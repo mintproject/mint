@@ -224,6 +224,9 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+  ensemble_manager:
+    image:
+      tag: b09bc0a244ee53b97eec31c2b34875b6360fde9a
 google:
   maps:
     key: CHANGEME
