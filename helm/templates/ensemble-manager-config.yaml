@@ -1,0 +1,72 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager-config-map
+  namespace: {{ .Release.Namespace }}
+data:
+   config.json: |
+      {
+         {{- if eq .Values.service.type "NodePort" }}
+         "data_catalog_api": "http://localhost:{{ include "helm.data_catalog_node_port" . }}",
+         "model_catalog_api": "http://localhost:{{ include "helm.model_catalog_api_node_port" . }}/{{ .Values.components.model_catalog_api.api_version }}",
+         "ensemble_manager_api": "http://localhost:{{ include "helm.ensemble_manager_node_port" . }}/{{ .Values.components.ensemble_manager.api_version }}",
+         "graphql": {
+            "endpoint": "localhost:{{ include "helm.hasura_node_port" . }}/v1/graphql",
+            "enable_ssl": false,
+            "use_secret": true
+         },
+
+         {{- else if eq .Values.service.type "ClusterIP" }}
+            {{- with .Values.components.data_catalog }}
+               {{- if  .enabled }}
+         "data_catalog_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}",
+               {{- end }}
+            {{- end }}
+
+            {{- with .Values.components.model_catalog_api }}
+               {{- if  .enabled }}
+         "model_catalog_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
+               {{- end }}
+            {{- end }}
+
+            {{- with .Values.components.ensemble_manager }}
+               {{- if  .enabled }}
+         "ensemble_manager_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
+               {{- end }}
+            {{- end }}
+
+            {{- with .Values.components.hasura }}
+               {{- if  .enabled }}
+         "ensemble_manager_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
+         "graphql": {
+            "endpoint": "{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/v1/graphql",
+            "enable_ssl": {{ if .ingress.tls  }}true{{else}}false{{ end }},
+            "use_secret": true
+         },
+               {{- end }}
+            {{- end }}
+         {{- end }}
+
+
+         {{- with .Values.components.ensemble_manager }}
+         {{- if  .enabled }}
+         "execution_engine": "localex",
+         "localex": {
+            "codedir":"{{ .environment.data_dir }}/code",
+            "datadir":"{{ .environment.data_dir }}/data",
+            "tempdir":"{{ .environment.data_dir }}/temp",
+            "logdir":"{{ .environment.data_dir }}/logs",
+            "dataurl":"{{ .environment.data_url }}/data",
+            "logurl":"{{ .environment.data_url }}/logs",
+            "parallelism": {{ .environment.parallel }}
+         },
+         {{- end }}
+         {{- end }}
+
+         "auth_server": {{ .Values.auth.url | quote }},
+         "auth_realm": {{ .Values.auth.realm | quote }},
+         "auth_client_id": {{ .Values.auth.ui_client_id | quote }},
+         "visualization_url": "",
+         "ingestion_api": ""
+      }

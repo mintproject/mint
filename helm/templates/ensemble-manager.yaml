@@ -1,0 +1,88 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: {{ include "helm.ensemble_manager_node_port" . }}
+      targetPort: 3000
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.ensemble_manager_node_port" . }}
+      {{ end }}
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-ensemble-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-ensemble-manager
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-ensemble-manager
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "mint.prefix" . }}-ensemble-manager-config-map
+        - name: storage
+          hostPath:
+            path: {{ .Values.components.ensemble_manager.environment.data_dir }}
+        - name: docker-storage
+          emptyDir: {}
+      containers:
+        - name: head
+          {{- with .Values.components.ensemble_manager }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          {{- end }}
+          env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: TMPDIR
+              value: /data/temp
+            - name: HASURA_GRAPHQL_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-hasura-secrets
+                  key: admin_secret
+          volumeMounts:
+            - name: storage
+              mountPath: /data
+            - name: config
+              mountPath: /home/node/app/src/config/config.json
+              subPath: config.json
+        - name: redis
+          image: redis
+          imagePullPolicy: IfNotPresent
+          command: ['redis-server', '--port', '7379']
+        - name: docker
+          image: docker:20.10.21-dind
+          imagePullPolicy: IfNotPresent
+          command: ["dockerd", "--host", "tcp://127.0.0.1:2375"]
+          securityContext:
+              privileged: true
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
+            - name: storage
+              mountPath: /data

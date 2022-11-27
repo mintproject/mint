@@ -15,6 +15,7 @@ data:
     window.REACT_APP_CROMO_URL = "http://localhost:{{ include "helm.cromo_node_port" . }}";
     window.REACT_APP_DATA_CATALOG_API = "http://localhost:{{ include "helm.data_catalog_node_port" . }}";
     window.REACT_APP_MODEL_CATALOG_API = "http://localhost:{{ include "helm.model_catalog_api_node_port" . }}/{{ .Values.components.model_catalog_api.api_version }}";
+    window.REACT_APP_ENSEMBLE_MANAGER_API = "http://localhost:{{ include "helm.ensemble_manager_node_port" . }}/{{ .Values.components.ensemble_manager.api_version }}";
     window.REACT_APP_GRAPHQL_ENDPOINT = "localhost:{{ include "helm.hasura_node_port" . }}/v1/graphql";
     window.REACT_APP_GRAPHQL_ENABLE_SSL = false;
     {{ else if eq .Values.service.type "ClusterIP" }}
@@ -39,9 +40,41 @@ data:
     window.REACT_APP_GRAPHQL_ENABLE_SSL = {{ if .ingress.tls  }}true{{else}}false{{ end }};
     {{ end }}
     {{ end }}
+    {{ with .Values.components.ensemble_manager }}
+    {{ if  .enabled }}
+    window.REACT_APP_ENSEMBLE_MANAGER_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}";
+    {{ with .Values.components.ensemble_manager }}
+        {{ if  .enabled }}
+    	"execution_engine": "localex",
+    	"localex": {
+        	"codedir":"{{ .environment.data_dir }}/code",
+        	"datadir":"{{ .environment.data_dir }}/data",
+        	"tempdir":"{{ .environment.data_dir }}/temp",
+        	"logdir":"{{ .environment.data_dir }}/logs",
+        	"dataurl":"{{ .environment.data_url }}/data",
+        	"logurl":"{{ .environment.data_url }}/logs",
+        	"parallelism": {{ .number_of_nodes }}
+    	},
+        {{ end }}
+        {{ end }}
+    //Execution - Local
+    window.REACT_APP_EXECUTION_ENGINE = "localex";
+    window.REACT_APP_LOCALEX_CODEDIR = "{{ .environment.data_dir }}/code";
+    window.REACT_APP_LOCALEX_DATADIR = "{{ .environment.data_dir }}/data";
+    window.REACT_APP_LOCALEX_TEMPDIR = "{{ .environment.data_dir }}/temp";
+    window.REACT_APP_LOCALEX_LOGDIR = "{{ .environment.data_dir }}/logs";
+    window.REACT_APP_LOCALEX_DATAURL = "{{ .environment.data_url }}/data";
+    window.REACT_APP_LOCALEX_LOGURL = "{{ .environment.data_url }}/logs";
+    window.REACT_APP_LOCALEX_PARALLEL = "{{ .environment.parallel }}";
+    //Execution - Wings
+    window.REACT_APP_WINGS_EXPORT_URL = "{{ .environment.wings_export_url }}";
+    window.REACT_APP_WINGS_STORAGE = "{{ .environment.wings_storage }}";
+    window.REACT_APP_WINGS_DOTPATH = "{{ .environment.wings_dot_path }}";
+    window.REACT_APP_WINGS_ONTURL = "{{ .environment.wings_ont_url }}";
+    {{ end }}
+    {{ end }}
 
     {{ end }}
-    window.REACT_APP_ENSEMBLE_MANAGER_API = "https://dev.ensemble.mint.isi.edu/v1";
     
     // Google API Key
     window.REACT_APP_GOOGLE_MAPS_KEY = {{ .Values.google.maps.key | quote }};
@@ -51,23 +84,6 @@ data:
     window.REACT_APP_AUTH_REALM = {{ .Values.auth.realm | quote }};
     window.REACT_APP_AUTH_CLIENT_ID = {{ .Values.auth.ui_client_id | quote }};
 
-    //Execution - Local
-    window.REACT_APP_EXECUTION_ENGINE = "localex";
-    window.REACT_APP_LOCALEX_CODEDIR = "/data/storage/mint/localex/code";
-    window.REACT_APP_LOCALEX_DATADIR = "/data/storage/mint/data-catalog/production/local-execution";
-    window.REACT_APP_LOCALEX_DATAURL = "http://data.mint.isi.edu/files/local-execution";
-    window.REACT_APP_LOCALEX_LOGDIR = "/data/storage/mint/data-catalog/production/local-execution/logs";
-    window.REACT_APP_LOCALEX_LOGURL = "http://data.mint.isi.edu/files/local-execution/logs";
-    window.REACT_APP_LOCALEX_PARALLEL = 50;
-
-    //Execution - Wings
-    window.REACT_APP_WINGS_EXPORT_URL = "http://data.mint.isi.edu/files/wings-export";
-    window.REACT_APP_WINGS_STORAGE = "/data/storage/mint/data-catalog/production/wings-export";
-    window.REACT_APP_WINGS_DOTPATH = "/data/storage/mint/data-catalog/production/wings-export/dot";
-    window.REACT_APP_WINGS_ONTURL = "http://data.mint.isi.edu/files/wings-export/dot";
-
-
-    //Visualization and Ingestion
+    //Visualization and Ingestion - Not used any more - Remove ?
     window.REACT_APP_VISUALIZATION_URL = "http://dev.viz.mint.isi.edu";
     window.REACT_APP_INGESTION_API = "http://node1.ingestion.mint.isi.edu/v1.3.0";
-
