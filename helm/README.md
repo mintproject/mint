@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 0.2.2](https://img.shields.io/badge/Version-0.2.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
+![Version: 1.4.1](https://img.shields.io/badge/Version-1.4.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -9,135 +9,208 @@ A Helm chart for MINT
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
-| auth | object | `{"client_id":"client","realm":"realm","ui_client_id":"client","url":"https://auth.example.com/"}` | Authentication configuration |
-| auth.client_id | string | `"client"` | Client ID |
-| auth.realm | string | `"realm"` | Realm |
-| auth.ui_client_id | string | `"client"` | Client ID |
-| auth.url | string | `"https://auth.example.com/"` | Keycloak URL |
+| auth.client_id | string | `"model_catalog"` |  |
+| auth.realm | string | `"production"` |  |
+| auth.ui_client_id | string | `"mint-ui"` |  |
+| auth.url | string | `"https://auth.mint.isi.edu/"` |  |
 | autoscaling.enabled | bool | `false` |  |
 | autoscaling.maxReplicas | int | `100` |  |
 | autoscaling.minReplicas | int | `1` |  |
 | autoscaling.targetCPUUtilizationPercentage | int | `80` |  |
-| components.cromo | object | `{"enabled":true,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/cromo","tag":"latest"},"ingress":{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"cromo.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}}` | Cromo configuration |
-| components.cromo.image.pullPolicy | string | `"IfNotPresent"` | cromo image pull policy |
-| components.cromo.image.repository | string | `"mintproject/cromo"` | cromo image repository |
-| components.cromo.image.tag | string | `"latest"` | cromo image tag |
-| components.cromo.ingress | object | `{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"cromo.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | cromo ingress configuration |
-| components.cromo.ingress.annotations | object | `{}` | cromo ingress annotations |
-| components.cromo.ingress.className | string | `""` | cromo ingress class name |
-| components.cromo.ingress.enabled | bool | `true` | enable the cromo ingress |
-| components.cromo.ingress.hosts | list | `[{"host":"cromo.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}]` | cromo ingress hosts |
-| components.cromo.ingress.tls | list | `[]` | cromo ingress tls configuration |
-| components.data_catalog.enabled | bool | `true` | enable the data catalog component |
-| components.data_catalog.image.pullPolicy | string | `"IfNotPresent"` | data catalog image pull policy |
-| components.data_catalog.image.repository | string | `"mintproject/data-catalog"` | data catalog image repository |
-| components.data_catalog.image.tag | string | `"15f10f5717870ecf1f9e5fb0f193c5ecbf8c2af3"` | data catalog image tag |
-| components.data_catalog.ingress | object | `{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"datacatalog.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | data catalog ingress configuration |
-| components.data_catalog.ingress.annotations | object | `{}` | data catalog ingress annotations |
-| components.data_catalog.ingress.className | string | `""` | data catalog ingress class name |
-| components.data_catalog.ingress.enabled | bool | `true` | enable the data catalog ingress |
-| components.data_catalog.ingress.hosts | list | `[{"host":"datacatalog.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}]` | data catalog ingress hosts |
-| components.data_catalog.ingress.tls | list | `[]` | data catalog ingress tls configuration |
-| components.data_catalog_db | object | `{"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/data-catalog-db","tag":"15f10f5717870ecf1f9e5fb0f193c5ecbf8c2af3"}}` | data database component |
-| components.data_catalog_db.image.pullPolicy | string | `"IfNotPresent"` | data catalog database image pull policy |
-| components.data_catalog_db.image.repository | string | `"mintproject/data-catalog-db"` | data catalog database image repository |
-| components.data_catalog_db.image.tag | string | `"15f10f5717870ecf1f9e5fb0f193c5ecbf8c2af3"` | data catalog database image tag |
-| components.hasura | object | `{"enabled":true,"environment":{"enable_console":true,"enable_dev_mode":false,"unauthorized_role":"anonymous"},"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/graphql-engine","tag":"597064529d763ec8df612d239dd54c307de97e57"},"ingress":{"annotations":{},"className":null,"enabled":true,"hosts":[{"host":"graphql.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}}` | GraphQL hasura engine |
-| components.hasura.enabled | bool | `true` | enable the hasura component |
-| components.hasura.environment | object | `{"enable_console":true,"enable_dev_mode":false,"unauthorized_role":"anonymous"}` | hasura environment variables |
-| components.hasura.environment.enable_console | bool | `true` | enable the hasura console |
-| components.hasura.environment.enable_dev_mode | bool | `false` | enable the hasura dev mode |
-| components.hasura.environment.unauthorized_role | string | `"anonymous"` | unauthenticated role |
-| components.hasura.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/graphql-engine","tag":"597064529d763ec8df612d239dd54c307de97e57"}` | hasura image repository |
-| components.hasura.image.pullPolicy | string | `"IfNotPresent"` | hasura image pull policy |
-| components.hasura.image.repository | string | `"mintproject/graphql-engine"` | hasura image repository |
-| components.hasura.image.tag | string | `"597064529d763ec8df612d239dd54c307de97e57"` | hasura image tag |
-| components.hasura.ingress | object | `{"annotations":{},"className":null,"enabled":true,"hosts":[{"host":"graphql.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | hasura ingress configuration |
-| components.hasura.ingress.annotations | object | `{}` | hasura ingress annotations |
-| components.hasura.ingress.className | string | `nil` | hasura ingress class name |
-| components.hasura.ingress.enabled | bool | `true` | enable the hasura ingress |
-| components.hasura.ingress.hosts | list | `[{"host":"graphql.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}]` | hasura ingress hosts |
-| components.hasura.ingress.tls | list | `[]` | hasura ingress tls configuration |
-| components.hasura_db | object | `{"image":{"pullPolicy":"IfNotPresent","repository":"postgis/postgis","tag":"10-2.5-alpine"}}` | GraphQL Postgres Database |
-| components.hasura_db.image | object | `{"pullPolicy":"IfNotPresent","repository":"postgis/postgis","tag":"10-2.5-alpine"}` | hasura database image repository |
-| components.hasura_db.image.pullPolicy | string | `"IfNotPresent"` | hasura database image pull policy |
-| components.hasura_db.image.repository | string | `"postgis/postgis"` | hasura database image repository |
-| components.hasura_db.image.tag | string | `"10-2.5-alpine"` | hasura database image tag |
-| components.model_catalog_api | object | `{"enabled":true,"environment":{"context_dir":"contexts/","graph_base":"http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/","prefix":"https://w3id.org/okn/i/mint/","queries_dir":"queries/"},"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/model-catalog-api","tag":"latest"},"ingress":{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"api.models.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}}` | Model Catalog configuration |
-| components.model_catalog_api.enabled | bool | `true` | enable the model catalog api component |
-| components.model_catalog_api.environment | object | `{"context_dir":"contexts/","graph_base":"http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/","prefix":"https://w3id.org/okn/i/mint/","queries_dir":"queries/"}` | model catalog api environment variables  |
-| components.model_catalog_api.environment.context_dir | string | `"contexts/"` | where are the contexts stored |
-| components.model_catalog_api.environment.graph_base | string | `"http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/"` | the graph prefix used by the RDF store |
-| components.model_catalog_api.environment.prefix | string | `"https://w3id.org/okn/i/mint/"` | uri of the RDF resource |
-| components.model_catalog_api.environment.queries_dir | string | `"queries/"` | where are the queries templates stored |
-| components.model_catalog_api.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/model-catalog-api","tag":"latest"}` | model catalog api image details  |
-| components.model_catalog_api.image.pullPolicy | string | `"IfNotPresent"` | model catalog api image pull policy |
-| components.model_catalog_api.image.repository | string | `"mintproject/model-catalog-api"` | model catalog api image repository |
-| components.model_catalog_api.image.tag | string | `"latest"` | model catalog api image tag |
-| components.model_catalog_api.ingress | object | `{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"api.models.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | model catalog api ingress configuration |
-| components.model_catalog_api.ingress.annotations | object | `{}` | model catalog api ingress annotations |
-| components.model_catalog_api.ingress.className | string | `""` | model catalog api ingress class name |
-| components.model_catalog_api.ingress.enabled | bool | `true` | enable the model catalog api ingress |
-| components.model_catalog_api.ingress.hosts | list | `[{"host":"api.models.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}]` | model catalog api ingress hosts |
-| components.model_catalog_api.ingress.tls | list | `[]` | model catalog api ingress tls configuration |
-| components.model_catalog_endpoint | object | `{"enabled":true,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/model-catalog-endpoint","tag":"91dabbb1c1f7b2b838e8d8e75a4091e5ec40d4a1"},"ingress":{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"endpoint.models.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}}` | Model Catalog RDF store configuration |
-| components.model_catalog_endpoint.enabled | bool | `true` | enable the model catalog endpoint component |
-| components.model_catalog_endpoint.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/model-catalog-endpoint","tag":"91dabbb1c1f7b2b838e8d8e75a4091e5ec40d4a1"}` | model catalog endpoint image repository |
-| components.model_catalog_endpoint.image.pullPolicy | string | `"IfNotPresent"` | model catalog endpoint image pull policy |
-| components.model_catalog_endpoint.image.repository | string | `"mintproject/model-catalog-endpoint"` | model catalog endpoint image repository |
-| components.model_catalog_endpoint.image.tag | string | `"91dabbb1c1f7b2b838e8d8e75a4091e5ec40d4a1"` | model catalog endpoint image tag |
-| components.model_catalog_endpoint.ingress | object | `{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"endpoint.models.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | model catalog endpoint ingress configuration |
-| components.model_catalog_endpoint.ingress.annotations | object | `{}` | model catalog endpoint ingress annotations |
-| components.model_catalog_endpoint.ingress.className | string | `""` | model catalog endpoint ingress class name |
-| components.model_catalog_endpoint.ingress.enabled | bool | `true` | enable the model catalog endpoint ingress |
-| components.model_catalog_endpoint.ingress.hosts | list | `[{"host":"endpoint.models.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}]` | model catalog endpoint ingress hosts |
-| components.model_catalog_endpoint.ingress.tls | list | `[]` | model catalog endpoint ingress tls configuration |
-| components.ui | object | `{"enabled":true,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/mint-ui-lit","tag":"547b3504e98856f52b3a03e862195384a305b87b"},"ingress":{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}}` | User Interface configuration |
-| components.ui.enabled | bool | `true` | enable the ui component |
-| components.ui.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/mint-ui-lit","tag":"547b3504e98856f52b3a03e862195384a305b87b"}` | ui image details |
-| components.ui.image.pullPolicy | string | `"IfNotPresent"` | ui image pull policy |
-| components.ui.image.repository | string | `"mintproject/mint-ui-lit"` | ui image repository |
-| components.ui.image.tag | string | `"547b3504e98856f52b3a03e862195384a305b87b"` | ui image tag |
-| components.ui.ingress | object | `{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | ui ingress configuration |
-| components.ui.ingress.annotations | object | `{}` | ui ingress annotations |
-| components.ui.ingress.className | string | `""` | ui ingress class name |
-| components.ui.ingress.enabled | bool | `true` | enable the ui ingress |
-| components.ui.ingress.hosts | list | `[{"host":"mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}]` | ui ingress hosts |
-| components.ui.ingress.tls | list | `[]` | ui ingress tls configuration |
+| components.cromo.enabled | bool | `true` |  |
+| components.cromo.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.cromo.image.repository | string | `"mintproject/cromo"` |  |
+| components.cromo.image.tag | string | `"3c75586989aedf2573c37f5352f960c294377931"` |  |
+| components.cromo.ingress.annotations | object | `{}` |  |
+| components.cromo.ingress.className | string | `""` |  |
+| components.cromo.ingress.enabled | bool | `false` |  |
+| components.cromo.ingress.hosts[0].host | string | `"cromo.mint.local"` |  |
+| components.cromo.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.cromo.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.cromo.ingress.tls | list | `[]` |  |
+| components.data_catalog.enabled | bool | `true` |  |
+| components.data_catalog.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.data_catalog.image.repository | string | `"mintproject/data-catalog"` |  |
+| components.data_catalog.image.tag | string | `"89bd8354c69923e2da5db1098f8c3c272f59c0c2"` |  |
+| components.data_catalog.ingress.annotations | object | `{}` |  |
+| components.data_catalog.ingress.className | string | `""` |  |
+| components.data_catalog.ingress.enabled | bool | `false` |  |
+| components.data_catalog.ingress.hosts[0].host | string | `"datacatalog.mint.local"` |  |
+| components.data_catalog.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.data_catalog.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.data_catalog.ingress.tls | list | `[]` |  |
+| components.data_catalog_db.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.data_catalog_db.image.repository | string | `"mintproject/data-catalog-db"` |  |
+| components.data_catalog_db.image.tag | string | `"eb6546857a341b32685d458d656cfc9a1e5abc36"` |  |
+| components.data_catalog_db.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| components.data_catalog_db.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
+| components.data_catalog_db.persistence.dataSource | object | `{}` |  |
+| components.data_catalog_db.persistence.enabled | bool | `true` |  |
+| components.data_catalog_db.persistence.existingClaim | string | `""` |  |
+| components.data_catalog_db.persistence.selector | object | `{}` |  |
+| components.data_catalog_db.persistence.size | string | `"10Gi"` |  |
+| components.data_catalog_db.persistence.storageClass | string | `""` |  |
+| components.ensemble_manager.enabled | bool | `true` |  |
+| components.ensemble_manager.environment.data_dir | string | `"/var/www/html/mint"` |  |
+| components.ensemble_manager.environment.data_url | string | `"http://localhost/mint"` |  |
+| components.ensemble_manager.environment.parallel | int | `2` |  |
+| components.ensemble_manager.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.ensemble_manager.image.repository | string | `"mintproject/ensemble-manager"` |  |
+| components.ensemble_manager.image.tag | string | `"b09bc0a244ee53b97eec31c2b34875b6360fde9a"` |  |
+| components.ensemble_manager.ingress.annotations | object | `{}` |  |
+| components.ensemble_manager.ingress.className | string | `""` |  |
+| components.ensemble_manager.ingress.enabled | bool | `false` |  |
+| components.ensemble_manager.ingress.hosts[0].host | string | `"ensemble-manager.mint.local"` |  |
+| components.ensemble_manager.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.ensemble_manager.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.ensemble_manager.ingress.tls | list | `[]` |  |
+| components.hasura.enabled | bool | `true` |  |
+| components.hasura.environment.enable_console | bool | `true` |  |
+| components.hasura.environment.enable_dev_mode | bool | `false` |  |
+| components.hasura.environment.unauthorized_role | string | `"anonymous"` |  |
+| components.hasura.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.hasura.image.repository | string | `"mintproject/graphql-engine"` |  |
+| components.hasura.image.tag | string | `"f11c7d00e6cea23c3e616e7d5dbd63cdbedc2650"` |  |
+| components.hasura.ingress.annotations | object | `{}` |  |
+| components.hasura.ingress.className | string | `nil` |  |
+| components.hasura.ingress.enabled | bool | `false` |  |
+| components.hasura.ingress.hosts[0].host | string | `"graphql.mint.local"` |  |
+| components.hasura.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.hasura.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.hasura.ingress.tls | list | `[]` |  |
+| components.hasura_db.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.hasura_db.image.repository | string | `"postgis/postgis"` |  |
+| components.hasura_db.image.tag | string | `"10-3.2-alpine"` |  |
+| components.hasura_db.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| components.hasura_db.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
+| components.hasura_db.persistence.dataSource | object | `{}` |  |
+| components.hasura_db.persistence.enabled | bool | `true` |  |
+| components.hasura_db.persistence.existingClaim | string | `""` |  |
+| components.hasura_db.persistence.selector | object | `{}` |  |
+| components.hasura_db.persistence.size | string | `"10Gi"` |  |
+| components.hasura_db.persistence.storageClass | string | `""` |  |
+| components.mic_api.enabled | bool | `true` |  |
+| components.mic_api.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.mic_api.image.repository | string | `"mintproject/mic-api"` |  |
+| components.mic_api.image.tag | string | `"2825e342aca2b914a1bdd08168c6ad12d38fa711"` |  |
+| components.mic_api.ingress.annotations | object | `{}` |  |
+| components.mic_api.ingress.className | string | `""` |  |
+| components.mic_api.ingress.enabled | bool | `false` |  |
+| components.mic_api.ingress.hosts[0].host | string | `"api.mic.mint.local"` |  |
+| components.mic_api.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.mic_api.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.mic_api.ingress.tls | list | `[]` |  |
+| components.mic_api_db.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.mic_api_db.image.repository | string | `"postgres"` |  |
+| components.mic_api_db.image.tag | float | `14.6` |  |
+| components.mic_api_db.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| components.mic_api_db.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
+| components.mic_api_db.persistence.dataSource | object | `{}` |  |
+| components.mic_api_db.persistence.enabled | bool | `true` |  |
+| components.mic_api_db.persistence.existingClaim | string | `""` |  |
+| components.mic_api_db.persistence.selector | object | `{}` |  |
+| components.mic_api_db.persistence.size | string | `"10Gi"` |  |
+| components.mic_api_db.persistence.storageClass | string | `""` |  |
+| components.mic_ui.enabled | bool | `true` |  |
+| components.mic_ui.image.environment.airflow_url | string | `"https://airflow.mint.isi.edu/api/v1"` |  |
+| components.mic_ui.image.environment.api_url | string | `nil` |  |
+| components.mic_ui.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.mic_ui.image.repository | string | `"mintproject/mic-web"` |  |
+| components.mic_ui.image.tag | string | `"35be95954472812c0fab52dc185adf8d795348e1"` |  |
+| components.mic_ui.ingress.annotations | object | `{}` |  |
+| components.mic_ui.ingress.className | string | `""` |  |
+| components.mic_ui.ingress.enabled | bool | `false` |  |
+| components.mic_ui.ingress.hosts[0].host | string | `"mic.mint.local"` |  |
+| components.mic_ui.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.mic_ui.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.mic_ui.ingress.tls | list | `[]` |  |
+| components.model_catalog_api.api_version | string | `"v1.8.0"` |  |
+| components.model_catalog_api.enabled | bool | `true` |  |
+| components.model_catalog_api.environment.context_dir | string | `"contexts/"` |  |
+| components.model_catalog_api.environment.queries_dir | string | `"queries/"` |  |
+| components.model_catalog_api.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.model_catalog_api.image.repository | string | `"mintproject/model-catalog-fastapi"` |  |
+| components.model_catalog_api.image.tag | string | `"e495b2dd5cf5a67f82dae1fb8d4a8a32fb25e6d8"` |  |
+| components.model_catalog_api.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
+| components.model_catalog_api.ingress.className | string | `""` |  |
+| components.model_catalog_api.ingress.enabled | bool | `false` |  |
+| components.model_catalog_api.ingress.hosts[0].host | string | `"api.models.mint.local"` |  |
+| components.model_catalog_api.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.model_catalog_api.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.model_catalog_api.ingress.tls | list | `[]` |  |
+| components.model_catalog_endpoint.enabled | bool | `true` |  |
+| components.model_catalog_endpoint.environment.backup_file | string | `"/fuseki-base/seeds/model-catalog.trig"` |  |
+| components.model_catalog_endpoint.environment.dataset | string | `"modelcatalog"` |  |
+| components.model_catalog_endpoint.environment.graph_base | string | `"http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/"` |  |
+| components.model_catalog_endpoint.environment.prefix | string | `"https://w3id.org/okn/i/mint/"` |  |
+| components.model_catalog_endpoint.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.model_catalog_endpoint.image.repository | string | `"mintproject/model-catalog-endpoint"` |  |
+| components.model_catalog_endpoint.image.tag | string | `"4f698c73d4ff48ddd20f31315ea23850df8737d7"` |  |
+| components.model_catalog_endpoint.ingress.annotations | object | `{}` |  |
+| components.model_catalog_endpoint.ingress.className | string | `""` |  |
+| components.model_catalog_endpoint.ingress.enabled | bool | `false` |  |
+| components.model_catalog_endpoint.ingress.hosts[0].host | string | `"endpoint.models.mint.local"` |  |
+| components.model_catalog_endpoint.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.model_catalog_endpoint.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.model_catalog_endpoint.ingress.tls | list | `[]` |  |
+| components.model_catalog_endpoint.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| components.model_catalog_endpoint.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
+| components.model_catalog_endpoint.persistence.dataSource | object | `{}` |  |
+| components.model_catalog_endpoint.persistence.enabled | bool | `true` |  |
+| components.model_catalog_endpoint.persistence.existingClaim | string | `""` |  |
+| components.model_catalog_endpoint.persistence.selector | object | `{}` |  |
+| components.model_catalog_endpoint.persistence.size | string | `"10Gi"` |  |
+| components.model_catalog_endpoint.persistence.storageClass | string | `""` |  |
+| components.model_catalog_explorer.enabled | bool | `true` |  |
+| components.model_catalog_explorer.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.model_catalog_explorer.image.repository | string | `"mintproject/model-catalog-explorer"` |  |
+| components.model_catalog_explorer.image.tag | string | `"2bc1ec44e5857f4870972367fddf0ca81ed8d27b"` |  |
+| components.model_catalog_explorer.ingress.annotations | object | `{}` |  |
+| components.model_catalog_explorer.ingress.className | string | `""` |  |
+| components.model_catalog_explorer.ingress.enabled | bool | `false` |  |
+| components.model_catalog_explorer.ingress.hosts[0].host | string | `"models.mint.local"` |  |
+| components.model_catalog_explorer.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.model_catalog_explorer.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.model_catalog_explorer.ingress.tls | list | `[]` |  |
+| components.ui.enabled | bool | `true` |  |
+| components.ui.image.pullPolicy | string | `"IfNotPresent"` |  |
+| components.ui.image.repository | string | `"mintproject/mint-ui-lit"` |  |
+| components.ui.image.tag | string | `"80db1b04d820ea3a5beb86bd6dcf4ef041acda0a"` |  |
+| components.ui.ingress.annotations | object | `{}` |  |
+| components.ui.ingress.className | string | `""` |  |
+| components.ui.ingress.enabled | bool | `false` |  |
+| components.ui.ingress.hosts[0].host | string | `"mint.local"` |  |
+| components.ui.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.ui.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.ui.ingress.tls | list | `[]` |  |
+| default_user | string | `"mint@isi.edu"` |  |
 | fullnameOverride | string | `""` |  |
-| google.maps | object | `{"key":"CHANGEME"}` | Google Maps API key |
-| google.maps.key | string | `"CHANGEME"` | Google Maps API key |
+| google.maps.key | string | `"CHANGEME"` |  |
 | imagePullSecrets | list | `[]` |  |
 | nameOverride | string | `""` |  |
 | nodeSelector | object | `{}` |  |
 | podAnnotations | object | `{}` |  |
 | podSecurityContext | object | `{}` |  |
 | resources | object | `{}` |  |
-| secrets.database.data_catalog | object | `{"database":"datacatalog","password":"CHANGEME","username":"datacatalog"}` | Data Catalog database credentials |
-| secrets.database.data_catalog.database | string | `"datacatalog"` | Data Catalog database name |
-| secrets.database.data_catalog.password | string | `"CHANGEME"` | Data Catalog database password |
-| secrets.database.data_catalog.username | string | `"datacatalog"` | Data Catalog database username |
-| secrets.database.hasura | object | `{"database":"hasura","password":"CHANGEME","username":"hasura"}` | GraphQL database credentials |
-| secrets.database.hasura.database | string | `"hasura"` | GraphQL database name |
-| secrets.database.hasura.password | string | `"CHANGEME"` | GraphQL database password |
-| secrets.database.hasura.username | string | `"hasura"` | GraphQL database username |
-| secrets.database.model_catalog_endpoint | object | `{"password":"CHANGEME","username":"admin"}` | Model Catalog database credentials |
-| secrets.database.model_catalog_endpoint.password | string | `"CHANGEME"` | Model Catalog database password |
-| secrets.database.model_catalog_endpoint.username | string | `"admin"` | Model Catalog database username |
-| secrets.hasura | object | `{"admin_secret":"CHANGEME","jwt_secret":"CHANGE"}` | GraphQL admin credentials |
-| secrets.hasura.admin_secret | string | `"CHANGEME"` | HASURA_GRAPHQL_ADMIN_SECRET |
-| secrets.hasura.jwt_secret | string | `"CHANGE"` | RS256 JWT public certificate from the OIDC provider |
+| secrets.database.data_catalog.database | string | `"datacatalog"` |  |
+| secrets.database.data_catalog.password | string | `"CHANGEME"` |  |
+| secrets.database.data_catalog.username | string | `"datacatalog"` |  |
+| secrets.database.hasura.database | string | `"hasura"` |  |
+| secrets.database.hasura.password | string | `"CHANGEME"` |  |
+| secrets.database.hasura.username | string | `"hasura"` |  |
+| secrets.database.mic_api.database | string | `"mic"` |  |
+| secrets.database.mic_api.password | string | `"CHANGEME"` |  |
+| secrets.database.mic_api.username | string | `"mic"` |  |
+| secrets.database.model_catalog_endpoint.password | string | `"CHANGEME"` |  |
+| secrets.database.model_catalog_endpoint.username | string | `"admin"` |  |
+| secrets.hasura.admin_secret | string | `"CHANGEME"` |  |
+| secrets.hasura.jwt_secret | string | `"{\"type\": \"RS256\", \"key\": \"-----BEGIN CERTIFICATE-----\\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyQQ56WKKsVCUs8n9swlv5DV7st7UUdvNoDSnwovdU2vinQQ686//vRqlUJ5vpyI7r75qTXCPkXUitDhPvGEMfChnb9tuWdymSyZmMmT+34oaYo/2bGSZjTlLRVfRJjUnFYeWoVLoXVKJolyDWtU6bXbFNnUyysb/6YIpg5sSwxkLs/9yl6HsWdFconxPJO6KmMPSjcOc0fZermNq+cOEvj1OqRhVkxDqBebreI+zcgrJHNSN8d6cxTmfVQl1jIPHvxE5oN7qUdfYmK4D+SOlj8FlkUvwis+3Ix2AQsvNoOD1OzuqUOd/FpXBnEGaeTq9EMwDxplNqltR/qT3/poUwIDAQAB\\n-----END CERTIFICATE-----\"}"` |  |
 | securityContext | object | `{}` |  |
-| service.port | int | `80` |  |
-| service.type | string | `"ClusterIP"` |  |
+| service.port | int | `30000` |  |
+| service.type | string | `"NodePort"` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
-| shared_storage.access_modes | string | `"ReadWriteMany"` | Shared volume access mode |
-| shared_storage.backend | string | `"hostpath"` | Shared volume storage backend |
-| shared_storage.hostpath | object | `{"root_path":"/var/mint"}` | Path to the MINT directory inside the underlying storage volume |
-| shared_storage.shared_volume_mount_path | string | `"/var/mint"` | Path inside the MINT components where the shared volume will be mounted |
-| shared_storage.volume_size | int | `200` | Shared volume size |
 | tolerations | list | `[]` |  |
 | welcome_message | string | `"Welcome to MINT"` |  |
 
