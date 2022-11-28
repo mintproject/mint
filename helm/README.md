@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 1.4.1](https://img.shields.io/badge/Version-1.4.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
+![Version: 1.4.2](https://img.shields.io/badge/Version-1.4.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.1](https://img.shields.io/badge/AppVersion-1.16.1-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -50,6 +50,7 @@ A Helm chart for MINT
 | components.data_catalog_db.persistence.selector | object | `{}` |  |
 | components.data_catalog_db.persistence.size | string | `"10Gi"` |  |
 | components.data_catalog_db.persistence.storageClass | string | `""` |  |
+| components.ensemble_manager.api_version | string | `"v1"` |  |
 | components.ensemble_manager.enabled | bool | `true` |  |
 | components.ensemble_manager.environment.data_dir | string | `"/var/www/html/mint"` |  |
 | components.ensemble_manager.environment.data_url | string | `"http://localhost/mint"` |  |
