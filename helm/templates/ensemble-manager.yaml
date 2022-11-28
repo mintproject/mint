@@ -10,7 +10,7 @@ spec:
   type: {{ .Values.service.type }}
   ports:
     - name: "http"
-      port: {{ include "helm.ensemble_manager_node_port" . }}
+      port: 80
       targetPort: 3000
       {{ if eq .Values.service.type "NodePort" }}
       nodePort: {{ include "helm.ensemble_manager_node_port" . }}
