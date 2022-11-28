@@ -9,9 +9,12 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - name: "http-model-explorer"
-      port: 80 
+    - name: "http"
+      port: 8080
       targetPort: 80
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.model_catalog_explorer_node_port" . }}
+      {{ end }}
       protocol: TCP
   selector:
     app: {{ include "mint.prefix" . }}-model-catalog-explorer

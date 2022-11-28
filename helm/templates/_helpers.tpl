@@ -186,6 +186,18 @@ Create ports
 {{- end }}
 {{- end }}
 
+{{- define "helm.model_catalog_explorer_node_port" -}}
+{{- if .Values.service.type }}
+{{- if eq .Values.service.type "NodePort" }}
+{{- if .Values.service.port }}
+{{- add .Values.service.port 9 }}
+{{- else }}
+{{- add 30000 9 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
 {{/*
 Return  the proper Storage Class
 {{ include "common.storage.class" ( dict "persistence" .Values.path.to.the.persistence "global" $) }}
@@ -193,6 +205,7 @@ Return  the proper Storage Class
 {{- define "common.storage.class" -}}
 
 {{- $storageClass := .persistence.storageClass -}}
+
 {{- if .global -}}
     {{- if .global.storageClass -}}
         {{- $storageClass = .global.storageClass -}}
