@@ -38,7 +38,6 @@ data:
 
             {{- with .Values.components.hasura }}
                {{- if  .enabled }}
-         "ensemble_manager_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
          "graphql": {
             "endpoint": "{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/v1/graphql",
             "enable_ssl": {{ if .ingress.tls  }}true{{else}}false{{ end }},
