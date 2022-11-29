@@ -3,15 +3,13 @@
   If you are deploying MINT for the first time, there are a few steps left to
   finalize its configuration.
 
-  1. Initialize the database:
+  1. Initialize the databases:
+  
+  1a. GraphQL database where the execution provenance will be stored :
 
       # Create database tables
       $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-hasura -c hasura -- \
           hasura migrate apply 
-
-
-      $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-mic-api -c mic-api -- \
-          yarn migrate
 
       # Create metadata
       $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-hasura -c hasura -- \
@@ -20,6 +18,8 @@
       # Populate with regions and variables
       $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-hasura -c hasura -- \
           hasura seeds apply
+
+  1b. Initialize the Model Catalog database where the model metadata will be stored:
 
       $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-model-catalog-endpoint -c endpoint -- \
         sh -c '
@@ -38,7 +38,13 @@
            -H  "Content-Type: application/trig" 
            '
 
-  1. Get the application URL by running these commands:
+  1c. Prepare database for MIC https://mic-web.readthedocs.io/en/latest/:
+
+      $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-mic-api -c mic-api -- \
+          yarn migrate
+
+
+  2. Get the application URL by running these commands:
   {{- if .Values.components.ui.ingress.enabled }}
   {{  with .Values.components.ui }}
   http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }};{{ end }}
