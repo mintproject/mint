@@ -1,0 +1,63 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-mic-api-backup
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-mic-api-backup
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-mic-api-backup
+    spec:
+      containers:
+        - name: db-backup
+          image: tiredofit/db-backup
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: BACKUP_LOCATION
+              value: minio
+            - name: DEBUG
+              value: "TRUE"
+            - name: CONTAINER_ENABLE_MONITORING
+              value: "FALSE"
+            - name: DB_TYPE
+              value: pgsql
+            - name: DB_HOST
+              value: {{ include "mint.prefix" $ }}-mic-api
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: ALL
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-mic-api-db-secrets
+                  key: username 
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-mic-api-db-secrets
+                  key: password
+            - name: S3_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-s3-secrets
+                  key: access_key
+            - name: S3_KEY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-s3-secrets
+                  key: secret_key
+            - name: S3_BUCKET
+              value: {{ .Values.secrets.backups.s3.bucket }}
+            - name: S3_HOST
+              value: {{ .Values.secrets.backups.s3.endpoint }}
+            - name: S3_REGION
+              value: {{ .Values.secrets.backups.s3.region }}
+            - name: S3_PATH
+              value: {{ .Values.secrets.backups.s3.path }}
