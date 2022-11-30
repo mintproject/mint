@@ -55,6 +55,8 @@ spec:
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
+          securityContext:
+            privileged: true
           env:
             - name: DOCKER_HOST
               value: tcp://localhost:2375
@@ -65,11 +67,13 @@ spec:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-hasura-secrets
                   key: admin_secret
+            - name: ENSEMBLE_MANAGER_CONFIG_FILE
+              value: /home/node/app/config.json
           volumeMounts:
             - name: storage
               mountPath: /data
             - name: config
-              mountPath: /home/node/app/src/config/config.json
+              mountPath: /home/node/app/config.json
               subPath: config.json
         - name: redis
           image: redis

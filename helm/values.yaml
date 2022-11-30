@@ -232,7 +232,7 @@ components:
       tag: 4b33e207af5f786a6111487f1cdacd0dc25b4cb3
       pullPolicy: IfNotPresent
     environment:
-      data_dir: /var/www/html/mint
+      data_dir: mintproject
       data_url: http://localhost/mint
       parallel: 2
     ingress:
