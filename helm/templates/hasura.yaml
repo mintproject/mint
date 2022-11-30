@@ -16,6 +16,10 @@ spec:
       nodePort: {{ include "helm.hasura_node_port" . }}
       {{ end }}
       protocol: TCP
+    - name: "postgres"
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
   selector:
     app: {{ include "mint.prefix" . }}-hasura
 ---
