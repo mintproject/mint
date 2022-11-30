@@ -59,7 +59,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_HOST
-              value: tcp://localhost:2375
+              value: 127.0.0.1:2375
             - name: TMPDIR
               value: /data/temp
             - name: HASURA_GRAPHQL_ADMIN_SECRET
