@@ -1,0 +1,52 @@
+{{- if .Values.components.backups.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: model-catalog-endpoint-backup-job
+  namespace: default
+spec:
+  schedule: "0 0 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: db-backup
+              image: minio/mc
+              env:
+                - name: S3_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "mint.prefix" . }}-s3-secrets
+                      key: access_key
+                - name: S3_KEY_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "mint.prefix" . }}-s3-secrets
+                      key: secret_key
+                - name: S3_BUCKET
+                  value: {{ .Values.secrets.backups.s3.bucket }}
+                - name: S3_HOST
+                  value: {{ .Values.secrets.backups.s3.endpoint }}
+                - name: S3_REGION
+                  value: {{ .Values.secrets.backups.s3.region }}
+                - name: S3_PATH
+                  value: {{ .Values.secrets.backups.s3.path }}
+                {{- with .Values.components.model_catalog_endpoint  }}
+                - name: ENDPOINT
+                  value: http://{{ include "mint.prefix" $ }}-model-catalog-endpoint:3030/{{ .environment.dataset }}
+                {{- end }}
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - >-
+                    mc alias set minio https://${S3_HOST} ${S3_KEY_ID} ${S3_KEY_SECRET} &&
+                    backup_date=$(date +%Y-%m-%d-%H-%M-%S) &&
+                    curl ${ENDPOINT} > /tmp/modelcatalog-$backup_date.trig &&
+                    mc cp /tmp/modelcatalog-$backup_date.trig minio/${S3_BUCKET}/${S3_PATH}/modelcatalog-$backup_date.trig &&
+                    rm /tmp/modelcatalog-$backup_date.trig &&
+                    echo "Backup completed successfully" &&
+                    exit 0
+{{- end }}
