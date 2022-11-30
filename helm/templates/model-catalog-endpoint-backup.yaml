@@ -2,8 +2,8 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: model-catalog-endpoint-backup-job
-  namespace: default
+  name: {{ include "mint.prefix" . }}-model-catalog-backup
+  namespace: {{ .Release.Namespace }}
 spec:
   schedule: "0 0 * * *"
   jobTemplate:
