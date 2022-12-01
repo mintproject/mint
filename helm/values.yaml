@@ -141,7 +141,7 @@ components:
     enabled: true
     image:
       repository: mintproject/graphql-engine
-      tag: f11c7d00e6cea23c3e616e7d5dbd63cdbedc2650
+      tag: 0fc7ce2a5098d2e86f1280f6fa70acfc816a531d
       pullPolicy: IfNotPresent
     environment:
       enable_console: true
