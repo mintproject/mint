@@ -109,7 +109,7 @@ components:
     enabled: true
     image:
       repository: mintproject/model-catalog-endpoint
-      tag: 4f698c73d4ff48ddd20f31315ea23850df8737d7
+      tag: 29256555a6fbaefae4729d5cd259564708a4ab04
       pullPolicy: IfNotPresent
     environment:
       dataset: modelcatalog

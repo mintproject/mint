@@ -8,11 +8,11 @@ data:
    config.json: |
       {
          {{- if eq .Values.service.type "NodePort" }}
-         "data_catalog_api": "http://localhost:{{ include "helm.data_catalog_node_port" . }}",
-         "model_catalog_api": "http://localhost:{{ include "helm.model_catalog_api_node_port" . }}/{{ .Values.components.model_catalog_api.api_version }}",
-         "ensemble_manager_api": "http://localhost:{{ include "helm.ensemble_manager_node_port" . }}/{{ .Values.components.ensemble_manager.api_version }}",
+         "data_catalog_api": "http://{{ include "mint.prefix" . }}-data-catalog",
+         "model_catalog_api": "http://{{ include "mint.prefix" . }}-model-catalog/{{ .Values.components.model_catalog_api.api_version }}",
+         "ensemble_manager_api": "http://{{ include "mint.prefix" .}}-ensemble-manager/{{ .Values.components.ensemble_manager.api_version }}",
          "graphql": {
-            "endpoint": "localhost:{{ include "helm.hasura_node_port" . }}/v1/graphql",
+            "endpoint": "{{ include "mint.prefix" . }}-hasura/v1/graphql",
             "enable_ssl": false,
             "use_secret": true
          },
