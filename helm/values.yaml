@@ -276,7 +276,7 @@ secrets:
       region: null
       endpoint: example.com
   hasura:
-    jwt_secret: '{"type": "RS256", "key": "-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyQQ56WKKsVCUs8n9swlv5DV7st7UUdvNoDSnwovdU2vinQQ686//vRqlUJ5vpyI7r75qTXCPkXUitDhPvGEMfChnb9tuWdymSyZmMmT+34oaYo/2bGSZjTlLRVfRJjUnFYeWoVLoXVKJolyDWtU6bXbFNnUyysb/6YIpg5sSwxkLs/9yl6HsWdFconxPJO6KmMPSjcOc0fZermNq+cOEvj1OqRhVkxDqBebreI+zcgrJHNSN8d6cxTmfVQl1jIPHvxE5oN7qUdfYmK4D+SOlj8FlkUvwis+3Ix2AQsvNoOD1OzuqUOd/FpXBnEGaeTq9EMwDxplNqltR/qT3/poUwIDAQAB\n-----END CERTIFICATE-----"}'
+    jwt_secret: '{"type": "RS256", "key": "-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyQQ56WKKsVCUs8n9swlv5DV7st7UUdvNoDSnwovdU2vinQQ686//vRqlUJ5vpyI7r75qTXCPkXUitDhPvGEMfChnb9tuWdymSyZmMmT+34oaYo/2bGSZjTlLRVfRJjUnFYeWoVLoXVKJolyDWtU6bXbFNnUyysb/6YIpg5sSwxkLs/9yl6HsWdFconxPJO6KmMPSjcOc0fZermNq+cOEvj1OqRhVkxDqBebreI+zcgrJHNSN8d6cxTmfVQl1jIPHvxE5oN7qUdfYmK4D+SOlj8FlkUvwis+3Ix2AQsvNoOD1OzuqUOd/FpXBnEGaeTq9EMwDxplNqltR/qT3/poUwIDAQAB\n-----END CERTIFICATE-----", "allowed_skew": 2}'
     admin_secret: CHANGEME
 auth:
   client_id: model_catalog
