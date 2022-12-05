@@ -236,7 +236,7 @@ components:
     environment:
       data_dir: mintproject
       data_url: http://localhost/mint
-      parallel: 2
+      parallel: 1
     ingress:
       enabled: false
       className: ''
