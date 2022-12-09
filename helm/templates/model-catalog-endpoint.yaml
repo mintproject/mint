@@ -61,6 +61,15 @@ spec:
               mountPath: /fuseki-base/databases
             - name: config
               mountPath: /fuseki-base/configuration
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+
       volumes:
         - name: config
           {{- if .Values.components.model_catalog_endpoint.persistence.enabled }}
