@@ -59,7 +59,7 @@ spec:
             pathType: ImplementationSpecific
             backend:
               service:
-                serviceName: {{ $fullName }}-ensemble-manager
+                name: {{ $fullName }}-ensemble-manager
                 port:
                   number: 8080
     {{- end }}
