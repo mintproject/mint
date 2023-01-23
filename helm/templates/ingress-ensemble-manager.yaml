@@ -55,5 +55,12 @@ spec:
               servicePort: {{ $svcPort }}
               {{- end }}
           {{- end }}
+          - path: /data/
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: mint-tacc-ensemble-manager
+                port:
+                  number: 8080
     {{- end }}
 {{- end }}

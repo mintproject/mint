@@ -234,8 +234,8 @@ components:
       tag: 5cf50aa8c0db678357f3e5716cfaeda31d43855b
       pullPolicy: IfNotPresent
     environment:
-      data_dir: mintproject
-      data_url: http://localhost/mint
+      data_dir: /var/mint
+      data_url: http://localhost:30010/data
       parallel: 1
     ingress:
       enabled: false
