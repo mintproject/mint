@@ -39,6 +39,13 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
+          - path: /data/
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ $fullName }}-ensemble-manager
+                port:
+                  number: 8080
           {{- range .paths }}
           - path: {{ .path }}
             {{- if and .pathType (semverCompare ">=1.18-0" $.Capabilities.KubeVersion.GitVersion) }}
@@ -55,12 +62,5 @@ spec:
               servicePort: {{ $svcPort }}
               {{- end }}
           {{- end }}
-          - path: /data/
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: {{ $fullName }}-ensemble-manager
-                port:
-                  number: 8080
     {{- end }}
 {{- end }}
