@@ -56,8 +56,7 @@ data:
             "datadir":"/data/data",
             "tempdir":"/data/temp",
             "logdir":"/data/logs",
-            "dataurl":"{{ .environment.data_url }}/data",
-            "logurl":"{{ .environment.data_url }}/logs",
+            "dataurl":  {{ .environment.data_url | quote }},
             "parallelism": {{ .environment.parallel }}
          },
          {{- end }}

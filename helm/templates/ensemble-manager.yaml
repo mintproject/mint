@@ -16,6 +16,12 @@ spec:
       nodePort: {{ include "helm.ensemble_manager_node_port" . }}
       {{ end }}
       protocol: TCP
+    - name: "datacatalog"
+      port: 8080
+      targetPort: 80
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.ensemble_manager_data_node_port" . }}
+      {{ end }}
   selector:
     app: {{ include "mint.prefix" . }}-ensemble-manager
 ---
@@ -75,6 +81,14 @@ spec:
             - name: config
               mountPath: /home/node/app/config.json
               subPath: config.json
+        - name: datacatalog 
+          {{- with .Values.components.ensemble_manager }}
+          image: "nginx" 
+          imagePullPolicy: {{ .image.pullPolicy }}
+          {{- end }}
+          volumeMounts:
+            - name: storage
+              mountPath: /usr/share/nginx/html/data
         - name: redis
           image: redis
           imagePullPolicy: IfNotPresent

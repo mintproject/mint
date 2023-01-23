@@ -70,6 +70,8 @@ Create the name of the service account to use
 {{- end }}
 {{- end }}
 
+
+
 {{/*
 Create ports 
 */}}
@@ -197,6 +199,20 @@ Create ports
 {{- end }}
 {{- end }}
 {{- end }}
+
+
+{{- define "helm.ensemble_manager_data_node_port" -}}
+{{- if .Values.service.type }}
+{{- if eq .Values.service.type "NodePort" }}
+{{- if .Values.service.port }}
+{{- add .Values.service.port 10 }}
+{{- else }}
+{{- add 30000 10 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
 
 {{/*
 Return  the proper Storage Class
