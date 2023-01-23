@@ -59,7 +59,7 @@ spec:
             pathType: ImplementationSpecific
             backend:
               service:
-                name: mint-tacc-ensemble-manager
+                serviceName: {{ $fullName }}-ensemble-manager
                 port:
                   number: 8080
     {{- end }}
