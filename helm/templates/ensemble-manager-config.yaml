@@ -52,10 +52,10 @@ data:
          {{- if  .enabled }}
          "execution_engine": "localex",
          "localex": {
-            "codedir":"/data/code",
-            "datadir":"/data/data",
-            "tempdir":"/data/temp",
-            "logdir":"/data/logs",
+            "codedir":"/home/node/app/data/code",
+            "datadir":"/home/node/app/data/data",
+            "tempdir":"/home/node/app/data/temp",
+            "logdir":"/home/node/app/data/logs",
             "dataurl":  {{ .environment.data_url | quote }},
             "parallelism": {{ .environment.parallel }}
          },

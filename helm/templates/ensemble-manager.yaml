@@ -77,7 +77,7 @@ spec:
               value: /home/node/app/config.json
           volumeMounts:
             - name: storage
-              mountPath: /data
+              mountPath: /home/app/node/data
             - name: config
               mountPath: /home/node/app/config.json
               subPath: config.json
