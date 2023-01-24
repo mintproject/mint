@@ -81,14 +81,14 @@ spec:
             - name: config
               mountPath: /home/node/app/config.json
               subPath: config.json
-        - name: datacatalog 
+        - name: files 
           {{- with .Values.components.ensemble_manager }}
           image: "nginx" 
           imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
           volumeMounts:
             - name: storage
-              mountPath: /usr/share/nginx/html/data
+              mountPath: /usr/share/nginx/html
         - name: redis
           image: redis
           imagePullPolicy: IfNotPresent
@@ -103,4 +103,4 @@ spec:
             - name: docker-storage
               mountPath: /var/lib/docker
             - name: storage
-              mountPath: /data
+              mountPath: /home/node/app/data
