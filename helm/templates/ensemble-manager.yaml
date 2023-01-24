@@ -67,7 +67,7 @@ spec:
             - name: DOCKER_HOST
               value: 127.0.0.1:2375
             - name: TMPDIR
-              value: /data/temp
+              value: /home/node/app/data/temp
             - name: HASURA_GRAPHQL_ADMIN_SECRET
               valueFrom:
                 secretKeyRef:
@@ -77,7 +77,7 @@ spec:
               value: /home/node/app/config.json
           volumeMounts:
             - name: storage
-              mountPath: /home/app/node/data
+              mountPath: /home/node/app/data
             - name: config
               mountPath: /home/node/app/config.json
               subPath: config.json
