@@ -40,6 +40,11 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      resources:
+        requests:
+          memory: "2Gi"
+        limits:
+          memory: "4Gi"
       containers:
         - name: endpoint
           {{- with .Values.components.model_catalog_endpoint  }}
