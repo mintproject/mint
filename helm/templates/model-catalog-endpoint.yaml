@@ -40,13 +40,13 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      resources:
-        requests:
-          memory: "2Gi"
-        limits:
-          memory: "4Gi"
       containers:
         - name: endpoint
+          resources:
+            requests:
+              memory: "1Gi"
+            limits:
+              memory: "4Gi"
           {{- with .Values.components.model_catalog_endpoint  }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
