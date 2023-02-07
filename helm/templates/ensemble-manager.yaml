@@ -94,7 +94,7 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ['redis-server', '--port', '7379']
         - name: docker
-          image: docker:20.10.21-dind
+          image: docker:23.0.0-dind
           imagePullPolicy: IfNotPresent
           command: ["dockerd", "--host", "tcp://127.0.0.1:2375"]
           securityContext:
