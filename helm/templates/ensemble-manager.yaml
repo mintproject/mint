@@ -96,7 +96,7 @@ spec:
         - name: docker
           image: docker:23.0.0-dind
           imagePullPolicy: IfNotPresent
-          command: ["dockerd", "--host", "tcp://127.0.0.1:2375"]
+          args: ["docker-init", "dockerd-entrypoint.sh"]
           securityContext:
               privileged: true
           volumeMounts:
