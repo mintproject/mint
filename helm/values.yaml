@@ -45,7 +45,7 @@ components:
     enabled: true
     image:
       repository: mintproject/mic-api
-      tag: 55ec3e0d8093790404a2466d15a16f19b9977b89
+      tag: ee71a1a364fc3d384f85243684ad95d37913b049
       pullPolicy: IfNotPresent
     ingress:
       enabled: false
