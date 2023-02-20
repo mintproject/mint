@@ -177,7 +177,7 @@ components:
     enabled: true
     image:
       repository: mintproject/model-catalog-explorer
-      tag: dc2d36c1539d13c423c99a9b505b2950f2473762
+      tag: 7a91e90325fb7561375db9726908e825182c9caa
       pullPolicy: IfNotPresent
     ingress:
       enabled: false
