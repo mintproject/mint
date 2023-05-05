@@ -214,7 +214,7 @@ components:
     enabled: true
     image:
       repository: mintproject/mint-ui-lit
-      tag: d3ac4bd4c5d6505207bea354f3e54eeb0ffa356f
+      tag: fc348ab58fca34f4b9bf11bb00a2aaa42f73f548
       pullPolicy: IfNotPresent
     ingress:
       enabled: false
