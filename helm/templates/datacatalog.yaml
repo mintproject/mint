@@ -1,4 +1,5 @@
 ---
+{{ if .Values.components.data_catalog.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -71,12 +72,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
-                  key: database 
+                  key: database
             - name: DB_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
-                  key: username 
+                  key: username
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -110,7 +111,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
-                  key: database 
+                  key: database
       volumes:
         - name: data-catalog-db
           {{- if .Values.components.data_catalog_db.persistence.enabled }}
@@ -123,3 +124,4 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+{{ end}}
