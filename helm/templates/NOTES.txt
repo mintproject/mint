@@ -1,50 +1,6 @@
   The MINT system has been installed!
 
-  If you are deploying MINT for the first time, there are a few steps left to
-  finalize its configuration.
-
-  1. Initialize the databases:
-  
-  1a. GraphQL database where the execution provenance will be stored :
-
-      # Create database tables
-      $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-hasura -c hasura -- \
-          hasura migrate apply 
-
-      # Create metadata
-      $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-hasura -c hasura -- \
-          hasura metadata apply
-
-      # Populate with regions and variables
-      $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-hasura -c hasura -- \
-          hasura seeds apply
-
-  1b. Initialize the Model Catalog database where the model metadata will be stored:
-
-      $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-model-catalog-endpoint -c endpoint -- \
-        sh -c '
-          curl -v 'http://localhost:3030/$/datasets' \
-          -X POST \
-          -u admin:${ADMIN_PASSWORD} \
-          --data-raw "dbName={{ .Values.components.model_catalog_endpoint.environment.dataset  }}&dbType=tdb2"
-        '
-
-      $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-model-catalog-endpoint -c endpoint -- \
-        sh -c '
-          curl localhost:3030/{{ .Values.components.model_catalog_endpoint.environment.dataset  }}/data \
-           -X POST \
-           -u admin:${ADMIN_PASSWORD} \
-           --upload-file {{ .Values.components.model_catalog_endpoint.environment.backup_file }} \
-           -H  "Content-Type: application/trig" 
-           '
-
-  1c. Prepare database for MIC https://mic-web.readthedocs.io/en/latest/:
-
-      $ kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "mint.prefix" . }}-mic-api -c mic-api -- \
-          yarn migrate
-
-
-  2. Get the application URL by running these commands:
+  1. Get the application URL by running these commands:
   {{- if .Values.components.ui.ingress.enabled }}
   {{  with .Values.components.ui }}
   http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }};{{ end }}
@@ -56,8 +12,8 @@
     export HASURA_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mint.prefix" . }}-hasura)
     export MODEL_CATALOG_API_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mint.prefix" . }}-model-catalog)
     export MODEL_CATALOG_DATABASE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[1].nodePort}" services {{ include "mint.prefix" . }}-model-catalog)
-    export NODE_IP="localhost"
-  
+    export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+
     echo "MINT User Interface: http://$NODE_IP:$UI_PORT"
     echo "MINT Model Catalog API: http://$NODE_IP:$MODEL_CATALOG_API_PORT/{{ .Values.components.model_catalog_api.api_version }}/docs"
     echo "MINT Data Catalog: http://$NODE_IP:$DATA_CATALOG_PORT"
@@ -69,7 +25,7 @@
       NOTE: It may take a few minutes for the LoadBalancer IP to be available.
             You can watch the status of by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "mint.prefix" . }}-ui'
     export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "mint.prefix" . }}-ui --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-    UI address: 
+    UI address:
     echo http://$SERVICE_IP:{{ .Values.service.port }}
   {{- else if contains "ClusterIP" .Values.service.type }}
     export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "helm.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")

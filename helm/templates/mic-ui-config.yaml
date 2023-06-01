@@ -10,9 +10,9 @@ data:
     // model catalog url
     {{- if  .Values.components.model_catalog_api.enabled }}
       {{- if eq .Values.service.type "NodePort" }}
-    window.REACT_APP_MODEL_CATALOG_API = "http://localhost:{{ include "helm.model_catalog_api_node_port" . }}/{{ .Values.components.model_catalog_api.api_version }}";
+    window.REACT_APP_MODEL_CATALOG_API = "http://{{ .Values.hostname }}:{{ include "helm.model_catalog_api_node_port" . }}/{{ .Values.components.model_catalog_api.api_version }}";
       {{- else if eq .Values.service.type "ClusterIP" }}
-        {{- with .Values.components.model_catalog_api }} 
+        {{- with .Values.components.model_catalog_api }}
           {{- if  .enabled }}
     window.REACT_APP_MODEL_CATALOG_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}";
           {{- end }}
@@ -25,7 +25,7 @@ data:
     {{- else }}
       {{- if eq .Values.service.type "NodePort" }}
         {{- if  .Values.components.mic_api.enabled }}
-    window.REACT_APP_MIC_API = "http://localhost:{{ include "helm.mic_api_node_port" . }}";
+    window.REACT_APP_MIC_API = "http://{{ .Values.hostname }}:{{ include "helm.mic_api_node_port" . }}";
         {{- end }}
       {{- else if eq .Values.service.type "ClusterIP" }}
         {{- with .Values.components.mic_api }}
