@@ -12,7 +12,7 @@ metadata:
 spec:
   template:
     metadata:
-      name: "{{ .Release.Name }}"
+      name: "{{ .Release.Name }}-hasura-post-install"
       labels:
         app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
         app.kubernetes.io/instance: {{ .Release.Name | quote }}
@@ -21,29 +21,16 @@ spec:
       restartPolicy: Never
       containers:
       - name: post-install-hasura
+        command: ["/bin/bash"]
+        args: ["-c", "env && hasura migrate apply && hasura metadata apply && hasura seeds apply"]
         {{- with .Values.components.hasura  }}
         image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
-        command:
+        {{ end }}
         env:
-          - name: HASURA_GRAPHQL_ENABLE_CONSOLE
-            value: "{{ .environment.enable_console }}"
-          - name: HASURA_GRAPHQL_DEV_MODE
-            value: "{{ .environment.enable_dev_mode }}"
-          - name: HASURA_GRAPHQL_UNAUTHORIZED_ROLE
-            value: "{{ .environment.unauthorized_role }}"
-          {{- end }}
-          - name: HASURA_GRAPHQL_DATABASE_URL
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "mint.prefix" . }}-hasura-secrets
-                key: database_url
+          - name: HASURA_GRAPHQL_ENDPOINT
+            value: http://{{ include "mint.prefix" $ }}-hasura
           - name: HASURA_GRAPHQL_ADMIN_SECRET
             valueFrom:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-hasura-secrets
                 key: admin_secret
-          - name: HASURA_GRAPHQL_JWT_SECRET
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "mint.prefix" . }}-hasura-secrets
-                key: jwt_secret

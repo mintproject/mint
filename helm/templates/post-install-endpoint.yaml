@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog-endpoint-post-install
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-endpoint-post-install"
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: post-install-model-catalog-endpoint
+        command: ["/bin/bash"]
+        args: ["-c", "curl -v \
+         'http://{{ include "mint.prefix" $ }}-model-catalog-endpoint:3030/$/datasets' \
+          -X POST \
+          -u admin:${ADMIN_PASSWORD} \
+          --data-raw \"dbName={{ .Values.components.model_catalog_endpoint.environment.dataset  }}&dbType=tdb2\" \
+          && curl -v \
+         'http://{{ include "mint.prefix" $ }}-model-catalog-endpoint:3030/{{ .Values.components.model_catalog_endpoint.environment.dataset }}/data' \
+                    -X POST \
+           -u admin:${ADMIN_PASSWORD} \
+           --upload-file {{ .Values.components.model_catalog_endpoint.environment.backup_file }} \
+           -H  \"Content-Type: application/trig\"
+          "]
+        {{- with .Values.components.model_catalog_endpoint  }}
+        image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+        {{ end }}
+        env:
+          - name: ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-model-catalog-endpoint-secrets
+                key: password
