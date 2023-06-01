@@ -1,4 +1,5 @@
 ---
+{{ if .Values.components.hasura.enabled -}}
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,8 +11,8 @@ spec:
   type: {{ .Values.service.type }}
   ports:
     - name: "http"
-      port: 80 
-      targetPort: 8080 
+      port: 80
+      targetPort: 8080
       {{ if eq .Values.service.type "NodePort" }}
       nodePort: {{ include "helm.hasura_node_port" . }}
       {{ end }}
@@ -61,7 +62,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-hasura-secrets
-                key: database_url 
+                key: database_url
           - name: HASURA_GRAPHQL_ADMIN_SECRET
             valueFrom:
               secretKeyRef:
@@ -71,7 +72,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-hasura-secrets
-                key: jwt_secret 
+                key: jwt_secret
           ports:
             - name: http
               containerPort: 8080
@@ -116,3 +117,4 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+{{end}}

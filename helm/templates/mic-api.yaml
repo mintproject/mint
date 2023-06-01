@@ -1,4 +1,5 @@
 ---
+{{ if .Values.components.mic_api.enabled -}}
 apiVersion: v1
 kind: Service
 metadata:
@@ -63,12 +64,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-mic-api-db-secrets
-                  key: database 
+                  key: database
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-mic-api-db-secrets
-                  key: username 
+                  key: username
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -92,13 +93,13 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-mic-api-db-secrets
-                  key: database 
-            - name: POSTGRES_USER 
+                  key: database
+            - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-mic-api-db-secrets
-                  key: username 
-            - name: POSTGRES_PASSWORD  
+                  key: username
+            - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-mic-api-db-secrets
@@ -115,3 +116,4 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+          {{- end}}

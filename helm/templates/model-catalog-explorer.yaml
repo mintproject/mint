@@ -1,4 +1,5 @@
---- 
+---
+{{ if .Values.components.model_catalog_explorer.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -54,4 +55,4 @@ spec:
             httpGet:
               path: /
               port: http
-             
+{{ end }}

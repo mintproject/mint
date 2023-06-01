@@ -1,4 +1,5 @@
 ---
+{{ if .Values.components.ensemble_manager.enabled -}}
 apiVersion: v1
 kind: Service
 metadata:
@@ -81,9 +82,9 @@ spec:
             - name: config
               mountPath: /home/node/app/config.json
               subPath: config.json
-        - name: files 
+        - name: files
           {{- with .Values.components.ensemble_manager }}
-          image: "nginx" 
+          image: "nginx"
           imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
           volumeMounts:
@@ -107,3 +108,4 @@ spec:
               mountPath: /var/lib/docker
             - name: storage
               mountPath: /home/node/app/data
+{{ end }}

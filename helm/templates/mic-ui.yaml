@@ -1,4 +1,5 @@
 ---
+{{ if .Values.components.mic_ui.enabled  }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -67,3 +68,4 @@ spec:
               port: http
 
             {{- end }}
+{{ end }}
