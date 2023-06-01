@@ -3,6 +3,9 @@ default_user: mint@isi.edu
 service:
   type: NodePort
   port: 30000
+# If you are using macOS or Windows and `service.Type` as NodePort, you need to change the hostname to the IP address of your virtual machine.
+# If you are using Ingress, you need to change the hostname to the domain name of your server.
+hostname: localhost
 components:
   backups:
     enabled: false
