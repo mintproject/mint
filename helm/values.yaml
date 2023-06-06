@@ -78,7 +78,7 @@ components:
     enabled: false
     image:
       repository: mintproject/data-catalog
-      tag: dfb7479a7c0a1676c8f77dba52989cfc77c9a76a
+      tag: fced7107f1299aa1ef9b36c17704b296b8f764d0
       pullPolicy: IfNotPresent
     ingress:
       enabled: false
