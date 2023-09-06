@@ -27,7 +27,7 @@ components:
     enabled: true
     image:
       repository: mintproject/mic-web
-      tag: 535e0c08bcd3cb22b486f97536ead14930fb951c
+      tag: a736ac5841d471de4679bec80c13b0fb646ae073
       pullPolicy: IfNotPresent
       environment:
         api_url: null
