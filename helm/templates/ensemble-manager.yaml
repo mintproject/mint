@@ -56,6 +56,13 @@ spec:
             path: {{ .Values.components.ensemble_manager.environment.data_dir }}
         - name: docker-storage
           emptyDir: {}
+      initContainers:
+        - name: volume-mount-hack
+          image: busybox
+          command: ["sh", "-c", "chown -R 1000:1000 /home/node/app/data"]
+          volumeMounts:
+          - name: storage
+            mountPath: /home/node/app/data
       containers:
         - name: head
           {{- with .Values.components.ensemble_manager }}
