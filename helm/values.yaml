@@ -232,7 +232,7 @@ components:
     api_version: v1
     image:
       repository: mintproject/ensemble-manager
-      tag: caaf347de226469fbdb308f1eb23837f5a8ce131
+      tag: d888812510632a2da24be898e58dfc5325417c05
       pullPolicy: IfNotPresent
     environment:
       data_dir: /var/mint
