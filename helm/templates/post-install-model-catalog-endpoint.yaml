@@ -12,7 +12,7 @@ metadata:
 spec:
   template:
     metadata:
-      name: "{{ .Release.Name }}-endpoint-post-install"
+      name: "{{ .Release.Name }}-model-catalog-endpoint-post-install"
       labels:
         app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
         app.kubernetes.io/instance: {{ .Release.Name | quote }}
