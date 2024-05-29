@@ -1,0 +1,4 @@
+welcome_message: Welcome to MINT Demo
+google:
+  maps:
+    key: <google_maps_key>
