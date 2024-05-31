@@ -105,6 +105,14 @@ spec:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-hasura-secrets
                   key: username
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - myuser
+            initialDelaySeconds: 5
+            periodSeconds: 10
       volumes:
         - name: hasura-db
           {{- if .Values.components.hasura_db.persistence.enabled }}

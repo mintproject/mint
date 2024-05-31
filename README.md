@@ -23,7 +23,7 @@ $ microk8s install --memory 8
 Support for 'multipass' needs to be set up. Would you like to do that now? [y/N]: y
 ```
 
-Enable the
+Enable required addons:
 
 ```bash
 $ microk8s enable dashboard hostpath-storage
@@ -35,21 +35,22 @@ Configure the kubectl to use the microk8s cluster
 $ microk8s config > ~/.kube/config
 ```
 
-To test, list the existing resources. It should be list multiple services, deployments, and pods.
+To test, list the existing resources. It should be list multiple services, deployments, and pods. Please wait until all the resources are up and running.
 
 ```bash
 $ kubectl get all --all-namespaces
 ```
 
+Verify the node status
+
+```bash
+$ kubectl get nodes
+```
+
 ### MINT services installation
 
-![
-
-](image.png)
-
-If you want to test the MINT services on your local machine, you can use the helm charts provided in this repository. The helm charts are organized in the `charts` folder. To install the MINT services, follow the instructions below:
-
-If you using MacOS Silicon, you need to install the `amd64` version of the postgresql database. Add the following lines in the `values.yaml` file
+If you using MacOS Silicon, you need to install the `arm64` version of the postgresql database. Add the following lines in the `values.yaml` file
+WARNING: The following image is not tested and may not work as expected. Please use it at your own risk.
 
 ```
 components:
@@ -63,7 +64,6 @@ components:
 Use the following commands to install the MINT services:
 
 ````bash
-
 $ helm install -f ./values.yaml mint ./helm --namespace mint --create-namespace
 ```
 
