@@ -4,6 +4,7 @@ service:
   type: NodePort
   port: 30000
 hostname: localhost
+arm_support: false
 components:
   backups:
     enabled: false
@@ -15,7 +16,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: false
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: cromo.mint.local
@@ -34,7 +35,7 @@ components:
         airflow_url: https://airflow.mint.isi.edu/api/v1
     ingress:
       enabled: false
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: mic.mint.local
@@ -50,7 +51,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: false
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: api.mic.mint.local
@@ -65,12 +66,12 @@ components:
       pullPolicy: IfNotPresent
     persistence:
       enabled: true
-      storageClass: ''
+      storageClass: ""
       accessModes:
         - ReadWriteOnce
       size: 10Gi
       dataSource: {}
-      existingClaim: ''
+      existingClaim: ""
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
@@ -82,7 +83,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: false
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: datacatalog.mint.local
@@ -97,12 +98,12 @@ components:
       pullPolicy: IfNotPresent
     persistence:
       enabled: true
-      storageClass: ''
+      storageClass: ""
       accessModes:
         - ReadWriteOnce
       size: 10Gi
       dataSource: {}
-      existingClaim: ''
+      existingClaim: ""
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
@@ -119,7 +120,7 @@ components:
       backup_file: /fuseki-base/seeds/model-catalog.trig
     ingress:
       enabled: false
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: endpoint.models.mint.local
@@ -129,12 +130,12 @@ components:
       tls: []
     persistence:
       enabled: true
-      storageClass: ''
+      storageClass: ""
       accessModes:
         - ReadWriteOnce
       size: 10Gi
       dataSource: {}
-      existingClaim: ''
+      existingClaim: ""
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
@@ -163,14 +164,18 @@ components:
       repository: postgis/postgis
       tag: 10-3.2-alpine
       pullPolicy: IfNotPresent
+    arm_image:
+      repository: imresamu/postgis-arm64
+      tag: 12-3.4-alpine
+      pullPolicy: IfNotPresent
     persistence:
       enabled: true
-      storageClass: ''
+      storageClass: ""
       accessModes:
         - ReadWriteOnce
       size: 10Gi
       dataSource: {}
-      existingClaim: ''
+      existingClaim: ""
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
@@ -182,7 +187,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: false
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: models.mint.local
@@ -202,9 +207,9 @@ components:
       queries_dir: queries/
     ingress:
       enabled: false
-      className: ''
+      className: ""
       annotations:
-        nginx.ingress.kubernetes.io/enable-cors: 'true'
+        nginx.ingress.kubernetes.io/enable-cors: "true"
       hosts:
         - host: api.models.mint.local
           paths:
@@ -219,7 +224,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: false
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: mint.local
@@ -240,7 +245,7 @@ components:
       parallel: 1
     ingress:
       enabled: false
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: ensemble-manager.mint.local
@@ -285,12 +290,12 @@ auth:
   realm: production
   ui_client_id: mint-ui
 imagePullSecrets: []
-nameOverride: ''
-fullnameOverride: ''
+nameOverride: ""
+fullnameOverride: ""
 serviceAccount:
   create: true
   annotations: {}
-  name: ''
+  name: ""
 podAnnotations: {}
 podSecurityContext: {}
 securityContext: {}
