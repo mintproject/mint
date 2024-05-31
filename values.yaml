@@ -1,4 +1,10 @@
 welcome_message: Welcome to MINT Demo
 google:
   maps:
-    key: <google_maps_key>
+    key:
+components:
+  hasura_db:
+    image:
+      repository: imresamu/postgis-arm64
+      tag: 12-3.4-alpine
+      pullPolicy: IfNotPresent
