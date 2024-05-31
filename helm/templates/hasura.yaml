@@ -86,9 +86,15 @@ spec:
               path: /
               port: http
         - name: hasura-db
+          #if the values.arm_support is true, then use the arm_image, otherwise use the image
+
+          {{- if .Values.arm_support  }}
           {{- with .Values.components.hasura_db }}
+          image: "{{ .arm_image.repository }}:{{ .arm_image.tag | default $.Chart.AppVersion }}"
+          {{- else }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
+          {{- end }}
           {{- end }}
           resources: {}
           volumeMounts:
@@ -105,6 +111,14 @@ spec:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-hasura-secrets
                   key: username
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.secrets.database.hasura.username }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
       volumes:
         - name: hasura-db
           {{- if .Values.components.hasura_db.persistence.enabled }}
