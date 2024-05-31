@@ -110,7 +110,7 @@ spec:
               command:
                 - pg_isready
                 - -U
-                - myuser
+                - {{ .Values.components.hasura_db.secrets.username }}
             initialDelaySeconds: 5
             periodSeconds: 10
       volumes:
