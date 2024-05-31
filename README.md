@@ -50,21 +50,45 @@ $ kubectl get nodes
 ### MINT services installation
 
 If you using MacOS Silicon, you need to install the `arm64` version of the postgresql database. Add the following lines in the `values.yaml` file
-WARNING: The following image is not tested and may not work as expected. Please use it at your own risk.
+WARNING: The arm64 image is not tested and may not work as expected. Please use it at your own risk.
 
 ```
-components:
-  hasura_db:
-    image:
-      repository: imresamu/postgis-arm64
-      tag: 12-3.4-alpine
-      pullPolicy: IfNotPresent
+arm_support: true
 ```
 
 Use the following commands to install the MINT services:
 
 ````bash
 $ helm install -f ./values.yaml mint ./helm --namespace mint --create-namespace
+```
+
+Helm will returns the URL to access the MINT services. You can use the following command to get the URL:
+
+```bash
+  export UI_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-ui)
+  export CROMO_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-cromo)
+  export DATA_CATALOG_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-data-catalog)
+  export HASURA_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-hasura)
+  export MODEL_CATALOG_API_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-model-catalog)
+  export MODEL_CATALOG_DATABASE_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[1].nodePort}" services mint-model-catalog)
+  export NODE_IP=$(kubectl get nodes --namespace mint -o jsonpath="{.items[0].status.addresses[0].address}")
+
+  echo "MINT User Interface: http://$NODE_IP:$UI_PORT"
+  echo "MINT Model Catalog API: http://$NODE_IP:$MODEL_CATALOG_API_PORT/v1.8.0/docs"
+  echo "MINT Data Catalog: http://$NODE_IP:$DATA_CATALOG_PORT"
+  echo "MINT Constraint Reasoning Over MOdels (CROMO): http://$NODE_IP:$CROMO_PORT"
+  echo "MINT Database: http://$NODE_IP:$HASURA_PORT"
+  echo "MINT Model Catalog Database: http://$NODE_IP:$MODEL_CATALOG_DATABASE_PORT"
+```
+
+### MINT services removal
+
+To remove the MINT services, use the following command:
+
+```bash
+$ helm uninstall mint -n mint
+$ kubectl delete pvc --all  -n mint
+$ kubectl delete jobs --all -n mint
 ```
 
 ## Developer documentation
