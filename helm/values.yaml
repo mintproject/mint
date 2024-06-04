@@ -1,8 +1,8 @@
 welcome_message: Welcome to MINT
 default_user: mint@isi.edu
 service:
-  type: NodePort
-  port: 30000
+  type: ClusterIP
+  port: 80
 hostname: localhost
 arm_support: false
 components:
@@ -15,7 +15,7 @@ components:
       tag: 3c75586989aedf2573c37f5352f960c294377931
       pullPolicy: IfNotPresent
     ingress:
-      enabled: false
+      enabled: true
       className: ""
       annotations: {}
       hosts:
@@ -34,7 +34,7 @@ components:
         api_url: null
         airflow_url: https://airflow.mint.isi.edu/api/v1
     ingress:
-      enabled: false
+      enabled: true
       className: ""
       annotations: {}
       hosts:
@@ -50,7 +50,7 @@ components:
       tag: ee71a1a364fc3d384f85243684ad95d37913b049
       pullPolicy: IfNotPresent
     ingress:
-      enabled: false
+      enabled: true
       className: ""
       annotations: {}
       hosts:
@@ -82,7 +82,7 @@ components:
       tag: 0e6b32b73228ef268065694ddf0aec47d28bf58e
       pullPolicy: IfNotPresent
     ingress:
-      enabled: false
+      enabled: true
       className: ""
       annotations: {}
       hosts:
@@ -119,7 +119,7 @@ components:
       prefix: https://w3id.org/okn/i/mint/
       backup_file: /fuseki-base/seeds/model-catalog.trig
     ingress:
-      enabled: false
+      enabled: true
       className: ""
       annotations: {}
       hosts:
@@ -150,7 +150,7 @@ components:
       enable_dev_mode: false
       unauthorized_role: anonymous
     ingress:
-      enabled: false
+      enabled: true
       className: null
       annotations: {}
       hosts:
@@ -186,7 +186,7 @@ components:
       tag: 0b2f9f0a9124076aeb492add2f123d0757066f6b
       pullPolicy: IfNotPresent
     ingress:
-      enabled: false
+      enabled: true
       className: ""
       annotations: {}
       hosts:
@@ -206,7 +206,7 @@ components:
       context_dir: contexts/
       queries_dir: queries/
     ingress:
-      enabled: false
+      enabled: true
       className: ""
       annotations:
         nginx.ingress.kubernetes.io/enable-cors: "true"
@@ -223,7 +223,7 @@ components:
       tag: a8611ff22eccf0e7b49201cb1e468a1fbecb4f81
       pullPolicy: IfNotPresent
     ingress:
-      enabled: false
+      enabled: true
       className: ""
       annotations: {}
       hosts:
@@ -244,7 +244,7 @@ components:
       data_url: http://localhost:30010/data
       parallel: 1
     ingress:
-      enabled: false
+      enabled: true
       className: ""
       annotations: {}
       hosts:

@@ -1,0 +1,1 @@
+helm upgrade -f ./values.yaml mint ./helm --namespace mint
