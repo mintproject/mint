@@ -108,6 +108,7 @@ Add the following lines (replace the IP address with the IP address of the VM):
 10.211.59.16 graphql.mint.local
 10.211.59.16 models.mint.local
 10.211.59.16 api.models.mint.local
+10.211.59.16 endpoint.models.mint.local
 ```
 
 ### MINT services removal
