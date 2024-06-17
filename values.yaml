@@ -2,4 +2,4 @@ welcome_message: Welcome to MINT Demo
 google:
   maps:
     key: <google_maps_key>
-arm_support: true
+arm_support: false
