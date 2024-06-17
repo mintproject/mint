@@ -14,7 +14,8 @@ To test the MINT services on your local machine, we recommend using the [microk8
 
 ### Microk8s installation
 
-Tested on MacOS (arm64) with microk8s 1.28/stable.
+Tested on MacOS (arm64) and microk8s 1.28/stable.
+Tested on Ubuntu 22.04 (amd64) and microk8s 1.28/stable.
 
 Install the microk8s using the following command:
 
@@ -26,7 +27,7 @@ Support for 'multipass' needs to be set up. Would you like to do that now? [y/N]
 Enable required addons:
 
 ```bash
-$ microk8s enable dashboard hostpath-storage
+$ microk8s enable dashboard hostpath-storage ingress
 ```
 
 Configure the kubectl to use the microk8s cluster
@@ -50,7 +51,8 @@ $ kubectl get nodes
 ### MINT services installation
 
 If you using MacOS Silicon, you need to install the `arm64` version of the postgresql database. Add the following lines in the `values.yaml` file
-WARNING: The arm64 image is not tested and may not work as expected. Please use it at your own risk.
+
+**WARNING:** The arm64 image has not been tested and may not work as expected. Please use it at your own risk.
 
 ```
 arm_support: true
@@ -58,27 +60,55 @@ arm_support: true
 
 Use the following commands to install the MINT services:
 
-````bash
+```bash
 $ helm install -f ./values.yaml mint ./helm --namespace mint --create-namespace
 ```
 
+or
+
 Helm will returns the URL to access the MINT services. You can use the following command to get the URL:
 
-```bash
-  export UI_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-ui)
-  export CROMO_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-cromo)
-  export DATA_CATALOG_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-data-catalog)
-  export HASURA_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-hasura)
-  export MODEL_CATALOG_API_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[0].nodePort}" services mint-model-catalog)
-  export MODEL_CATALOG_DATABASE_PORT=$(kubectl get --namespace mint -o jsonpath="{.spec.ports[1].nodePort}" services mint-model-catalog)
-  export NODE_IP=$(kubectl get nodes --namespace mint -o jsonpath="{.items[0].status.addresses[0].address}")
+```txt
+The MINT system has been installed!
 
-  echo "MINT User Interface: http://$NODE_IP:$UI_PORT"
-  echo "MINT Model Catalog API: http://$NODE_IP:$MODEL_CATALOG_API_PORT/v1.8.0/docs"
-  echo "MINT Data Catalog: http://$NODE_IP:$DATA_CATALOG_PORT"
-  echo "MINT Constraint Reasoning Over MOdels (CROMO): http://$NODE_IP:$CROMO_PORT"
-  echo "MINT Database: http://$NODE_IP:$HASURA_PORT"
-  echo "MINT Model Catalog Database: http://$NODE_IP:$MODEL_CATALOG_DATABASE_PORT"
+Please remember to edit your `/etc/hosts/`
+
+After that, you can access to the MINT services
+
+
+http://mint.local
+http://ensemble-manager.mint.local
+http://cromo.mint.local
+http://mic.mint.local
+http://datacatalog.mint.local
+```
+
+If you are using microk8s on a VM, need to get the IP address of the VM to access the MINT services. You can use the following command to get the IP address of the VM:
+
+```bash
+$ microk8s kubectl get node -o json | jq '.items[].status.addresses[] | select(.type=="InternalIP") | .address'
+10.211.59.16
+```
+
+Then, edit the `/etc/hosts` file and add the following lines:
+
+```bash
+$ sudo vim /etc/hosts
+```
+
+Add the following lines (replace the IP address with the IP address of the VM):
+
+```text
+10.211.59.16 mint.local
+10.211.59.16 cromo.mint.local
+10.211.59.16 mic.mint.local
+10.211.59.16 api.mic.mint.local
+10.211.59.16 datacatalog.mint.local
+10.211.59.16 endpoint.models.mint.local
+10.211.59.16 graphql.mint.local
+10.211.59.16 models.mint.local
+10.211.59.16 api.models.mint.local
+10.211.59.16 endpoint.models.mint.local
 ```
 
 ### MINT services removal
@@ -89,6 +119,12 @@ To remove the MINT services, use the following command:
 $ helm uninstall mint -n mint
 $ kubectl delete pvc --all  -n mint
 $ kubectl delete jobs --all -n mint
+```
+
+or
+
+```bash
+bash uninstall.sh
 ```
 
 ## Developer documentation
@@ -106,6 +142,6 @@ To release a new version of the MINT charts, follow the following steps:
 
 ```bash
 make release
-````
+```
 
 3. Commit the changes and push them to the repository.

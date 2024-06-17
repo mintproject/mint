@@ -1,35 +1,25 @@
-  The MINT system has been installed!
+The MINT system has been installed!
 
-  1. Get the application URL by running these commands:
-  {{- if .Values.components.ui.ingress.enabled }}
-  {{  with .Values.components.ui }}
-  http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }};{{ end }}
-  {{- end }}
-  {{- else if contains "NodePort" .Values.service.type }}
-    export UI_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mint.prefix" . }}-ui)
-    export CROMO_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mint.prefix" . }}-cromo)
-    export DATA_CATALOG_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mint.prefix" . }}-data-catalog)
-    export HASURA_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mint.prefix" . }}-hasura)
-    export MODEL_CATALOG_API_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mint.prefix" . }}-model-catalog)
-    export MODEL_CATALOG_DATABASE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[1].nodePort}" services {{ include "mint.prefix" . }}-model-catalog)
-    export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+Please remember to edit your `/etc/hosts/`
 
-    echo "MINT User Interface: http://$NODE_IP:$UI_PORT"
-    echo "MINT Model Catalog API: http://$NODE_IP:$MODEL_CATALOG_API_PORT/{{ .Values.components.model_catalog_api.api_version }}/docs"
-    echo "MINT Data Catalog: http://$NODE_IP:$DATA_CATALOG_PORT"
-    echo "MINT Constraint Reasoning Over MOdels (CROMO): http://$NODE_IP:$CROMO_PORT"
-    echo "MINT Database: http://$NODE_IP:$HASURA_PORT"
-    echo "MINT Model Catalog Database: http://$NODE_IP:$MODEL_CATALOG_DATABASE_PORT"
 
-  {{- else if contains "LoadBalancer" .Values.service.type }}
-      NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-            You can watch the status of by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "mint.prefix" . }}-ui'
-    export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "mint.prefix" . }}-ui --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-    UI address:
-    echo http://$SERVICE_IP:{{ .Values.service.port }}
-  {{- else if contains "ClusterIP" .Values.service.type }}
-    export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "helm.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
-    export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-    echo "Visit http://127.0.0.1:8080 to use your application"
-    kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
-  {{- end }}
+
+After that, you can access to the MINT services
+
+{{ if .Values.components.ui.ingress.enabled }}
+{{- with .Values.components.ui }}
+http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}
+{{- end }}
+{{- with .Values.components.ensemble_manager }}
+http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}
+{{- end }}
+{{- with .Values.components.cromo }}
+http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}
+{{- end }}
+{{- with .Values.components.mic_ui }}
+http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}
+{{- end }}
+{{- with .Values.components.data_catalog }}
+http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}
+{{- end }}
+{{- end }}

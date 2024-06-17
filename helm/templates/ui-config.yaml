@@ -44,7 +44,7 @@ data:
     {{ if  .enabled }}
     window.REACT_APP_ENSEMBLE_MANAGER_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}";
     //Execution - Local
-    window.REACT_APP_EXECUTION_ENGINE = "localex";
+    window.REACT_APP_EXECUTION_ENGINE = "tapis";
     window.REACT_APP_LOCALEX_CODEDIR = "{{ .environment.data_dir }}/code";
     window.REACT_APP_LOCALEX_DATADIR = "{{ .environment.data_dir }}/data";
     window.REACT_APP_LOCALEX_TEMPDIR = "{{ .environment.data_dir }}/temp";
