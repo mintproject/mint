@@ -16,7 +16,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: true
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: cromo.mint.local
@@ -35,7 +35,7 @@ components:
         airflow_url: https://airflow.mint.isi.edu/api/v1
     ingress:
       enabled: true
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: mic.mint.local
@@ -51,7 +51,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: true
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: api.mic.mint.local
@@ -66,12 +66,12 @@ components:
       pullPolicy: IfNotPresent
     persistence:
       enabled: true
-      storageClass: ''
+      storageClass: ""
       accessModes:
         - ReadWriteOnce
       size: 10Gi
       dataSource: {}
-      existingClaim: ''
+      existingClaim: ""
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
@@ -83,7 +83,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: true
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: datacatalog.mint.local
@@ -98,12 +98,12 @@ components:
       pullPolicy: IfNotPresent
     persistence:
       enabled: true
-      storageClass: ''
+      storageClass: ""
       accessModes:
         - ReadWriteOnce
       size: 10Gi
       dataSource: {}
-      existingClaim: ''
+      existingClaim: ""
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
@@ -120,7 +120,7 @@ components:
       backup_file: /fuseki-base/seeds/model-catalog.trig
     ingress:
       enabled: true
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: endpoint.models.mint.local
@@ -130,12 +130,12 @@ components:
       tls: []
     persistence:
       enabled: true
-      storageClass: ''
+      storageClass: ""
       accessModes:
         - ReadWriteOnce
       size: 10Gi
       dataSource: {}
-      existingClaim: ''
+      existingClaim: ""
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
@@ -170,12 +170,12 @@ components:
       pullPolicy: IfNotPresent
     persistence:
       enabled: true
-      storageClass: ''
+      storageClass: ""
       accessModes:
         - ReadWriteOnce
       size: 10Gi
       dataSource: {}
-      existingClaim: ''
+      existingClaim: ""
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
@@ -187,7 +187,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: true
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: models.mint.local
@@ -207,9 +207,9 @@ components:
       queries_dir: queries/
     ingress:
       enabled: true
-      className: ''
+      className: ""
       annotations:
-        nginx.ingress.kubernetes.io/enable-cors: 'true'
+        nginx.ingress.kubernetes.io/enable-cors: "true"
       hosts:
         - host: api.models.mint.local
           paths:
@@ -224,7 +224,7 @@ components:
       pullPolicy: IfNotPresent
     ingress:
       enabled: true
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: mint.local
@@ -237,15 +237,23 @@ components:
     api_version: v1
     image:
       repository: mintproject/ensemble-manager
-      tag: 1bec795edf26f556c6ac2a7c48a77d831b4a55e4
+      tag: 5768d915d57b0700f39be603247d9a78c87a8999
       pullPolicy: IfNotPresent
     environment:
       data_dir: /var/mint
       data_url: http://localhost:30010/data
       parallel: 1
+    executionEngine:
+      type: localex
+      codedir: /home/node/app/data/code
+      datadir: /home/node/app/data/data
+      tempdir: /home/node/app/data/temp
+      logdir: /home/node/app/data/logs
+      dataurl: http://localhost:30010/data
+      parallelism: 1
     ingress:
       enabled: true
-      className: ''
+      className: ""
       annotations: {}
       hosts:
         - host: ensemble-manager.mint.local
@@ -290,12 +298,12 @@ auth:
   realm: production
   ui_client_id: mint-ui
 imagePullSecrets: []
-nameOverride: ''
-fullnameOverride: ''
+nameOverride: ""
+fullnameOverride: ""
 serviceAccount:
   create: true
   annotations: {}
-  name: ''
+  name: ""
 podAnnotations: {}
 podSecurityContext: {}
 securityContext: {}

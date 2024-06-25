@@ -49,15 +49,13 @@ data:
 
 
          {{- with .Values.components.ensemble_manager }}
-         {{- if  .enabled }}
+         # if execution engine is enabled and type is localex
+         {{- if eq .executionEngine.type "localex" }}
          "execution_engine": "localex",
-         "localex": {
-            "codedir":"/home/node/app/data/code",
-            "datadir":"/home/node/app/data/data",
-            "tempdir":"/home/node/app/data/temp",
-            "logdir":"/home/node/app/data/logs",
-            "dataurl":  {{ .environment.data_url | quote }},
-            "parallelism": {{ .environment.parallel }}
+         "{{ .executionEngine.type }}": {
+            {{- range $key, $value := .Values }}
+            {{ $key }}: {{ $value | toYaml | nindent 2 }}
+            {{- end }}
          },
          {{- end }}
          {{- end }}
