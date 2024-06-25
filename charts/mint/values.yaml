@@ -245,11 +245,12 @@ components:
       parallel: 1
     executionEngine:
       type: localex
-      codedir: /home/node/app/data/code
-      datadir: /home/node/app/data/data
-      tempdir: /home/node/app/data/temp
-      logdir: /home/node/app/data/logs
-      dataurl: http://localhost:30010/data
+      config:
+        codedir: /home/node/app/data/code
+        datadir: /home/node/app/data/data
+        tempdir: /home/node/app/data/temp
+        logdir: /home/node/app/data/logs
+        dataurl: http://localhost:30010/data
       parallelism: 1
     ingress:
       enabled: true
