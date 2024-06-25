@@ -9,7 +9,7 @@ components:
   backups:
     enabled: false
   cromo:
-    enabled: true
+    enabled: false
     image:
       repository: mintproject/cromo
       tag: 3c75586989aedf2573c37f5352f960c294377931
@@ -238,12 +238,21 @@ components:
     execution_engine: localex
     image:
       repository: mintproject/ensemble-manager
-      tag: 1bec795edf26f556c6ac2a7c48a77d831b4a55e4
+      tag: 5768d915d57b0700f39be603247d9a78c87a8999
       pullPolicy: IfNotPresent
     environment:
       data_dir: /var/mint
       data_url: http://localhost:30010/data
       parallel: 1
+    executionEngine:
+      type: localex
+      config:
+        codedir: /home/node/app/data/code
+        datadir: /home/node/app/data/data
+        tempdir: /home/node/app/data/temp
+        logdir: /home/node/app/data/logs
+        dataurl: http://localhost:30010/data
+      parallelism: 1
     ingress:
       enabled: true
       className: ""

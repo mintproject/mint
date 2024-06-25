@@ -49,19 +49,12 @@ data:
 
 
          {{- with .Values.components.ensemble_manager }}
-         {{- if  .enabled }}
+         {{- if eq .executionEngine.type "localex" }}
          "execution_engine": "localex",
-         "localex": {
-            "codedir":"/home/node/app/data/code",
-            "datadir":"/home/node/app/data/data",
-            "tempdir":"/home/node/app/data/temp",
-            "logdir":"/home/node/app/data/logs",
-            "dataurl":  {{ .environment.data_url | quote }},
-            "parallelism": {{ .environment.parallel }}
-         },
+         "{{ .executionEngine.type }}":
+            {{ .executionEngine.config  | toRawJson | nindent 12}}
          {{- end }}
          {{- end }}
-
          "auth_server": {{ .Values.auth.url | quote }},
          "auth_realm": {{ .Values.auth.realm | quote }},
          "auth_client_id": {{ .Values.auth.ui_client_id | quote }},
