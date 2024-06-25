@@ -131,8 +131,8 @@ bash uninstall.sh
 
 This repository contains the helm charts for the MINT services. The helm charts are used to deploy the services in a Kubernetes cluster. The helm charts are organized in the following folders:
 
-- `helm`: contains the helm templates for the MINT services
-- `charts`: contains the helm charts for the MINT services
+- `charts`: contains the helm templates for the MINT services
+- `releases`: contains the helm releases for the MINT services
 
 To release a new version of the MINT charts, follow the following steps:
 
