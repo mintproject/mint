@@ -9,7 +9,7 @@ components:
   backups:
     enabled: false
   cromo:
-    enabled: true
+    enabled: false
     image:
       repository: mintproject/cromo
       tag: 3c75586989aedf2573c37f5352f960c294377931
