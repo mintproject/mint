@@ -237,7 +237,7 @@ components:
     api_version: v1
     image:
       repository: mintproject/ensemble-manager
-      tag: 1bec795edf26f556c6ac2a7c48a77d831b4a55e4
+      tag: 8e4981ed3fbc1c55d7164fdf685a01b3635e5e26
       pullPolicy: IfNotPresent
     environment:
       data_dir: /var/mint
