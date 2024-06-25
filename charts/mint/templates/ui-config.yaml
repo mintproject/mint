@@ -44,35 +44,35 @@ data:
     {{ if  .enabled }}
     window.REACT_APP_ENSEMBLE_MANAGER_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}";
     //Execution - Local
-    window.REACT_APP_EXECUTION_ENGINE = "{{ .Values.execution_engine }}";
+    window.REACT_APP_EXECUTION_ENGINE = "{{ .execution_engine.type }}";
 
-    {{ if eq .Values.execution_engine "localex" }}
-    window.REACT_APP_LOCALEX_CODEDIR = "{{ .environment.data_dir }}/code";
-    window.REACT_APP_LOCALEX_DATADIR = "{{ .environment.data_dir }}/data";
-    window.REACT_APP_LOCALEX_TEMPDIR = "{{ .environment.data_dir }}/temp";
-    window.REACT_APP_LOCALEX_LOGDIR = "{{ .environment.data_dir }}/logs";
-    window.REACT_APP_LOCALEX_DATAURL = "{{ .environment.data_url }}/data";
-    window.REACT_APP_LOCALEX_LOGURL = "{{ .environment.data_url }}/logs";
-    window.REACT_APP_LOCALEX_PARALLEL = "{{ .environment.parallel }}";
+    {{ if eq .execution_engine.type "localex" }}
+    window.REACT_APP_LOCALEX_CODEDIR = "{{ .execution_engine.config.data_dir }}/code";
+    window.REACT_APP_LOCALEX_DATADIR = "{{ .execution_engine.config.data_dir }}/data";
+    window.REACT_APP_LOCALEX_TEMPDIR = "{{ .execution_engine.config.data_dir }}/temp";
+    window.REACT_APP_LOCALEX_LOGDIR = "{{ .execution_engine.config.data_dir }}/logs";
+    window.REACT_APP_LOCALEX_DATAURL = "{{ .execution_engine.config.data_url }}/data";
+    window.REACT_APP_LOCALEX_LOGURL = "{{ .execution_engine.config.data_url }}/logs";
+    window.REACT_APP_LOCALEX_PARALLEL = "{{ .execution_engine.config.parallel }}";
     {{ end }}
 
-    {{ if eq .Values.execution_engine "tapis" }}
-    window.REACT_APP_LOCALEX_CODEDIR = "{{ .environment.data_dir }}/code";
-    window.REACT_APP_LOCALEX_DATADIR = "{{ .environment.data_dir }}/data";
-    window.REACT_APP_LOCALEX_TEMPDIR = "{{ .environment.data_dir }}/temp";
-    window.REACT_APP_LOCALEX_LOGDIR = "{{ .environment.data_dir }}/logs";
-    window.REACT_APP_LOCALEX_DATAURL = "{{ .environment.data_url }}/data";
-    window.REACT_APP_LOCALEX_LOGURL = "{{ .environment.data_url }}/logs";
-    window.REACT_APP_LOCALEX_PARALLEL = "{{ .environment.parallel }}";
+    {{ if eq .execution_engine.type "tapis" }}
+    window.REACT_APP_LOCALEX_CODEDIR = "{{ .execution_engine.config.data_dir }}/code";
+    window.REACT_APP_LOCALEX_DATADIR = "{{ .execution_engine.config.data_dir }}/data";
+    window.REACT_APP_LOCALEX_TEMPDIR = "{{ .execution_engine.config.data_dir }}/temp";
+    window.REACT_APP_LOCALEX_LOGDIR = "{{ .execution_engine.config.data_dir }}/logs";
+    window.REACT_APP_LOCALEX_DATAURL = "{{ .execution_engine.config.data_url }}/data";
+    window.REACT_APP_LOCALEX_LOGURL = "{{ .execution_engine.config.data_url }}/logs";
+    window.REACT_APP_LOCALEX_PARALLEL = "{{ .execution_engine.config.parallel }}";
     {{ end }}
 
 
-    {{ if eq .Values.execution_engine "wings" }}
+    {{ if eq .execution_engine.type "wings" }}
     //Execution - Wings
-    window.REACT_APP_WINGS_EXPORT_URL = "{{ .environment.wings_export_url }}";
-    window.REACT_APP_WINGS_STORAGE = "{{ .environment.wings_storage }}";
-    window.REACT_APP_WINGS_DOTPATH = "{{ .environment.wings_dot_path }}";
-    window.REACT_APP_WINGS_ONTURL = "{{ .environment.wings_ont_url }}";
+    window.REACT_APP_WINGS_EXPORT_URL = "{{ .execution_engine.config.wings_export_url }}";
+    window.REACT_APP_WINGS_STORAGE = "{{ .execution_engine.config.wings_storage }}";
+    window.REACT_APP_WINGS_DOTPATH = "{{ .execution_engine.config.wings_dot_path }}";
+    window.REACT_APP_WINGS_ONTURL = "{{ .execution_engine.config.wings_ont_url }}";
     {{ end }}
 
     {{ end }}

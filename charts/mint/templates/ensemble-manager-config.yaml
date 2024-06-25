@@ -49,10 +49,10 @@ data:
 
 
          {{- with .Values.components.ensemble_manager }}
-         {{- if eq .executionEngine.type "localex" }}
+         {{- if eq .execution_engine.type "localex" }}
          "execution_engine": "localex",
-         "{{ .executionEngine.type }}":
-            {{ .executionEngine.config  | toRawJson | nindent 12}}
+         "{{ .execution_engine.type }}":
+            {{ .execution_engine.config  | toRawJson | nindent 12}}
          {{- end }}
          {{- end }}
          "auth_server": {{ .Values.auth.url | quote }},
