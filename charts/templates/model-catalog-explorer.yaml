@@ -1,0 +1,58 @@
+---
+{{ if .Values.components.model_catalog_explorer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog-explorer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: 8080
+      targetPort: 80
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.model_catalog_explorer_node_port" . }}
+      {{ end }}
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-model-catalog-explorer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog-explorer
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-model-catalog-explorer
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-model-catalog-explorer
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: model-catalog-explorer
+          {{- with .Values.components.model_catalog_explorer }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+{{ end }}

@@ -1,0 +1,118 @@
+---
+{{ if .Values.components.ensemble_manager.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 3000
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.ensemble_manager_node_port" . }}
+      {{ end }}
+      protocol: TCP
+    - name: "datacatalog"
+      port: 8080
+      targetPort: 80
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.ensemble_manager_data_node_port" . }}
+      {{ end }}
+  selector:
+    app: {{ include "mint.prefix" . }}-ensemble-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-ensemble-manager
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-ensemble-manager
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "mint.prefix" . }}-ensemble-manager-config-map
+        - name: storage
+          hostPath:
+            path: {{ .Values.components.ensemble_manager.environment.data_dir }}
+        - name: docker-storage
+          emptyDir: {}
+      initContainers:
+        - name: volume-mount-hack
+          image: busybox
+          command: ["sh", "-c", "chown -R 1000:1000 /home/node/app/data"]
+          volumeMounts:
+          - name: storage
+            mountPath: /home/node/app/data
+      containers:
+        - name: head
+          {{- with .Values.components.ensemble_manager }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          {{- end }}
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_HOST
+              value: 127.0.0.1:2375
+            - name: TMPDIR
+              value: /home/node/app/data/temp
+            - name: HASURA_GRAPHQL_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-hasura-secrets
+                  key: admin_secret
+            - name: ENSEMBLE_MANAGER_CONFIG_FILE
+              value: /home/node/app/config.json
+          volumeMounts:
+            - name: storage
+              mountPath: /home/node/app/data
+            - name: config
+              mountPath: /home/node/app/config.json
+              subPath: config.json
+        - name: files
+          {{- with .Values.components.ensemble_manager }}
+          image: "nginx"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          {{- end }}
+          volumeMounts:
+            - name: storage
+              mountPath: /usr/share/nginx/html
+        - name: redis
+          image: redis
+          imagePullPolicy: IfNotPresent
+          command: ['redis-server', '--port', '7379']
+        - name: docker
+          image: docker:23.0.0-dind
+          imagePullPolicy: IfNotPresent
+          args: ["docker-init", "dockerd-entrypoint.sh"]
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+          securityContext:
+              privileged: true
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
+            - name: storage
+              mountPath: /home/node/app/data
+{{ end }}

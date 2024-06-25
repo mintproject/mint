@@ -1,0 +1,37 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mint.prefix" . }}-mic-ui-config-map
+  namespace: {{ .Release.Namespace }}
+data:
+  config.js: |
+    window.REACT_APP_AIRFLOW_API = {{.Values.components.mic_ui.image.environment.airflow_url | quote }}
+    // model catalog url
+    {{- if  .Values.components.model_catalog_api.enabled }}
+      {{- if eq .Values.service.type "NodePort" }}
+    window.REACT_APP_MODEL_CATALOG_API = "http://{{ .Values.hostname }}:{{ include "helm.model_catalog_api_node_port" . }}/{{ .Values.components.model_catalog_api.api_version }}";
+      {{- else if eq .Values.service.type "ClusterIP" }}
+        {{- with .Values.components.model_catalog_api }}
+          {{- if  .enabled }}
+    window.REACT_APP_MODEL_CATALOG_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}";
+          {{- end }}
+      {{- end }}
+      {{- end }}
+    {{- end }}
+    // mic api url
+    {{- if .Values.components.mic_ui.image.environment.api_url  }}
+    window.REACT_APP_MIC_API = {{ .Values.components.mic_ui.image.environment.api_url | quote }};
+    {{- else }}
+      {{- if eq .Values.service.type "NodePort" }}
+        {{- if  .Values.components.mic_api.enabled }}
+    window.REACT_APP_MIC_API = "http://{{ .Values.hostname }}:{{ include "helm.mic_api_node_port" . }}";
+        {{- end }}
+      {{- else if eq .Values.service.type "ClusterIP" }}
+        {{- with .Values.components.mic_api }}
+          {{- if  .enabled }}
+    window.REACT_APP_MIC_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}";
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}

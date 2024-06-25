@@ -1,0 +1,137 @@
+---
+{{ if .Values.components.hasura.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 8080
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.hasura_node_port" . }}
+      {{ end }}
+      protocol: TCP
+    - name: "postgres"
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-hasura
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-hasura
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-hasura
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: hasura
+          {{- with .Values.components.hasura  }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          env:
+          - name: HASURA_GRAPHQL_ENABLE_CONSOLE
+            value: "{{ .environment.enable_console }}"
+          - name: HASURA_GRAPHQL_DEV_MODE
+            value: "{{ .environment.enable_dev_mode }}"
+          - name: HASURA_GRAPHQL_UNAUTHORIZED_ROLE
+            value: "{{ .environment.unauthorized_role }}"
+          {{- end }}
+          - name: HASURA_GRAPHQL_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: database_url
+          - name: HASURA_GRAPHQL_ADMIN_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: admin_secret
+          - name: HASURA_GRAPHQL_JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: jwt_secret
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+        - name: hasura-db
+          #if the values.arm_support is true, then use the arm_image, otherwise use the image
+
+          {{- if .Values.arm_support  }}
+          {{- with .Values.components.hasura_db }}
+          image: "{{ .arm_image.repository }}:{{ .arm_image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .arm_image.pullPolicy }}
+          {{- end }}
+          {{- else }}
+          {{- with .Values.components.hasura_db }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          {{- end }}
+          {{- end }}
+          resources: {}
+          volumeMounts:
+          - mountPath: /var/lib/postgresql/data
+            name: hasura-db
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-hasura-secrets
+                  key: password
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-hasura-secrets
+                  key: username
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.secrets.database.hasura.username }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: hasura-db
+          {{- if .Values.components.hasura_db.persistence.enabled }}
+          persistentVolumeClaim:
+            {{- if .Values.components.hasura_db.persistence.existingClaim }}
+            claimName: {{ .Values.components.hasura_db.persistence.existingClaim }}
+            {{- else }}
+            claimName: {{ include "mint.prefix" . }}-hasura-db
+            {{- end }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{end}}

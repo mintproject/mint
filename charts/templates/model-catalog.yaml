@@ -1,0 +1,99 @@
+---
+{{ if .Values.components.model_catalog_api.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http-api"
+      port: 80
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.model_catalog_api_node_port" . }}
+      {{ end }}
+      targetPort: 8080
+      protocol: TCP
+    - name: "redis-endpoint"
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-model-catalog
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-model-catalog
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-model-catalog
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: model-catalog
+          {{- with .Values.components.model_catalog_api  }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          command: ["uvicorn", "openapi_server.main:app", "--workers", "8", "--host", "0.0.0.0" , "--port", "8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          livenessProbe:
+            httpGet:
+              path: /v1.8.0/models?username=mint%40isi.edu&page=1&per_page=200
+              port: http
+            timeoutSeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          env:
+            - name: CONTEXT_DIR
+              value: "{{ .environment.context_dir }}"
+            - name: QUERIES_DIR
+              value: "{{ .environment.queries_dir }}"
+            - name: REDIS_ADDRESS
+              value: {{ include "mint.prefix" $ }}-model-catalog:6379
+          {{- end }}
+          {{- with .Values.components.model_catalog_endpoint  }}
+            - name: ENDPOINT
+              value: http://{{ include "mint.prefix" $ }}-model-catalog-endpoint:3030/{{ .environment.dataset }}
+            - name: GRAPH_BASE
+              value: "{{ .environment.graph_base }}"
+            - name: PREFIX
+              value: "{{ .environment.prefix }}"
+          {{- end }}
+            - name: AUTH_CLIENT_ID
+              value: {{ .Values.auth.client_id }}
+            - name: AUTH_SERVER
+              value: {{ .Values.auth.url }}/realms/{{ .Values.auth.realm }}/protocol/openid-connect/token
+            - name: ENDPOINT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-model-catalog-endpoint-secrets
+                  key: password
+        - name: model-catalog-redis
+          image: redis:6.0.16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+{{ end }}

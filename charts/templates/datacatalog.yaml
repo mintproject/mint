@@ -1,0 +1,127 @@
+---
+{{ if .Values.components.data_catalog.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-data-catalog
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 7000
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.data_catalog_node_port" . }}
+      {{ end }}
+      protocol: TCP
+    - name: "postgres"
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-data-catalog
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-data-catalog
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-data-catalog
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-data-catalog
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: data-catalog
+          {{- with .Values.components.data_catalog  }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 7000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          env:
+            - name: DB_HOST
+              value: {{ include "mint.prefix" $ }}-data-catalog
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
+                  key: database
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
+                  key: password
+        - name: data-catalog-db
+          {{- with .Values.components.data_catalog_db }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          {{- end }}
+          resources: {}
+          volumeMounts:
+          - mountPath: /var/lib/postgresql/data
+            name: data-catalog-db
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
+                  key: password
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
+                  key: username
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
+                  key: database
+      volumes:
+        - name: data-catalog-db
+          {{- if .Values.components.data_catalog_db.persistence.enabled }}
+          persistentVolumeClaim:
+            {{- if .Values.components.data_catalog_db.persistence.existingClaim }}
+            claimName: {{ .Values.components.data_catalog_db.persistence.existingClaim }}
+            {{- else }}
+            claimName: {{ include "mint.prefix" . }}-data-catalog-db
+            {{- end }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{ end}}

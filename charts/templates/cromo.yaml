@@ -1,0 +1,54 @@
+{{ if .Values.components.cromo.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-cromo
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 9090
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.cromo_node_port" . }}
+      {{ end }}
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-cromo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-cromo
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-cromo
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-cromo
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: cromo
+          {{- with .Values.components.cromo  }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+            {{- end }}
+{{ end }}

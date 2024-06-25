@@ -1,0 +1,64 @@
+{{- if and .Values.components.model_catalog_endpoint.persistence.enabled (not .Values.components.model_catalog_endpoint.persistence.existingClaim) }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog-endpoint-config
+  namespace: {{ .Release.Namespace | quote }}
+  {{- if or .Values.components.model_catalog_endpoint.persistence.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.components.model_catalog_endpoint.persistence.annotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.components.model_catalog_endpoint.persistence.annotations "context" $ ) | nindent 4 }}
+    {{- end }}
+    {{- if .Values.commonAnnotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  accessModes:
+  {{- if not (empty .Values.components.model_catalog_endpoint.persistence.accessModes) }}
+  {{- range .Values.components.model_catalog_endpoint.persistence.accessModes }}
+    - {{ . | quote }}
+  {{- end }}
+  {{- else }}
+    - {{ .Values.components.model_catalog_endpoint.persistence.accessMode | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: "1Gi"
+  {{- include "common.storage.class" (dict "persistence" .Values.components.model_catalog_endpoint.persistence "global" .Values.global) | nindent 2 }}
+  {{- if .Values.components.model_catalog_endpoint.persistence.dataSource }}
+  dataSource: {{- include "common.tplvalues.render" (dict "value" .Values.components.model_catalog_endpoint.persistence.dataSource "context" $) | nindent 4 }}
+  {{- end }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog-endpoint-db
+  namespace: {{ .Release.Namespace | quote }}
+  {{- if or .Values.components.model_catalog_endpoint.persistence.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.components.model_catalog_endpoint.persistence.annotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.components.model_catalog_endpoint.persistence.annotations "context" $ ) | nindent 4 }}
+    {{- end }}
+    {{- if .Values.commonAnnotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  accessModes:
+  {{- if not (empty .Values.components.model_catalog_endpoint.persistence.accessModes) }}
+  {{- range .Values.components.model_catalog_endpoint.persistence.accessModes }}
+    - {{ . | quote }}
+  {{- end }}
+  {{- else }}
+    - {{ .Values.components.model_catalog_endpoint.persistence.accessMode | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.components.model_catalog_endpoint.persistence.size | quote }}
+  {{- include "common.storage.class" (dict "persistence" .Values.components.model_catalog_endpoint.persistence "global" .Values.global) | nindent 2 }}
+  {{- if .Values.components.model_catalog_endpoint.persistence.dataSource }}
+  dataSource: {{- include "common.tplvalues.render" (dict "value" .Values.components.model_catalog_endpoint.persistence.dataSource "context" $) | nindent 4 }}
+  {{- end }}
+{{- end }}
+ 
