@@ -235,9 +235,10 @@ components:
   ensemble_manager:
     enabled: true
     api_version: v1
+    execution_engine: localex
     image:
       repository: mintproject/ensemble-manager
-      tag: d888812510632a2da24be898e58dfc5325417c05
+      tag: 1bec795edf26f556c6ac2a7c48a77d831b4a55e4
       pullPolicy: IfNotPresent
     environment:
       data_dir: /var/mint
