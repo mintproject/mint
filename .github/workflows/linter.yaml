@@ -3,9 +3,6 @@ name: Lint and Test Charts
 # on pull request or any branch
 on:
   pull_request:
-  push:
-    branches:
-      - "*"
 
 jobs:
   lint-test:
