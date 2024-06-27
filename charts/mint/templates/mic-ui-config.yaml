@@ -1,4 +1,4 @@
-{{-if .Values.components.mic_ui.enabled }}
+{{- if .Values.components.mic_ui.enabled }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -37,4 +37,4 @@ data:
       {{- end }}
     {{- end }}
 
-{{-end}}
+{{- end}}
