@@ -99,6 +99,7 @@ spec:
           imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
           {{- end }}
+
           resources: {}
           volumeMounts:
           - mountPath: /var/lib/postgresql/data

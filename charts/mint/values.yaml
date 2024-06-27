@@ -25,7 +25,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
   mic_ui:
-    enabled: true
+    enabled: false
     image:
       repository: mintproject/mic-web
       tag: a736ac5841d471de4679bec80c13b0fb646ae073
@@ -44,7 +44,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
   mic_api:
-    enabled: true
+    enabled: false
     image:
       repository: mintproject/mic-api
       tag: ee71a1a364fc3d384f85243684ad95d37913b049
@@ -76,10 +76,14 @@ components:
       annotations:
         helm.sh/resource-policy: keep
   data_catalog:
-    enabled: false
+    enabled: true
     image:
       repository: mintproject/data-catalog
-      tag: 0e6b32b73228ef268065694ddf0aec47d28bf58e
+      tag: 9be70359feabe03ed55bfdbf92c20a7e43ab928b
+      pullPolicy: IfNotPresent
+    arm_image:
+      repository: mintproject/data-catalog
+      tag: 8a6af95cae183320d596dc5219f2f76d1f234749
       pullPolicy: IfNotPresent
     ingress:
       enabled: true
@@ -94,7 +98,11 @@ components:
   data_catalog_db:
     image:
       repository: mintproject/data-catalog-db
-      tag: 0e6b32b73228ef268065694ddf0aec47d28bf58e
+      tag: 9be70359feabe03ed55bfdbf92c20a7e43ab928b
+      pullPolicy: IfNotPresent
+    arm_image:
+      repository: mintproject/data-catalog-db
+      tag: 8a6af95cae183320d596dc5219f2f76d1f234749
       pullPolicy: IfNotPresent
     persistence:
       enabled: true

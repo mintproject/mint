@@ -1,3 +1,4 @@
+{{- if .Values.components.hasura.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -34,3 +35,4 @@ spec:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-hasura-secrets
                 key: admin_secret
+{{- end }}

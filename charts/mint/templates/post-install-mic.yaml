@@ -1,3 +1,4 @@
+{{- if .Values.components.mic_api.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -46,3 +47,4 @@ spec:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-mic-api-db-secrets
                 key: password
+{{- end }}

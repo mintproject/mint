@@ -75,7 +75,6 @@ spec:
             httpGet:
               path: /
               port: http
-
       volumes:
         - name: config
           {{- if .Values.components.model_catalog_endpoint.persistence.enabled }}
