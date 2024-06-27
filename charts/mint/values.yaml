@@ -25,7 +25,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
   mic_ui:
-    enabled: true
+    enabled: false
     image:
       repository: mintproject/mic-web
       tag: a736ac5841d471de4679bec80c13b0fb646ae073
@@ -44,7 +44,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
   mic_api:
-    enabled: true
+    enabled: false
     image:
       repository: mintproject/mic-api
       tag: ee71a1a364fc3d384f85243684ad95d37913b049
@@ -108,7 +108,7 @@ components:
       annotations:
         helm.sh/resource-policy: keep
   model_catalog_endpoint:
-    enabled: true
+    enabled: false
     image:
       repository: mintproject/model-catalog-endpoint
       tag: 29256555a6fbaefae4729d5cd259564708a4ab04
@@ -140,7 +140,7 @@ components:
       annotations:
         helm.sh/resource-policy: keep
   hasura:
-    enabled: true
+    enabled: false
     image:
       repository: mintproject/graphql-engine
       tag: 0fc7ce2a5098d2e86f1280f6fa70acfc816a531d
@@ -180,7 +180,7 @@ components:
       annotations:
         helm.sh/resource-policy: keep
   model_catalog_explorer:
-    enabled: true
+    enabled: false
     image:
       repository: mintproject/model-catalog-explorer
       tag: 0b2f9f0a9124076aeb492add2f123d0757066f6b
@@ -196,7 +196,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
   model_catalog_api:
-    enabled: true
+    enabled: false
     api_version: v1.8.0
     image:
       repository: mintproject/model-catalog-fastapi
@@ -233,7 +233,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
   ensemble_manager:
-    enabled: true
+    enabled: false
     api_version: v1
     image:
       repository: mintproject/ensemble-manager
