@@ -98,11 +98,11 @@ components:
   data_catalog_db:
     image:
       repository: mintproject/data-catalog-db
-      tag: 8a6af95cae183320d596dc5219f2f76d1f234749
+      tag: 9be70359feabe03ed55bfdbf92c20a7e43ab928b
       pullPolicy: IfNotPresent
     arm_image:
       repository: mintproject/data-catalog-db
-      tag: 0e6b32b73228ef268065694ddf0aec47d28bf58e
+      tag: 8a6af95cae183320d596dc5219f2f76d1f234749
       pullPolicy: IfNotPresent
     persistence:
       enabled: true
