@@ -76,7 +76,7 @@ components:
       annotations:
         helm.sh/resource-policy: keep
   data_catalog:
-    enabled: false
+    enabled: true
     image:
       repository: mintproject/data-catalog
       tag: 0e6b32b73228ef268065694ddf0aec47d28bf58e
