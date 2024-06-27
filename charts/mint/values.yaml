@@ -180,7 +180,7 @@ components:
       annotations:
         helm.sh/resource-policy: keep
   model_catalog_explorer:
-    enabled: false
+    enabled: true
     image:
       repository: mintproject/model-catalog-explorer
       tag: 0b2f9f0a9124076aeb492add2f123d0757066f6b
