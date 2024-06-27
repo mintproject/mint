@@ -108,7 +108,7 @@ components:
       annotations:
         helm.sh/resource-policy: keep
   model_catalog_endpoint:
-    enabled: false
+    enabled: true
     image:
       repository: mintproject/model-catalog-endpoint
       tag: 29256555a6fbaefae4729d5cd259564708a4ab04
@@ -196,7 +196,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
   model_catalog_api:
-    enabled: false
+    enabled: true
     api_version: v1.8.0
     image:
       repository: mintproject/model-catalog-fastapi
