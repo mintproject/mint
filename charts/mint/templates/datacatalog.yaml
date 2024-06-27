@@ -84,10 +84,19 @@ spec:
                   name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
                   key: password
         - name: data-catalog-db
+
+          {{- if .Values.arm_support  }}
+          {{- with .Values.components.data_catalog_db }}
+          image: "{{ .arm_image.repository }}:{{ .arm_image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .arm_image.pullPolicy }}
+          {{- end }}
+          {{- else }}
           {{- with .Values.components.data_catalog_db }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
+          {{- end }}
+
           resources: {}
           volumeMounts:
           - mountPath: /var/lib/postgresql/data
