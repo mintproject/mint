@@ -1,3 +1,4 @@
+{{- if .Values.components.model_catalog_endpoint.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -43,3 +44,4 @@ spec:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-model-catalog-endpoint-secrets
                 key: password
+{{- end }}
