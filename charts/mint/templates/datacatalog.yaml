@@ -47,16 +47,9 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: data-catalog
-          {{- if .Values.arm_support  }}
-          {{- with .Values.components.data_catalog }}
-          image: "{{ .arm_image.repository }}:{{ .arm_image.tag | default $.Chart.AppVersion }}"
-          imagePullPolicy: {{ .arm_image.pullPolicy }}
-          {{- end }}
-          {{- else }}
-          {{- with .Values.components.data_catalog }}
+          {{- with .Values.components.data_catalog  }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
-          {{- end }}
           {{- end }}
           ports:
             - name: http
