@@ -140,7 +140,7 @@ components:
       annotations:
         helm.sh/resource-policy: keep
   hasura:
-    enabled: false
+    enabled: true
     image:
       repository: mintproject/graphql-engine
       tag: 0fc7ce2a5098d2e86f1280f6fa70acfc816a531d
