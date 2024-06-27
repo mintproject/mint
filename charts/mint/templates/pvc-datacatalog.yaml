@@ -1,4 +1,4 @@
-{{- if and .Values.components.data_catalog_db.persistence.enabled (not .Values.components.data_catalog_db.persistence.existingClaim) }}
+{{- if and .Values.components.data_catalog.enabled and .Values.components.data_catalog_db.persistence.enabled (not .Values.components.data_catalog_db.persistence.existingClaim) }}
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
@@ -30,4 +30,3 @@ spec:
   dataSource: {{- include "common.tplvalues.render" (dict "value" .Values.components.data_catalog_db.persistence.dataSource "context" $) | nindent 4 }}
   {{- end }}
 {{- end }}
- 
