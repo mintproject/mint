@@ -233,7 +233,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
   ensemble_manager:
-    enabled: false
+    enabled: true
     api_version: v1
     image:
       repository: mintproject/ensemble-manager
