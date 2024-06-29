@@ -26,8 +26,11 @@ Support for 'multipass' needs to be set up. Would you like to do that now? [y/N]
 
 Enable required addons:
 
-```bash
-$ microk8s enable dashboard hostpath-storage ingress
+```console
+$ microk8s enable dns 
+$ microk8s enable dashboard 
+$ microk8s enable hostpath-storage 
+$ microk8s enable ingress
 ```
 
 Configure the kubectl to use the microk8s cluster
