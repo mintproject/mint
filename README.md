@@ -52,7 +52,7 @@ Use the following commands to install the MINT services:
 ```bash
 $ microk8s helm repo add mint https://mintproject.github.io/mint
 $ microk8s helm repo update
-$ microk8s helm install testing-mint mint/mint --namespace mint --create-namespace
+$ microk8s helm install testing-mint mint/MINT --namespace mint --create-namespace
 ```
 
 If you using MacOS Silicon, you need to install the `arm64` version of the postgresql database.
