@@ -27,28 +27,22 @@ Support for 'multipass' needs to be set up. Would you like to do that now? [y/N]
 Enable required addons:
 
 ```console
-$ microk8s enable dns 
-$ microk8s enable dashboard 
-$ microk8s enable hostpath-storage 
+$ microk8s enable dns
+$ microk8s enable dashboard
+$ microk8s enable hostpath-storage
 $ microk8s enable ingress
-```
-
-Configure the kubectl to use the microk8s cluster
-
-```bash
-$ microk8s config > ~/.kube/config
 ```
 
 To test, list the existing resources. It should be list multiple services, deployments, and pods. Please wait until all the resources are up and running.
 
 ```bash
-$ kubectl get all --all-namespaces
+$ microk8s kubectl get all --all-namespaces
 ```
 
 Verify the node status
 
 ```bash
-$ kubectl get nodes
+$ microk8s kubectl get nodes
 ```
 
 ### MINT services installation
@@ -64,10 +58,16 @@ arm_support: true
 Use the following commands to install the MINT services:
 
 ```bash
-$ helm install -f ./values.yaml mint ./helm --namespace mint --create-namespace
+$ microk8s helm repo add mint https://mintproject.github.io/mint
+$ microk8s helm repo update
+$ microk8s helm install testing-mint mint/mint --namespace mint --create-namespace -f values.yaml
 ```
 
-or
+Or use the following command to install the MINT services:
+
+```bash
+$ microk8s helm install -f ./values.yaml mint ./helm --namespace mint --create-namespace
+```
 
 Helm will returns the URL to access the MINT services. You can use the following command to get the URL:
 
