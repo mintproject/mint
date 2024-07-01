@@ -47,26 +47,22 @@ $ microk8s kubectl get nodes
 
 ### MINT services installation
 
-If you using MacOS Silicon, you need to install the `arm64` version of the postgresql database. Add the following lines in the `values.yaml` file
-
-**WARNING:** The arm64 image has not been tested and may not work as expected. Please use it at your own risk.
-
-```
-arm_support: true
-```
-
 Use the following commands to install the MINT services:
 
 ```bash
 $ microk8s helm repo add mint https://mintproject.github.io/mint
 $ microk8s helm repo update
-$ microk8s helm install testing-mint mint/mint --namespace mint --create-namespace -f values.yaml
+$ microk8s helm install testing-mint mint/mint --namespace mint --create-namespace
 ```
 
-Or use the following command to install the MINT services:
+If you using MacOS Silicon, you need to install the `arm64` version of the postgresql database.
 
-```bash
-$ microk8s helm install -f ./values.yaml mint ./helm --namespace mint --create-namespace
+**WARNING:** The arm64 image has not been tested and may not work as expected. Please use it at your own risk.
+
+```
+$ microk8s helm repo add mint https://mintproject.github.io/mint
+$ microk8s helm repo update
+$ microk8s helm install testing-mint mint/mint --namespace mint --create-namespace --set arm_support=true
 ```
 
 Helm will returns the URL to access the MINT services. You can use the following command to get the URL:
