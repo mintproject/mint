@@ -272,7 +272,7 @@ components:
       tls: []
 google:
   maps:
-    key: CHANGEME
+    key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM
 secrets:
   database:
     data_catalog:
