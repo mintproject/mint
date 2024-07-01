@@ -52,7 +52,7 @@ data:
          {{- if eq .execution_engine.type "localex" }}
          "execution_engine": "localex",
          "{{ .execution_engine.type }}":
-            {{ .execution_engine.config  | toRawJson | nindent 12}}
+            {{ .execution_engine.config  | toRawJson | nindent 12}},
          {{- end }}
          {{- end }}
          "auth_server": {{ .Values.auth.url | quote }},
