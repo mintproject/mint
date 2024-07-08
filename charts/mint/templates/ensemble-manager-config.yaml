@@ -49,8 +49,8 @@ data:
 
 
          {{- with .Values.components.ensemble_manager }}
-         {{- if eq .execution_engine.type "localex" }}
-         "execution_engine": "localex",
+         {{- if .execution_engine.type }}
+         "execution_engine": {{ .execution_engine.type | quote }},
          "{{ .execution_engine.type }}":
             {{ .execution_engine.config  | toRawJson | nindent 12}},
          {{- end }}
