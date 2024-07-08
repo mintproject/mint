@@ -1,0 +1,91 @@
+components:
+  cromo:
+    ingress:
+      enabled: true
+      hosts:
+        - host: cromo.mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+  mic_ui:
+    ingress:
+      enabled: true
+      hosts:
+        - host: mic.mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+  mic_api:
+    ingress:
+      enabled: true
+      hosts:
+        - host: api.mic.mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+  data_catalog:
+    ingress:
+      enabled: true
+      hosts:
+        - host: datacatalog.mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+  model_catalog_endpoint:
+    ingress:
+      enabled: true
+      hosts:
+        - host: endpoint.models.mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+  hasura:
+    ingress:
+      enabled: true
+      hosts:
+        - host: graphql.mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+  model_catalog_explorer:
+    ingress:
+      enabled: true
+      hosts:
+        - host: models.mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+  model_catalog_api:
+    ingress:
+      enabled: true
+      annotations:
+        nginx.ingress.kubernetes.io/enable-cors: "true"
+      hosts:
+        - host: api.models.mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+  ui:
+    ingress:
+      enabled: true
+      hosts:
+        - host: mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+  ensemble_manager:
+    ingress:
+      enabled: true
+      hosts:
+        - host: ensemble-manager.mydomain.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
