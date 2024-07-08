@@ -15,7 +15,6 @@ components:
           paths:
             - path: /
               pathType: ImplementationSpecific
-      tls: []
   mic_api:
     ingress:
       enabled: true
@@ -24,7 +23,6 @@ components:
           paths:
             - path: /
               pathType: ImplementationSpecific
-      tls: []
   data_catalog:
     ingress:
       enabled: true
@@ -33,7 +31,6 @@ components:
           paths:
             - path: /
               pathType: ImplementationSpecific
-      tls: []
   model_catalog_endpoint:
     ingress:
       enabled: true
@@ -42,7 +39,6 @@ components:
           paths:
             - path: /
               pathType: ImplementationSpecific
-      tls: []
   hasura:
     ingress:
       enabled: true
@@ -70,7 +66,6 @@ components:
           paths:
             - path: /
               pathType: ImplementationSpecific
-      tls: []
   ui:
     ingress:
       enabled: true
@@ -88,4 +83,3 @@ components:
           paths:
             - path: /
               pathType: ImplementationSpecific
-      tls: []
