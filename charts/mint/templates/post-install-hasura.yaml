@@ -27,7 +27,12 @@ spec:
         {{- with .Values.components.hasura  }}
         image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
         resources:
-          {{- toYaml .resources | nindent 12 }}
+          requests:
+            cpu: 200m
+            memory: 200Mi
+          limits:
+            cpu: 210m
+            memory: 210Mi
         {{ end }}
         env:
           - name: HASURA_GRAPHQL_ENDPOINT
