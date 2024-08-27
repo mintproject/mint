@@ -95,7 +95,7 @@ spec:
           image: redis:6.0.16-alpine
           imagePullPolicy: IfNotPresent
           resources:
-            {{- toYaml .resources | nindent 12 }}
+            {{- toYaml .Values.resources | nindent 12 }}
           ports:
             - name: redis
               containerPort: 6379

@@ -108,13 +108,13 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ['redis-server', '--port', '7379']
           resources:
-            {{- toYaml .resources | nindent 12 }}
+            {{- toYaml .Values.resources | nindent 12 }}
         - name: docker
           image: docker:23.0.0-dind
           imagePullPolicy: IfNotPresent
           args: ["docker-init", "dockerd-entrypoint.sh"]
           resources:
-            {{- toYaml .resources | nindent 12 }}
+            {{- toYaml .Values.resources | nindent 12 }}
           env:
             - name: DOCKER_TLS_CERTDIR
               value: ""
