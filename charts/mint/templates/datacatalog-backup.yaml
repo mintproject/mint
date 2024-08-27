@@ -19,6 +19,8 @@ spec:
         - name: db-backup
           image: tiredofit/db-backup
           imagePullPolicy: IfNotPresent
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           env:
             - name: BACKUP_LOCATION
               value: minio
@@ -38,7 +40,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "mint.prefix" . }}-data-catalog-db-secrets
-                  key: username 
+                  key: username
             - name: DB_PASS
               valueFrom:
                 secretKeyRef:
