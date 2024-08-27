@@ -47,17 +47,22 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: data-catalog
-          {{- with .Values.components.data_catalog }}
           {{- if .Values.arm_support  }}
+          {{- with .Values.components.data_catalog }}
           image: "{{ .arm_image.repository }}:{{ .arm_image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .arm_image.pullPolicy }}
-          {{- else }}
-          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
-          imagePullPolicy: {{ .image.pullPolicy }}
-          {{- end }}
           resources:
             {{- toYaml .resources | nindent 12 }}
           {{- end }}
+          {{- else }}
+          {{- with .Values.components.data_catalog }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- end }}
+          {{- end }}
+
           ports:
             - name: http
               containerPort: 7000
@@ -92,16 +97,18 @@ spec:
                   key: password
         - name: data-catalog-db
 
-          {{- with .Values.components.data_catalog_db }}
           {{- if .Values.arm_support  }}
+          {{- with .Values.components.data_catalog_db }}
           image: "{{ .arm_image.repository }}:{{ .arm_image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .arm_image.pullPolicy }}
+          {{- end }}
           {{- else }}
+          {{- with .Values.components.data_catalog_db }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
-          {{- end }}
           resources:
             {{- toYaml .resources | nindent 12 }}
+          {{- end }}
           {{- end }}
           volumeMounts:
           - mountPath: /var/lib/postgresql/data
