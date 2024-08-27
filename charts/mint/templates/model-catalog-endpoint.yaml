@@ -43,14 +43,11 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: endpoint
-          resources:
-            requests:
-              memory: "1Gi"
-            limits:
-              memory: "4Gi"
           {{- with .Values.components.model_catalog_endpoint  }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           {{- end }}
           env:
             - name: ADMIN_PASSWORD

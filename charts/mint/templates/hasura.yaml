@@ -50,6 +50,8 @@ spec:
           {{- with .Values.components.hasura  }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           env:
           - name: HASURA_GRAPHQL_ENABLE_CONSOLE
             value: "{{ .environment.enable_console }}"
@@ -98,6 +100,8 @@ spec:
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           {{- end }}
 
           resources: {}

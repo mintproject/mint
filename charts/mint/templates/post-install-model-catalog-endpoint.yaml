@@ -37,6 +37,8 @@ spec:
           "]
         {{- with .Values.components.model_catalog_endpoint  }}
         image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+        resources:
+          {{- toYaml .resources | nindent 12 }}
         {{ end }}
         env:
           - name: ADMIN_PASSWORD

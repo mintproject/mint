@@ -50,6 +50,8 @@ spec:
           {{- with .Values.components.ui  }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           ports:
             - name: http
               containerPort: 80

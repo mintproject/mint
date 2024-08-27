@@ -50,6 +50,8 @@ spec:
           {{- with .Values.components.mic_api  }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           {{- end }}
           ports:
             - name: http
@@ -80,7 +82,8 @@ spec:
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
-          resources: {}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           volumeMounts:
           - mountPath: /var/lib/postgresql/data
             name: mic-api-db
