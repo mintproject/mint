@@ -58,6 +58,8 @@ spec:
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           {{- end }}
 
           ports:
@@ -104,6 +106,8 @@ spec:
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           {{- end }}
 
           resources: {}
