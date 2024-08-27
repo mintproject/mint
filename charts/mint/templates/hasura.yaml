@@ -93,6 +93,8 @@ spec:
           {{- with .Values.components.hasura_db }}
           image: "{{ .arm_image.repository }}:{{ .arm_image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .arm_image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           {{- end }}
           {{- else }}
           {{- with .Values.components.hasura_db }}
@@ -102,8 +104,6 @@ spec:
             {{- toYaml .resources | nindent 12 }}
           {{- end }}
           {{- end }}
-
-          resources: {}
           volumeMounts:
           - mountPath: /var/lib/postgresql/data
             name: hasura-db
