@@ -1,1 +1,1 @@
-helm install -f ./values.yaml mint ./helm --namespace mint --create-namespace
+helm install -f ./values.yaml mint ./charts/mint --namespace mint --create-namespace
