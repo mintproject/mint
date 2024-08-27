@@ -24,6 +24,13 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1024Mi
   mic_ui:
     enabled: false
     image:
@@ -43,6 +50,13 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+    resources:
+      requests:
+        cpu: 200m
+        memory: 200Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
   mic_api:
     enabled: false
     image:
@@ -59,11 +73,25 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
   mic_api_db:
     image:
       repository: postgres
       tag: 14.6
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     persistence:
       enabled: true
       storageClass: ""
@@ -85,6 +113,13 @@ components:
       repository: mintproject/data-catalog
       tag: 8a6af95cae183320d596dc5219f2f76d1f234749
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     ingress:
       enabled: true
       className: ""
@@ -104,6 +139,13 @@ components:
       repository: mintproject/data-catalog-db
       tag: 8a6af95cae183320d596dc5219f2f76d1f234749
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     persistence:
       enabled: true
       storageClass: ""
@@ -121,6 +163,13 @@ components:
       repository: mintproject/model-catalog-endpoint
       tag: 29256555a6fbaefae4729d5cd259564708a4ab04
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     environment:
       dataset: modelcatalog
       graph_base: http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/
@@ -153,6 +202,13 @@ components:
       repository: mintproject/graphql-engine
       tag: 0fc7ce2a5098d2e86f1280f6fa70acfc816a531d
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     environment:
       enable_console: true
       enable_dev_mode: false
@@ -176,6 +232,13 @@ components:
       repository: imresamu/postgis-arm64
       tag: 12-3.4-alpine
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     persistence:
       enabled: true
       storageClass: ""
@@ -193,6 +256,13 @@ components:
       repository: mintproject/model-catalog-explorer
       tag: 0b2f9f0a9124076aeb492add2f123d0757066f6b
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     ingress:
       enabled: true
       className: ""
@@ -210,6 +280,13 @@ components:
       repository: mintproject/model-catalog-fastapi
       tag: c5f784785c52034f75de24c46b89907c74a14312
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     environment:
       context_dir: contexts/
       queries_dir: queries/
@@ -230,6 +307,13 @@ components:
       repository: mintproject/mint-ui-lit
       tag: 858ce054d1f757d0f6ec3765e878ec54091bb110
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     ingress:
       enabled: true
       className: ""
@@ -247,6 +331,13 @@ components:
       repository: mintproject/ensemble-manager
       tag: 4f9831855f6e6f3cd140871e574566427e061e77
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
     environment:
       data_dir: /var/mint
       data_url: http://localhost:30010/data
@@ -316,7 +407,13 @@ serviceAccount:
 podAnnotations: {}
 podSecurityContext: {}
 securityContext: {}
-resources: {}
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1024Mi
+  requests:
+    cpu: 200m
+    memory: 512Mi
 autoscaling:
   enabled: false
   minReplicas: 1
