@@ -26,6 +26,8 @@ spec:
         args: ["-c", "env && hasura migrate apply && hasura metadata apply && hasura seeds apply"]
         {{- with .Values.components.hasura  }}
         image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+        resources:
+          {{- toYaml .resources | nindent 12 }}
         {{ end }}
         env:
           - name: HASURA_GRAPHQL_ENDPOINT

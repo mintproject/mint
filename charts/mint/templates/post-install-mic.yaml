@@ -26,6 +26,8 @@ spec:
         args: ["-c", "yarn migrate "]
         {{- with .Values.components.mic_api }}
         image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+        resources:
+          {{- toYaml .resources | nindent 12 }}
         {{ end }}
         env:
           - name: DB_HOST
