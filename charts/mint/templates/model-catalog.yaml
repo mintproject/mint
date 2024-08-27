@@ -50,6 +50,8 @@ spec:
           {{- with .Values.components.model_catalog_api  }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           command: ["uvicorn", "openapi_server.main:app", "--workers", "8", "--host", "0.0.0.0" , "--port", "8080"]
           ports:
             - name: http
@@ -92,6 +94,8 @@ spec:
         - name: model-catalog-redis
           image: redis:6.0.16-alpine
           imagePullPolicy: IfNotPresent
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           ports:
             - name: redis
               containerPort: 6379
