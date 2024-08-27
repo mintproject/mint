@@ -60,6 +60,8 @@ spec:
         - name: volume-mount-hack
           image: busybox
           command: ["sh", "-c", "chown -R 1000:1000 /home/node/app/data"]
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           volumeMounts:
           - name: storage
             mountPath: /home/node/app/data
@@ -68,6 +70,8 @@ spec:
           {{- with .Values.components.ensemble_manager }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           {{- end }}
           securityContext:
             privileged: true
@@ -93,6 +97,8 @@ spec:
           {{- with .Values.components.ensemble_manager }}
           image: "nginx"
           imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: storage
@@ -101,10 +107,14 @@ spec:
           image: redis
           imagePullPolicy: IfNotPresent
           command: ['redis-server', '--port', '7379']
+          resources:
+            {{- toYaml .resources | nindent 12 }}
         - name: docker
           image: docker:23.0.0-dind
           imagePullPolicy: IfNotPresent
           args: ["docker-init", "dockerd-entrypoint.sh"]
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           env:
             - name: DOCKER_TLS_CERTDIR
               value: ""
