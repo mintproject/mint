@@ -165,11 +165,11 @@ components:
       pullPolicy: IfNotPresent
     resources:
       requests:
-        cpu: 100m
-        memory: 512Mi
+        cpu: 1000m
+        memory: 3Gi
       limits:
-        cpu: 500m
-        memory: 1024Mi
+        cpu: 2000m
+        memory: 5Gi
     environment:
       dataset: modelcatalog
       graph_base: http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/
