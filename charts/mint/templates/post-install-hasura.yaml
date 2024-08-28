@@ -28,11 +28,11 @@ spec:
         image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
         resources:
           requests:
-            cpu: 200m
-            memory: 200Mi
+            cpu: 1000m
+            memory: 1000Mi
           limits:
-            cpu: 210m
-            memory: 210Mi
+            cpu: 1100m
+            memory: 1100Mi
         {{ end }}
         env:
           - name: HASURA_GRAPHQL_ENDPOINT
