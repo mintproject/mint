@@ -124,7 +124,7 @@ spec:
                 - pg_isready
                 - -U
                 - {{ .Values.secrets.database.hasura.username }}
-            initialDelaySeconds: 5
+            initialDelaySeconds: 100
             periodSeconds: 10
       volumes:
         - name: hasura-db
