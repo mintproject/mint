@@ -151,7 +151,7 @@ components:
       storageClass: ""
       accessModes:
         - ReadWriteOnce
-      size: 10Gi
+      size: 30Gi
       dataSource: {}
       existingClaim: ""
       selector: {}
@@ -190,7 +190,7 @@ components:
       storageClass: ""
       accessModes:
         - ReadWriteOnce
-      size: 10Gi
+      size: 20Gi
       dataSource: {}
       existingClaim: ""
       selector: {}
@@ -244,7 +244,7 @@ components:
       storageClass: ""
       accessModes:
         - ReadWriteOnce
-      size: 10Gi
+      size: 30Gi
       dataSource: {}
       existingClaim: ""
       selector: {}
