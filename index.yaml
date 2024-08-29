@@ -3,7 +3,21 @@ entries:
   MINT:
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.382151-04:00"
+    created: "2024-08-29T15:50:07.56665-04:00"
+    description: A Helm chart for MINT
+    digest: 60e1155713419f799d31c6a2905ba03f008e69015f619f2ffdbdcaa308f15fef
+    maintainers:
+    - email: maxiosorio@gmail.com
+      name: mosoriob
+      url: https://github.com/mosoriob
+    name: MINT
+    type: application
+    urls:
+    - https://mintproject.github.io/mint/releases/MINT-3.2.0-alpha.1.tgz
+    version: 3.2.0-alpha.1
+  - apiVersion: v2
+    appVersion: 1.16.3
+    created: "2024-08-29T15:50:07.565343-04:00"
     description: A Helm chart for MINT
     digest: d09376fdac4d06bbc815ba56d3a690c085532cf3870979221d32043062dacbed
     maintainers:
@@ -17,7 +31,7 @@ entries:
     version: 3.1.1
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.381073-04:00"
+    created: "2024-08-29T15:50:07.563088-04:00"
     description: A Helm chart for MINT
     digest: 73672fd2f3d071e6e7fd0d634a1f2ad2bbcf776981a0cf0f1fa635ed7f562ad8
     maintainers:
@@ -31,7 +45,7 @@ entries:
     version: 3.1.0
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.379239-04:00"
+    created: "2024-08-29T15:50:07.561721-04:00"
     description: A Helm chart for MINT
     digest: a9a3194809b02157b024bedace8ad42b4e8291dbaa40cbd4c970e6593fd103f4
     maintainers:
@@ -45,7 +59,7 @@ entries:
     version: 3.0.1-alpha.2
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.377979-04:00"
+    created: "2024-08-29T15:50:07.560455-04:00"
     description: A Helm chart for MINT
     digest: 4502ee4ee16a0da1dc0d850a052fda4538da775050b9ec8e046bc37adbf29253
     maintainers:
@@ -59,7 +73,7 @@ entries:
     version: 3.0.1-alpha.1
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.376718-04:00"
+    created: "2024-08-29T15:50:07.558863-04:00"
     description: A Helm chart for MINT
     digest: d2c1481372efb5734da488fa010aeba1db680d9d89fd4cadadf99f9ccc7f1877
     maintainers:
@@ -73,7 +87,7 @@ entries:
     version: 3.0.0
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.375461-04:00"
+    created: "2024-08-29T15:50:07.557602-04:00"
     description: A Helm chart for MINT
     digest: 418ebf95384e27acf1e751b0eb1aa5000fa933a9cd39a83de428a033e5b53806
     maintainers:
@@ -87,7 +101,7 @@ entries:
     version: 3.0.0-alpha.2
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.373745-04:00"
+    created: "2024-08-29T15:50:07.556356-04:00"
     description: A Helm chart for MINT
     digest: 353053f31d1e2bd69767ccb9a556ec51ff6e1236031436817af627b3fc95c754
     maintainers:
@@ -101,7 +115,7 @@ entries:
     version: 3.0.0-alpha.1
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.37232-04:00"
+    created: "2024-08-29T15:50:07.554843-04:00"
     description: A Helm chart for MINT
     digest: 1224756f56a5b98a6cb26df9cfed03adb08fcda62a9178f49b29319a11e3bb8f
     maintainers:
@@ -115,7 +129,7 @@ entries:
     version: 2.3.3
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.370896-04:00"
+    created: "2024-08-29T15:50:07.552908-04:00"
     description: A Helm chart for MINT
     digest: bf89ba5d8490ca8efa8ddc220b140f8e0f29d4a2739e8f401e8eb12f349c4396
     maintainers:
@@ -129,7 +143,7 @@ entries:
     version: 2.3.1
   - apiVersion: v2
     appVersion: 1.16.3
-    created: "2024-08-27T15:16:09.36957-04:00"
+    created: "2024-08-29T15:50:07.551545-04:00"
     description: A Helm chart for MINT
     digest: 052db5e9e4bd62be4262d80320c13d5c62ca7b64be4be61a35088dc7e8864ba6
     name: MINT
@@ -139,7 +153,7 @@ entries:
     version: 2.3.0
   - apiVersion: v2
     appVersion: 1.16.2
-    created: "2024-08-27T15:16:09.367894-04:00"
+    created: "2024-08-29T15:50:07.55026-04:00"
     description: A Helm chart for MINT
     digest: 98567a0bd0334564199b7639c76e8bea364e397c39317fe17b699ab1f1b6c67b
     name: MINT
@@ -149,7 +163,7 @@ entries:
     version: 2.2.7
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.366697-04:00"
+    created: "2024-08-29T15:50:07.549005-04:00"
     description: A Helm chart for MINT
     digest: c887c706ae8e99eab5774b70f85613c46fece2b25fbe959580a5847698f05c73
     name: MINT
@@ -159,7 +173,7 @@ entries:
     version: 2.2.6
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.365654-04:00"
+    created: "2024-08-29T15:50:07.547744-04:00"
     description: A Helm chart for MINT
     digest: 811b15e5b32adfbd10ac53a07c2a530a30063795c93f33fc616959eab0dfa2c8
     name: MINT
@@ -169,7 +183,7 @@ entries:
     version: 2.2.5
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.364779-04:00"
+    created: "2024-08-29T15:50:07.546111-04:00"
     description: A Helm chart for MINT
     digest: 3011a3d98dcab01bb951dc5e12512aa23a5651996f8046c3a8425e075fbb93eb
     name: MINT
@@ -179,7 +193,7 @@ entries:
     version: 2.2.4
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.363833-04:00"
+    created: "2024-08-29T15:50:07.544917-04:00"
     description: A Helm chart for MINT
     digest: a02805284b6ef454572382de3455bd8c1e5dd6b965d253277d85c243cbeaf2b4
     name: MINT
@@ -189,7 +203,7 @@ entries:
     version: 2.2.3
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.362564-04:00"
+    created: "2024-08-29T15:50:07.543232-04:00"
     description: A Helm chart for MINT
     digest: e168e2ab341bd97f840a575b81d4db801a132a49a149b0475c95a7b997ab8437
     name: MINT
@@ -199,7 +213,7 @@ entries:
     version: 2.2.2
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.36169-04:00"
+    created: "2024-08-29T15:50:07.542019-04:00"
     description: A Helm chart for MINT
     digest: 416a5a9eddb36a2c75d17e2719e5ec7a1e882bbea7819dcace84eb43b84d975c
     name: MINT
@@ -209,7 +223,7 @@ entries:
     version: 2.2.1
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.360829-04:00"
+    created: "2024-08-29T15:50:07.540672-04:00"
     description: A Helm chart for MINT
     digest: b001652353730b421a9b00d6c0854255738eaea92f24685110746ddb888ea1e1
     name: MINT
@@ -219,7 +233,7 @@ entries:
     version: 2.2.0
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.359959-04:00"
+    created: "2024-08-29T15:50:07.539361-04:00"
     description: A Helm chart for MINT
     digest: 7cca79b898b7e5a245bb72e96d40f66a07641c23a2bf3c4282d9eb26e05dc40b
     name: MINT
@@ -229,7 +243,7 @@ entries:
     version: 2.1.9
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.359079-04:00"
+    created: "2024-08-29T15:50:07.538449-04:00"
     description: A Helm chart for MINT
     digest: 4b58de7ebcc7a1416da5ac21d50332a3b5838a2627b9aecff3c3cf8e2747baa5
     name: MINT
@@ -239,7 +253,7 @@ entries:
     version: 2.1.8
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.357667-04:00"
+    created: "2024-08-29T15:50:07.537568-04:00"
     description: A Helm chart for MINT
     digest: 6c7c5f8598268c64b66ac1c0c7c7d4f830129029e8607a44e653c77d3804b7ca
     name: MINT
@@ -249,7 +263,7 @@ entries:
     version: 2.1.7
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.356802-04:00"
+    created: "2024-08-29T15:50:07.536683-04:00"
     description: A Helm chart for MINT
     digest: 6bc8f8cfeae2cf3eebbe5149e1cb3d9c2f5951faee2a059cb66a896740ef71c2
     name: MINT
@@ -259,7 +273,7 @@ entries:
     version: 2.1.6
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.355946-04:00"
+    created: "2024-08-29T15:50:07.535819-04:00"
     description: A Helm chart for MINT
     digest: 90d5b891f22e3598d4bdeb6dfda9a057d56012367ed60c970226019effe84495
     name: MINT
@@ -269,7 +283,7 @@ entries:
     version: 2.1.5
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.354962-04:00"
+    created: "2024-08-29T15:50:07.534771-04:00"
     description: A Helm chart for MINT
     digest: 98fd19dd8c33e420aa08706a23d0dca1b75527fd53125e54335cacdc10e48a9f
     name: MINT
@@ -279,7 +293,7 @@ entries:
     version: 2.1.4
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.354082-04:00"
+    created: "2024-08-29T15:50:07.533361-04:00"
     description: A Helm chart for MINT
     digest: c02423458b407c1b40bdbcd35fc721c69a002534286e5fe146529d8985d90522
     name: MINT
@@ -289,7 +303,7 @@ entries:
     version: 2.1.3
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.353209-04:00"
+    created: "2024-08-29T15:50:07.532441-04:00"
     description: A Helm chart for MINT
     digest: 066cd07bdb91d3e2e786c1894785f6f772a4e97147a59b35138d41e435d7bd3f
     name: MINT
@@ -299,7 +313,7 @@ entries:
     version: 2.1.2
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.351807-04:00"
+    created: "2024-08-29T15:50:07.53151-04:00"
     description: A Helm chart for MINT
     digest: 77d65ead31d52b93fd1a9c438858ad4da39141b04c132d76b550ac285e94fa47
     name: MINT
@@ -309,7 +323,7 @@ entries:
     version: 2.1.1
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.350953-04:00"
+    created: "2024-08-29T15:50:07.530622-04:00"
     description: A Helm chart for MINT
     digest: 661e005f57577e045e25dfd99f5281dbbb0824d4faa666c8b03ce9b225235897
     name: MINT
@@ -319,7 +333,7 @@ entries:
     version: 2.1.0
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.349913-04:00"
+    created: "2024-08-29T15:50:07.529534-04:00"
     description: A Helm chart for MINT
     digest: eb0ed5c12c026733f252831e7d07a8139cb9611703c68d326a1a8b8a7b8556a0
     name: MINT
@@ -329,7 +343,7 @@ entries:
     version: 2.0.3
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.348909-04:00"
+    created: "2024-08-29T15:50:07.528256-04:00"
     description: A Helm chart for MINT
     digest: de8fd357872d972de8ce1edab73ce88edc3c4bcd2992dcf96d0227cdd025dca2
     name: MINT
@@ -339,7 +353,7 @@ entries:
     version: 2.0.2
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.347902-04:00"
+    created: "2024-08-29T15:50:07.527307-04:00"
     description: A Helm chart for MINT
     digest: 2894fb146960e3d186d93d4cfef0fd3d4a1b64aba0b68c79577289d3eadb3e24
     name: MINT
@@ -349,7 +363,7 @@ entries:
     version: 2.0.1
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.346734-04:00"
+    created: "2024-08-29T15:50:07.526454-04:00"
     description: A Helm chart for MINT
     digest: 24fc1468ed473de53e87a19fda76a59e65fb5bd4b92619f2cebe68eba71b0652
     name: MINT
@@ -359,7 +373,7 @@ entries:
     version: 2.0.0
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.345925-04:00"
+    created: "2024-08-29T15:50:07.525596-04:00"
     description: A Helm chart for MINT
     digest: 8a790838a9103b920e367cbffdde25644d6dedc097330bed04e252ae53780b22
     name: MINT
@@ -369,7 +383,7 @@ entries:
     version: 1.4.7
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.345149-04:00"
+    created: "2024-08-29T15:50:07.524776-04:00"
     description: A Helm chart for MINT
     digest: d12b2a689065ec57f3a8bae279ea5186cc40f761064ab541aef6752cdce844d5
     name: MINT
@@ -379,7 +393,7 @@ entries:
     version: 1.4.6
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.344374-04:00"
+    created: "2024-08-29T15:50:07.523954-04:00"
     description: A Helm chart for MINT
     digest: 5b229b162c654fca1347e7fc8afae3c67a8bde0b57fe6594621c81148f27745d
     name: MINT
@@ -389,7 +403,7 @@ entries:
     version: 1.4.5
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.34358-04:00"
+    created: "2024-08-29T15:50:07.522692-04:00"
     description: A Helm chart for MINT
     digest: 9336cc3f21f4b0d3e8467a34fe1470303b50987567e24bbfd0337ad9f136b4bd
     name: MINT
@@ -399,7 +413,7 @@ entries:
     version: 1.4.4
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.342774-04:00"
+    created: "2024-08-29T15:50:07.521899-04:00"
     description: A Helm chart for MINT
     digest: d3a6a527980a7342fe7b301f662ab8d1ca5eb656f4f3c450a978b811a7c5f882
     name: MINT
@@ -409,7 +423,7 @@ entries:
     version: 1.4.3
   - apiVersion: v2
     appVersion: 1.16.1
-    created: "2024-08-27T15:16:09.34162-04:00"
+    created: "2024-08-29T15:50:07.521098-04:00"
     description: A Helm chart for MINT
     digest: 599af468fb628629480a1d46ef6a8b3fb0554fb806cbfb05dfadf51a9277f66a
     name: MINT
@@ -419,7 +433,7 @@ entries:
     version: 1.4.2
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.340792-04:00"
+    created: "2024-08-29T15:50:07.520328-04:00"
     description: A Helm chart for MINT
     digest: dfe93e95a0c832825521b6b6fe8a5ac02e6eb64784907e2d7de9059cb8a423d6
     name: MINT
@@ -429,7 +443,7 @@ entries:
     version: 1.4.1
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.339886-04:00"
+    created: "2024-08-29T15:50:07.519484-04:00"
     description: A Helm chart for MINT
     digest: 0ce38971269d661e292fb9328ec125f7b694c6aa5219be06e2292dc594657d0e
     name: MINT
@@ -439,7 +453,7 @@ entries:
     version: 1.4.0
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.339114-04:00"
+    created: "2024-08-29T15:50:07.518754-04:00"
     description: A Helm chart for MINT
     digest: 7b88b02262e7dfa76b5fca20405ad55f488ec07c29d71cce4c0d5c27a5104b4a
     name: MINT
@@ -449,7 +463,7 @@ entries:
     version: 1.3.0
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.338172-04:00"
+    created: "2024-08-29T15:50:07.517499-04:00"
     description: A Helm chart for MINT
     digest: 208b801c1374b022fb9027f6e5272e55d23c6502baed01ee02830b2dd720ae2e
     name: MINT
@@ -459,7 +473,7 @@ entries:
     version: 1.2.1
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.337281-04:00"
+    created: "2024-08-29T15:50:07.516737-04:00"
     description: A Helm chart for MINT
     digest: ac7eb799c1aa70b6dde566a6d99c2121c1173ad94ed8c17428db1354533919ce
     name: MINT
@@ -469,7 +483,7 @@ entries:
     version: 1.2.0
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.336047-04:00"
+    created: "2024-08-29T15:50:07.515967-04:00"
     description: A Helm chart for MINT
     digest: e0c24e8b3d3409828eb0a5b7bbb9323dddd26376ee14c2fbd4d62a07fc7d09c5
     name: MINT
@@ -479,7 +493,7 @@ entries:
     version: 1.1.2
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.335245-04:00"
+    created: "2024-08-29T15:50:07.515187-04:00"
     description: A Helm chart for MINT
     digest: e401be24735a9ca68240a2cdeac180a353a1d1010a30bf55bb2e662f94ef59bc
     name: MINT
@@ -489,7 +503,7 @@ entries:
     version: 1.1.1
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.334414-04:00"
+    created: "2024-08-29T15:50:07.514412-04:00"
     description: A Helm chart for MINT
     digest: 41d0dd09352a6733deda195757bcc05f4224bff47946641842b799217cb1d3f3
     name: MINT
@@ -499,7 +513,7 @@ entries:
     version: 1.1.0
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.333624-04:00"
+    created: "2024-08-29T15:50:07.513634-04:00"
     description: A Helm chart for MINT
     digest: 63d38254df08e071958b7fa5362df0554e14d094efe39f388919df8da465b5a2
     name: MINT
@@ -509,7 +523,7 @@ entries:
     version: 1.0.6
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.332965-04:00"
+    created: "2024-08-29T15:50:07.511839-04:00"
     description: A Helm chart for MINT
     digest: 20c35316798a15552084149ebca28ad858ee3787cb954a0c6c36a2bc22fed324
     name: MINT
@@ -519,7 +533,7 @@ entries:
     version: 1.0.5
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.33212-04:00"
+    created: "2024-08-29T15:50:07.511003-04:00"
     description: A Helm chart for MINT
     digest: 7f1ef9debb71a25df17d16334f03f157138c72794d7db8db4bdd5c1a37619411
     name: MINT
@@ -529,7 +543,7 @@ entries:
     version: 1.0.4
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.331297-04:00"
+    created: "2024-08-29T15:50:07.510188-04:00"
     description: A Helm chart for MINT
     digest: 8851c1479e81f30ee60fd431bc6371a87e0510f8e088417a2bb28689b3e1103f
     name: MINT
@@ -539,7 +553,7 @@ entries:
     version: 1.0.3
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.330124-04:00"
+    created: "2024-08-29T15:50:07.509341-04:00"
     description: A Helm chart for MINT
     digest: 25a37073c524aedeff255f1418df89835091cffb0c975ab007f9acc2460b0dfb
     name: MINT
@@ -549,7 +563,7 @@ entries:
     version: 1.0.2
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.329322-04:00"
+    created: "2024-08-29T15:50:07.508536-04:00"
     description: A Helm chart for MINT
     digest: b786dd3bc10bdaa7f70322c2623bb2aeb398d180aa2fd0e8ce7cf3342a9a2d09
     name: MINT
@@ -559,7 +573,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.328522-04:00"
+    created: "2024-08-29T15:50:07.507734-04:00"
     description: A Helm chart for MINT
     digest: 34831e91732985227a731e2800b99b15c4f1fbe6b2dc90bfb38ad932d109f75f
     name: MINT
@@ -569,7 +583,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.327734-04:00"
+    created: "2024-08-29T15:50:07.506921-04:00"
     description: A Helm chart for MINT
     digest: fd8b1b29ff83418f9244135ff1c1d2b6931717282b6619042f31218b431a02ba
     name: MINT
@@ -579,7 +593,7 @@ entries:
     version: 0.3.9
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.326958-04:00"
+    created: "2024-08-29T15:50:07.505881-04:00"
     description: A Helm chart for MINT
     digest: b3d269bd5aad8daa6cca305687cd33c1fdfc5a554694a55c58bd431b41fb2046
     name: MINT
@@ -589,7 +603,7 @@ entries:
     version: 0.3.8
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.326128-04:00"
+    created: "2024-08-29T15:50:07.504913-04:00"
     description: A Helm chart for MINT
     digest: adcd66236e954cd9c10a931c4c98b5b8d339a0a7682f65438647a7d85463a325
     name: MINT
@@ -599,7 +613,7 @@ entries:
     version: 0.3.7
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.325348-04:00"
+    created: "2024-08-29T15:50:07.504219-04:00"
     description: A Helm chart for MINT
     digest: 54f4f1e932d144ea8e0e0bb0404d8558cd36042d209c7aae13664d6bf3da44be
     name: MINT
@@ -609,7 +623,7 @@ entries:
     version: 0.3.6
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.324714-04:00"
+    created: "2024-08-29T15:50:07.503571-04:00"
     description: A Helm chart for MINT
     digest: 3e7b4feb27d4cb3cf58045cbb689a7524950d0c9f987b05036a78b11a7ed1084
     name: MINT
@@ -619,7 +633,7 @@ entries:
     version: 0.3.5
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.323117-04:00"
+    created: "2024-08-29T15:50:07.502966-04:00"
     description: A Helm chart for MINT
     digest: a06c239c49ec74a0c99f0866ffb47b00f1bdd6c3c009c4b4257a430f9702bb45
     name: MINT
@@ -629,7 +643,7 @@ entries:
     version: 0.3.4
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.322497-04:00"
+    created: "2024-08-29T15:50:07.502348-04:00"
     description: A Helm chart for MINT
     digest: 6ad99bac1f1d6c5d1286d871b007d11b633b75ed8b7807745837cad025aec8cc
     name: MINT
@@ -639,7 +653,7 @@ entries:
     version: 0.3.3
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.321924-04:00"
+    created: "2024-08-29T15:50:07.501721-04:00"
     description: A Helm chart for MINT
     digest: eab856896d66b164496bb2db3aaf2939cd2d6705e3f92eb97a5247a6f8c7e3f5
     name: MINT
@@ -649,7 +663,7 @@ entries:
     version: 0.3.2
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.321332-04:00"
+    created: "2024-08-29T15:50:07.501059-04:00"
     description: A Helm chart for MINT
     digest: 66186b196e359e3dc6bc93142a641daf759047770beead9e4fdeebf93d6757fc
     name: MINT
@@ -659,7 +673,7 @@ entries:
     version: 0.3.1
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.32075-04:00"
+    created: "2024-08-29T15:50:07.5001-04:00"
     description: A Helm chart for MINT
     digest: d6e73e1a393c370f3da44366ed2828ea18cf48da8ebabcff4ebbd32df3c54b55
     name: MINT
@@ -669,7 +683,7 @@ entries:
     version: 0.3.0
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.320177-04:00"
+    created: "2024-08-29T15:50:07.4995-04:00"
     description: A Helm chart for MINT
     digest: 7477e1f5ecc03f9c19e4abede7c23a1d50401e2f6a44be2a51f479f24a2d36ed
     name: MINT
@@ -679,7 +693,7 @@ entries:
     version: 0.2.9
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.319589-04:00"
+    created: "2024-08-29T15:50:07.498934-04:00"
     description: A Helm chart for MINT
     digest: b79c3f7cba33db725a6aaf85a59439e87a7c0fe5e8d59852ef0e90b1f05e5956
     name: MINT
@@ -689,7 +703,7 @@ entries:
     version: 0.2.8
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.318989-04:00"
+    created: "2024-08-29T15:50:07.498374-04:00"
     description: A Helm chart for MINT
     digest: c31c4aa8220f9151327e5ad0cf6e251689b72765564669f10a6626cd1d9e232c
     name: MINT
@@ -699,7 +713,7 @@ entries:
     version: 0.2.7
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.31792-04:00"
+    created: "2024-08-29T15:50:07.497821-04:00"
     description: A Helm chart for MINT
     digest: 111af7dfbec5892057282936a2ff8f3b1a8def57cf2010c6c68085da8c9e0d99
     name: MINT
@@ -709,7 +723,7 @@ entries:
     version: 0.2.6
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.317382-04:00"
+    created: "2024-08-29T15:50:07.497267-04:00"
     description: A Helm chart for MINT
     digest: 69112cec3295d1bd916262fc55cb4556dbb9d4d5c2371bfa63bee6af52ad4491
     name: MINT
@@ -719,7 +733,7 @@ entries:
     version: 0.2.5
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.316843-04:00"
+    created: "2024-08-29T15:50:07.496719-04:00"
     description: A Helm chart for MINT
     digest: dbf6d1e148e72dc1ffd77c869c9b8da699a7bb749c899315a1886c64112f5b75
     name: MINT
@@ -729,7 +743,7 @@ entries:
     version: 0.2.4
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.31629-04:00"
+    created: "2024-08-29T15:50:07.496167-04:00"
     description: A Helm chart for MINT
     digest: f9bf5365c50c5ed9e62609de277cc8d350b874c75c996e70e9ec9a58c6f0c600
     name: MINT
@@ -739,7 +753,7 @@ entries:
     version: 0.2.3
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.315654-04:00"
+    created: "2024-08-29T15:50:07.495465-04:00"
     description: A Helm chart for MINT
     digest: 7e839c7397a2f4d2fc40a74885f14e1214db1c8dfe0de15de82f7f69025a2f64
     name: MINT
@@ -749,7 +763,7 @@ entries:
     version: 0.2.2
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.314925-04:00"
+    created: "2024-08-29T15:50:07.494724-04:00"
     description: A Helm chart for MINT
     digest: d682a327bb7edbd8478f60f4fbbe652bd19240b2420fafd4fadcb010bdad330a
     name: MINT
@@ -759,7 +773,7 @@ entries:
     version: 0.2.1
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.311179-04:00"
+    created: "2024-08-29T15:50:07.490988-04:00"
     description: A Helm chart for MINT
     digest: 90ef5332e1d5f7b04ab5c2c65411344370baae539c4e7d0377063a373e867636
     name: MINT
@@ -769,7 +783,7 @@ entries:
     version: 0.2.0
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.309339-04:00"
+    created: "2024-08-29T15:50:07.488942-04:00"
     description: A Helm chart for MINT
     digest: d7534c936064ac704e57b1bc143684ddc9ac606568ef9bb6515c690cb3cb00bd
     name: MINT
@@ -779,7 +793,7 @@ entries:
     version: 0.1.4
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.307709-04:00"
+    created: "2024-08-29T15:50:07.487319-04:00"
     description: A Helm chart for MINT
     digest: 51cad48a1795b51ab7cbb1eb177607cb77c36251210d9cdee1a05ea0f923dee8
     name: MINT
@@ -789,7 +803,7 @@ entries:
     version: 0.1.3
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.306509-04:00"
+    created: "2024-08-29T15:50:07.486263-04:00"
     description: A Helm chart for MINT
     digest: c46dcecfee55dc90202e7c3d43cf5fec93b8631bbcfa207315fa006bba7dff97
     name: MINT
@@ -799,7 +813,7 @@ entries:
     version: 0.1.2
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.305498-04:00"
+    created: "2024-08-29T15:50:07.485336-04:00"
     description: A Helm chart for MINT
     digest: c217e51981cc3f62cea28fe443082d153d4210d90de1e437d72d19c713f0fae3
     name: MINT
@@ -809,7 +823,7 @@ entries:
     version: 0.1.1
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2024-08-27T15:16:09.304816-04:00"
+    created: "2024-08-29T15:50:07.484112-04:00"
     description: A Helm chart for MINT
     digest: 18f42649890a28c6eb34d4a2f57d2d99d318d208c3613691c8deb957713de1f0
     name: MINT
@@ -817,4 +831,4 @@ entries:
     urls:
     - https://mintproject.github.io/mint/releases/MINT-0.1.0.tgz
     version: 0.1.0
-generated: "2024-08-27T15:16:09.303625-04:00"
+generated: "2024-08-29T15:50:07.482783-04:00"
