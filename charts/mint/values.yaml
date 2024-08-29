@@ -361,6 +361,17 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+    persistence:
+      enabled: true
+      storageClass: ""
+      accessModes:
+        - ReadWriteMany
+      size: 100Gi
+      dataSource: {}
+      existingClaim: ""
+      selector: {}
+      annotations:
+        helm.sh/resource-policy: keep
 google:
   maps:
     key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM

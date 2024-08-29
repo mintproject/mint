@@ -26,22 +26,6 @@ spec:
   selector:
     app: {{ include "mint.prefix" . }}-ensemble-manager
 ---
-# Source: MINT/templates/pvc-model-catalog.yaml
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: {{ include "mint.prefix" . }}-storage
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    helm.sh/resource-policy: keep
-spec:
-  storageClassName: "rook-cephfs"
-  accessModes:
-    - "ReadWriteMany"
-  resources:
-    requests:
-      storage: "100Gi"
----
 apiVersion: v1
 kind: Secret
 metadata:
@@ -80,7 +64,7 @@ spec:
             name: {{ include "mint.prefix" . }}-ensemble-manager-config-map
         - name: storage
           persistentVolumeClaim:
-            claimName: {{ include "mint.prefix" . }}-storage
+            claimName: {{ include "mint.prefix" . }}-ensemble-manager
         - name: kubeconfig
           secret:
             secretName: {{ include "mint.prefix" . }}-kubeconfig
