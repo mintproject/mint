@@ -26,6 +26,33 @@ spec:
   selector:
     app: {{ include "mint.prefix" . }}-ensemble-manager
 ---
+# Source: MINT/templates/pvc-model-catalog.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ include "mint.prefix" . }}-storage
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  storageClassName: "rook-cephfs"
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: "100Gi"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "mint.prefix" . }}-kubeconfig
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/resource-policy": keep
+type: Opaque
+data:
+  config: {{ .Files.Get "kubeconfig" | b64enc | quote }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -52,10 +79,11 @@ spec:
           configMap:
             name: {{ include "mint.prefix" . }}-ensemble-manager-config-map
         - name: storage
-          hostPath:
-            path: {{ .Values.components.ensemble_manager.environment.data_dir }}
-        - name: docker-storage
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: {{ include "mint.prefix" . }}-storage
+        - name: kubeconfig
+          secret:
+            secretName: {{ include "mint.prefix" . }}-kubeconfig
       initContainers:
         - name: volume-mount-hack
           image: busybox
@@ -73,11 +101,7 @@ spec:
           resources:
             {{- toYaml .resources | nindent 12 }}
           {{- end }}
-          securityContext:
-            privileged: true
           env:
-            - name: DOCKER_HOST
-              value: 127.0.0.1:2375
             - name: TMPDIR
               value: /home/node/app/data/temp
             - name: HASURA_GRAPHQL_ADMIN_SECRET
@@ -93,6 +117,9 @@ spec:
             - name: config
               mountPath: /home/node/app/config.json
               subPath: config.json
+            - name: kubeconfig
+              mountPath: /home/node/.kube
+              readOnly: true
         - name: files
           {{- with .Values.components.ensemble_manager }}
           image: "nginx"
@@ -109,20 +136,4 @@ spec:
           command: ['redis-server', '--port', '7379']
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-        - name: docker
-          image: docker:23.0.0-dind
-          imagePullPolicy: IfNotPresent
-          args: ["docker-init", "dockerd-entrypoint.sh"]
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
-          env:
-            - name: DOCKER_TLS_CERTDIR
-              value: ""
-          securityContext:
-              privileged: true
-          volumeMounts:
-            - name: docker-storage
-              mountPath: /var/lib/docker
-            - name: storage
-              mountPath: /home/node/app/data
 {{ end }}
