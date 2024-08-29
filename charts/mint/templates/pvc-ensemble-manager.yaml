@@ -1,4 +1,6 @@
-{{- if and .Values.components.ensemble_manager.enabled and .Values.components.ensemble_manager.persistence.enabled (not .Values.components.ensemble_manager.persistence.existingClaim) }}
+
+{{- if and .Values.components.ensemble_manager.enabled }}
+{{- if and .Values.components.ensemble_manager.persistence.enabled (not .Values.components.ensemble_manager.persistence.existingClaim) }}
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
@@ -20,7 +22,7 @@ spec:
     - {{ . | quote }}
   {{- end }}
   {{- else }}
-  - {{ .Values.components.ensemble_manager.persistence.accessMode | quote }}
+  - {{ .Values.components.ensemble_manager.persistence.accessModes | quote }}
   {{- end }}
   resources:
     requests:
@@ -29,4 +31,5 @@ spec:
   {{- if .Values.components.ensemble_manager.persistence.dataSource }}
   dataSource: {{- include "common.tplvalues.render" (dict "value" .Values.components.ensemble_manager.persistence.dataSource "context" $) | nindent 4 }}
   {{- end }}
+{{- end }}
 {{- end }}
