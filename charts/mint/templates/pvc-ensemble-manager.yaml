@@ -22,7 +22,7 @@ spec:
     - {{ . | quote }}
   {{- end }}
   {{- else }}
-  - {{ .Values.components.ensemble_manager.persistence.accessModes | quote }}
+    - "ReadWriteOnce"
   {{- end }}
   resources:
     requests:
