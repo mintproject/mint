@@ -26,17 +26,6 @@ spec:
   selector:
     app: {{ include "mint.prefix" . }}-ensemble-manager
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{ include "mint.prefix" . }}-kubeconfig
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    "helm.sh/resource-policy": keep
-type: Opaque
-data:
-  config: {{ .Files.Get "kubeconfig" | b64enc | quote }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -52,6 +41,7 @@ spec:
       labels:
         app: {{ include "mint.prefix" . }}-ensemble-manager
     spec:
+      serviceAccountName: {{ .Values.components.ensemble_manager.serviceAccountName }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -65,9 +55,6 @@ spec:
         - name: storage
           persistentVolumeClaim:
             claimName: {{ include "mint.prefix" . }}-ensemble-manager
-        - name: kubeconfig
-          secret:
-            secretName: {{ include "mint.prefix" . }}-kubeconfig
       initContainers:
         - name: volume-mount-hack
           image: busybox
@@ -101,9 +88,6 @@ spec:
             - name: config
               mountPath: /home/node/app/config.json
               subPath: config.json
-            - name: kubeconfig
-              mountPath: /home/node/.kube
-              readOnly: true
         - name: files
           {{- with .Values.components.ensemble_manager }}
           image: "nginx"

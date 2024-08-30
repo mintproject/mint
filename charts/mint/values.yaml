@@ -260,6 +260,7 @@ components:
       tag: 17dcd41412f97525425e4377b8c0dbd6e2088458
       pullPolicy: IfNotPresent
     resources: {}
+    serviceAccountName: default
     environment:
       data_dir: /var/mint
       data_url: http://localhost:30010/data
