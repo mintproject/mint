@@ -41,6 +41,17 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: volume-mount-hack
+          image: busybox
+          command: ["sh", "-c", "chown -R 9008 /fuseki-base"]
+          volumeMounts:
+            - name: db
+              mountPath: /fuseki-base/databases
+            - name: config
+              mountPath: /fuseki-base/configuration
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
       containers:
         - name: endpoint
           {{- with .Values.components.model_catalog_endpoint  }}

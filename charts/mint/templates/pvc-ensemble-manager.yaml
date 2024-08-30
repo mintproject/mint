@@ -1,0 +1,35 @@
+
+{{- if and .Values.components.ensemble_manager.enabled }}
+{{- if and .Values.components.ensemble_manager.persistence.enabled (not .Values.components.ensemble_manager.persistence.existingClaim) }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager
+  namespace: {{ .Release.Namespace | quote }}
+  {{- if or .Values.components.ensemble_manager.persistence.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.components.ensemble_manager.persistence.annotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.components.ensemble_manager.persistence.annotations "context" $ ) | nindent 4 }}
+    {{- end }}
+    {{- if .Values.commonAnnotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  accessModes:
+  {{- if not (empty .Values.components.ensemble_manager.persistence.accessModes) }}
+  {{- range .Values.components.ensemble_manager.persistence.accessModes }}
+    - {{ . | quote }}
+  {{- end }}
+  {{- else }}
+    - "ReadWriteOnce"
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.components.ensemble_manager.persistence.size | quote }}
+  {{- include "common.storage.class" (dict "persistence" .Values.components.ensemble_manager.persistence "global" .Values.global) | nindent 2 }}
+  {{- if .Values.components.ensemble_manager.persistence.dataSource }}
+  dataSource: {{- include "common.tplvalues.render" (dict "value" .Values.components.ensemble_manager.persistence.dataSource "context" $) | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

@@ -89,22 +89,21 @@ spec:
               port: http
         - name: hasura-db
           #if the values.arm_support is true, then use the arm_image, otherwise use the image
-
           {{- if .Values.arm_support  }}
           {{- with .Values.components.hasura_db }}
           image: "{{ .arm_image.repository }}:{{ .arm_image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .arm_image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
           {{- end }}
           {{- else }}
           {{- with .Values.components.hasura_db }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
-          {{- end }}
           resources:
             {{- toYaml .resources | nindent 12 }}
           {{- end }}
-
-          resources: {}
+          {{- end }}
           volumeMounts:
           - mountPath: /var/lib/postgresql/data
             name: hasura-db
@@ -125,7 +124,7 @@ spec:
                 - pg_isready
                 - -U
                 - {{ .Values.secrets.database.hasura.username }}
-            initialDelaySeconds: 5
+            initialDelaySeconds: 100
             periodSeconds: 10
       volumes:
         - name: hasura-db
