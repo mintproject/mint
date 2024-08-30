@@ -286,9 +286,9 @@ components:
     persistence:
       enabled: true
       storageClass: ""
-      accessModes:
-        - ReadWriteMany
-      size: 100Gi
+      #accessModes:
+      # - ReadWriteMany
+      size: 10Gi
       dataSource: {}
       existingClaim: ""
       selector: {}
