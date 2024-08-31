@@ -314,6 +314,9 @@ google:
   maps:
     key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM
 secrets:
+  data_catalog:
+    ckan:
+      api_key: CHANGEME
   database:
     data_catalog:
       username: datacatalog

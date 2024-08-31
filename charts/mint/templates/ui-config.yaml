@@ -87,4 +87,10 @@ data:
     window.REACT_APP_INGESTION_API = "http://node1.ingestion.mint.isi.edu/v1.3.0";
     window.REACT_APP_AIRFLOW_API = "https://airflow.mint.isi.edu/api/v1";
     window.REACT_APP_AIRFLOW_DAG_DOWNLOAD_THREAD_ID = "download_thread"
+
+    {{ if eq .Values.components.ensemble_manager.config.data_catalog.type "CKAN" }}
+    window.REACT_APP_DATA_CATALOG_TYPE = "CKAN";
+    window.REACT_APP_DATA_CATALOG_KEY = {{ .Values.secrets.data_catalog.ckan.api_key | quote }};
+    {{ end }}
+
 {{- end}}
