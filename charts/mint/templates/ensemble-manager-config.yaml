@@ -48,11 +48,11 @@ data:
          {{- end }}
 
 
-         {{- with .Values.components.ensemble_manager }}
-         {{- if .execution_engine.type }}
-         "execution_engine": {{ .execution_engine.type | quote }},
-         "{{ .execution_engine.type }}":
-            {{ .execution_engine.config  | toRawJson | nindent 12}},
+         {{- with .Values.components.ensemble_manager.config }}
+         {{- if .type }}
+         "execution_engine": {{ .type | quote }},
+         "{{ .type }}":
+            {{ .execution_engine | toRawJson | nindent 12}},
          {{- end }}
          {{- end }}
          "auth_server": {{ .Values.auth.url | quote }},
