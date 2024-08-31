@@ -268,9 +268,8 @@ components:
         api: "http://localhost:5000"
         type: "CKAN"
         extra:
-          owner_organizationId: "21033e7d-484d-4974-9340-8c5755242c1f"
-          owner_provenanceId: "9ef60317-5da5-4050-8bbc-7d6826fee49f"
-
+          owner_organization_id: "21033e7d-484d-4974-9340-8c5755242c1f"
+          owner_provenance_id: "9ef60317-5da5-4050-8bbc-7d6826fee49f"
       data_server:
         type: "S3"
         region: "ap-south-1"
@@ -310,13 +309,19 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
+
 google:
   maps:
     key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM
+
 secrets:
   data_catalog:
     ckan:
       api_key: CHANGEME
+  data_server:
+    s3:
+      access_key: CHANGEME
+      secret_key: CHANGEME
   database:
     data_catalog:
       username: datacatalog
