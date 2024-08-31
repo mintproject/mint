@@ -38,35 +38,35 @@ data:
     {{ if  .enabled }}
     window.REACT_APP_ENSEMBLE_MANAGER_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}";
     //Execution - Local
-    window.REACT_APP_EXECUTION_ENGINE = "{{ .execution_engine.type }}";
+    window.REACT_APP_EXECUTION_ENGINE = "{{ .config.type }}";
 
-    {{ if eq .execution_engine.type "localex" }}
-    window.REACT_APP_LOCALEX_CODEDIR = "{{ .execution_engine.config.data_dir }}/code";
-    window.REACT_APP_LOCALEX_DATADIR = "{{ .execution_engine.config.data_dir }}/data";
-    window.REACT_APP_LOCALEX_TEMPDIR = "{{ .execution_engine.config.data_dir }}/temp";
-    window.REACT_APP_LOCALEX_LOGDIR = "{{ .execution_engine.config.data_dir }}/logs";
-    window.REACT_APP_LOCALEX_DATAURL = "{{ .execution_engine.config.data_url }}/data";
-    window.REACT_APP_LOCALEX_LOGURL = "{{ .execution_engine.config.data_url }}/logs";
-    window.REACT_APP_LOCALEX_PARALLEL = "{{ .execution_engine.config.parallel }}";
+    {{ if eq .config.type "localex" }}
+    window.REACT_APP_LOCALEX_CODEDIR = "{{ .config.data_dir }}/code";
+    window.REACT_APP_LOCALEX_DATADIR = "{{ .config.data_dir }}/data";
+    window.REACT_APP_LOCALEX_TEMPDIR = "{{ .config.data_dir }}/temp";
+    window.REACT_APP_LOCALEX_LOGDIR = "{{ .config.data_dir }}/logs";
+    window.REACT_APP_LOCALEX_DATAURL = "{{ .config.data_url }}/data";
+    window.REACT_APP_LOCALEX_LOGURL = "{{ .config.data_url }}/logs";
+    window.REACT_APP_LOCALEX_PARALLEL = "{{ .config.parallel }}";
     {{ end }}
 
-    {{ if eq .execution_engine.type "tapis" }}
-    window.REACT_APP_LOCALEX_CODEDIR = "{{ .execution_engine.config.data_dir }}/code";
-    window.REACT_APP_LOCALEX_DATADIR = "{{ .execution_engine.config.data_dir }}/data";
-    window.REACT_APP_LOCALEX_TEMPDIR = "{{ .execution_engine.config.data_dir }}/temp";
-    window.REACT_APP_LOCALEX_LOGDIR = "{{ .execution_engine.config.data_dir }}/logs";
-    window.REACT_APP_LOCALEX_DATAURL = "{{ .execution_engine.config.data_url }}/data";
-    window.REACT_APP_LOCALEX_LOGURL = "{{ .execution_engine.config.data_url }}/logs";
-    window.REACT_APP_LOCALEX_PARALLEL = "{{ .execution_engine.config.parallel }}";
+    {{ if eq .config.type "tapis" }}
+    window.REACT_APP_LOCALEX_CODEDIR = "{{ .config.data_dir }}/code";
+    window.REACT_APP_LOCALEX_DATADIR = "{{ .config.data_dir }}/data";
+    window.REACT_APP_LOCALEX_TEMPDIR = "{{ .config.data_dir }}/temp";
+    window.REACT_APP_LOCALEX_LOGDIR = "{{ .config.data_dir }}/logs";
+    window.REACT_APP_LOCALEX_DATAURL = "{{ .config.data_url }}/data";
+    window.REACT_APP_LOCALEX_LOGURL = "{{ .config.data_url }}/logs";
+    window.REACT_APP_LOCALEX_PARALLEL = "{{ .config.parallelism }}";
     {{ end }}
 
 
-    {{ if eq .execution_engine.type "wings" }}
+    {{ if eq .config.type "wings" }}
     //Execution - Wings
-    window.REACT_APP_WINGS_EXPORT_URL = "{{ .execution_engine.config.wings_export_url }}";
-    window.REACT_APP_WINGS_STORAGE = "{{ .execution_engine.config.wings_storage }}";
-    window.REACT_APP_WINGS_DOTPATH = "{{ .execution_engine.config.wings_dot_path }}";
-    window.REACT_APP_WINGS_ONTURL = "{{ .execution_engine.config.wings_ont_url }}";
+    window.REACT_APP_WINGS_EXPORT_URL = "{{ .config.wings_export_url }}";
+    window.REACT_APP_WINGS_STORAGE = "{{ .config.wings_storage }}";
+    window.REACT_APP_WINGS_DOTPATH = "{{ .config.wings_dot_path }}";
+    window.REACT_APP_WINGS_ONTURL = "{{ .config.wings_ont_url }}";
     {{ end }}
 
     {{ end }}
@@ -87,4 +87,10 @@ data:
     window.REACT_APP_INGESTION_API = "http://node1.ingestion.mint.isi.edu/v1.3.0";
     window.REACT_APP_AIRFLOW_API = "https://airflow.mint.isi.edu/api/v1";
     window.REACT_APP_AIRFLOW_DAG_DOWNLOAD_THREAD_ID = "download_thread"
+
+    {{ if  and .Values.components.ensemble_manager.config.data_catalog (eq .Values.components.ensemble_manager.config.data_catalog.type "CKAN") }}
+    window.REACT_APP_DATA_CATALOG_TYPE = "CKAN";
+    window.REACT_APP_DATA_CATALOG_KEY = {{ .Values.secrets.data_catalog.ckan.api_key | quote }};
+    {{ end }}
+
 {{- end}}

@@ -1,6 +1,6 @@
 remote: origin
 target-branch: main
 chart-dirs:
-  - charts/mint
+  - charts
 helm-extra-args: --timeout 600s
 helm-extra-set-args: --set=arm_support=true --set components.data_catalog.enabled=false

@@ -263,17 +263,33 @@ components:
     serviceAccountName: default
     environment:
       data_dir: /var/mint
-      data_url: http://localhost:30010/data
-      parallel: 1
-    execution_engine:
-      type: localex
-      config:
-        codedir: /home/node/app/data/code
-        datadir: /home/node/app/data/data
-        tempdir: /home/node/app/data/temp
-        logdir: /home/node/app/data/logs
-        dataurl: http://localhost:30010/data
-        parallelism: 1
+    config:
+      data_catalog:
+        api: "http://localhost:5000"
+        type: "CKAN"
+        extra:
+          owner_organization_id: "21033e7d-484d-4974-9340-8c5755242c1f"
+          owner_provenance_id: "9ef60317-5da5-4050-8bbc-7d6826fee49f"
+      data_server:
+        type: "S3"
+        region: "ap-south-1"
+        bucket: "mintdata"
+
+      graphql:
+        endpoint: "localhost:30003/v1/graphql"
+        enable_ssl: false
+        use_secret: true
+
+      execution_engine:
+        type: "localex"
+        code_dir: "/home/node/app/data/code"
+        data_dir: "/home/node/app/data/data"
+        temp_dir: "/home/node/app/data/temp"
+        log_dir: "/home/node/app/data/logs"
+        data_url: "s3://mintdata"
+        log_url: "s3://mintdata"
+        parallelism: 2
+
     ingress:
       enabled: true
       className: ""
@@ -293,10 +309,19 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
+
 google:
   maps:
     key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM
+
 secrets:
+  data_catalog:
+    ckan:
+      api_key: CHANGEME
+  data_server:
+    s3:
+      access_key: CHANGEME
+      secret_key: CHANGEME
   database:
     data_catalog:
       username: datacatalog
