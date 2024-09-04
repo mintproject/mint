@@ -20,10 +20,26 @@ spec:
         helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
       restartPolicy: Never
+      initContainers:
+      - name: wait-for-db
+        image: busybox
+        command: ['sh', '-c', 'until nc -z ${DB_HOST} 5432; do echo waiting for db; sleep 2; done;']
+        env:
+          - name: DB_HOST
+            value: {{ include "mint.prefix" $ }}-hasura
+          - name: DB_PORT
+            value: "5432"
+          - name: DB_NAME
+            value: ALL
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: username
       containers:
       - name: post-install-hasura
         command: ["/bin/bash"]
-        args: ["-c", "env && hasura migrate apply && hasura metadata apply && hasura seeds apply"]
+        args: ["-c", "env && pushd /hasura && hasura migrate apply && hasura metadata apply && hasura seeds apply"]
         {{- with .Values.components.hasura  }}
         image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
         resources:

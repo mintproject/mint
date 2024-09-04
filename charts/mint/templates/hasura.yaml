@@ -75,6 +75,8 @@ spec:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-hasura-secrets
                 key: jwt_secret
+          - name: DB_HOST
+            value: {{ include "mint.prefix" $ }}-hasura
           ports:
             - name: http
               containerPort: 8080
@@ -84,9 +86,11 @@ spec:
               path: /
               port: http
           readinessProbe:
-            httpGet:
-              path: /
-              port: http
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - pg_isready -h localhost -p 5432
         - name: hasura-db
           #if the values.arm_support is true, then use the arm_image, otherwise use the image
           {{- if .Values.arm_support  }}
