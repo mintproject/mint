@@ -317,6 +317,10 @@ components:
       annotations:
         helm.sh/resource-policy: keep
 
+external:
+  data_catalog:
+    url: http://localhost:5000
+
 google:
   maps:
     key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM
