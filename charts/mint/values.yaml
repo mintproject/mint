@@ -289,6 +289,10 @@ components:
         data_url: "s3://mintdata"
         log_url: "s3://mintdata"
         parallelism: 2
+        wings_export_url: ""
+        wings_storage: ""
+        wings_dot_path: ""
+        wings_ont_url: ""
 
     ingress:
       enabled: true
