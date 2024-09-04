@@ -7,17 +7,7 @@ metadata:
 data:
    config.json: |
       {
-         {{- if eq .Values.service.type "NodePort" }}
-         "data_catalog_api": "http://{{ include "mint.prefix" . }}-data-catalog",
-         "model_catalog_api": "http://{{ include "mint.prefix" . }}-model-catalog/{{ .Values.components.model_catalog_api.api_version }}",
-         "ensemble_manager_api": "http://{{ include "mint.prefix" .}}-ensemble-manager/{{ .Values.components.ensemble_manager.api_version }}",
-         "graphql": {
-            "endpoint": "{{ include "mint.prefix" . }}-hasura/v1/graphql",
-            "enable_ssl": false,
-            "use_secret": true
-         },
-
-         {{- else if eq .Values.service.type "ClusterIP" }}
+         {{- if eq .Values.service.type "ClusterIP" }}
             {{- with .Values.components.data_catalog }}
                {{- if  .enabled }}
          "data_catalog_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}",
@@ -54,10 +44,7 @@ data:
          "{{ .type }}":
             {{ .execution_engine | toRawJson | nindent 12}},
          {{- end }}
-         {{- end }}
 
-
-         {{- with .Values.components.ensemble_manager.config }}
          {{- if eq .data_catalog.type "CKAN"}}
          "data_catalog_api": {{ .data_catalog.api | quote }},
          "data_catalog_type": {{ .data_catalog.type | quote }},

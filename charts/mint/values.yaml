@@ -289,6 +289,13 @@ components:
         data_url: "s3://mintdata"
         log_url: "s3://mintdata"
         parallelism: 2
+        wings_export_url: ""
+        wings_storage: ""
+        wings_dot_path: ""
+        wings_ont_url: ""
+        #tapis properties
+        username: ""
+        basePath: ""
 
     ingress:
       enabled: true
@@ -309,6 +316,10 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
+
+external:
+  data_catalog:
+    url: http://localhost:5000
 
 google:
   maps:
