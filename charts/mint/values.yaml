@@ -293,7 +293,7 @@ components:
         wings_storage: ""
         wings_dot_path: ""
         wings_ont_url: ""
-        #tapis properties
+        # tapis properties
         username: ""
         basePath: ""
 
