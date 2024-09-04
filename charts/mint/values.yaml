@@ -158,7 +158,7 @@ components:
     enabled: true
     image:
       repository: mintproject/graphql-engine
-      tag: 0fc7ce2a5098d2e86f1280f6fa70acfc816a531d
+      tag: 305c0dbeba1878eafe348f21fc300fbfc017d9dc
       pullPolicy: IfNotPresent
     resources: {}
     environment:
@@ -293,7 +293,7 @@ components:
         wings_storage: ""
         wings_dot_path: ""
         wings_ont_url: ""
-        #tapis properties
+        # tapis properties
         username: ""
         basePath: ""
 
