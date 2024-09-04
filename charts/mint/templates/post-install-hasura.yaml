@@ -23,6 +23,13 @@ spec:
       initContainers:
       - name: wait-for-db
         image: busybox
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 110m
+            memory: 110Mi
         command: ['sh', '-c', 'until nc -z ${DB_HOST} 5432; do echo waiting for db; sleep 2; done;']
         env:
           - name: DB_HOST
@@ -36,6 +43,7 @@ spec:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-hasura-secrets
                 key: username
+
       containers:
       - name: post-install-hasura
         command: ["/bin/bash"]
