@@ -293,6 +293,9 @@ components:
         wings_storage: ""
         wings_dot_path: ""
         wings_ont_url: ""
+        #tapis properties
+        username: ""
+        basePath: ""
 
     ingress:
       enabled: true
