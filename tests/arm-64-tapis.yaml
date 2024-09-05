@@ -1,0 +1,18 @@
+arm_support: true
+components:
+  data_catalog:
+    enabled: false
+  ensemble_manager:
+    enabled: true
+    config:
+      execution_engine:
+        type: tapis
+        codedir: /home/node/app/data/code
+        datadir: /home/node/app/data/data
+        tempdir: /home/node/app/data/temp
+        logdir: /home/node/app/data/logs
+        dataurl: http://localhost:30010/data
+        parallelism: 1
+        basePath:
+        username: "tapisuser"
+        password: "tapispass"
