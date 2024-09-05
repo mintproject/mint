@@ -44,7 +44,7 @@ spec:
       initContainers:
         - name: volume-mount-hack
           image: busybox
-          command: ["sh", "-c", "chown -R 9008 /fuseki-base"]
+          command: ["sh", "-c", "chown -R 9008 /fuseki-base", '&&', 'find /fuseki-base -name tdb.lock -delete']
           volumeMounts:
             - name: db
               mountPath: /fuseki-base/databases
@@ -80,9 +80,11 @@ spec:
               path: /
               port: http
           readinessProbe:
-            httpGet:
-              path: /
-              port: http
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - curl -f http://localhost:3030/$/ping
       volumes:
         - name: config
           {{- if .Values.components.model_catalog_endpoint.persistence.enabled }}
