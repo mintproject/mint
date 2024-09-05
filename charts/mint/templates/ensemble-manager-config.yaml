@@ -7,36 +7,14 @@ metadata:
 data:
    config.json: |
       {
-         {{- if eq .Values.service.type "ClusterIP" }}
-            {{- with .Values.components.data_catalog }}
-               {{- if  .enabled }}
-         "data_catalog_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}",
-               {{- end }}
-            {{- end }}
-
-            {{- with .Values.components.model_catalog_api }}
-               {{- if  .enabled }}
-         "model_catalog_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
-               {{- end }}
-            {{- end }}
-
-            {{- with .Values.components.ensemble_manager }}
-               {{- if  .enabled }}
-         "ensemble_manager_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
-               {{- end }}
-            {{- end }}
-
-            {{- with .Values.components.hasura }}
-               {{- if  .enabled }}
+         "data_catalog_api": "http://{{ include "mint.prefix" . }}-data-catalog",
+         "model_catalog_api": "http://{{ include "mint.prefix" . }}-model-catalog/{{ .Values.components.model_catalog_api.api_version }}",
+         "ensemble_manager_api": "http://{{ include "mint.prefix" .}}-ensemble-manager/{{ .Values.components.ensemble_manager.api_version }}",
          "graphql": {
-            "endpoint": "{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/v1/graphql",
-            "enable_ssl": {{ if .ingress.tls  }}true{{else}}false{{ end }},
+            "endpoint": "{{ include "mint.prefix" . }}-hasura/v1/graphql",
+            "enable_ssl": false,
             "use_secret": true
          },
-               {{- end }}
-            {{- end }}
-         {{- end }}
-
 
          {{- with .Values.components.ensemble_manager.config }}
          {{- if .type }}
