@@ -48,7 +48,7 @@ spec:
       initContainers:
         - name: wait-for-model-catalog-endpoint
           image: alpine/curl
-          command: ["sh", "-c", "until curl -sk {{ include "mint.prefix" . }}-model-catalog-endpoint:3030/$/modelcatalog/ping; do echo waiting for model-catalog-endpoint; sleep 2; done"]
+          command: ["sh", "-c", "sleep 60; until curl -sk {{ include "mint.prefix" . }}-model-catalog-endpoint:3030/$/modelcatalog/ping; do echo waiting for model-catalog-endpoint; sleep 2; done"]
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       containers:
