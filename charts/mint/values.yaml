@@ -133,6 +133,7 @@ components:
       graph_base: http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/
       prefix: https://w3id.org/okn/i/mint/
       backup_file: /fuseki-base/seeds/model-catalog.trig
+      seeds_url: https://raw.githubusercontent.com/mintproject/model-catalog-endpoint/main/data/model-catalog.trig
     ingress:
       enabled: true
       className: ""
