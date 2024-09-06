@@ -45,6 +45,12 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-model-catalog-endpoint
+          image: alpine/curl
+          command: ["sh", "-c", "until curl -sk {{ include "mint.prefix" . }}-model-catalog-endpoint:3030/$/modelcatalog/ping; do echo waiting for model-catalog-endpoint; sleep 2; done"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
       containers:
         - name: model-catalog
           {{- with .Values.components.model_catalog_api  }}
