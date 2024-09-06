@@ -28,11 +28,12 @@ spec:
           -X POST \
           -u admin:${ADMIN_PASSWORD} \
           --data-raw \"dbName={{ .Values.components.model_catalog_endpoint.environment.dataset  }}&dbType=tdb2\" \
+          && curl -o /tmp/seeds.trig {{ .Values.components.model_catalog_endpoint.environment.seeds_url }} \
           && curl -v \
          'http://{{ include "mint.prefix" $ }}-model-catalog-endpoint:3030/{{ .Values.components.model_catalog_endpoint.environment.dataset }}/data' \
                     -X POST \
            -u admin:${ADMIN_PASSWORD} \
-           --upload-file {{ .Values.components.model_catalog_endpoint.environment.backup_file }} \
+           --upload-file /tmp/seeds.trig \
            -H  \"Content-Type: application/trig\"
           "]
         {{- with .Values.components.model_catalog_endpoint  }}
