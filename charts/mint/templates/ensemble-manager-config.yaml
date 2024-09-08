@@ -23,27 +23,26 @@ data:
             {{ .execution_engine | toRawJson | nindent 12}},
          {{- end }}
 
-         {{- if eq .data_catalog.type "CKAN"}}
-         "data_catalog_api": {{ .data_catalog.api | quote }},
-         "data_catalog_type": {{ .data_catalog.type | quote }},
+         {{- end}}
+
+         {{ with .Values.external_services}}
+         {{- if .ckan and eq .ckan.enabled true }}
+         "data_catalog_api": {{ .ckan.url | quote }},
+         "data_catalog_type": {{ .ckan.type | quote }},
          "data_catalog_extra": {
-            "owner_organization_id": {{ .data_catalog.extra.owner_organization_id | quote }},
-            "owner_provenance_id": {{ .data_catalog.extra.owner_provenance_id | quote }}
+            "owner_organization_id": {{ .ckan.extra.owner_organization_id | quote }},
+            "owner_provenance_id": {{ .ckan.extra.owner_provenance_id | quote }}
          },
          {{- end}}
-         {{- end}}
+         {{end}}
 
-
-
-         {{- if eq .Values.components.ensemble_manager.config.data_server.type "S3" }}
-         {{- with .Values.components.ensemble_manager.config }}
-         "data_server_type": {{ .data_server.type | quote }},
+         {{- if .Values.external_services.s3 and .Values.external_services.s3.enabled }}
+         "data_server_type": {{ .Values.external_services.s3.type | quote }},
          "data_server": {
-            "region": {{ .data_server.region | quote }},
-            "bucket": {{ .data_server.bucket | quote }},
-         {{- end}}
-            "access_key": {{ .Values.secrets.data_server.s3.access_key | quote }},
-            "secret_access_key": {{ .Values.secrets.data_server.s3.secret_key | quote }}
+            "region": {{ .Values.external_services.s3.region | quote }},
+            "bucket": {{ .Values.external_services.s3.bucket | quote }},
+            "access_key": {{ .Values.secrets.external_services.s3.access_key | quote }},
+            "secret_access_key": {{ .Values.secrets.external_services.s3.secret_key | quote }}
          },
          {{- end}}
 
