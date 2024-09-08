@@ -337,10 +337,6 @@ components:
     environment:
       data_dir: /var/mint
     config:
-      data_server:
-        type: "S3"
-        region: "ap-south-1"
-        bucket: "mintdata"
       graphql:
         endpoint: "localhost:30003/v1/graphql"
         enable_ssl: false
@@ -392,10 +388,9 @@ google:
     key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM
 
 secrets:
-  data_catalog:
+  external_services:
     ckan:
       api_key: CHANGEME
-  data_server:
     s3:
       access_key: CHANGEME
       secret_key: CHANGEME
