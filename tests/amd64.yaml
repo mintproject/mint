@@ -1,0 +1,36 @@
+components:
+  cromo:
+    enabled: false
+    resources: {}
+  mic_ui:
+    enabled: false
+    resources: {}
+  mic_api:
+    enabled: false
+    resources: {}
+  mic_api_db:
+    resources: {}
+  data_catalog:
+    enabled: false
+    resources: {}
+  data_catalog_db:
+    resources: {}
+  model_catalog_endpoint:
+    enabled: true
+    resources: {}
+  hasura:
+    enabled: true
+    resources: {}
+  model_catalog_explorer:
+    enabled: true
+    resources: {}
+  model_catalog_api:
+    enabled: true
+    resources: {}
+  ui:
+    enabled: true
+    resources: {}
+  ensemble_manager:
+    enabled: true
+    resources: {}
+resources: {}
