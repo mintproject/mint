@@ -448,6 +448,7 @@ affinity: {}
 
 external_services:
   ckan:
+    enabled: false
     url: "http://localhost:5000"
     type: "CKAN"
     api_key: "CHANGEME"
@@ -455,6 +456,7 @@ external_services:
       owner_organization_id: "21033e7d-484d-4974-9340-8c5755242c1f"
       owner_provenance_id: "9ef60317-5da5-4050-8bbc-7d6826fee49f"
   s3:
+    enabled: false
     type: "S3"
-    region: "ap-south-1"
-    bucket: "mintdata"
+    region: ""
+    bucket: ""

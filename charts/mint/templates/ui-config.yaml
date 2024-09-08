@@ -86,7 +86,7 @@ data:
     window.REACT_APP_AIRFLOW_DAG_DOWNLOAD_THREAD_ID = "download_thread"
 
     {{ with .Values.external_services }}
-    {{ if .ckan }}
+    {{- if .ckan and eq .ckan.enabled true }}
     window.REACT_APP_DATA_CATALOG_TYPE = {{ .ckan.type | quote }};
     window.REACT_APP_DATA_CATALOG_KEY = {{ .ckan.api_key | quote }};
     {{ end }}
