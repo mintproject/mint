@@ -275,6 +275,7 @@ components:
       repository: mintproject/model-catalog-fastapi
       tag: c5f784785c52034f75de24c46b89907c74a14312
       pullPolicy: IfNotPresent
+    resources:
       requests:
         memory: "1024Mi"
         cpu: "1000m"
