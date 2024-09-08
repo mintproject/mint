@@ -1,0 +1,71 @@
+# Source: MINT/templates/post-install-model-catalog-endpoint.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mint-model-catalog-endpoint-post-install
+  namespace: wifire-mint
+  labels:
+    helm.sh/chart: MINT-3.3.1-alpha.5
+    app.kubernetes.io/name: MINT
+    app.kubernetes.io/instance: mint
+    app.kubernetes.io/version: "1.16.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  template:
+    metadata:
+      name: "mint-model-catalog-endpoint-post-install"
+      labels:
+        app.kubernetes.io/managed-by: "Helm"
+        app.kubernetes.io/instance: "mint"
+        helm.sh/chart: "MINT-3.3.1-alpha.5"
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-model-catalog-endpoint
+          image: alpine/curl
+          command:
+            [
+              "sh",
+              "-c",
+              "until curl -sk mint-model-catalog-endpoint:3030/$/ping; do echo waiting for model-catalog-endpoint; sleep 2; done",
+            ]
+          resources:
+            limits:
+              cpu: 210m
+              memory: 256Mi
+            requests:
+              cpu: 200m
+              memory: 254Mi
+      containers:
+        - name: post-install-model-catalog-endpoint
+          command: ["/bin/bash"]
+          args: [
+              "-c",
+              "curl 'http://mint-model-catalog-endpoint:3030/$/datasets' \
+              -X POST \
+              -u admin:${ADMIN_PASSWORD} \
+              --data-raw \"dbName=modelcatalog&dbType=tdb2\" \
+              && curl -o /tmp/seeds.trig https://github.com/mintproject/model-catalog-endpoint/raw/main/data/wifire-2024-09.trig \
+              && curl \
+              'http://mint-model-catalog-endpoint:3030/modelcatalog/data' \
+              -X POST \
+              -u admin:${ADMIN_PASSWORD} \
+              --upload-file /tmp/seeds.trig \
+              -H  \"Content-Type: application/trig\"
+              ",
+            ]
+          image: "mintproject/model-catalog-endpoint:29256555a6fbaefae4729d5cd259564708a4ab04"
+          resources:
+            limits:
+              cpu: 1024m
+              memory: 2500Mi
+            requests:
+              cpu: 1000m
+              memory: 2000Mi
+
+          env:
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mint-model-catalog-endpoint-secrets
+                  key: password

@@ -1,22 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: wifire-hasura-post-install
-  namespace: wifire-mint
-  labels:
-    helm.sh/chart: MINT-3.3.1-alpha.3
-    app.kubernetes.io/name: MINT
-    app.kubernetes.io/instance: wifire
-    app.kubernetes.io/version: "1.16.3"
-    app.kubernetes.io/managed-by: Helm
+  name: mint-hasura-post-install
 spec:
   selector:
     matchLabels:
-      app: wifire-hasura-post-install
+      app: mint-hasura-post-install
   template:
     metadata:
       labels:
-        app: wifire-hasura-post-install
+        app: mint-hasura-post-install
     spec:
       initContainers:
         - name: wait-for-db
@@ -36,7 +29,7 @@ spec:
             ]
           env:
             - name: DB_HOST
-              value: wifire-hasura
+              value: mint-hasura
             - name: DB_PORT
               value: "5432"
             - name: DB_NAME
@@ -44,14 +37,17 @@ spec:
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
-                  name: wifire-hasura-secrets
+                  name: mint-hasura-secrets
                   key: username
 
       containers:
         - name: post-install-hasura
-          #sleep
-          command: ["/bin/sh"]
-          args: ["-c", "while true; do echo 'Running...'; sleep 300; done"]
+          command: ["/bin/bash"]
+          args:
+            [
+              "-c",
+              "env && pushd /hasura && hasura migrate apply && hasura metadata apply && hasura seeds apply",
+            ]
           image: "mintproject/graphql-engine:305c0dbeba1878eafe348f21fc300fbfc017d9dc"
           resources:
             requests:
@@ -60,12 +56,11 @@ spec:
             limits:
               cpu: 1100m
               memory: 1100Mi
-
           env:
             - name: HASURA_GRAPHQL_ENDPOINT
-              value: http://wifire-hasura
+              value: http://mint-hasura
             - name: HASURA_GRAPHQL_ADMIN_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: wifire-hasura-secrets
+                  name: mint-hasura-secrets
                   key: admin_secret
