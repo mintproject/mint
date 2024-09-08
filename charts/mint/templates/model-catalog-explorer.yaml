@@ -44,10 +44,10 @@ spec:
       containers:
         - name: model-catalog-explorer
           {{- with .Values.components.model_catalog_explorer }}
-          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
-          imagePullPolicy: {{ .image.pullPolicy }}
           resources:
             {{- toYaml .resources | nindent 12 }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
           {{- end }}
           ports:
             - name: http
