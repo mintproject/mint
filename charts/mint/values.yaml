@@ -306,8 +306,13 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
-
-external:
+jobs:
+  model_catalog_endpoint:
+    enabled: true
+    resources: {}
+  hasura:
+    enabled: true
+    resources: {}
   data_catalog:
     url: http://localhost:5000
 
