@@ -9,7 +9,11 @@ data:
       {
          "data_catalog_api": "http://{{ include "mint.prefix" . }}-data-catalog",
          "model_catalog_api": "http://{{ include "mint.prefix" . }}-model-catalog/{{ .Values.components.model_catalog_api.api_version }}",
-         "ensemble_manager_api": "http://{{ include "mint.prefix" .}}-ensemble-manager/{{ .Values.components.ensemble_manager.api_version }}",
+         {{- with .Values.components.ensemble_manager }}
+            {{- if  .enabled }}
+               "ensemble_manager_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
+            {{- end }}
+         {{- end }}
          "graphql": {
             "endpoint": "{{ include "mint.prefix" . }}-hasura/v1/graphql",
             "enable_ssl": false,
