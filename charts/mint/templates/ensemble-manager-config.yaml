@@ -17,9 +17,9 @@ data:
          },
 
          {{- with .Values.components.ensemble_manager.config }}
-         {{- if .type }}
-         "execution_engine": {{ .type | quote }},
-         "{{ .type }}":
+         {{- if .execution_engine.type }}
+         "execution_engine": {{ .execution_engine.type | quote }},
+         "{{ .execution_engine.type }}":
             {{ .execution_engine | toRawJson | nindent 12}},
          {{- end }}
 
