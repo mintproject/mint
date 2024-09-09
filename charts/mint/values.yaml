@@ -313,8 +313,6 @@ jobs:
   hasura:
     enabled: true
     resources: {}
-  data_catalog:
-    url: http://localhost:5000
 
 google:
   maps:
