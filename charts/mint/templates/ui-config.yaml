@@ -13,21 +13,25 @@ data:
     {{- end }}
     // Mint Services
     {{ if eq .Values.service.type "ClusterIP" }}
+
     {{ with .Values.components.cromo }}
     {{ if  .enabled }}
     window.REACT_APP_CROMO_URL = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}";
     {{ end }}
     {{ end }}
+
     {{ with .Values.components.data_catalog }}
     {{ if  .enabled }}
     window.REACT_APP_DATA_CATALOG_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}";
     {{ end }}
     {{ end }}
+
     {{ with .Values.components.model_catalog_api}}
     {{ if  .enabled }}
     window.REACT_APP_MODEL_CATALOG_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}";
     {{ end }}
     {{ end }}
+
     {{ with .Values.components.hasura }}
     {{ if  .enabled }}
     window.REACT_APP_GRAPHQL_ENDPOINT = "{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/v1/graphql";
@@ -38,6 +42,7 @@ data:
     {{ if  .Values.components.ensemble_manager.enabled }}
     {{ with .Values.components.ensemble_manager }}
     window.REACT_APP_ENSEMBLE_MANAGER_API = "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}";
+    {{ end }}
     {{ end }}
 
     {{ with .Values.components.ensemble_manager.config.execution_engine }}
@@ -51,6 +56,7 @@ data:
     window.REACT_APP_LOCALEX_LOGURL = "{{ .data_url }}/logs";
     window.REACT_APP_LOCALEX_PARALLEL = "{{ .parallellelism }}";
     {{ end }}
+
     {{ if eq .type "tapis" }}
     window.REACT_APP_LOCALEX_CODEDIR = "{{ .data_dir }}/code";
     window.REACT_APP_LOCALEX_DATADIR = "{{ .data_dir }}/data";
@@ -60,6 +66,7 @@ data:
     window.REACT_APP_LOCALEX_LOGURL = "{{ .data_url }}/logs";
     window.REACT_APP_LOCALEX_PARALLEL = "{{ .parallelism }}";
     {{ end }}
+
     {{ if eq .type "wings" }}
     //Execution - Wings
     window.REACT_APP_WINGS_EXPORT_URL = "{{ .wings_export_url }}";
@@ -86,16 +93,14 @@ data:
     window.REACT_APP_AIRFLOW_DAG_DOWNLOAD_THREAD_ID = "download_thread"
 
     {{ with .Values.external_services }}
-    {{- if .ckan and eq .ckan.enabled true }}
+    {{ if eq .ckan.enabled true }}
     window.REACT_APP_DATA_CATALOG_TYPE = {{ .ckan.type | quote }};
     window.REACT_APP_DATA_CATALOG_KEY = {{ .ckan.api_key | quote }};
     {{ end }}
     {{ end }}
 
-    {{ with .Values.components.data_catalog }}
-    {{ if  eq .enabled false }}
+    {{ if  eq .Values.components.data_catalog.enabled false }}
     window.REACT_APP_DATA_CATALOG_API = {{.Values.external_services.ckan.url | quote }};
-    {{ end }}
     {{ end }}
 
 {{- end }}
