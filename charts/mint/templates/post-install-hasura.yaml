@@ -51,7 +51,7 @@ spec:
         {{- with .Values.components.hasura  }}
         image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
         {{ end }}
-        {{- with .jobs.hasura }}
+        {{- with .Values.jobs.hasura }}
         resources:
           {{- toYaml .resources | nindent 12 }}
         {{ end }}
