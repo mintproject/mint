@@ -26,7 +26,7 @@ data:
          {{- end}}
 
          {{ with .Values.external_services}}
-         {{- if .ckan and eq .ckan.enabled true }}
+         {{- if eq .ckan.enabled true }}
          "data_catalog_api": {{ .ckan.url | quote }},
          "data_catalog_type": {{ .ckan.type | quote }},
          "data_catalog_extra": {
@@ -36,7 +36,7 @@ data:
          {{- end}}
          {{end}}
 
-         {{- if .Values.external_services.s3 and .Values.external_services.s3.enabled }}
+         {{- if eq .Values.external_services.s3.enabled true }}
          "data_server_type": {{ .Values.external_services.s3.type | quote }},
          "data_server": {
             "region": {{ .Values.external_services.s3.region | quote }},
