@@ -13,16 +13,7 @@ spec:
     - name: "http"
       port: 80
       targetPort: 3000
-      {{ if eq .Values.service.type "NodePort" }}
-      nodePort: {{ include "helm.ensemble_manager_node_port" . }}
-      {{ end }}
       protocol: TCP
-    - name: "datacatalog"
-      port: 8080
-      targetPort: 80
-      {{ if eq .Values.service.type "NodePort" }}
-      nodePort: {{ include "helm.ensemble_manager_data_node_port" . }}
-      {{ end }}
   selector:
     app: {{ include "mint.prefix" . }}-ensemble-manager
 ---
@@ -72,6 +63,9 @@ spec:
           resources:
             {{- toYaml .resources | nindent 12 }}
           {{- end }}
+          ports:
+            - containerPort: 3000
+              name: api
           env:
             - name: TMPDIR
               value: /home/node/app/data/temp
@@ -92,6 +86,8 @@ spec:
           {{- with .Values.components.ensemble_manager }}
           image: "nginx"
           imagePullPolicy: {{ .image.pullPolicy }}
+          ports:
+            - containerPort: 80
           resources:
             {{- toYaml .resources | nindent 12 }}
           {{- end }}

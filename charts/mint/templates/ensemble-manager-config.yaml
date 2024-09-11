@@ -50,6 +50,15 @@ data:
          },
          {{- end}}
 
+         {{- if eq .Values.external_services.kubernetes.enabled true }}
+         "kubernetes": {
+            "namespace": {{ .Values.external_services.kubernetes.namespace | quote }},
+            "use": {{ .Values.external_services.kubernetes.enabled }},
+            "cpu_limit": {{ .Values.external_services.kubernetes.cpu_limit | quote }},
+            "memory_limit": {{ .Values.external_services.kubernetes.memory_limit | quote }}
+         },
+         {{- end}}
+
          "auth_server": {{ .Values.auth.url | quote }},
          "auth_realm": {{ .Values.auth.realm | quote }},
          "auth_client_id": {{ .Values.auth.ui_client_id | quote }},
