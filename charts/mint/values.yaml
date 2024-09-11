@@ -258,7 +258,7 @@ components:
     api_version: v1
     image:
       repository: mintproject/ensemble-manager
-      tag: be57e330e06c1ba73295b3eb500c352384e9dbca
+      tag: 3e1f40865e647a8025b06ac63178b0eed64aed3e
       pullPolicy: IfNotPresent
     resources: {}
     serviceAccountName: default
@@ -302,6 +302,8 @@ components:
       storageClass: ""
       size: 10Gi
       dataSource: {}
+      accessModes:
+        - ReadWriteMany
       existingClaim: ""
       selector: {}
       annotations:
@@ -391,3 +393,8 @@ external_services:
     type: "S3"
     region: ""
     bucket: ""
+  kubernetes:
+    enabled: false
+    namespace: "default"
+    cpu_limit: "256m"
+    memory_limit: "512Mi"
