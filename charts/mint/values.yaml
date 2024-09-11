@@ -303,7 +303,7 @@ components:
       size: 10Gi
       dataSource: {}
       accessModes:
-        - ReadWriteMany
+        - ReadWriteOnce
       existingClaim: ""
       selector: {}
       annotations:
