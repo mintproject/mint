@@ -298,6 +298,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
     persistence:
+      name: ensemble-manager
       enabled: true
       storageClass: ""
       size: 10Gi

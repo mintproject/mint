@@ -45,7 +45,7 @@ spec:
             name: {{ include "mint.prefix" . }}-ensemble-manager-config-map
         - name: storage
           persistentVolumeClaim:
-            claimName: {{ include "mint.prefix" . }}-ensemble-manager
+            claimName: {{ include "mint.prefix" . }}-{{ .Values.components.ensemble_manager.persistence.name }}
       initContainers:
         - name: volume-mount-hack
           image: busybox
