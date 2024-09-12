@@ -17,6 +17,23 @@ spec:
   selector:
     app: {{ include "mint.prefix" . }}-ensemble-manager
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager-files
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-ensemble-manager
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
