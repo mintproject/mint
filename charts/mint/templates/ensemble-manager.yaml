@@ -45,7 +45,7 @@ spec:
             name: {{ include "mint.prefix" . }}-ensemble-manager-config-map
         - name: storage
           persistentVolumeClaim:
-            claimName: {{ include "mint.prefix" . }}-ensemble-manager
+            claimName: {{ include "mint.prefix" . }}-{{ .Values.components.ensemble_manager.persistence.name }}
       initContainers:
         - name: volume-mount-hack
           image: busybox
@@ -69,6 +69,8 @@ spec:
           env:
             - name: TMPDIR
               value: /home/node/app/data/temp
+            - name: ENSEMBLE_MANAGER_PVC
+              value: {{ include "mint.prefix" . }}-{{ .Values.components.ensemble_manager.persistence.name }}
             - name: HASURA_GRAPHQL_ADMIN_SECRET
               valueFrom:
                 secretKeyRef:

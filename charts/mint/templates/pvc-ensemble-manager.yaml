@@ -4,7 +4,7 @@
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: {{ include "mint.prefix" . }}-ensemble-manager
+  name: {{ include "mint.prefix" . }}-{{ .Values.components.ensemble_manager.persistence.name }}
   namespace: {{ .Release.Namespace | quote }}
   {{- if or .Values.components.ensemble_manager.persistence.annotations .Values.commonAnnotations }}
   annotations:
