@@ -10,7 +10,7 @@ All the documentation for the MINT framework can be found in the [MINT documenta
 
 ## Testing on local machine
 
-To test the MINT services on your local machine, we recommend using the [microk8s](https://microk8s.io/) Kubernetes distribution. Follow the instructions in the [microk8s documentation](https://microk8s.io/#install-microk8s) to install microk8s on your machine.
+To test the MINT services on your local machine, we **strongly** recommend using the [microk8s](https://microk8s.io/) Kubernetes distribution. Follow the instructions in the [microk8s documentation](https://microk8s.io/#install-microk8s) to install microk8s on your machine.
 
 ### Microk8s installation
 
