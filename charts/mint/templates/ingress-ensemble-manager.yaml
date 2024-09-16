@@ -39,6 +39,13 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
+          - path: /data/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}-ensemble-manager-files
+                port:
+                  number: 80
           {{- range .paths }}
           - path: {{ .path }}
             {{- if and .pathType (semverCompare ">=1.18-0" $.Capabilities.KubeVersion.GitVersion) }}
