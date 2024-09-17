@@ -95,6 +95,10 @@ spec:
                   key: admin_secret
             - name: ENSEMBLE_MANAGER_CONFIG_FILE
               value: /home/node/app/config.json
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           volumeMounts:
             - name: storage
               mountPath: /home/node/app/data

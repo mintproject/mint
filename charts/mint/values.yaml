@@ -399,3 +399,4 @@ external_services:
     namespace: "default"
     cpu_limit: "256m"
     memory_limit: "512Mi"
+    node_affinity: true

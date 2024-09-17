@@ -55,6 +55,7 @@ data:
             "namespace": {{ .Values.external_services.kubernetes.namespace | quote }},
             "use": {{ .Values.external_services.kubernetes.enabled }},
             "cpu_limit": {{ .Values.external_services.kubernetes.cpu_limit | quote }},
+            "node_affinity": {{ .Values.external_services.kubernetes.node_affinity }},
             "memory_limit": {{ .Values.external_services.kubernetes.memory_limit | quote }}
          },
          {{- end}}
