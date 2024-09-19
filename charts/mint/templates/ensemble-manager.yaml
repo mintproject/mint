@@ -40,6 +40,8 @@ metadata:
   name: {{ include "mint.prefix" . }}-ensemble-manager
   namespace: {{ .Release.Namespace }}
 spec:
+  strategy:
+    type: {{ .Values.components.ensemble_manager.strategy.type }}
   replicas: 1
   selector:
     matchLabels:

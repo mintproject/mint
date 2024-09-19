@@ -260,6 +260,8 @@ components:
       repository: mintproject/ensemble-manager
       tag: 3e1f40865e647a8025b06ac63178b0eed64aed3e
       pullPolicy: IfNotPresent
+    strategy:
+      type: Recreate
     resources: {}
     serviceAccountName: default
     environment:
