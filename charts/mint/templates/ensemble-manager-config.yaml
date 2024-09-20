@@ -29,16 +29,16 @@ data:
 
          {{- end}}
 
+         {{ if eq .Values.external_services.ckan.enabled true }}
+         "data_catalog_key": {{ .Values.secrets.external_services.ckan.api_key | quote }},
          {{ with .Values.external_services}}
-         {{- if eq .ckan.enabled true }}
          "data_catalog_api": {{ .ckan.url | quote }},
          "data_catalog_type": {{ .ckan.type | quote }},
-         "data_catalog_key": {{ .secrets.ckan.api_key | quote }},
          "data_catalog_extra": {
             "owner_organization_id": {{ .ckan.extra.owner_organization_id | quote }},
             "owner_provenance_id": {{ .ckan.extra.owner_provenance_id | quote }}
          },
-         {{- end}}
+         {{end}}
          {{end}}
 
          {{- if eq .Values.external_services.s3.enabled true }}
