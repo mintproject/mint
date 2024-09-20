@@ -387,7 +387,6 @@ external_services:
     enabled: false
     url: "http://localhost:5000"
     type: "CKAN"
-    api_key: "CHANGEME"
     extra:
       owner_organization_id: ""
       owner_provenance_id: ""
