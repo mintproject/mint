@@ -1,0 +1,43 @@
+site_name: MINT
+extra_css:
+  - assets/versions.css
+extra_javascript:
+  - assets/versions.js
+repo_url: https://github.com/mintproject/MINT_USERGUIDE
+edit_uri: edit/master/docs/
+nav:
+  - Overview: index.md
+  - Capabilities:
+      - Modeling capabilities: modeling.md
+      - Indicators: indicators.md
+      - Interventions: interventions.md
+  - User guide:
+      - User Interface Walkthrough: walkthrough.md
+  - Services:
+      - Model Catalog: modelcatalog.md
+      - Data Catalog: datacatalog.md
+  - Administrator Guide:
+      - admin-guide/index.md
+      - admin-guide/installation.md
+      - Catalog configuration:
+          - Model Catalog: admin-guide/catalog-configuration/model-catalog-configuration.md
+          - Solution Catalog: admin-guide/catalog-configuration/solution-catalog-configuration.md
+          - Region configuration: admin-guide/catalog-configuration/region-configuration.md
+      - CKAN configuration: admin-guide/ckan-configuration.md
+      - Execution configuration:
+          - Kubernetes: admin-guide/execution-configuration/execution-configuration-kubernetes.md
+          - Tapis: admin-guide/execution-configuration/execution-configuration-tapis.md
+    #- admin-guide/configuration.md
+theme:
+  name: material
+  logo: images/logo.png
+  favicon: images/favicon.ico
+  palette:
+    primary: teal
+
+markdown_extensions:
+  - codehilite
+  - admonition
+  - toc:
+      toc_depth: "1-1"
+      permalink: true
