@@ -21,7 +21,7 @@ nav:
       - admin-guide/installation.md
       - Catalog configuration:
           - Model Catalog: admin-guide/catalog-configuration/model-catalog-configuration.md
-          - Task Catalog: admin-guide/catalog-configuration/task-catalog-configuration.md
+          - Solution Catalog: admin-guide/catalog-configuration/task-catalog-configuration.md
           - Region configuration: admin-guide/catalog-configuration/region-configuration.md
       - CKAN configuration: admin-guide/ckan-configuration.md
       - Execution configuration:
@@ -39,5 +39,5 @@ markdown_extensions:
   - codehilite
   - admonition
   - toc:
-      toc_depth: '1-1'
+      toc_depth: "1-1"
       permalink: true
