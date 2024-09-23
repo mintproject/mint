@@ -12,13 +12,10 @@ service:
 hostname: localhost
 # -- Enable or disable ARM support
 arm_support: false
-# -- Configuration for various MINT components
 components:
-  # -- Backup component configuration
   backups:
     # -- Enable or disable backups
     enabled: false
-  # -- Cromo component configuration
   cromo:
     # -- Enable or disable Cromo
     enabled: false
@@ -42,7 +39,6 @@ components:
       tls: []
     # -- Resource specifications for Cromo
     resources: {}
-  # -- MIC UI component configuration
   mic_ui:
     # -- Enable or disable MIC UI
     enabled: false
@@ -95,7 +91,6 @@ components:
       tls: []
     # -- Resource specifications for MIC API
     resources: {}
-  # -- MIC API database configuration
   mic_api_db:
     image:
       # -- Docker image repository for MIC API database
@@ -109,11 +104,15 @@ components:
     persistence:
       # -- Enable or disable persistence for MIC API database
       enabled: true
+      # -- Storage class for MIC API database
       storageClass: ""
+      # -- Access modes for MIC API database
       accessModes:
         - ReadWriteOnce
+      # -- Size for MIC API database
       size: 10Gi
       dataSource: {}
+      # -- Existing claim for MIC API database
       existingClaim: ""
       selector: {}
       annotations:
@@ -149,7 +148,6 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
-  # -- Data Catalog database configuration
   data_catalog_db:
     image:
       # -- Docker image repository for Data Catalog database
@@ -179,7 +177,6 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
-  # -- Model Catalog Endpoint component configuration
   model_catalog_endpoint:
     # -- Enable or disable Model Catalog Endpoint
     enabled: true
@@ -193,9 +190,9 @@ components:
     # -- Resource specifications for Model Catalog Endpoint
     resources: {}
     environment:
-      # -- Dataset name for Model Catalog Endpoint
+      # -- Dataset name for Model Catalog Endpoint Apache Jena Fuseki
       dataset: modelcatalog
-      # -- Graph base URL for Model Catalog Endpoint
+      # -- Graph base URL for Model Catalog Endpoint. The triples are stored in this graph
       graph_base: http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/
       # -- Prefix URL for Model Catalog Endpoint
       prefix: https://w3id.org/okn/i/mint/
@@ -226,7 +223,6 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
-  # -- Hasura component configuration
   hasura:
     # -- Enable or disable Hasura
     enabled: true
@@ -257,7 +253,6 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
-  # -- Hasura database configuration
   hasura_db:
     image:
       # -- Docker image repository for Hasura database
@@ -287,7 +282,6 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
-  # -- Model Catalog Explorer component configuration
   model_catalog_explorer:
     # -- Enable or disable Model Catalog Explorer
     enabled: true
@@ -311,7 +305,6 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
-  # -- Model Catalog API component configuration
   model_catalog_api:
     # -- Enable or disable Model Catalog API
     enabled: true
@@ -343,7 +336,6 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
-  # -- UI component configuration
   ui:
     # -- Enable or disable UI
     enabled: true
@@ -367,7 +359,6 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
-  # -- Ensemble Manager component configuration
   ensemble_manager:
     # -- Enable or disable Ensemble Manager
     enabled: true
@@ -436,45 +427,67 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
-# -- Configuration initialization jobs for MINT
 jobs:
-  # -- Initialize Model Catalog API
   model_catalog_endpoint:
     # -- Enable or disable Model Catalog API initialization
     enabled: true
     # -- Resource specifications for Model Catalog API initialization
     resources: {}
-  # -- Initialize MINT Database
   hasura:
     # -- Enable or disable MINT Database initialization
     enabled: true
     # -- Resource specifications for MINT Database initialization
     resources: {}
 
-# -- Configuration for Google Services
 google:
-  # -- Google Maps Service
   maps:
     # -- API key for Google Maps
     key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM
 
-# -- Secret configuration for MINT
+external_services:
+  ckan:
+    # -- Enable or disable CKAN service
+    enabled: false
+    # -- CKAN service configuration
+    url: "http://localhost:5000"
+    # -- CKAN service type
+    type: "CKAN"
+    extra:
+      # -- Owner organization ID for CKAN service
+      owner_organization_id: ""
+      # -- Owner provenance ID for CKAN service
+      owner_provenance_id: ""
+  s3:
+    # -- Enable or disable S3
+    enabled: false
+    # -- S3 configuration
+    type: "S3"
+    # -- S3 region
+    region: ""
+    # -- S3 bucket
+    bucket: ""
+  kubernetes:
+    # -- Enable or disable Kubernetes service to run jobs used by Ensemble Manager
+    enabled: false
+    # -- Kubernetes namespace
+    namespace: "default"
+    # -- Job CPU limit
+    cpu_limit: "256m"
+    # -- Job memory limit
+    memory_limit: "512Mi"
+    # -- Toggle for node affinity. The job will be scheduled on the same node as the Ensemble Manager
+    node_affinity: true
 secrets:
-  # -- External services configuration
   external_services:
-    # -- CKAN configuration: Used by ensemble manager
     ckan:
-      # -- API key for CKAN
+      # -- API key for CKAN service. Used by Ensemble Manager to upload data
       api_key: CHANGEME
-    # -- S3 configuration: Used by ensemble manager to upload data
     s3:
-      # -- Access key for S3
+      # -- Access key for S3. Used by Ensemble Manager to upload data
       access_key: CHANGEME
       # -- Secret key for S3
       secret_key: CHANGEME
-  # -- Database configuration
   database:
-    # -- Data Catalog database configuration
     data_catalog:
       # -- Username for Data Catalog database
       username: datacatalog
@@ -482,13 +495,11 @@ secrets:
       password: CHANGEME
       # -- Database name for Data Catalog database
       database: datacatalog
-    # -- Model Catalog database configuration
     model_catalog_endpoint:
       # -- Username for Model Catalog Apache Jena Fuseki database
       username: admin
       # -- Password for Model Catalog Apache Jena Fuseki database
       password: CHANGEME
-    # -- Hasura database configuration
     hasura:
       # -- Username for Hasura database
       username: hasura
@@ -496,7 +507,6 @@ secrets:
       password: CHANGEME
       # -- Database name for Hasura database
       database: hasura
-    # -- Mic API database configuration
     mic_api:
       # -- Username for Mic API database
       username: mic
@@ -504,9 +514,8 @@ secrets:
       password: CHANGEME
       # -- Database name for Mic API database
       database: mic
-  # -- Backup configuration for MINT. Allow backups databases to S3
   backups:
-    # -- S3 configuration for backups
+    # -- S3 configuration for backups of MINT databases
     s3:
       # -- Access key for S3
       access_key: CHANGEME
@@ -521,12 +530,18 @@ secrets:
       # -- Url for S3
       endpoint: example.com
   hasura:
+    # -- JWT verification secret for Hasura
     jwt_secret: '{"type": "RS256", "key": "-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyQQ56WKKsVCUs8n9swlv5DV7st7UUdvNoDSnwovdU2vinQQ686//vRqlUJ5vpyI7r75qTXCPkXUitDhPvGEMfChnb9tuWdymSyZmMmT+34oaYo/2bGSZjTlLRVfRJjUnFYeWoVLoXVKJolyDWtU6bXbFNnUyysb/6YIpg5sSwxkLs/9yl6HsWdFconxPJO6KmMPSjcOc0fZermNq+cOEvj1OqRhVkxDqBebreI+zcgrJHNSN8d6cxTmfVQl1jIPHvxE5oN7qUdfYmK4D+SOlj8FlkUvwis+3Ix2AQsvNoOD1OzuqUOd/FpXBnEGaeTq9EMwDxplNqltR/qT3/poUwIDAQAB\n-----END CERTIFICATE-----", "allowed_skew": 2}'
+    # -- Admin secret for Hasura used to access the console
     admin_secret: CHANGEME
 auth:
+  # -- URL for authentication service
   client_id: model_catalog
+  # -- Realm for authentication service
   url: https://auth.mint.isi.edu/
+  # -- Realm for authentication service
   realm: production
+  # -- Client ID for authentication service
   ui_client_id: mint-ui
 imagePullSecrets: []
 nameOverride: ""
@@ -547,23 +562,3 @@ autoscaling:
 nodeSelector: {}
 tolerations: []
 affinity: {}
-
-external_services:
-  ckan:
-    enabled: false
-    url: "http://localhost:5000"
-    type: "CKAN"
-    extra:
-      owner_organization_id: ""
-      owner_provenance_id: ""
-  s3:
-    enabled: false
-    type: "S3"
-    region: ""
-    bucket: ""
-  kubernetes:
-    enabled: false
-    namespace: "default"
-    cpu_limit: "256m"
-    memory_limit: "512Mi"
-    node_affinity: true
