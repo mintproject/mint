@@ -10,3 +10,5 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
       - name: Run helm-docs
         uses: losisin/helm-docs-github-action@v1
+        with:
+          git-push: true
