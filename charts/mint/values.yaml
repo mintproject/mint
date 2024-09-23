@@ -1,20 +1,36 @@
+# -- Welcome message for MINT
 welcome_message: Welcome to MINT
+# -- Default user email
 default_user: mint@isi.edu
+# -- Service configuration
 service:
+  # -- Type of Kubernetes service
   type: ClusterIP
+  # -- Port number for the service
   port: 80
+# -- Hostname for the application
 hostname: localhost
+# -- Enable or disable ARM support
 arm_support: false
+# -- Configuration for various MINT components
 components:
+  # -- Backup component configuration
   backups:
+    # -- Enable or disable backups
     enabled: false
+  # -- Cromo component configuration
   cromo:
+    # -- Enable or disable Cromo
     enabled: false
     image:
+      # -- Docker image repository for Cromo
       repository: mintproject/cromo
+      # -- Docker image tag for Cromo
       tag: 3c75586989aedf2573c37f5352f960c294377931
+      # -- Image pull policy for Cromo
       pullPolicy: IfNotPresent
     ingress:
+      # -- Enable or disable ingress for Cromo
       enabled: true
       className: ""
       annotations: {}
@@ -24,17 +40,26 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+    # -- Resource specifications for Cromo
     resources: {}
+  # -- MIC UI component configuration
   mic_ui:
+    # -- Enable or disable MIC UI
     enabled: false
     image:
+      # -- Docker image repository for MIC UI
       repository: mintproject/mic-web
+      # -- Docker image tag for MIC UI
       tag: a736ac5841d471de4679bec80c13b0fb646ae073
+      # -- Image pull policy for MIC UI
       pullPolicy: IfNotPresent
       environment:
+        # -- API URL for MIC UI
         api_url: null
+        # -- Airflow URL for MIC UI
         airflow_url: https://airflow.mint.isi.edu/api/v1
     ingress:
+      # -- Enable or disable ingress for MIC UI
       enabled: true
       className: ""
       annotations: {}
@@ -44,14 +69,21 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+    # -- Resource specifications for MIC UI
     resources: {}
+  # -- MIC API component configuration
   mic_api:
+    # -- Enable or disable MIC API
     enabled: false
     image:
+      # -- Docker image repository for MIC API
       repository: mintproject/mic-api
+      # -- Docker image tag for MIC API
       tag: ee71a1a364fc3d384f85243684ad95d37913b049
+      # -- Image pull policy for MIC API
       pullPolicy: IfNotPresent
     ingress:
+      # -- Enable or disable ingress for MIC API
       enabled: true
       className: ""
       annotations: {}
@@ -61,14 +93,21 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+    # -- Resource specifications for MIC API
     resources: {}
+  # -- MIC API database configuration
   mic_api_db:
     image:
+      # -- Docker image repository for MIC API database
       repository: postgres
+      # -- Docker image tag for MIC API database
       tag: 14.6
+      # -- Image pull policy for MIC API database
       pullPolicy: IfNotPresent
+    # -- Resource specifications for MIC API database
     resources: {}
     persistence:
+      # -- Enable or disable persistence for MIC API database
       enabled: true
       storageClass: ""
       accessModes:
@@ -79,18 +118,28 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
+  # -- Data Catalog component configuration
   data_catalog:
+    # -- Enable or disable Data Catalog
     enabled: true
     image:
+      # -- Docker image repository for Data Catalog
       repository: mintproject/data-catalog
+      # -- Docker image tag for Data Catalog
       tag: 9be70359feabe03ed55bfdbf92c20a7e43ab928b
+      # -- Image pull policy for Data Catalog
       pullPolicy: IfNotPresent
     arm_image:
+      # -- Docker image repository for ARM-based Data Catalog
       repository: mintproject/data-catalog
+      # -- Docker image tag for ARM-based Data Catalog
       tag: 8a6af95cae183320d596dc5219f2f76d1f234749
+      # -- Image pull policy for ARM-based Data Catalog
       pullPolicy: IfNotPresent
+    # -- Resource specifications for Data Catalog
     resources: {}
     ingress:
+      # -- Enable or disable ingress for Data Catalog
       enabled: true
       className: ""
       annotations: {}
@@ -100,17 +149,26 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+  # -- Data Catalog database configuration
   data_catalog_db:
     image:
+      # -- Docker image repository for Data Catalog database
       repository: mintproject/data-catalog-db
+      # -- Docker image tag for Data Catalog database
       tag: 9be70359feabe03ed55bfdbf92c20a7e43ab928b
+      # -- Image pull policy for Data Catalog database
       pullPolicy: IfNotPresent
     arm_image:
+      # -- Docker image repository for ARM-based Data Catalog database
       repository: mintproject/data-catalog-db
+      # -- Docker image tag for ARM-based Data Catalog database
       tag: 8a6af95cae183320d596dc5219f2f76d1f234749
+      # -- Image pull policy for ARM-based Data Catalog database
       pullPolicy: IfNotPresent
+    # -- Resource specifications for Data Catalog database
     resources: {}
     persistence:
+      # -- Enable or disable persistence for Data Catalog database
       enabled: true
       storageClass: ""
       accessModes:
@@ -121,20 +179,32 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
+  # -- Model Catalog Endpoint component configuration
   model_catalog_endpoint:
+    # -- Enable or disable Model Catalog Endpoint
     enabled: true
     image:
+      # -- Docker image repository for Model Catalog Endpoint
       repository: mintproject/model-catalog-endpoint
+      # -- Docker image tag for Model Catalog Endpoint
       tag: 29256555a6fbaefae4729d5cd259564708a4ab04
+      # -- Image pull policy for Model Catalog Endpoint
       pullPolicy: IfNotPresent
+    # -- Resource specifications for Model Catalog Endpoint
     resources: {}
     environment:
+      # -- Dataset name for Model Catalog Endpoint
       dataset: modelcatalog
+      # -- Graph base URL for Model Catalog Endpoint
       graph_base: http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/
+      # -- Prefix URL for Model Catalog Endpoint
       prefix: https://w3id.org/okn/i/mint/
+      # -- Backup file path for Model Catalog Endpoint
       backup_file: /fuseki-base/seeds/model-catalog.trig
+      # -- Seeds URL for Model Catalog Endpoint
       seeds_url: https://raw.githubusercontent.com/mintproject/model-catalog-endpoint/main/data/model-catalog.trig
     ingress:
+      # -- Enable or disable ingress for Model Catalog Endpoint
       enabled: true
       className: ""
       annotations: {}
@@ -145,6 +215,7 @@ components:
               pathType: ImplementationSpecific
       tls: []
     persistence:
+      # -- Enable or disable persistence for Model Catalog Endpoint
       enabled: true
       storageClass: ""
       accessModes:
@@ -155,18 +226,28 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
+  # -- Hasura component configuration
   hasura:
+    # -- Enable or disable Hasura
     enabled: true
     image:
+      # -- Docker image repository for Hasura
       repository: mintproject/graphql-engine
+      # -- Docker image tag for Hasura
       tag: 305c0dbeba1878eafe348f21fc300fbfc017d9dc
+      # -- Image pull policy for Hasura
       pullPolicy: IfNotPresent
+    # -- Resource specifications for Hasura
     resources: {}
     environment:
+      # -- Enable or disable Hasura console
       enable_console: true
+      # -- Enable or disable Hasura dev mode
       enable_dev_mode: false
+      # -- Unauthorized role for Hasura
       unauthorized_role: anonymous
     ingress:
+      # -- Enable or disable ingress for Hasura
       enabled: true
       className: null
       annotations: {}
@@ -176,17 +257,26 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+  # -- Hasura database configuration
   hasura_db:
     image:
+      # -- Docker image repository for Hasura database
       repository: postgis/postgis
+      # -- Docker image tag for Hasura database
       tag: 10-3.2-alpine
+      # -- Image pull policy for Hasura database
       pullPolicy: IfNotPresent
     arm_image:
+      # -- Docker image repository for ARM-based Hasura database
       repository: imresamu/postgis-arm64
+      # -- Docker image tag for ARM-based Hasura database
       tag: 12-3.4-alpine
+      # -- Image pull policy for ARM-based Hasura database
       pullPolicy: IfNotPresent
+    # -- Resource specifications for Hasura database
     resources: {}
     persistence:
+      # -- Enable or disable persistence for Hasura database
       enabled: true
       storageClass: ""
       accessModes:
@@ -197,14 +287,21 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
+  # -- Model Catalog Explorer component configuration
   model_catalog_explorer:
+    # -- Enable or disable Model Catalog Explorer
     enabled: true
     image:
+      # -- Docker image repository for Model Catalog Explorer
       repository: mintproject/model-catalog-explorer
+      # -- Docker image tag for Model Catalog Explorer
       tag: 0b2f9f0a9124076aeb492add2f123d0757066f6b
+      # -- Image pull policy for Model Catalog Explorer
       pullPolicy: IfNotPresent
+    # -- Resource specifications for Model Catalog Explorer
     resources: {}
     ingress:
+      # -- Enable or disable ingress for Model Catalog Explorer
       enabled: true
       className: ""
       annotations: {}
@@ -214,18 +311,28 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+  # -- Model Catalog API component configuration
   model_catalog_api:
+    # -- Enable or disable Model Catalog API
     enabled: true
+    # -- API version for Model Catalog API
     api_version: v1.8.0
     image:
+      # -- Docker image repository for Model Catalog API
       repository: mintproject/model-catalog-fastapi
+      # -- Docker image tag for Model Catalog API
       tag: c5f784785c52034f75de24c46b89907c74a14312
+      # -- Image pull policy for Model Catalog API
       pullPolicy: IfNotPresent
+    # -- Resource specifications for Model Catalog API
     resources: {}
     environment:
+      # -- Context directory for Model Catalog API
       context_dir: contexts/
+      # -- Queries directory for Model Catalog API
       queries_dir: queries/
     ingress:
+      # -- Enable or disable ingress for Model Catalog API
       enabled: true
       className: ""
       annotations:
@@ -236,14 +343,21 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+  # -- UI component configuration
   ui:
+    # -- Enable or disable UI
     enabled: true
     image:
+      # -- Docker image repository for UI
       repository: mintproject/mint-ui-lit
+      # -- Docker image tag for UI
       tag: 858ce054d1f757d0f6ec3765e878ec54091bb110
+      # -- Image pull policy for UI
       pullPolicy: IfNotPresent
+    # -- Resource specifications for UI
     resources: {}
     ingress:
+      # -- Enable or disable ingress for UI
       enabled: true
       className: ""
       annotations: {}
@@ -253,16 +367,27 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+  # -- Ensemble Manager component configuration
   ensemble_manager:
+    # -- Enable or disable Ensemble Manager
     enabled: true
+    # -- API version for Ensemble Manager
     api_version: v1
+    # -- Docker image repository for Ensemble Manager
     image:
+      # -- Docker image repository for Ensemble Manager
       repository: mintproject/ensemble-manager
+      # -- Docker image tag for Ensemble Manager
       tag: 3e1f40865e647a8025b06ac63178b0eed64aed3e
+      # -- Image pull policy for Ensemble Manager
       pullPolicy: IfNotPresent
+    # -- Ensemble Manager deployment strategy (Recreate or RollingUpdate)
     strategy:
+      # -- Type of deployment strategy
       type: Recreate
+    # -- Resource specifications for Ensemble Manager
     resources: {}
+    # -- Service account name for Ensemble Manager, used to run jobs
     serviceAccountName: default
     environment:
       data_dir: /var/mint
@@ -311,48 +436,89 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
+# -- Configuration initialization jobs for MINT
 jobs:
+  # -- Initialize Model Catalog API
   model_catalog_endpoint:
+    # -- Enable or disable Model Catalog API initialization
     enabled: true
+    # -- Resource specifications for Model Catalog API initialization
     resources: {}
+  # -- Initialize MINT Database
   hasura:
+    # -- Enable or disable MINT Database initialization
     enabled: true
+    # -- Resource specifications for MINT Database initialization
     resources: {}
 
+# -- Configuration for Google Services
 google:
+  # -- Google Maps Service
   maps:
+    # -- API key for Google Maps
     key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM
 
+# -- Secret configuration for MINT
 secrets:
+  # -- External services configuration
   external_services:
+    # -- CKAN configuration: Used by ensemble manager
     ckan:
+      # -- API key for CKAN
       api_key: CHANGEME
+    # -- S3 configuration: Used by ensemble manager to upload data
     s3:
+      # -- Access key for S3
       access_key: CHANGEME
+      # -- Secret key for S3
       secret_key: CHANGEME
+  # -- Database configuration
   database:
+    # -- Data Catalog database configuration
     data_catalog:
+      # -- Username for Data Catalog database
       username: datacatalog
+      # -- Password for Data Catalog database
       password: CHANGEME
+      # -- Database name for Data Catalog database
       database: datacatalog
+    # -- Model Catalog database configuration
     model_catalog_endpoint:
+      # -- Username for Model Catalog Apache Jena Fuseki database
       username: admin
+      # -- Password for Model Catalog Apache Jena Fuseki database
       password: CHANGEME
+    # -- Hasura database configuration
     hasura:
+      # -- Username for Hasura database
       username: hasura
+      # -- Password for Hasura database
       password: CHANGEME
+      # -- Database name for Hasura database
       database: hasura
+    # -- Mic API database configuration
     mic_api:
+      # -- Username for Mic API database
       username: mic
+      # -- Password for Mic API database
       password: CHANGEME
+      # -- Database name for Mic API database
       database: mic
+  # -- Backup configuration for MINT. Allow backups databases to S3
   backups:
+    # -- S3 configuration for backups
     s3:
+      # -- Access key for S3
       access_key: CHANGEME
+      # -- Secret key for S3
       secret_key: CHANGEME
+      # -- Region for S3
       bucket: CHANGEME
+      # -- Bucket for S3
       path: CHANGEME
+      # -- Path for S3
       region: null
+      # -- Url for S3
       endpoint: example.com
   hasura:
     jwt_secret: '{"type": "RS256", "key": "-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyQQ56WKKsVCUs8n9swlv5DV7st7UUdvNoDSnwovdU2vinQQ686//vRqlUJ5vpyI7r75qTXCPkXUitDhPvGEMfChnb9tuWdymSyZmMmT+34oaYo/2bGSZjTlLRVfRJjUnFYeWoVLoXVKJolyDWtU6bXbFNnUyysb/6YIpg5sSwxkLs/9yl6HsWdFconxPJO6KmMPSjcOc0fZermNq+cOEvj1OqRhVkxDqBebreI+zcgrJHNSN8d6cxTmfVQl1jIPHvxE5oN7qUdfYmK4D+SOlj8FlkUvwis+3Ix2AQsvNoOD1OzuqUOd/FpXBnEGaeTq9EMwDxplNqltR/qT3/poUwIDAQAB\n-----END CERTIFICATE-----", "allowed_skew": 2}'
