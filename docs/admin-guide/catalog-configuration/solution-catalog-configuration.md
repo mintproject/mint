@@ -10,3 +10,13 @@ secrets:
     # -- Admin secret for Hasura used to access the console
     admin_secret: CHANGEME
 ```
+
+## Initial Data
+
+Helm charts are configured to populate the database with initial data.
+
+!!! Note
+
+    The process of loading the initial data is done only once when the Hasura is installed.
+
+To delete existing regions, please go to the [Region Configuration](region-configuration.md) page.

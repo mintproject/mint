@@ -18,6 +18,11 @@ secrets:
 
 Helm charts are configured to populate the database with initial data. You can configure the initial data by editing the `values.yaml` file in the `mint` directory. The `values.yaml` file contains the following sections:
 
+!!! Note
+
+    The initial data file must be in the [Turtle](https://www.w3.org/TR/turtle/) format.
+    The process of loading the initial data is done only once when the Model Catalog Endpoint is installed.
+
 ```yaml
 components:
   model_catalog_endpoint:
