@@ -17,3 +17,7 @@ build:
     # nodejs: "20"
     # rust: "1.70"
     # golang: "1.20"
+
+python:
+  install:
+    - requirements: docs/requirements.txt
