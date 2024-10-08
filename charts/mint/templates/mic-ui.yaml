@@ -12,7 +12,7 @@ spec:
   ports:
     - name: "http"
       port: 80
-      targetPort: 3000
+      targetPort: 80
       {{ if eq .Values.service.type "NodePort" }}
       nodePort: {{ include "helm.mic_ui_node_port" . }}
       {{ end }}
