@@ -15,7 +15,7 @@ spec:
             - name: db-backup
               image: minio/mc
               resources:
-                {{- toYaml .resources | nindent 12 }}
+                {{- toYaml .Values.resources | nindent 12 }}
               env:
                 - name: S3_KEY_ID
                   valueFrom:
