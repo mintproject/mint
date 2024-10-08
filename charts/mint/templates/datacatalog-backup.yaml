@@ -20,7 +20,7 @@ spec:
           image: tiredofit/db-backup
           imagePullPolicy: IfNotPresent
           resources:
-            {{- toYaml .resources | nindent 12 }}
+            {{- toYaml .Values.resources | nindent 12 }}
           env:
             - name: BACKUP_LOCATION
               value: minio
