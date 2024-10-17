@@ -96,5 +96,5 @@ data:
     window.REACT_APP_DATA_CATALOG_TYPE = {{ .Values.external_services.ckan.type | quote }};
     window.REACT_APP_DATA_CATALOG_API = {{.Values.external_services.ckan.url | quote }};
     window.REACT_APP_DATA_CATALOG_KEY = {{ .Values.secrets.external_services.ckan.api_key | quote }};
-
+    {{ end }}
 {{- end }}
