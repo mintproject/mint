@@ -92,15 +92,9 @@ data:
     window.REACT_APP_AIRFLOW_API = "https://airflow.mint.isi.edu/api/v1";
     window.REACT_APP_AIRFLOW_DAG_DOWNLOAD_THREAD_ID = "download_thread"
 
-    {{ with .Values.external_services }}
-    {{ if eq .ckan.enabled true }}
-    window.REACT_APP_DATA_CATALOG_TYPE = {{ .ckan.type | quote }};
-    window.REACT_APP_DATA_CATALOG_KEY = {{ .ckan.api_key | quote }};
-    {{ end }}
-    {{ end }}
-
-    {{ if  eq .Values.components.data_catalog.enabled false }}
+    {{ if eq .Values.external_services.ckan.enabled true }}
+    window.REACT_APP_DATA_CATALOG_TYPE = {{ .Values.external_services.ckan.type | quote }};
     window.REACT_APP_DATA_CATALOG_API = {{.Values.external_services.ckan.url | quote }};
-    {{ end }}
+    window.REACT_APP_DATA_CATALOG_KEY = {{ .Values.secrets.external_services.ckan.api_key | quote }};
 
 {{- end }}
