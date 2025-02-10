@@ -118,6 +118,7 @@ spec:
           {{ else }}
           - mountPath: /var/lib/postgresql/data
             name: data-catalog-db
+          {{ end }}
           ports:
             - name: postgres
               containerPort: 5432
