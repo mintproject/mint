@@ -61,6 +61,7 @@ A Helm chart for MINT
 | components.data_catalog_db.persistence.selector | object | `{}` |  |
 | components.data_catalog_db.persistence.size | string | `"30Gi"` |  |
 | components.data_catalog_db.persistence.storageClass | string | `""` |  |
+| components.data_catalog_db.persistence.subPath | string | `""` |  |
 | components.data_catalog_db.resources | object | `{}` | Resource specifications for Data Catalog database |
 | components.ensemble_manager.api_version | string | `"v1"` | API version for Ensemble Manager |
 | components.ensemble_manager.config.execution_engine.basePath | string | `""` |  |
@@ -135,6 +136,7 @@ A Helm chart for MINT
 | components.hasura_db.persistence.selector | object | `{}` |  |
 | components.hasura_db.persistence.size | string | `"30Gi"` |  |
 | components.hasura_db.persistence.storageClass | string | `""` |  |
+| components.hasura_db.persistence.subPath | string | `""` | Subpath for Hasura database |
 | components.hasura_db.resources | object | `{}` | Resource specifications for Hasura database |
 | components.mic_api | object | `{"enabled":false,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/mic-api","tag":"ee71a1a364fc3d384f85243684ad95d37913b049"},"ingress":{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"api.mic.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | MIC API component configuration |
 | components.mic_api.enabled | bool | `false` | Enable or disable MIC API |
@@ -154,6 +156,7 @@ A Helm chart for MINT
 | components.mic_api_db.persistence.selector | object | `{}` |  |
 | components.mic_api_db.persistence.size | string | `"10Gi"` | Size for MIC API database |
 | components.mic_api_db.persistence.storageClass | string | `""` | Storage class for MIC API database |
+| components.mic_api_db.persistence.subPath | string | `""` | Subpath for MIC API database |
 | components.mic_api_db.resources | object | `{}` | Resource specifications for MIC API database |
 | components.mic_ui.enabled | bool | `false` | Enable or disable MIC UI |
 | components.mic_ui.image.environment.airflow_url | string | `"https://airflow.mint.isi.edu/api/v1"` | Airflow URL for MIC UI |
