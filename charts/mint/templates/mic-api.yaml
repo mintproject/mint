@@ -85,8 +85,14 @@ spec:
           resources:
             {{- toYaml .resources | nindent 12 }}
           volumeMounts:
+          {{ if .Values.components.mic_api_db.persistence.subPath }}
           - mountPath: /var/lib/postgresql/data
             name: mic-api-db
+            subPath: {{ .Values.components.mic_api_db.persistence.subPath }}
+          {{ else }}
+          - mountPath: /var/lib/postgresql/data
+            name: mic-api-db
+          {{ end }}
           ports:
             - name: postgres
               containerPort: 5432
