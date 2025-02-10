@@ -109,8 +109,14 @@ spec:
           {{- end }}
           {{- end }}
           volumeMounts:
+          {{ if .Values.components.hasura_db.persistence.subPath }}
           - mountPath: /var/lib/postgresql/data
             name: hasura-db
+            subPath: {{ .Values.components.hasura_db.persistence.subPath }}
+          {{ else }}
+          - mountPath: /var/lib/postgresql/data
+            name: hasura-db
+          {{ end }}
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:

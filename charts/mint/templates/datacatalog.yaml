@@ -111,8 +111,14 @@ spec:
           {{- end }}
           {{- end }}
           volumeMounts:
+          {{ if .Values.components.data_catalog_db.persistence.subPath }}
           - mountPath: /var/lib/postgresql/data
             name: data-catalog-db
+            subPath: {{ .Values.components.data_catalog_db.persistence.subPath }}
+          {{ else }}
+          - mountPath: /var/lib/postgresql/data
+            name: data-catalog-db
+          {{ end }}
           ports:
             - name: postgres
               containerPort: 5432

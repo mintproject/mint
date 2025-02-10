@@ -102,6 +102,8 @@ components:
     # -- Resource specifications for MIC API database
     resources: {}
     persistence:
+      # -- Subpath for MIC API database
+      subPath: ""
       # -- Enable or disable persistence for MIC API database
       enabled: true
       # -- Storage class for MIC API database
@@ -175,6 +177,7 @@ components:
       dataSource: {}
       existingClaim: ""
       selector: {}
+      subPath: ""
       annotations:
         helm.sh/resource-policy: keep
   model_catalog_endpoint:
@@ -271,6 +274,8 @@ components:
     # -- Resource specifications for Hasura database
     resources: {}
     persistence:
+      # -- Subpath for Hasura database
+      subPath: ""
       # -- Enable or disable persistence for Hasura database
       enabled: true
       storageClass: ""
