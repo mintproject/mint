@@ -24,7 +24,7 @@ spec:
   selector:
     app: {{ include "mint.prefix" . }}-hasura
 ---
-{{- if and (eq .Values.components.hasura.auth.type "webhook") .Values.components.hasura.auth.webhook.enabled }}
+{{- if eq .Values.components.hasura.auth.type "webhook" }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -76,11 +76,11 @@ spec:
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /health
               port: http
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /health
               port: http
 {{- end }}
 ---
@@ -117,14 +117,14 @@ spec:
             value: "{{ .environment.enable_console }}"
           - name: HASURA_GRAPHQL_DEV_MODE
             value: "{{ .environment.enable_dev_mode }}"
-          - name: HASURA_GRAPHQL_UNAUTHORIZED_ROLE
-            value: "{{ .environment.unauthorized_role }}"
           {{- if eq .auth.type "webhook" }}
           - name: HASURA_GRAPHQL_AUTH_HOOK
             value: "http://{{ include "mint.prefix" $ }}-hasura-auth-webhook:3000/auth-webhook"
           - name: HASURA_GRAPHQL_AUTH_HOOK_MODE
             value: "POST"
           {{- else }}
+          - name: HASURA_GRAPHQL_UNAUTHORIZED_ROLE
+            value: "{{ .environment.unauthorized_role }}"
           - name: HASURA_GRAPHQL_JWT_SECRET
             valueFrom:
               secretKeyRef:

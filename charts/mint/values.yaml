@@ -254,14 +254,10 @@ components:
       # -- Authentication type (jwt or webhook)
       type: jwt
       jwt:
-        # -- Enable JWT authentication
-        enabled: true
         # -- JWT claims configuration
         claims:
           namespace: "https://hasura.io/jwt/claims"
       webhook:
-        # -- Enable webhook authentication
-        enabled: false
         # -- Webhook service configuration
         service:
           image:
