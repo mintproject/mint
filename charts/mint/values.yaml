@@ -249,6 +249,31 @@ components:
       enable_dev_mode: false
       # -- Unauthorized role for Hasura
       unauthorized_role: anonymous
+    # -- Authentication configuration for Hasura
+    auth:
+      # -- Authentication type (jwt or webhook)
+      type: jwt
+      jwt:
+        # -- JWT claims configuration
+        claims:
+          namespace: "https://hasura.io/jwt/claims"
+      webhook:
+        # -- Webhook service configuration
+        service:
+          image:
+            # -- Docker image repository for auth webhook
+            repository: ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook
+            # -- Docker image tag for auth webhook
+            tag: latest
+            # -- Image pull policy for auth webhook
+            pullPolicy: IfNotPresent
+          # -- Resource specifications for auth webhook
+          resources: {}
+        config:
+          # -- JWKS URI for Tapis authentication
+          tapisJwksUri: "https://tacc.tapis.io/v3/tenants/tacc"
+          # -- Token issuer for Tapis authentication
+          tapisTokenIssuer: "https://tacc.tapis.io/v3/tokens"
     ingress:
       # -- Enable or disable ingress for Hasura
       enabled: true
@@ -541,7 +566,7 @@ secrets:
       # -- Url for S3
       endpoint: example.com
   hasura:
-    # -- JWT verification secret for Hasura
+    # -- JWT verification secret for Hasura (only used when auth.type is jwt)
     jwt_secret: '{"type": "RS256", "key": "-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyQQ56WKKsVCUs8n9swlv5DV7st7UUdvNoDSnwovdU2vinQQ686//vRqlUJ5vpyI7r75qTXCPkXUitDhPvGEMfChnb9tuWdymSyZmMmT+34oaYo/2bGSZjTlLRVfRJjUnFYeWoVLoXVKJolyDWtU6bXbFNnUyysb/6YIpg5sSwxkLs/9yl6HsWdFconxPJO6KmMPSjcOc0fZermNq+cOEvj1OqRhVkxDqBebreI+zcgrJHNSN8d6cxTmfVQl1jIPHvxE5oN7qUdfYmK4D+SOlj8FlkUvwis+3Ix2AQsvNoOD1OzuqUOd/FpXBnEGaeTq9EMwDxplNqltR/qT3/poUwIDAQAB\n-----END CERTIFICATE-----", "allowed_skew": 2}'
     # -- Admin secret for Hasura used to access the console
     admin_secret: CHANGEME
