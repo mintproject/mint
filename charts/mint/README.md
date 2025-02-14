@@ -29,7 +29,7 @@ A Helm chart for MINT
 | components.cromo.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Cromo |
 | components.cromo.image.repository | string | `"mintproject/cromo"` | Docker image repository for Cromo |
 | components.cromo.image.tag | string | `"3c75586989aedf2573c37f5352f960c294377931"` | Docker image tag for Cromo |
-| components.cromo.ingress.annotations | object | `{}` |  |
+| components.cromo.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.cromo.ingress.className | string | `""` |  |
 | components.cromo.ingress.enabled | bool | `true` | Enable or disable ingress for Cromo |
 | components.cromo.ingress.hosts[0].host | string | `"cromo.mint.local"` |  |
@@ -37,7 +37,7 @@ A Helm chart for MINT
 | components.cromo.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | components.cromo.ingress.tls | list | `[]` |  |
 | components.cromo.resources | object | `{}` | Resource specifications for Cromo |
-| components.data_catalog | object | `{"arm_image":{"pullPolicy":"IfNotPresent","repository":"mintproject/data-catalog","tag":"8a6af95cae183320d596dc5219f2f76d1f234749"},"enabled":true,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/data-catalog","tag":"9be70359feabe03ed55bfdbf92c20a7e43ab928b"},"ingress":{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"datacatalog.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | Data Catalog component configuration |
+| components.data_catalog | object | `{"arm_image":{"pullPolicy":"IfNotPresent","repository":"mintproject/data-catalog","tag":"8a6af95cae183320d596dc5219f2f76d1f234749"},"enabled":true,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/data-catalog","tag":"9be70359feabe03ed55bfdbf92c20a7e43ab928b"},"ingress":{"annotations":{"nginx.ingress.kubernetes.io/enable-cors":"true"},"className":"","enabled":true,"hosts":[{"host":"datacatalog.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | Data Catalog component configuration |
 | components.data_catalog.arm_image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for ARM-based Data Catalog |
 | components.data_catalog.arm_image.repository | string | `"mintproject/data-catalog"` | Docker image repository for ARM-based Data Catalog |
 | components.data_catalog.arm_image.tag | string | `"8a6af95cae183320d596dc5219f2f76d1f234749"` | Docker image tag for ARM-based Data Catalog |
@@ -87,7 +87,7 @@ A Helm chart for MINT
 | components.ensemble_manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Ensemble Manager |
 | components.ensemble_manager.image.repository | string | `"mintproject/ensemble-manager"` | Docker image repository for Ensemble Manager |
 | components.ensemble_manager.image.tag | string | `"3e1f40865e647a8025b06ac63178b0eed64aed3e"` | Docker image tag for Ensemble Manager |
-| components.ensemble_manager.ingress.annotations | object | `{}` |  |
+| components.ensemble_manager.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.ensemble_manager.ingress.className | string | `""` |  |
 | components.ensemble_manager.ingress.enabled | bool | `true` |  |
 | components.ensemble_manager.ingress.hosts[0].host | string | `"ensemble-manager.mint.local"` |  |
@@ -126,7 +126,7 @@ A Helm chart for MINT
 | components.hasura.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Hasura |
 | components.hasura.image.repository | string | `"mintproject/graphql-engine"` | Docker image repository for Hasura |
 | components.hasura.image.tag | string | `"305c0dbeba1878eafe348f21fc300fbfc017d9dc"` | Docker image tag for Hasura |
-| components.hasura.ingress.annotations | object | `{}` |  |
+| components.hasura.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.hasura.ingress.className | string | `nil` |  |
 | components.hasura.ingress.enabled | bool | `true` | Enable or disable ingress for Hasura |
 | components.hasura.ingress.hosts[0].host | string | `"graphql.mint.local"` |  |
@@ -150,7 +150,7 @@ A Helm chart for MINT
 | components.hasura_db.persistence.storageClass | string | `""` |  |
 | components.hasura_db.persistence.subPath | string | `""` | Subpath for Hasura database |
 | components.hasura_db.resources | object | `{}` | Resource specifications for Hasura database |
-| components.mic_api | object | `{"enabled":false,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/mic-api","tag":"ee71a1a364fc3d384f85243684ad95d37913b049"},"ingress":{"annotations":{},"className":"","enabled":true,"hosts":[{"host":"api.mic.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | MIC API component configuration |
+| components.mic_api | object | `{"enabled":false,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/mic-api","tag":"ee71a1a364fc3d384f85243684ad95d37913b049"},"ingress":{"annotations":{"nginx.ingress.kubernetes.io/enable-cors":"true"},"className":"","enabled":true,"hosts":[{"host":"api.mic.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | MIC API component configuration |
 | components.mic_api.enabled | bool | `false` | Enable or disable MIC API |
 | components.mic_api.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for MIC API |
 | components.mic_api.image.repository | string | `"mintproject/mic-api"` | Docker image repository for MIC API |
@@ -208,7 +208,7 @@ A Helm chart for MINT
 | components.model_catalog_endpoint.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Model Catalog Endpoint |
 | components.model_catalog_endpoint.image.repository | string | `"mintproject/model-catalog-endpoint"` | Docker image repository for Model Catalog Endpoint |
 | components.model_catalog_endpoint.image.tag | string | `"29256555a6fbaefae4729d5cd259564708a4ab04"` | Docker image tag for Model Catalog Endpoint |
-| components.model_catalog_endpoint.ingress.annotations | object | `{}` |  |
+| components.model_catalog_endpoint.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.model_catalog_endpoint.ingress.className | string | `""` |  |
 | components.model_catalog_endpoint.ingress.enabled | bool | `true` | Enable or disable ingress for Model Catalog Endpoint |
 | components.model_catalog_endpoint.ingress.hosts[0].host | string | `"endpoint.models.mint.local"` |  |
