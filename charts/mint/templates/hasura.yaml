@@ -24,6 +24,66 @@ spec:
   selector:
     app: {{ include "mint.prefix" . }}-hasura
 ---
+{{- if and (eq .Values.components.hasura.auth.type "webhook") .Values.components.hasura.auth.webhook.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura-auth-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ include "mint.prefix" . }}-hasura-auth-webhook
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura-auth-webhook
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-hasura-auth-webhook
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-hasura-auth-webhook
+    spec:
+      containers:
+        - name: auth-webhook
+          {{- with .Values.components.hasura.auth.webhook.service }}
+          image: "{{ .image.repository }}:{{ .image.tag }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- end }}
+          env:
+            - name: TAPIS_JWKS_URI
+              value: {{ .Values.components.hasura.auth.webhook.config.tapisJwksUri }}
+            - name: TAPIS_TOKEN_ISSUER
+              value: {{ .Values.components.hasura.auth.webhook.config.tapisTokenIssuer }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+{{- end }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -59,6 +119,18 @@ spec:
             value: "{{ .environment.enable_dev_mode }}"
           - name: HASURA_GRAPHQL_UNAUTHORIZED_ROLE
             value: "{{ .environment.unauthorized_role }}"
+          {{- if eq .auth.type "webhook" }}
+          - name: HASURA_GRAPHQL_AUTH_HOOK
+            value: "http://{{ include "mint.prefix" $ }}-hasura-auth-webhook:3000/auth-webhook"
+          - name: HASURA_GRAPHQL_AUTH_HOOK_MODE
+            value: "POST"
+          {{- else }}
+          - name: HASURA_GRAPHQL_JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" $ }}-hasura-secrets
+                key: jwt_secret
+          {{- end }}
           {{- end }}
           - name: HASURA_GRAPHQL_DATABASE_URL
             valueFrom:
@@ -70,11 +142,6 @@ spec:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-hasura-secrets
                 key: admin_secret
-          - name: HASURA_GRAPHQL_JWT_SECRET
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "mint.prefix" . }}-hasura-secrets
-                key: jwt_secret
           - name: DB_HOST
             value: {{ include "mint.prefix" $ }}-hasura
           ports:
