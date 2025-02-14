@@ -107,6 +107,18 @@ A Helm chart for MINT
 | components.ensemble_manager.serviceAccountName | string | `"default"` | Service account name for Ensemble Manager, used to run jobs |
 | components.ensemble_manager.strategy | object | `{"type":"Recreate"}` | Ensemble Manager deployment strategy (Recreate or RollingUpdate) |
 | components.ensemble_manager.strategy.type | string | `"Recreate"` | Type of deployment strategy |
+| components.hasura.auth | object | `{"jwt":{"claims":{"namespace":"https://hasura.io/jwt/claims"},"enabled":true},"type":"jwt","webhook":{"config":{"tapisJwksUri":"https://tacc.tapis.io/v3/tenants/tacc","tapisTokenIssuer":"https://tacc.tapis.io/v3/tokens"},"enabled":false,"service":{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"latest"},"resources":{}}}}` | Authentication configuration for Hasura |
+| components.hasura.auth.jwt.claims | object | `{"namespace":"https://hasura.io/jwt/claims"}` | JWT claims configuration |
+| components.hasura.auth.jwt.enabled | bool | `true` | Enable JWT authentication |
+| components.hasura.auth.type | string | `"jwt"` | Authentication type (jwt or webhook) |
+| components.hasura.auth.webhook.config.tapisJwksUri | string | `"https://tacc.tapis.io/v3/tenants/tacc"` | JWKS URI for Tapis authentication |
+| components.hasura.auth.webhook.config.tapisTokenIssuer | string | `"https://tacc.tapis.io/v3/tokens"` | Token issuer for Tapis authentication |
+| components.hasura.auth.webhook.enabled | bool | `false` | Enable webhook authentication |
+| components.hasura.auth.webhook.service | object | `{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"latest"},"resources":{}}` | Webhook service configuration |
+| components.hasura.auth.webhook.service.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for auth webhook |
+| components.hasura.auth.webhook.service.image.repository | string | `"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook"` | Docker image repository for auth webhook |
+| components.hasura.auth.webhook.service.image.tag | string | `"latest"` | Docker image tag for auth webhook |
+| components.hasura.auth.webhook.service.resources | object | `{}` | Resource specifications for auth webhook |
 | components.hasura.enabled | bool | `true` | Enable or disable Hasura |
 | components.hasura.environment.enable_console | bool | `true` | Enable or disable Hasura console |
 | components.hasura.environment.enable_dev_mode | bool | `false` | Enable or disable Hasura dev mode |
@@ -286,7 +298,7 @@ A Helm chart for MINT
 | secrets.external_services.s3.access_key | string | `"CHANGEME"` | Access key for S3. Used by Ensemble Manager to upload data |
 | secrets.external_services.s3.secret_key | string | `"CHANGEME"` | Secret key for S3 |
 | secrets.hasura.admin_secret | string | `"CHANGEME"` | Admin secret for Hasura used to access the console |
-| secrets.hasura.jwt_secret | string | `"{\"type\": \"RS256\", \"key\": \"-----BEGIN CERTIFICATE-----\\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyQQ56WKKsVCUs8n9swlv5DV7st7UUdvNoDSnwovdU2vinQQ686//vRqlUJ5vpyI7r75qTXCPkXUitDhPvGEMfChnb9tuWdymSyZmMmT+34oaYo/2bGSZjTlLRVfRJjUnFYeWoVLoXVKJolyDWtU6bXbFNnUyysb/6YIpg5sSwxkLs/9yl6HsWdFconxPJO6KmMPSjcOc0fZermNq+cOEvj1OqRhVkxDqBebreI+zcgrJHNSN8d6cxTmfVQl1jIPHvxE5oN7qUdfYmK4D+SOlj8FlkUvwis+3Ix2AQsvNoOD1OzuqUOd/FpXBnEGaeTq9EMwDxplNqltR/qT3/poUwIDAQAB\\n-----END CERTIFICATE-----\", \"allowed_skew\": 2}"` | JWT verification secret for Hasura |
+| secrets.hasura.jwt_secret | string | `"{\"type\": \"RS256\", \"key\": \"-----BEGIN CERTIFICATE-----\\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyQQ56WKKsVCUs8n9swlv5DV7st7UUdvNoDSnwovdU2vinQQ686//vRqlUJ5vpyI7r75qTXCPkXUitDhPvGEMfChnb9tuWdymSyZmMmT+34oaYo/2bGSZjTlLRVfRJjUnFYeWoVLoXVKJolyDWtU6bXbFNnUyysb/6YIpg5sSwxkLs/9yl6HsWdFconxPJO6KmMPSjcOc0fZermNq+cOEvj1OqRhVkxDqBebreI+zcgrJHNSN8d6cxTmfVQl1jIPHvxE5oN7qUdfYmK4D+SOlj8FlkUvwis+3Ix2AQsvNoOD1OzuqUOd/FpXBnEGaeTq9EMwDxplNqltR/qT3/poUwIDAQAB\\n-----END CERTIFICATE-----\", \"allowed_skew\": 2}"` | JWT verification secret for Hasura (only used when auth.type is jwt) |
 | securityContext | object | `{}` |  |
 | service | object | `{"port":80,"type":"ClusterIP"}` | Service configuration |
 | service.port | int | `80` | Port number for the service |
