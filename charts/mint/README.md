@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 3.4.6-pre2](https://img.shields.io/badge/Version-3.4.6--pre2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 3.4.6-pre3](https://img.shields.io/badge/Version-3.4.6--pre3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -107,13 +107,11 @@ A Helm chart for MINT
 | components.ensemble_manager.serviceAccountName | string | `"default"` | Service account name for Ensemble Manager, used to run jobs |
 | components.ensemble_manager.strategy | object | `{"type":"Recreate"}` | Ensemble Manager deployment strategy (Recreate or RollingUpdate) |
 | components.ensemble_manager.strategy.type | string | `"Recreate"` | Type of deployment strategy |
-| components.hasura.auth | object | `{"jwt":{"claims":{"namespace":"https://hasura.io/jwt/claims"},"enabled":true},"type":"jwt","webhook":{"config":{"tapisJwksUri":"https://tacc.tapis.io/v3/tenants/tacc","tapisTokenIssuer":"https://tacc.tapis.io/v3/tokens"},"enabled":false,"service":{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"latest"},"resources":{}}}}` | Authentication configuration for Hasura |
+| components.hasura.auth | object | `{"jwt":{"claims":{"namespace":"https://hasura.io/jwt/claims"}},"type":"jwt","webhook":{"config":{"tapisJwksUri":"https://tacc.tapis.io/v3/tenants/tacc","tapisTokenIssuer":"https://tacc.tapis.io/v3/tokens"},"service":{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"latest"},"resources":{}}}}` | Authentication configuration for Hasura |
 | components.hasura.auth.jwt.claims | object | `{"namespace":"https://hasura.io/jwt/claims"}` | JWT claims configuration |
-| components.hasura.auth.jwt.enabled | bool | `true` | Enable JWT authentication |
 | components.hasura.auth.type | string | `"jwt"` | Authentication type (jwt or webhook) |
 | components.hasura.auth.webhook.config.tapisJwksUri | string | `"https://tacc.tapis.io/v3/tenants/tacc"` | JWKS URI for Tapis authentication |
 | components.hasura.auth.webhook.config.tapisTokenIssuer | string | `"https://tacc.tapis.io/v3/tokens"` | Token issuer for Tapis authentication |
-| components.hasura.auth.webhook.enabled | bool | `false` | Enable webhook authentication |
 | components.hasura.auth.webhook.service | object | `{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"latest"},"resources":{}}` | Webhook service configuration |
 | components.hasura.auth.webhook.service.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for auth webhook |
 | components.hasura.auth.webhook.service.image.repository | string | `"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook"` | Docker image repository for auth webhook |
