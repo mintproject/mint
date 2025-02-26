@@ -19,6 +19,7 @@ nav:
   - Administrator Guide:
       - admin-guide/index.md
       - admin-guide/installation.md
+      - admin-guide/authentication.md
       - Catalog configuration:
           - Model Catalog: admin-guide/catalog-configuration/model-catalog-configuration.md
           - Solution Catalog: admin-guide/catalog-configuration/solution-catalog-configuration.md
