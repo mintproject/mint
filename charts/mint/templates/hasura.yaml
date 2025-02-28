@@ -194,6 +194,18 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      # Add init container to wait for database
+      initContainers:
+      - name: wait-for-db
+        image: postgres:13-alpine
+        command: ['sh', '-c',
+          'until pg_isready -h {{ include "mint.prefix" . }}-hasura-db -U $POSTGRES_USER; do echo waiting for database; sleep 2; done;']
+        env:
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: username
       containers:
         - name: hasura
           {{- with .Values.components.hasura  }}
@@ -241,3 +253,11 @@ spec:
             httpGet:
               path: /
               port: http
+          readinessProbe:
+            exec:
+              command:
+              - pg_isready
+              - -h
+              - {{ include "mint.prefix" . }}-hasura-db
+              - -U
+              - {{ .Values.secrets.database.hasura.username | default "mint" }}
