@@ -571,14 +571,20 @@ secrets:
     # -- Admin secret for Hasura used to access the console
     admin_secret: CHANGEME
 auth:
+  # -- Provider for authentication service: "tapis" or "keycloak"
+  provider: "tapis"
+  # -- Auth server
+  server: "https://portals.tapis.io"
   # -- URL for authentication service
   client_id: model_catalog
-  # -- Realm for authentication service
-  url: https://auth.mint.isi.edu/
-  # -- Realm for authentication service
-  realm: production
-  # -- Client ID for authentication service
-  ui_client_id: mint-ui
+  # -- Token URL for authentication service
+  token_url: /v3/oauth2/token
+  # -- Authorization URL for authentication service
+  auth_url: /v3/oauth2/authorize
+  # -- Discovery URL for authentication service
+  discovery_url: /v3/oauth2/.well-known/oauth-authorization-server
+  # -- Logout URL for authentication service
+  logout_url: /v3/oauth2/tokens/revoke
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""

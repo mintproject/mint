@@ -82,9 +82,13 @@ data:
     window.REACT_APP_GOOGLE_MAPS_KEY = {{ .Values.google.maps.key | quote }};
 
     //Authentications
-    window.REACT_APP_AUTH_SERVER = {{ .Values.auth.url | quote }};
-    window.REACT_APP_AUTH_REALM = {{ .Values.auth.realm | quote }};
-    window.REACT_APP_AUTH_CLIENT_ID = {{ .Values.auth.ui_client_id | quote }};
+    window.REACT_APP_AUTH_PROVIDER = {{ .Values.auth.provider | quote }};
+    window.REACT_APP_AUTH_SERVER = {{ .Values.auth.server | quote }};
+    window.REACT_APP_AUTH_CLIENT_ID = {{ .Values.auth.client_id | quote }};
+    window.REACT_APP_AUTH_TOKEN_URL = {{ printf "%s%s" .Values.auth.server .Values.auth.token_url | quote }};
+    window.REACT_APP_AUTH_AUTH_URL = {{ printf "%s%s" .Values.auth.server .Values.auth.auth_url | quote }};
+    window.REACT_APP_AUTH_DISCOVERY_URL = {{ printf "%s%s" .Values.auth.server .Values.auth.discovery_url | quote }};
+    window.REACT_APP_AUTH_LOGOUT_URL = {{ printf "%s%s" .Values.auth.server .Values.auth.logout_url | quote }};
 
     //Visualization and Ingestion - Not used any more - Remove ?
     window.REACT_APP_VISUALIZATION_URL = "http://dev.viz.mint.isi.edu";
