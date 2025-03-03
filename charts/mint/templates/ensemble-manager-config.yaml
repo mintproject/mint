@@ -61,9 +61,24 @@ data:
          },
          {{- end}}
 
-         "auth_server": {{ .Values.auth.url | quote }},
-         "auth_realm": {{ .Values.auth.realm | quote }},
-         "auth_client_id": {{ .Values.auth.ui_client_id | quote }},
+         {{- with .Values.auth }}
+         {{- if .url }}
+         "auth_server": {{ .url | quote }},
+         {{- end }}
+         {{- if .realm }}
+         "auth_realm": {{ .realm | quote }},
+         {{- end }}
+         {{- if .ui_client_id }}
+         "auth_client_id": {{ .ui_client_id | quote }},
+         {{- end }}
+         {{- end }}
+
          "visualization_url": "",
-         "ingestion_api": ""
+         "ingestion_api": "",
+         "auth": {
+            "client_id": {{ .Values.components.ensemble_manager.config.auth.client_id | quote }},
+            "authorization_url": {{ .Values.components.ensemble_manager.config.auth.authorization_url | quote }},
+            "public_key": {{ .Values.components.ensemble_manager.config.auth.public_key | quote }},
+            "algorithms": {{ .Values.components.ensemble_manager.config.auth.algorithms | quote }}
+         }
       }

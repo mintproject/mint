@@ -264,7 +264,7 @@ components:
             # -- Docker image repository for auth webhook
             repository: ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook
             # -- Docker image tag for auth webhook
-            tag: latest
+            tag: 1.0.0
             # -- Image pull policy for auth webhook
             pullPolicy: IfNotPresent
           # -- Resource specifications for auth webhook
@@ -422,7 +422,11 @@ components:
         endpoint: "localhost:30003/v1/graphql"
         enable_ssl: false
         use_secret: true
-
+      auth:
+        client_id: "me3"
+        authorization_url: "https://portals.tapis.io/v3/oauth2/authorize"
+        public_key: "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw/gduKqo2Pjv6puw1TLxEF/CzVacsBYVGYAeyhNg0opB4ScnDlZhGtG84co/9vBVTtKznoZ+L7a3a4gqFZXY404K0TdkkZkRUWW6uU06oMK22EQxQTCPkI+MgqX6nRE6T2RAixluRGVI2qDP620IFLXJCm7l4ZHCDJITpVADdpAnrDe2y6PuYC9nWz+VXVRNs3rkmEV2aHM6F5PTfT1cOuvWxaDCSdzJUQlUNb2h0fWNVPAz0KETzjx4QQ1XFV5KONaMwSGJ6b4RVefaOVp7fgs35TISiO57pX1Cv9KjW3BFG6CWb2TurLtv4HM+mYIUIk3t1XywUonP1oyXSnwPaQIDAQAB\n-----END PUBLIC KEY-----"
+        algorithms: ["RS256"]
       execution_engine:
         type: "localex"
         code_dir: "/home/node/app/data/code"
@@ -571,12 +575,16 @@ secrets:
     # -- Admin secret for Hasura used to access the console
     admin_secret: CHANGEME
 auth:
+  # DEPRECATED OPTION - realm
+  realm: ""
+  url: ""
+  ui_client_id: ""
   # -- Provider for authentication service: "tapis" or "keycloak"
   provider: "tapis"
   # -- Auth server
   server: "https://portals.tapis.io"
   # -- URL for authentication service
-  client_id: model_catalog
+  client_id: mint-local
   # -- Token URL for authentication service
   token_url: /v3/oauth2/token
   # -- Authorization URL for authentication service
