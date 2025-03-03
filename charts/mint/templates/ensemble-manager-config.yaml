@@ -80,5 +80,14 @@ data:
             "authorization_url": {{ .Values.components.ensemble_manager.config.auth.authorization_url | quote }},
             "public_key": {{ .Values.components.ensemble_manager.config.auth.public_key | quote }},
             "algorithms": {{ .Values.components.ensemble_manager.config.auth.algorithms | quote }}
+         },
+
+         "openapi": {
+            "servers": [
+               {
+                  "url": "http{{ if .Values.components.ensemble_manager.ingress.tls }}s{{ end }}://{{ with (first .Values.components.ensemble_manager.ingress.hosts) }}{{ .host }}{{ end }}/{{ .Values.components.ensemble_manager.api_version }}",
+                  "description": "Default Server"
+               }
+            ]
          }
       }
