@@ -7,7 +7,7 @@ components:
   ensemble_manager:
     image:
       repository: mintproject/ensemble-manager
-      tag: 5.0.4-beta1
+      tag: 8a3362ef2deb39a12b3751bee0baae873298db38
       pullPolicy: IfNotPresent
     config:
       execution_engine:
