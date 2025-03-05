@@ -90,11 +90,19 @@ data:
     window.REACT_APP_AUTH_DISCOVERY_URL = {{ .Values.auth.discovery_url | quote }};
     window.REACT_APP_AUTH_LOGOUT_URL = {{ .Values.auth.logout_url | quote }};
 
-    //Visualization and Ingestion - Not used any more - Remove ?
-    window.REACT_APP_VISUALIZATION_URL = "http://dev.viz.mint.isi.edu";
-    window.REACT_APP_INGESTION_API = "http://node1.ingestion.mint.isi.edu/v1.3.0";
-    window.REACT_APP_AIRFLOW_API = "https://airflow.mint.isi.edu/api/v1";
-    window.REACT_APP_AIRFLOW_DAG_DOWNLOAD_THREAD_ID = "download_thread"
+    //Visualization and Ingestion
+    {{ if eq .Values.external_services.visualization.enabled true }}
+    window.REACT_APP_VISUALIZATION_URL = {{ .Values.external_services.visualization.url | quote }};
+    {{ end }}
+
+    {{ if eq .Values.external_services.ingestion.enabled true }}
+    window.REACT_APP_INGESTION_API = {{ .Values.external_services.ingestion.api | quote }};
+    {{ end }}
+
+    {{ if eq .Values.external_services.airflow.enabled true }}
+    window.REACT_APP_AIRFLOW_API = {{ .Values.external_services.airflow.api | quote }};
+    window.REACT_APP_AIRFLOW_DAG_DOWNLOAD_THREAD_ID = {{ .Values.external_services.airflow.dag_download_thread_id | quote }};
+    {{ end }}
 
     {{ if eq .Values.external_services.ckan.enabled true }}
     window.REACT_APP_DATA_CATALOG_TYPE = {{ .Values.external_services.ckan.type | quote }};

@@ -2,12 +2,12 @@ components:
   ui:
     image:
       repository: mintproject/mint-ui-lit
-      tag: a4bbdf1b18f1073ce0fd8093ffe679266c9e9caf
+      tag: 39b64323676ac12d3b8c5548fb0066deb4d9f687
       pullPolicy: IfNotPresent
   ensemble_manager:
     image:
       repository: mintproject/ensemble-manager
-      tag: 8a3362ef2deb39a12b3751bee0baae873298db38
+      tag: c39a2232684b81af00c23810fbd522fe932e31ad
       pullPolicy: IfNotPresent
     config:
       execution_engine:

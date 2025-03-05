@@ -485,6 +485,16 @@ google:
     key: AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM
 
 external_services:
+  visualization:
+    enabled: false
+    url: "" # Default: http://dev.viz.mint.isi.edu
+  ingestion:
+    enabled: false
+    api: "" # Default: http://node1.ingestion.mint.isi.edu/v1.3.0
+  airflow:
+    enabled: false
+    api: "" # Default: https://airflow.mint.isi.edu/api/v1
+    dag_download_thread_id: "" # Default: download_thread
   ckan:
     # -- Enable or disable CKAN service
     enabled: false
