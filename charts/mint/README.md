@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 3.4.6-pre4](https://img.shields.io/badge/Version-3.4.6--pre4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 3.4.6-pre7](https://img.shields.io/badge/Version-3.4.6--pre7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -16,10 +16,16 @@ A Helm chart for MINT
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
 | arm_support | bool | `false` | Enable or disable ARM support |
-| auth.client_id | string | `"model_catalog"` | URL for authentication service |
-| auth.realm | string | `"production"` | Realm for authentication service |
-| auth.ui_client_id | string | `"mint-ui"` | Client ID for authentication service |
-| auth.url | string | `"https://auth.mint.isi.edu/"` | Realm for authentication service |
+| auth.auth_url | string | `"/v3/oauth2/authorize"` | Authorization URL for authentication service |
+| auth.client_id | string | `"mint-local"` | URL for authentication service |
+| auth.discovery_url | string | `"/v3/oauth2/.well-known/oauth-authorization-server"` | Discovery URL for authentication service |
+| auth.logout_url | string | `"/v3/oauth2/tokens/revoke"` | Logout URL for authentication service |
+| auth.provider | string | `"tapis"` | Provider for authentication service: "tapis" or "keycloak" |
+| auth.realm | string | `""` |  |
+| auth.server | string | `"https://portals.tapis.io"` | Auth server |
+| auth.token_url | string | `"/v3/oauth2/token"` | Token URL for authentication service |
+| auth.ui_client_id | string | `""` |  |
+| auth.url | string | `""` |  |
 | autoscaling.enabled | bool | `false` |  |
 | autoscaling.maxReplicas | int | `100` |  |
 | autoscaling.minReplicas | int | `1` |  |
@@ -64,6 +70,10 @@ A Helm chart for MINT
 | components.data_catalog_db.persistence.subPath | string | `""` |  |
 | components.data_catalog_db.resources | object | `{}` | Resource specifications for Data Catalog database |
 | components.ensemble_manager.api_version | string | `"v1"` | API version for Ensemble Manager |
+| components.ensemble_manager.config.auth.algorithms[0] | string | `"RS256"` |  |
+| components.ensemble_manager.config.auth.authorization_url | string | `"https://portals.tapis.io/v3/oauth2/authorize"` |  |
+| components.ensemble_manager.config.auth.client_id | string | `"me3"` |  |
+| components.ensemble_manager.config.auth.public_key | string | `"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw/gduKqo2Pjv6puw1TLxEF/CzVacsBYVGYAeyhNg0opB4ScnDlZhGtG84co/9vBVTtKznoZ+L7a3a4gqFZXY404K0TdkkZkRUWW6uU06oMK22EQxQTCPkI+MgqX6nRE6T2RAixluRGVI2qDP620IFLXJCm7l4ZHCDJITpVADdpAnrDe2y6PuYC9nWz+VXVRNs3rkmEV2aHM6F5PTfT1cOuvWxaDCSdzJUQlUNb2h0fWNVPAz0KETzjx4QQ1XFV5KONaMwSGJ6b4RVefaOVp7fgs35TISiO57pX1Cv9KjW3BFG6CWb2TurLtv4HM+mYIUIk3t1XywUonP1oyXSnwPaQIDAQAB\n-----END PUBLIC KEY-----"` |  |
 | components.ensemble_manager.config.execution_engine.basePath | string | `""` |  |
 | components.ensemble_manager.config.execution_engine.code_dir | string | `"/home/node/app/data/code"` |  |
 | components.ensemble_manager.config.execution_engine.data_dir | string | `"/home/node/app/data/data"` |  |
@@ -83,10 +93,10 @@ A Helm chart for MINT
 | components.ensemble_manager.config.graphql.use_secret | bool | `true` |  |
 | components.ensemble_manager.enabled | bool | `true` | Enable or disable Ensemble Manager |
 | components.ensemble_manager.environment.data_dir | string | `"/var/mint"` |  |
-| components.ensemble_manager.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/ensemble-manager","tag":"3e1f40865e647a8025b06ac63178b0eed64aed3e"}` | Docker image repository for Ensemble Manager |
+| components.ensemble_manager.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/ensemble-manager","tag":"739acdcd828140fc471d4756b8708e57ca6acdeb"}` | Docker image repository for Ensemble Manager |
 | components.ensemble_manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Ensemble Manager |
 | components.ensemble_manager.image.repository | string | `"mintproject/ensemble-manager"` | Docker image repository for Ensemble Manager |
-| components.ensemble_manager.image.tag | string | `"3e1f40865e647a8025b06ac63178b0eed64aed3e"` | Docker image tag for Ensemble Manager |
+| components.ensemble_manager.image.tag | string | `"739acdcd828140fc471d4756b8708e57ca6acdeb"` | Docker image tag for Ensemble Manager |
 | components.ensemble_manager.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.ensemble_manager.ingress.className | string | `""` |  |
 | components.ensemble_manager.ingress.enabled | bool | `true` |  |
@@ -107,15 +117,15 @@ A Helm chart for MINT
 | components.ensemble_manager.serviceAccountName | string | `"default"` | Service account name for Ensemble Manager, used to run jobs |
 | components.ensemble_manager.strategy | object | `{"type":"Recreate"}` | Ensemble Manager deployment strategy (Recreate or RollingUpdate) |
 | components.ensemble_manager.strategy.type | string | `"Recreate"` | Type of deployment strategy |
-| components.hasura.auth | object | `{"jwt":{"claims":{"namespace":"https://hasura.io/jwt/claims"}},"type":"jwt","webhook":{"config":{"tapisJwksUri":"https://tacc.tapis.io/v3/tenants/tacc","tapisTokenIssuer":"https://tacc.tapis.io/v3/tokens"},"service":{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"latest"},"resources":{}}}}` | Authentication configuration for Hasura |
+| components.hasura.auth | object | `{"jwt":{"claims":{"namespace":"https://hasura.io/jwt/claims"}},"type":"jwt","webhook":{"config":{"tapisJwksUri":"https://tacc.tapis.io/v3/tenants/tacc","tapisTokenIssuer":"https://tacc.tapis.io/v3/tokens"},"service":{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"1.0.0"},"resources":{}}}}` | Authentication configuration for Hasura |
 | components.hasura.auth.jwt.claims | object | `{"namespace":"https://hasura.io/jwt/claims"}` | JWT claims configuration |
 | components.hasura.auth.type | string | `"jwt"` | Authentication type (jwt or webhook) |
 | components.hasura.auth.webhook.config.tapisJwksUri | string | `"https://tacc.tapis.io/v3/tenants/tacc"` | JWKS URI for Tapis authentication |
 | components.hasura.auth.webhook.config.tapisTokenIssuer | string | `"https://tacc.tapis.io/v3/tokens"` | Token issuer for Tapis authentication |
-| components.hasura.auth.webhook.service | object | `{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"latest"},"resources":{}}` | Webhook service configuration |
+| components.hasura.auth.webhook.service | object | `{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"1.0.0"},"resources":{}}` | Webhook service configuration |
 | components.hasura.auth.webhook.service.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for auth webhook |
 | components.hasura.auth.webhook.service.image.repository | string | `"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook"` | Docker image repository for auth webhook |
-| components.hasura.auth.webhook.service.image.tag | string | `"latest"` | Docker image tag for auth webhook |
+| components.hasura.auth.webhook.service.image.tag | string | `"1.0.0"` | Docker image tag for auth webhook |
 | components.hasura.auth.webhook.service.resources | object | `{}` | Resource specifications for auth webhook |
 | components.hasura.enabled | bool | `true` | Enable or disable Hasura |
 | components.hasura.environment.enable_console | bool | `true` | Enable or disable Hasura console |
@@ -237,7 +247,7 @@ A Helm chart for MINT
 | components.ui.enabled | bool | `true` | Enable or disable UI |
 | components.ui.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for UI |
 | components.ui.image.repository | string | `"mintproject/mint-ui-lit"` | Docker image repository for UI |
-| components.ui.image.tag | string | `"858ce054d1f757d0f6ec3765e878ec54091bb110"` | Docker image tag for UI |
+| components.ui.image.tag | string | `"859e83b02101b12aa8a52006f232116c1d0351bf"` | Docker image tag for UI |
 | components.ui.ingress.annotations | object | `{}` |  |
 | components.ui.ingress.className | string | `""` |  |
 | components.ui.ingress.enabled | bool | `true` | Enable or disable ingress for UI |
