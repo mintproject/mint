@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 3.4.6-pre7](https://img.shields.io/badge/Version-3.4.6--pre7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 3.4.6-pre9](https://img.shields.io/badge/Version-3.4.6--pre9-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -93,10 +93,10 @@ A Helm chart for MINT
 | components.ensemble_manager.config.graphql.use_secret | bool | `true` |  |
 | components.ensemble_manager.enabled | bool | `true` | Enable or disable Ensemble Manager |
 | components.ensemble_manager.environment.data_dir | string | `"/var/mint"` |  |
-| components.ensemble_manager.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/ensemble-manager","tag":"739acdcd828140fc471d4756b8708e57ca6acdeb"}` | Docker image repository for Ensemble Manager |
+| components.ensemble_manager.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/ensemble-manager","tag":"814018a933c2750b62eef160394128daf3addf3d"}` | Docker image repository for Ensemble Manager |
 | components.ensemble_manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Ensemble Manager |
 | components.ensemble_manager.image.repository | string | `"mintproject/ensemble-manager"` | Docker image repository for Ensemble Manager |
-| components.ensemble_manager.image.tag | string | `"739acdcd828140fc471d4756b8708e57ca6acdeb"` | Docker image tag for Ensemble Manager |
+| components.ensemble_manager.image.tag | string | `"814018a933c2750b62eef160394128daf3addf3d"` | Docker image tag for Ensemble Manager |
 | components.ensemble_manager.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.ensemble_manager.ingress.className | string | `""` |  |
 | components.ensemble_manager.ingress.enabled | bool | `true` |  |
@@ -244,6 +244,10 @@ A Helm chart for MINT
 | components.model_catalog_explorer.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | components.model_catalog_explorer.ingress.tls | list | `[]` |  |
 | components.model_catalog_explorer.resources | object | `{}` | Resource specifications for Model Catalog Explorer |
+| components.ui.config.airflow_api | string | `""` |  |
+| components.ui.config.airflow_dag_download_thread_id | string | `""` |  |
+| components.ui.config.ingestion_api | string | `""` |  |
+| components.ui.config.visualization_url | string | `""` |  |
 | components.ui.enabled | bool | `true` | Enable or disable UI |
 | components.ui.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for UI |
 | components.ui.image.repository | string | `"mintproject/mint-ui-lit"` | Docker image repository for UI |
