@@ -383,6 +383,11 @@ components:
       pullPolicy: IfNotPresent
     # -- Resource specifications for UI
     resources: {}
+    config:
+      visualization_url: ""
+      ingestion_api: ""
+      airflow_api: ""
+      airflow_dag_download_thread_id: ""
     ingress:
       # -- Enable or disable ingress for UI
       enabled: true
