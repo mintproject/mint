@@ -13,6 +13,11 @@ nav:
       - Interventions: interventions.md
   - User guide:
       - User Interface Walkthrough: walkthrough.md
+      - Explore Areas: walkthrough/01-exploring-area.md
+      - Prepare Models: walkthrough/02-preparing-models.md
+      - Explore Data: walkthrough/03-exploring-data.md
+      - Use Models: walkthrough/04-modeling.md
+      - Prepare Reports: walkthrough/05-reporting.md
   - Services:
       - Model Catalog: modelcatalog.md
       - Data Catalog: datacatalog.md
