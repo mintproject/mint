@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 3.4.6-pre9](https://img.shields.io/badge/Version-3.4.6--pre9-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 3.4.7-pre1](https://img.shields.io/badge/Version-3.4.7--pre1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -198,7 +198,7 @@ A Helm chart for MINT
 | components.model_catalog_api.environment.queries_dir | string | `"queries/"` | Queries directory for Model Catalog API |
 | components.model_catalog_api.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Model Catalog API |
 | components.model_catalog_api.image.repository | string | `"mintproject/model-catalog-fastapi"` | Docker image repository for Model Catalog API |
-| components.model_catalog_api.image.tag | string | `"c5f784785c52034f75de24c46b89907c74a14312"` | Docker image tag for Model Catalog API |
+| components.model_catalog_api.image.tag | string | `"e4928bdeffd8f0e128ab3ce28b85782d41190abf"` | Docker image tag for Model Catalog API |
 | components.model_catalog_api.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.model_catalog_api.ingress.className | string | `""` |  |
 | components.model_catalog_api.ingress.enabled | bool | `true` | Enable or disable ingress for Model Catalog API |
@@ -251,7 +251,7 @@ A Helm chart for MINT
 | components.ui.enabled | bool | `true` | Enable or disable UI |
 | components.ui.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for UI |
 | components.ui.image.repository | string | `"mintproject/mint-ui-lit"` | Docker image repository for UI |
-| components.ui.image.tag | string | `"859e83b02101b12aa8a52006f232116c1d0351bf"` | Docker image tag for UI |
+| components.ui.image.tag | string | `"752ea0098dc9f106382090857825ad057f9e1a1e"` | Docker image tag for UI |
 | components.ui.ingress.annotations | object | `{}` |  |
 | components.ui.ingress.className | string | `""` |  |
 | components.ui.ingress.enabled | bool | `true` | Enable or disable ingress for UI |

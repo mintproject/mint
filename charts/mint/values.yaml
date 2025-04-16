@@ -349,7 +349,7 @@ components:
       # -- Docker image repository for Model Catalog API
       repository: mintproject/model-catalog-fastapi
       # -- Docker image tag for Model Catalog API
-      tag: c5f784785c52034f75de24c46b89907c74a14312
+      tag: e4928bdeffd8f0e128ab3ce28b85782d41190abf
       # -- Image pull policy for Model Catalog API
       pullPolicy: IfNotPresent
     # -- Resource specifications for Model Catalog API
@@ -378,7 +378,7 @@ components:
       # -- Docker image repository for UI
       repository: mintproject/mint-ui-lit
       # -- Docker image tag for UI
-      tag: 859e83b02101b12aa8a52006f232116c1d0351bf
+      tag: 752ea0098dc9f106382090857825ad057f9e1a1e
       # -- Image pull policy for UI
       pullPolicy: IfNotPresent
     # -- Resource specifications for UI
