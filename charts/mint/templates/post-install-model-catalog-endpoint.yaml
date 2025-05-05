@@ -54,4 +54,8 @@ spec:
               secretKeyRef:
                 name: {{ include "mint.prefix" . }}-model-catalog-endpoint-secrets
                 key: password
+          - name: DATASET
+            value: {{ .Values.components.model_catalog_endpoint.environment.dataset }}
+          - name: SEEDS_URL
+            value: {{ .Values.components.model_catalog_endpoint.environment.seeds_url }}
 {{- end }}
