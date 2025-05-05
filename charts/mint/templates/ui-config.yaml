@@ -94,6 +94,8 @@ data:
     window.REACT_APP_VISUALIZATION_URL = {{ .Values.components.ui.config.visualization_url | quote }};
     window.REACT_APP_INGESTION_API = {{ .Values.components.ui.config.ingestion_api | quote }};
     window.REACT_APP_AIRFLOW_API = {{ .Values.components.ui.config.airflow_api | quote }};
+    window.REACT_APP_EXECUTION_COMPONENT_FROM_TAPIS = {{ .Values.components.ui.config.execution_component_from_tapis }};
+    window.REACT_APP_EXECUTION_COMPONENT_FROM_TAPIS_TENANT = {{ .Values.components.ui.config.execution_component_from_tapis_tenant | quote }};
     window.REACT_APP_AIRFLOW_DAG_DOWNLOAD_THREAD_ID = {{ .Values.components.ui.config.airflow_dag_download_thread_id | quote }};
 
     {{ if eq .Values.external_services.ckan.enabled true }}
