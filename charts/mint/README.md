@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 3.4.7-pre1](https://img.shields.io/badge/Version-3.4.7--pre1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 3.5.0-pre2](https://img.shields.io/badge/Version-3.5.0--pre2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -93,10 +93,10 @@ A Helm chart for MINT
 | components.ensemble_manager.config.graphql.use_secret | bool | `true` |  |
 | components.ensemble_manager.enabled | bool | `true` | Enable or disable Ensemble Manager |
 | components.ensemble_manager.environment.data_dir | string | `"/var/mint"` |  |
-| components.ensemble_manager.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/ensemble-manager","tag":"814018a933c2750b62eef160394128daf3addf3d"}` | Docker image repository for Ensemble Manager |
+| components.ensemble_manager.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/ensemble-manager","tag":"bc469353a42afa09ca44407d6b2a2fc025d3dfbb"}` | Docker image repository for Ensemble Manager |
 | components.ensemble_manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Ensemble Manager |
 | components.ensemble_manager.image.repository | string | `"mintproject/ensemble-manager"` | Docker image repository for Ensemble Manager |
-| components.ensemble_manager.image.tag | string | `"814018a933c2750b62eef160394128daf3addf3d"` | Docker image tag for Ensemble Manager |
+| components.ensemble_manager.image.tag | string | `"bc469353a42afa09ca44407d6b2a2fc025d3dfbb"` | Docker image tag for Ensemble Manager |
 | components.ensemble_manager.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.ensemble_manager.ingress.className | string | `""` |  |
 | components.ensemble_manager.ingress.enabled | bool | `true` |  |
@@ -198,7 +198,7 @@ A Helm chart for MINT
 | components.model_catalog_api.environment.queries_dir | string | `"queries/"` | Queries directory for Model Catalog API |
 | components.model_catalog_api.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Model Catalog API |
 | components.model_catalog_api.image.repository | string | `"mintproject/model-catalog-fastapi"` | Docker image repository for Model Catalog API |
-| components.model_catalog_api.image.tag | string | `"e4928bdeffd8f0e128ab3ce28b85782d41190abf"` | Docker image tag for Model Catalog API |
+| components.model_catalog_api.image.tag | string | `"7dd88dc5bf1fe6a6d4703ea0a077afee45cb2561"` | Docker image tag for Model Catalog API |
 | components.model_catalog_api.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.model_catalog_api.ingress.className | string | `""` |  |
 | components.model_catalog_api.ingress.enabled | bool | `true` | Enable or disable ingress for Model Catalog API |
@@ -246,12 +246,14 @@ A Helm chart for MINT
 | components.model_catalog_explorer.resources | object | `{}` | Resource specifications for Model Catalog Explorer |
 | components.ui.config.airflow_api | string | `""` |  |
 | components.ui.config.airflow_dag_download_thread_id | string | `""` |  |
+| components.ui.config.execution_component_from_tapis | bool | `false` |  |
+| components.ui.config.execution_component_from_tapis_tenant | string | `""` |  |
 | components.ui.config.ingestion_api | string | `""` |  |
 | components.ui.config.visualization_url | string | `""` |  |
 | components.ui.enabled | bool | `true` | Enable or disable UI |
 | components.ui.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for UI |
 | components.ui.image.repository | string | `"mintproject/mint-ui-lit"` | Docker image repository for UI |
-| components.ui.image.tag | string | `"752ea0098dc9f106382090857825ad057f9e1a1e"` | Docker image tag for UI |
+| components.ui.image.tag | string | `"6eca685617482e7bf67dbd520bebaaefa4392ec5"` | Docker image tag for UI |
 | components.ui.ingress.annotations | object | `{}` |  |
 | components.ui.ingress.className | string | `""` |  |
 | components.ui.ingress.enabled | bool | `true` | Enable or disable ingress for UI |
