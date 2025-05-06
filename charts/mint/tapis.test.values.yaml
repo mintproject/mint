@@ -1,14 +1,12 @@
 components:
   ui:
-    image:
-      repository: mintproject/mint-ui-lit
-      tag: a4bbdf1b18f1073ce0fd8093ffe679266c9e9caf
-      pullPolicy: IfNotPresent
+    config:
+      execution_component_from_tapis: true
+      execution_component_from_tapis_tenant: "portals"
+  model_catalog_endpoint:
+    environment:
+      seeds_url: https://raw.githubusercontent.com/mintproject/model-catalog-endpoint/main/data/model-catalog.trig
   ensemble_manager:
-    image:
-      repository: mintproject/ensemble-manager
-      tag: 8a3362ef2deb39a12b3751bee0baae873298db38
-      pullPolicy: IfNotPresent
     config:
       execution_engine:
         type: "tapis"
@@ -27,3 +25,9 @@ components:
         config:
           tapisJwksUri: "https://portals.tapis.io/v3/tenants/portals"
           tapisTokenIssuer: "https://portals.tapis.io/v3/tokens"
+
+external_services:
+  ckan:
+    enabled: true
+    url: https://ckan.tacc.utexas.edu
+    type: "CKAN"

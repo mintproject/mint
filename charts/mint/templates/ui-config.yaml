@@ -45,6 +45,9 @@ data:
     {{ end }}
     {{ end }}
 
+    window.REACT_APP_EXECUTION_COMPONENT_FROM_TAPIS = {{ .Values.components.ui.config.execution_component_from_tapis }};
+    window.REACT_APP_EXECUTION_COMPONENT_FROM_TAPIS_TENANT = {{ .Values.components.ui.config.execution_component_from_tapis_tenant | quote }};
+
     {{ with .Values.components.ensemble_manager.config.execution_engine }}
     window.REACT_APP_EXECUTION_ENGINE = "{{ .type }}";
     {{ if eq .type "localex" }}
