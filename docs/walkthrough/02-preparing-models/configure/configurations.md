@@ -4,10 +4,10 @@
 
 A configuration defines:
 
-- The specific software version to run
-- Required input parameters
-- Input and output file specifications
-- Variable requirements for each file
+- Input Files: Required data files and model components
+- Input Parameters: Configuration values and settings
+- Outputs: Expected results and output specifications
+- ComponentLocation - The location of the model component files (required for model execution)
 
 You can view detailed configuration information by clicking the _expand button_:
 ![](../../figures/walkthrough/27.png)
@@ -28,66 +28,37 @@ Each configuration defines its required parameters with:
 
 ### File Specifications
 
+#### Input Files
+
 Configurations specify:
 
 - Required input files
-- Expected output files
+- File format requirements
 - Variable requirements for each file
-- File format specifications
+- File validation rules
   ![](../../figures/walkthrough/29.png)
 
-## Creating and Editing Configurations
+#### Output Files
 
-### 1. Add New Configuration
+Configurations define:
 
-- Click _add new configuration_ to create a new configuration
-- Or click _edit_ to modify an existing one
-  ![](../../figures/walkthrough/30.png)
+- Expected output files
+- Output format specifications
+- Output variable requirements
+- Output validation rules
 
-### 2. Manage Parameters
+### Component Location
 
-- Add, edit, or remove parameters
-- Define parameter metadata
-- Set validation rules
-  ![](../../figures/walkthrough/31.png)
+The ComponentLocation field is a critical requirement for model execution:
 
-### 3. Parameter Form
+- Specifies the URL or path to the model component files
+- Must be a valid and accessible location
+- Typically points to a ZIP file containing the model code
+- Required for both ModelConfiguration and ModelConfigurationSetup
+- Example: `https://github.com/mintproject/MINT-WorkflowDomain/blob/main/WINGSWorkflowComponents/model-name/model-name.zip?raw=true`
 
-- Use the parameter form to define:
-  - Parameter names
-  - Data types
-  - Default values
-  - Validation rules
-    ![](../../figures/walkthrough/32.png)
-
-### 4. File Management
-
-- Define input file requirements
-- Specify output file formats
-- Set variable requirements
-  ![](../../figures/walkthrough/33.png)
-  ![](../../figures/walkthrough/34.png)
-
-## Configuration Types
-
-### Basic Configuration
-
-- Simple parameter sets
-- Standard file requirements
-- Common validation rules
-
-### Advanced Configuration
-
-- Complex parameter dependencies
-- Custom validation rules
-- Specialized file formats
-
-### Custom Configuration
-
-- User-defined parameters
-- Custom file specifications
-- Flexible validation rules
+For MINT versions running on TACC systems, the ComponentLocation should point to a Tapis Application. Tapis Applications are containerized applications that can be executed on TACC clusters. For more information about creating and managing Tapis Applications, refer to the [cookbook-docker-template](https://github.com/In-For-Disaster-Analytics/cookbook-docker-template) documentation.
 
 ## Next Steps
 
-Now that you understand how to work with configurations, you can proceed to learn about [creating and managing setups](setups.md). Setups allow you to provide specific values and pre-configured settings for your model runs based on these configurations.
+Now that you understand what configurations are, you can learn about [creating and editing configurations](creating-configurations.md). After that, you can proceed to learn about [creating and managing setups](setups.md). Setups allow you to provide specific values and pre-configured settings for your model runs based on these configurations.
