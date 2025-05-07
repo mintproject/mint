@@ -19,28 +19,29 @@ The _configure models_ page presents a tree view showing the configuration hiera
 
 The tree view provides a visual representation of your model's configuration structure:
 
-1. **Models Level**
+### 1. Models Level
 
-   - Top-level organization
-   - Groups related model versions
-   - Provides model-wide settings
+- Top-level organization
+- Groups related model versions
+- Provides model-wide settings
 
-2. **Versions Level**
+### 2. Versions Level
 
-   - Groups configurations by software revision
-   - Maintains version-specific settings
-   - Links to software documentation
+- Groups configurations by software revision
+- Maintains version-specific settings
+- Links to software documentation
 
-3. **Configurations Level**
+### 3. Configurations Level
 
-   - Defines specific parameter sets
-   - Specifies file requirements
-   - Sets up validation rules
+- Defines specific parameter sets
+- Specifies file requirements
+- Sets up validation rules
 
-4. **Setups Level**
-   - Provides concrete values
-   - Pre-configures model runs
-   - Defines user-adjustable parameters
+### 4. Setups Level
+
+- Provides concrete values
+- Pre-configures model runs
+- Defines user-adjustable parameters
 
 ## Basic Navigation
 
@@ -48,3 +49,7 @@ The tree view provides a visual representation of your model's configuration str
 - Use the expand/collapse buttons to manage the view
 - Right-click for additional options
 - Use the search function to find specific items
+
+## Next Steps
+
+Now that you understand the basic structure of the configuration interface, you can proceed to learn about [working with configurations](configurations.md) in detail. This will show you how to define parameters, specify file requirements, and create effective model configurations.

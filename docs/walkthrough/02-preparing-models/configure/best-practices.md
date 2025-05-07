@@ -79,3 +79,7 @@
 - Update outdated settings
 - Remove unused configurations
 - Monitor performance impact
+
+## Next Steps
+
+You have now completed the configuration section of the MINT walkthrough. With your models properly configured, you can proceed to the next section where you'll learn about [running models](../run/getting-started.md) and executing your configured model setups.

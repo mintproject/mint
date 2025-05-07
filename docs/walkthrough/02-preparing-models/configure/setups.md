@@ -62,3 +62,7 @@ For input files, you can:
 - Reusable configurations
 - Parameter templates
 - File collection templates
+
+## Next Steps
+
+Now that you understand how to create and manage setups, we recommend reviewing the [configuration best practices](best-practices.md) to ensure your configurations and setups follow recommended guidelines for organization, maintenance, and documentation.

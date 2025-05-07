@@ -87,3 +87,7 @@ Configurations specify:
 - User-defined parameters
 - Custom file specifications
 - Flexible validation rules
+
+## Next Steps
+
+Now that you understand how to work with configurations, you can proceed to learn about [creating and managing setups](setups.md). Setups allow you to provide specific values and pre-configured settings for your model runs based on these configurations.
