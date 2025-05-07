@@ -14,7 +14,13 @@ nav:
   - User guide:
       - User Interface Walkthrough: walkthrough.md
       - Explore Areas: walkthrough/01-exploring-area.md
-      - Prepare Models: walkthrough/02-preparing-models.md
+      - Prepare Models:
+          - Overview: walkthrough/02-preparing-models/index.md
+          - Browse Models: walkthrough/02-preparing-models/browse-models.md
+          - Compare Models: walkthrough/02-preparing-models/compare-models.md
+          - Add Models: walkthrough/02-preparing-models/add-models.md
+          - Edit Models: walkthrough/02-preparing-models/edit-models.md
+          - Configure Models: walkthrough/02-preparing-models/configure-models.md
       - Explore Data: walkthrough/03-exploring-data.md
       - Use Models: walkthrough/04-modeling.md
       - Prepare Reports: walkthrough/05-reporting.md

@@ -1,3 +1,4 @@
+.venv
 kubeconfig
 uscd.yaml
 # Created by https://www.toptal.com/developers/gitignore/api/osx
@@ -10,7 +11,8 @@ uscd.yaml
 .LSOverride
 
 # Icon must end with two \r
-Icon
+Icon
+
 
 # Thumbnails
 ._*
