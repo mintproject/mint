@@ -27,8 +27,11 @@ nav:
               - Creating Configurations: walkthrough/02-preparing-models/configure/creating-configurations.md
               - Creating Setups: walkthrough/02-preparing-models/configure/creating-setups.md
               - Making Executable: walkthrough/02-preparing-models/configure/making-executable.md
-              - Best Practices: walkthrough/02-preparing-models/configure/best-practices.md
       - Explore Data: walkthrough/03-exploring-data.md
+      - Prepare Data:
+          - Overview: walkthrough/walkthrough/index.md
+          - MINT Data Catalog: walkthrough/walkthrough/03-1-preparing-data-mint-catalog.md
+          - CKAN: walkthrough/walkthrough/03-1-preparing-data-ckan.md
       - Use Models: walkthrough/04-modeling.md
       - Prepare Reports: walkthrough/05-reporting.md
   - Services:
