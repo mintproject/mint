@@ -37,6 +37,8 @@ groundwater__initial_head
 
 You can select from the list of standard variables provided in the MINT interface. This step is required for the dataset to be usable in MINT workflows.
 
+![MINT Standard Variables](./figures/mint-standard-variables.png)
+
 ## Implementation Steps
 
 1. Set up your CKAN instance
