@@ -3,7 +3,7 @@
 This guide explains how to add data to MINT. There are two main options for adding datasets:
 
 1. [MINT Data Catalog](03-1-preparing-data-mint-catalog.md) - Add data directly through the MINT platform's integrated interface
-2. [CKAN](03-1-preparing-data-ckan.md) - Use the open-source data management system to host and share datasets
+2. [CKAN - TACC Deployment](03-1-preparing-data-ckan.md) - Use the open-source data management system to host and share datasets
 
 ## Key Requirements
 
