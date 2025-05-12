@@ -15,13 +15,6 @@ The configuration system follows a hierarchical structure:
 
 - [Getting Started](getting-started.md) - Access and basic interface
 - [Configurations](configurations.md) - Working with model configurations
-- [Setups](setups.md) - Creating and managing setups
-- [Best Practices](best-practices.md) - Guidelines for effective configuration
-
-## Quick Navigation
-
-- [Configuration Interface](getting-started.md#configuration-interface)
-- [Parameter Management](configurations.md#managing-parameters)
-- [File Specifications](configurations.md#file-specifications)
-- [Setup Creation](setups.md#creating-and-managing-setups)
-- [Configuration Guidelines](best-practices.md)
+- [Creating Configurations](creating-configurations.md) - How to create new configurations
+- [Creating Setups](creating-setups.md) - Creating and managing setups
+- [Making Executable](making-executable.md) - Making configurations executable

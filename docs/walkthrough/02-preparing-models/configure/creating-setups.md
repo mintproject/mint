@@ -81,4 +81,4 @@ For outputs, you can:
 
 ## Next Steps
 
-Now that you understand how to create and manage setups, we recommend reviewing the [configuration best practices](best-practices.md) to ensure your configurations and setups follow recommended guidelines for organization, maintenance, and documentation.
+Now that you understand how to create and manage setups, proceed to [making your configuration executable](making-executable.md) to ensure your setup can be run successfully.
