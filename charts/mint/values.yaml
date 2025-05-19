@@ -378,7 +378,7 @@ components:
       # -- Docker image repository for UI
       repository: mintproject/mint-ui-lit
       # -- Docker image tag for UI
-      tag: 8.0.1
+      tag: c52818e6b0d28e556c8696667cf4a5e3771d040d
       # -- Image pull policy for UI
       pullPolicy: IfNotPresent
     # -- Resource specifications for UI
