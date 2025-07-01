@@ -36,7 +36,8 @@ data:
          "data_catalog_type": {{ .ckan.type | quote }},
          "data_catalog_extra": {
             "owner_organization_id": {{ .ckan.extra.owner_organization_id | quote }},
-            "owner_provenance_id": {{ .ckan.extra.owner_provenance_id | quote }}
+            "owner_provenance_id": {{ .ckan.extra.owner_provenance_id | quote }},
+            "default_dataset_id": {{ .ckan.extra.default_dataset_id | quote }}
          },
          {{end}}
          {{end}}

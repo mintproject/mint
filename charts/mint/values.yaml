@@ -411,7 +411,7 @@ components:
       # -- Docker image repository for Ensemble Manager
       repository: mintproject/ensemble-manager
       # -- Docker image tag for Ensemble Manager
-      tag: 588465993432f6dbe6d9f5de698039b532b80bf0
+      tag: c87f938dd35b582f2e6a83e23ba99e077848cb03
       # -- Image pull policy for Ensemble Manager
       pullPolicy: IfNotPresent
     # -- Ensemble Manager deployment strategy (Recreate or RollingUpdate)
@@ -504,6 +504,8 @@ external_services:
       owner_organization_id: ""
       # -- Owner provenance ID for CKAN service
       owner_provenance_id: ""
+      # -- Default dataset ID for CKAN service. Used by Ensemble Manager to upload data when a task has no dataset_id
+      default_dataset_id: ""
   s3:
     # -- Enable or disable S3
     enabled: false
