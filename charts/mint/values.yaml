@@ -237,7 +237,7 @@ components:
       # -- Docker image repository for Hasura
       repository: mintproject/graphql-engine
       # -- Docker image tag for Hasura
-      tag: 305c0dbeba1878eafe348f21fc300fbfc017d9dc
+      tag: ed3af3609f3e086ad5e6b1eee158f22c0c5e033e
       # -- Image pull policy for Hasura
       pullPolicy: IfNotPresent
     # -- Resource specifications for Hasura
@@ -378,7 +378,7 @@ components:
       # -- Docker image repository for UI
       repository: mintproject/mint-ui-lit
       # -- Docker image tag for UI
-      tag: 246a8771e8c043f8c1840d3c32262d3d6a9a5532
+      tag: 36b15259bcaf01aafdbe6e0d978cca58ae60e702
       # -- Image pull policy for UI
       pullPolicy: IfNotPresent
     # -- Resource specifications for UI
@@ -411,7 +411,7 @@ components:
       # -- Docker image repository for Ensemble Manager
       repository: mintproject/ensemble-manager
       # -- Docker image tag for Ensemble Manager
-      tag: c87f938dd35b582f2e6a83e23ba99e077848cb03
+      tag: ac6ad6115486a11b67221655654a061066e64b45
       # -- Image pull policy for Ensemble Manager
       pullPolicy: IfNotPresent
     # -- Ensemble Manager deployment strategy (Recreate or RollingUpdate)
