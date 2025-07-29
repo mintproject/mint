@@ -411,7 +411,7 @@ components:
       # -- Docker image repository for Ensemble Manager
       repository: mintproject/ensemble-manager
       # -- Docker image tag for Ensemble Manager
-      tag: 57cabdf0ee9d8ab46e6fcdac3b619038f739da25
+      tag: d4e2d9d370077ec1ec12d2d9f3a7abea3e80da7d
       # -- Image pull policy for Ensemble Manager
       pullPolicy: IfNotPresent
     # -- Ensemble Manager deployment strategy (Recreate or RollingUpdate)
