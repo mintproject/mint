@@ -237,7 +237,7 @@ components:
       # -- Docker image repository for Hasura
       repository: mintproject/graphql-engine
       # -- Docker image tag for Hasura
-      tag: b30a80c3a1e94031c85e7d17a0c9b6f14bdfc618
+      tag: 56ebce44a8c15fd9386ae5fc1c183b53db49778c
       # -- Image pull policy for Hasura
       pullPolicy: IfNotPresent
     # -- Resource specifications for Hasura
