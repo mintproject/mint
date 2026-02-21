@@ -1,4 +1,4 @@
-{{- if .Values.components.backups.enabled }}
+{{- if and .Values.components.model_catalog_endpoint.enabled .Values.components.backups.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:

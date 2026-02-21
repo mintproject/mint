@@ -1,4 +1,4 @@
-{{- if .Values.components.model_catalog_endpoint.ingress.enabled -}}
+{{- if and .Values.components.model_catalog_endpoint.enabled .Values.components.model_catalog_endpoint.ingress.enabled -}}
 {{- $fullName := include "mint.prefix"  . -}}
 {{- $svcPort := .Values.service.port -}}
 {{- if and .Values.components.model_catalog_endpoint.ingress.className (not (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion)) }}

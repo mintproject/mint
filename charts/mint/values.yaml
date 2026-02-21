@@ -185,7 +185,7 @@ components:
         helm.sh/resource-policy: keep
   model_catalog_endpoint:
     # -- Enable or disable Model Catalog Endpoint
-    enabled: true
+    enabled: false
     image:
       # -- Docker image repository for Model Catalog Endpoint
       repository: mintproject/model-catalog-endpoint
@@ -237,7 +237,7 @@ components:
       # -- Docker image repository for Hasura
       repository: mintproject/graphql-engine
       # -- Docker image tag for Hasura
-      tag: b579032912a05017823e4ee148b8b98adc93ffc8
+      tag: 46f4c248af68f61b66fbadad3aa439ea1fec2754
       # -- Image pull policy for Hasura
       pullPolicy: IfNotPresent
     # -- Resource specifications for Hasura
@@ -506,7 +506,7 @@ components:
 jobs:
   model_catalog_endpoint:
     # -- Enable or disable Model Catalog API initialization
-    enabled: true
+    enabled: false
     # -- Resource specifications for Model Catalog API initialization
     resources: {}
   hasura:
