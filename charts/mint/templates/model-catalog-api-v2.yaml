@@ -1,0 +1,79 @@
+---
+{{ if .Values.components.model_catalog_api_v2.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog-api-v2
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http-api"
+      port: 80
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-model-catalog-api-v2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog-api-v2
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-model-catalog-api-v2
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-model-catalog-api-v2
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: model-catalog-api-v2
+          {{- with .Values.components.model_catalog_api_v2 }}
+          image: "{{ .image.repository }}:{{ .image.tag }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          env:
+            - name: PORT
+              value: "3000"
+            - name: HASURA_GRAPHQL_URL
+              value: "{{ .environment.hasura_graphql_url }}"
+            - name: LOG_LEVEL
+              value: "{{ .environment.log_level }}"
+          {{- end }}
+            - name: HASURA_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-secrets
+                  key: hasura_admin_secret
+                  optional: true
+{{ end }}

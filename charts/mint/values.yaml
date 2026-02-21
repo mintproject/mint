@@ -371,6 +371,35 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+  model_catalog_api_v2:
+    # -- Enable or disable Model Catalog API v2
+    enabled: false
+    image:
+      # -- Docker image repository for Model Catalog API v2
+      repository: mintproject/model-catalog-api
+      # -- Docker image tag for Model Catalog API v2
+      tag: latest
+      # -- Image pull policy for Model Catalog API v2
+      pullPolicy: IfNotPresent
+    # -- Resource specifications for Model Catalog API v2
+    resources: {}
+    environment:
+      # -- Hasura GraphQL URL for Model Catalog API v2
+      hasura_graphql_url: ""
+      # -- Log level for Model Catalog API v2
+      log_level: info
+    ingress:
+      # -- Enable or disable ingress for Model Catalog API v2
+      enabled: true
+      className: ""
+      annotations:
+        nginx.ingress.kubernetes.io/enable-cors: "true"
+      hosts:
+        - host: api.models.mint.local
+          paths:
+            - path: /v2.0.0
+              pathType: Prefix
+      tls: []
   ui:
     # -- Enable or disable UI
     enabled: true
