@@ -12,47 +12,77 @@ All the documentation for the MINT framework can be found in the [MINT documenta
 
 To test the MINT services on your local machine, we **strongly** recommend using the [microk8s](https://microk8s.io/) Kubernetes distribution. Follow the instructions in the [microk8s documentation](https://microk8s.io/#install-microk8s) to install microk8s on your machine.
 
-### Microk8s installation
+### Microk8s Installation and Setup
 
 Tested on MacOS (arm64) and microk8s 1.28/stable.
 Tested on Ubuntu 22.04 (amd64) and microk8s 1.28/stable.
 
 Install the microk8s using the following command:
 
+
 ```bash
-$ microk8s install --memory 8
-Support for 'multipass' needs to be set up. Would you like to do that now? [y/N]: y
+sudo snap install microk8s --classic --channel=1.35
+```
+
+Give permissions:
+
+```bash
+sudo usermod -a -G microk8s $USER
+mkdir -p ~/.kube
+chmod 0700 ~/.kube
+sudo chown -R $USER ~/.kube
+newgrp microk8s
 ```
 
 Enable required addons:
 
 ```console
-$ microk8s enable dns
-$ microk8s enable dashboard
-$ microk8s enable hostpath-storage
-$ microk8s enable ingress
+microk8s enable dns
+microk8s enable dashboard
+microk8s enable hostpath-storage
+microk8s enable ingress
 ```
+
+### Test Microk8s
 
 To test, list the existing resources. It should be list multiple services, deployments, and pods. Please wait until all the resources are up and running.
 
 ```bash
-$ microk8s kubectl get all --all-namespaces
+microk8s kubectl get all --all-namespaces
 ```
 
 Verify the node status
 
 ```bash
-$ microk8s kubectl get nodes
+microk8s kubectl get nodes
 ```
+
+
+### Install Portainer for MicroK8s (Optional)
+
+Portainer serves as a supervisor of your pods, where you can see and configure them graphically. 
+
+```bash
+microk8s enable community
+microk8s enable portainer
+```
+To see the status:
+
+```bash
+microk8s status --wait-ready
+microk8s kubectl get svc -n portainer
+```
+
+Serves as default on port `30779` with https.
 
 ### MINT services installation
 
 Use the following commands to install the MINT services:
 
 ```bash
-$ microk8s helm repo add mint https://mintproject.github.io/mint
-$ microk8s helm repo update
-$ microk8s helm install testing-mint mint/MINT --namespace mint --create-namespace
+microk8s helm repo add mint https://mintproject.github.io/mint
+microk8s helm repo update
+microk8s helm install testing-mint mint/MINT --namespace mint --create-namespace
 ```
 
 If you using MacOS Silicon, you need to install the `arm64` version of the postgresql database.
@@ -60,9 +90,9 @@ If you using MacOS Silicon, you need to install the `arm64` version of the postg
 **WARNING:** The arm64 image has not been tested and may not work as expected. Please use it at your own risk.
 
 ```
-$ microk8s helm repo add mint https://mintproject.github.io/mint
-$ microk8s helm repo update
-$ microk8s helm install testing-mint mint/mint --namespace mint --create-namespace --set arm_support=true
+microk8s helm repo add mint https://mintproject.github.io/mint
+microk8s helm repo update
+microk8s helm install testing-mint mint/mint --namespace mint --create-namespace --set arm_support=true
 ```
 
 Helm will returns the URL to access the MINT services. You can use the following command to get the URL:
@@ -85,14 +115,14 @@ http://datacatalog.mint.local
 If you are using microk8s on a VM, need to get the IP address of the VM to access the MINT services. You can use the following command to get the IP address of the VM:
 
 ```bash
-$ microk8s kubectl get node -o json | jq '.items[].status.addresses[] | select(.type=="InternalIP") | .address'
+microk8s kubectl get node -o json | jq '.items[].status.addresses[] | select(.type=="InternalIP") | .address'
 10.211.59.16
 ```
 
 Then, edit the `/etc/hosts` file and add the following lines:
 
 ```bash
-$ sudo vim /etc/hosts
+sudo vim /etc/hosts
 ```
 
 Add the following lines (replace the IP address with the IP address of the VM):
@@ -115,9 +145,9 @@ Add the following lines (replace the IP address with the IP address of the VM):
 To remove the MINT services, use the following command:
 
 ```bash
-$ helm uninstall mint -n mint
-$ kubectl delete pvc --all  -n mint
-$ kubectl delete jobs --all -n mint
+helm uninstall mint -n mint
+kubectl delete pvc --all  -n mint
+kubectl delete jobs --all -n mint
 ```
 
 or
