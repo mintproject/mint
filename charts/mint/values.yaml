@@ -25,7 +25,7 @@ components:
       # -- Docker image tag for Cromo
       tag: 3c75586989aedf2573c37f5352f960c294377931
       # -- Image pull policy for Cromo
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     ingress:
       # -- Enable or disable ingress for Cromo
       enabled: true
@@ -49,7 +49,7 @@ components:
       # -- Docker image tag for MIC UI
       tag: a736ac5841d471de4679bec80c13b0fb646ae073
       # -- Image pull policy for MIC UI
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
       environment:
         # -- API URL for MIC UI
         api_url: null
@@ -78,7 +78,7 @@ components:
       # -- Docker image tag for MIC API
       tag: ee71a1a364fc3d384f85243684ad95d37913b049
       # -- Image pull policy for MIC API
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     ingress:
       # -- Enable or disable ingress for MIC API
       enabled: true
@@ -131,14 +131,14 @@ components:
       # -- Docker image tag for Data Catalog
       tag: 9be70359feabe03ed55bfdbf92c20a7e43ab928b
       # -- Image pull policy for Data Catalog
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     arm_image:
       # -- Docker image repository for ARM-based Data Catalog
       repository: mintproject/data-catalog
       # -- Docker image tag for ARM-based Data Catalog
       tag: 8a6af95cae183320d596dc5219f2f76d1f234749
       # -- Image pull policy for ARM-based Data Catalog
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Data Catalog
     resources: {}
     ingress:
@@ -160,14 +160,14 @@ components:
       # -- Docker image tag for Data Catalog database
       tag: 9be70359feabe03ed55bfdbf92c20a7e43ab928b
       # -- Image pull policy for Data Catalog database
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     arm_image:
       # -- Docker image repository for ARM-based Data Catalog database
       repository: mintproject/data-catalog-db
       # -- Docker image tag for ARM-based Data Catalog database
       tag: 8a6af95cae183320d596dc5219f2f76d1f234749
       # -- Image pull policy for ARM-based Data Catalog database
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Data Catalog database
     resources: {}
     persistence:
@@ -192,7 +192,7 @@ components:
       # -- Docker image tag for Model Catalog Endpoint
       tag: 29256555a6fbaefae4729d5cd259564708a4ab04
       # -- Image pull policy for Model Catalog Endpoint
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Model Catalog Endpoint
     resources: {}
     environment:
@@ -326,7 +326,7 @@ components:
       # -- Docker image tag for Model Catalog Explorer
       tag: 0b2f9f0a9124076aeb492add2f123d0757066f6b
       # -- Image pull policy for Model Catalog Explorer
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Model Catalog Explorer
     resources: {}
     ingress:
@@ -379,7 +379,7 @@ components:
       # -- Docker image tag for UI
       tag: 5ec5a06c8bc68634aee3d09f79ac89d228dfd814
       # -- Image pull policy for UI
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for UI
     resources: {}
     config:
@@ -412,7 +412,7 @@ components:
       # -- Docker image tag for Ensemble Manager
       tag: d4e2d9d370077ec1ec12d2d9f3a7abea3e80da7d
       # -- Image pull policy for Ensemble Manager
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Ensemble Manager deployment strategy (Recreate or RollingUpdate)
     strategy:
       # -- Type of deployment strategy
