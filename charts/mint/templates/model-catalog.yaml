@@ -15,11 +15,7 @@ spec:
       {{ if eq .Values.service.type "NodePort" }}
       nodePort: {{ include "helm.model_catalog_api_node_port" . }}
       {{ end }}
-      targetPort: 8080
-      protocol: TCP
-    - name: "redis-endpoint"
-      port: 6379
-      targetPort: 6379
+      targetPort: 3000
       protocol: TCP
   selector:
     app: {{ include "mint.prefix" . }}-model-catalog
@@ -45,12 +41,6 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      initContainers:
-        - name: wait-for-model-catalog-endpoint
-          image: alpine/curl
-          command: ["sh", "-c", "sleep 60; until curl -sk {{ include "mint.prefix" . }}-model-catalog-endpoint:3030/$/modelcatalog/ping; do echo waiting for model-catalog-endpoint; sleep 2; done"]
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
       containers:
         - name: model-catalog
           {{- with .Values.components.model_catalog_api  }}
@@ -58,52 +48,38 @@ spec:
           imagePullPolicy: {{ .image.pullPolicy }}
           resources:
             {{- toYaml .resources | nindent 12 }}
-          command: ["uvicorn", "openapi_server.main:app", "--workers", "8", "--host", "0.0.0.0" , "--port", "8080"]
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 3000
               protocol: TCP
-
           livenessProbe:
             httpGet:
-              path: /v1.8.0/models?username=mint%40isi.edu&page=1&per_page=200
+              path: /health
               port: http
+            initialDelaySeconds: 10
             timeoutSeconds: 30
             periodSeconds: 10
             successThreshold: 1
             failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
           env:
-            - name: CONTEXT_DIR
-              value: "{{ .environment.context_dir }}"
-            - name: QUERIES_DIR
-              value: "{{ .environment.queries_dir }}"
-            - name: REDIS_ADDRESS
-              value: {{ include "mint.prefix" $ }}-model-catalog:6379
+            - name: PORT
+              value: "3000"
+            - name: HASURA_GRAPHQL_URL
+              value: {{ .environment.hasura_graphql_url | default (printf "http://%s-hasura/v1/graphql" (include "mint.prefix" $)) | quote }}
+            - name: LOG_LEVEL
+              value: "{{ .environment.log_level }}"
           {{- end }}
-          {{- with .Values.components.model_catalog_endpoint  }}
-            - name: ENDPOINT
-              value: http://{{ include "mint.prefix" $ }}-model-catalog-endpoint:3030/{{ .environment.dataset }}
-            - name: GRAPH_BASE
-              value: "{{ .environment.graph_base }}"
-            - name: PREFIX
-              value: "{{ .environment.prefix }}"
-          {{- end }}
-            - name: AUTH_CLIENT_ID
-              value: {{ .Values.auth.client_id }}
-            - name: AUTH_SERVER
-              value: {{ .Values.auth.url }}/realms/{{ .Values.auth.realm }}/protocol/openid-connect/token
-            - name: ENDPOINT_PASSWORD
+            - name: HASURA_ADMIN_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "mint.prefix" . }}-model-catalog-endpoint-secrets
-                  key: password
-        - name: model-catalog-redis
-          image: redis:6.0.16-alpine
-          imagePullPolicy: IfNotPresent
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
-          ports:
-            - name: redis
-              containerPort: 6379
-              protocol: TCP
+                  name: {{ include "mint.prefix" . }}-secrets
+                  key: hasura_admin_secret
+                  optional: true
 {{ end }}

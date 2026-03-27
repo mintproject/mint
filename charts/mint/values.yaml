@@ -237,9 +237,9 @@ components:
       # -- Docker image repository for Hasura
       repository: ghcr.io/mintproject/graphql-engine
       # -- Docker image tag for Hasura
-      tag: f6d4277a83adcd5295bd899fde5988ca5c335aae
+      tag: latest
       # -- Image pull policy for Hasura
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Hasura
     resources: {}
     environment:
@@ -343,22 +343,21 @@ components:
   model_catalog_api:
     # -- Enable or disable Model Catalog API
     enabled: true
-    # -- API version for Model Catalog API
-    api_version: v1.8.0
+    api_version: v2.0.0
     image:
       # -- Docker image repository for Model Catalog API
-      repository: mintproject/model-catalog-fastapi
+      repository: ghcr.io/mintproject/model-catalog-api
       # -- Docker image tag for Model Catalog API
-      tag: 7dd88dc5bf1fe6a6d4703ea0a077afee45cb2561
+      tag: latest
       # -- Image pull policy for Model Catalog API
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Model Catalog API
     resources: {}
     environment:
-      # -- Context directory for Model Catalog API
-      context_dir: contexts/
-      # -- Queries directory for Model Catalog API
-      queries_dir: queries/
+      # -- Hasura GraphQL URL for Model Catalog API. Defaults to internal service DNS (http://<prefix>-hasura/v1/graphql)
+      hasura_graphql_url: ""
+      # -- Log level for Model Catalog API
+      log_level: info
     ingress:
       # -- Enable or disable ingress for Model Catalog API
       enabled: true
@@ -370,35 +369,6 @@ components:
           paths:
             - path: /
               pathType: ImplementationSpecific
-      tls: []
-  model_catalog_api_v2:
-    # -- Enable or disable Model Catalog API v2
-    enabled: false
-    image:
-      # -- Docker image repository for Model Catalog API v2
-      repository: mintproject/model-catalog-api
-      # -- Docker image tag for Model Catalog API v2
-      tag: latest
-      # -- Image pull policy for Model Catalog API v2
-      pullPolicy: IfNotPresent
-    # -- Resource specifications for Model Catalog API v2
-    resources: {}
-    environment:
-      # -- Hasura GraphQL URL for Model Catalog API v2
-      hasura_graphql_url: ""
-      # -- Log level for Model Catalog API v2
-      log_level: info
-    ingress:
-      # -- Enable or disable ingress for Model Catalog API v2
-      enabled: true
-      className: ""
-      annotations:
-        nginx.ingress.kubernetes.io/enable-cors: "true"
-      hosts:
-        - host: api.models.mint.local
-          paths:
-            - path: /v2.0.0
-              pathType: Prefix
       tls: []
   ui:
     # -- Enable or disable UI
