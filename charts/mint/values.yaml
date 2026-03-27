@@ -252,7 +252,7 @@ components:
     # -- Authentication configuration for Hasura
     auth:
       # -- Authentication type (jwt or webhook)
-      type: jwt
+      type: webhook
       jwt:
         # -- JWT claims configuration
         claims:
@@ -271,9 +271,9 @@ components:
           resources: {}
         config:
           # -- JWKS URI for Tapis authentication
-          tapisJwksUri: "https://tacc.tapis.io/v3/tenants/tacc"
+          tapisJwksUri: "https://portals.tapis.io/v3/tenants/portals"
           # -- Token issuer for Tapis authentication
-          tapisTokenIssuer: "https://tacc.tapis.io/v3/tokens"
+          tapisTokenIssuer: "https://portals.tapis.io/v3/tokens"
     ingress:
       # -- Enable or disable ingress for Hasura
       enabled: true
