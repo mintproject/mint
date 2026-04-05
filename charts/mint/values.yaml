@@ -377,7 +377,7 @@ components:
       # -- Docker image repository for UI
       repository: mintproject/mint-ui-lit
       # -- Docker image tag for UI
-      tag: 5ec5a06c8bc68634aee3d09f79ac89d228dfd814
+      tag: latest
       # -- Image pull policy for UI
       pullPolicy: Always
     # -- Resource specifications for UI
@@ -410,7 +410,7 @@ components:
       # -- Docker image repository for Ensemble Manager
       repository: mintproject/ensemble-manager
       # -- Docker image tag for Ensemble Manager
-      tag: d4e2d9d370077ec1ec12d2d9f3a7abea3e80da7d
+      tag: 8df9ac5ff7063a4a11d00a72d86f591bde035ca6
       # -- Image pull policy for Ensemble Manager
       pullPolicy: Always
     # -- Ensemble Manager deployment strategy (Recreate or RollingUpdate)
