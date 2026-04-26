@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 8.0.1](https://img.shields.io/badge/Version-8.0.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 9.0.0-beta.1](https://img.shields.io/badge/Version-9.0.0--beta.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -32,7 +32,7 @@ A Helm chart for MINT
 | autoscaling.targetCPUUtilizationPercentage | int | `80` |  |
 | components.backups.enabled | bool | `false` | Enable or disable backups |
 | components.cromo.enabled | bool | `false` | Enable or disable Cromo |
-| components.cromo.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Cromo |
+| components.cromo.image.pullPolicy | string | `"Always"` | Image pull policy for Cromo |
 | components.cromo.image.repository | string | `"mintproject/cromo"` | Docker image repository for Cromo |
 | components.cromo.image.tag | string | `"3c75586989aedf2573c37f5352f960c294377931"` | Docker image tag for Cromo |
 | components.cromo.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
@@ -43,20 +43,20 @@ A Helm chart for MINT
 | components.cromo.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | components.cromo.ingress.tls | list | `[]` |  |
 | components.cromo.resources | object | `{}` | Resource specifications for Cromo |
-| components.data_catalog | object | `{"arm_image":{"pullPolicy":"IfNotPresent","repository":"mintproject/data-catalog","tag":"8a6af95cae183320d596dc5219f2f76d1f234749"},"enabled":true,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/data-catalog","tag":"9be70359feabe03ed55bfdbf92c20a7e43ab928b"},"ingress":{"annotations":{"nginx.ingress.kubernetes.io/enable-cors":"true"},"className":"","enabled":true,"hosts":[{"host":"datacatalog.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | Data Catalog component configuration |
-| components.data_catalog.arm_image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for ARM-based Data Catalog |
+| components.data_catalog | object | `{"arm_image":{"pullPolicy":"Always","repository":"mintproject/data-catalog","tag":"8a6af95cae183320d596dc5219f2f76d1f234749"},"enabled":false,"image":{"pullPolicy":"Always","repository":"mintproject/data-catalog","tag":"9be70359feabe03ed55bfdbf92c20a7e43ab928b"},"ingress":{"annotations":{"nginx.ingress.kubernetes.io/enable-cors":"true"},"className":"","enabled":true,"hosts":[{"host":"datacatalog.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | Data Catalog component configuration |
+| components.data_catalog.arm_image.pullPolicy | string | `"Always"` | Image pull policy for ARM-based Data Catalog |
 | components.data_catalog.arm_image.repository | string | `"mintproject/data-catalog"` | Docker image repository for ARM-based Data Catalog |
 | components.data_catalog.arm_image.tag | string | `"8a6af95cae183320d596dc5219f2f76d1f234749"` | Docker image tag for ARM-based Data Catalog |
-| components.data_catalog.enabled | bool | `true` | Enable or disable Data Catalog |
-| components.data_catalog.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Data Catalog |
+| components.data_catalog.enabled | bool | `false` | Enable or disable Data Catalog |
+| components.data_catalog.image.pullPolicy | string | `"Always"` | Image pull policy for Data Catalog |
 | components.data_catalog.image.repository | string | `"mintproject/data-catalog"` | Docker image repository for Data Catalog |
 | components.data_catalog.image.tag | string | `"9be70359feabe03ed55bfdbf92c20a7e43ab928b"` | Docker image tag for Data Catalog |
 | components.data_catalog.ingress.enabled | bool | `true` | Enable or disable ingress for Data Catalog |
 | components.data_catalog.resources | object | `{}` | Resource specifications for Data Catalog |
-| components.data_catalog_db.arm_image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for ARM-based Data Catalog database |
+| components.data_catalog_db.arm_image.pullPolicy | string | `"Always"` | Image pull policy for ARM-based Data Catalog database |
 | components.data_catalog_db.arm_image.repository | string | `"mintproject/data-catalog-db"` | Docker image repository for ARM-based Data Catalog database |
 | components.data_catalog_db.arm_image.tag | string | `"8a6af95cae183320d596dc5219f2f76d1f234749"` | Docker image tag for ARM-based Data Catalog database |
-| components.data_catalog_db.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Data Catalog database |
+| components.data_catalog_db.image.pullPolicy | string | `"Always"` | Image pull policy for Data Catalog database |
 | components.data_catalog_db.image.repository | string | `"mintproject/data-catalog-db"` | Docker image repository for Data Catalog database |
 | components.data_catalog_db.image.tag | string | `"9be70359feabe03ed55bfdbf92c20a7e43ab928b"` | Docker image tag for Data Catalog database |
 | components.data_catalog_db.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
@@ -93,10 +93,10 @@ A Helm chart for MINT
 | components.ensemble_manager.config.graphql.use_secret | bool | `true` |  |
 | components.ensemble_manager.enabled | bool | `true` | Enable or disable Ensemble Manager |
 | components.ensemble_manager.environment.data_dir | string | `"/var/mint"` |  |
-| components.ensemble_manager.image | object | `{"pullPolicy":"IfNotPresent","repository":"mintproject/ensemble-manager","tag":"8.0.1"}` | Docker image repository for Ensemble Manager |
-| components.ensemble_manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Ensemble Manager |
+| components.ensemble_manager.image | object | `{"pullPolicy":"Always","repository":"mintproject/ensemble-manager","tag":"latest"}` | Docker image repository for Ensemble Manager |
+| components.ensemble_manager.image.pullPolicy | string | `"Always"` | Image pull policy for Ensemble Manager |
 | components.ensemble_manager.image.repository | string | `"mintproject/ensemble-manager"` | Docker image repository for Ensemble Manager |
-| components.ensemble_manager.image.tag | string | `"8.0.1"` | Docker image tag for Ensemble Manager |
+| components.ensemble_manager.image.tag | string | `"latest"` | Docker image tag for Ensemble Manager |
 | components.ensemble_manager.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.ensemble_manager.ingress.className | string | `""` |  |
 | components.ensemble_manager.ingress.enabled | bool | `true` |  |
@@ -117,11 +117,11 @@ A Helm chart for MINT
 | components.ensemble_manager.serviceAccountName | string | `"default"` | Service account name for Ensemble Manager, used to run jobs |
 | components.ensemble_manager.strategy | object | `{"type":"Recreate"}` | Ensemble Manager deployment strategy (Recreate or RollingUpdate) |
 | components.ensemble_manager.strategy.type | string | `"Recreate"` | Type of deployment strategy |
-| components.hasura.auth | object | `{"jwt":{"claims":{"namespace":"https://hasura.io/jwt/claims"}},"type":"jwt","webhook":{"config":{"tapisJwksUri":"https://tacc.tapis.io/v3/tenants/tacc","tapisTokenIssuer":"https://tacc.tapis.io/v3/tokens"},"service":{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"1.0.0"},"resources":{}}}}` | Authentication configuration for Hasura |
+| components.hasura.auth | object | `{"jwt":{"claims":{"namespace":"https://hasura.io/jwt/claims"}},"type":"webhook","webhook":{"config":{"tapisJwksUri":"https://portals.tapis.io/v3/tenants/portals","tapisTokenIssuer":"https://portals.tapis.io/v3/tokens"},"service":{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"1.0.0"},"resources":{}}}}` | Authentication configuration for Hasura |
 | components.hasura.auth.jwt.claims | object | `{"namespace":"https://hasura.io/jwt/claims"}` | JWT claims configuration |
-| components.hasura.auth.type | string | `"jwt"` | Authentication type (jwt or webhook) |
-| components.hasura.auth.webhook.config.tapisJwksUri | string | `"https://tacc.tapis.io/v3/tenants/tacc"` | JWKS URI for Tapis authentication |
-| components.hasura.auth.webhook.config.tapisTokenIssuer | string | `"https://tacc.tapis.io/v3/tokens"` | Token issuer for Tapis authentication |
+| components.hasura.auth.type | string | `"webhook"` | Authentication type (jwt or webhook) |
+| components.hasura.auth.webhook.config.tapisJwksUri | string | `"https://portals.tapis.io/v3/tenants/portals"` | JWKS URI for Tapis authentication |
+| components.hasura.auth.webhook.config.tapisTokenIssuer | string | `"https://portals.tapis.io/v3/tokens"` | Token issuer for Tapis authentication |
 | components.hasura.auth.webhook.service | object | `{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"1.0.0"},"resources":{}}` | Webhook service configuration |
 | components.hasura.auth.webhook.service.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for auth webhook |
 | components.hasura.auth.webhook.service.image.repository | string | `"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook"` | Docker image repository for auth webhook |
@@ -131,9 +131,9 @@ A Helm chart for MINT
 | components.hasura.environment.enable_console | bool | `true` | Enable or disable Hasura console |
 | components.hasura.environment.enable_dev_mode | bool | `false` | Enable or disable Hasura dev mode |
 | components.hasura.environment.unauthorized_role | string | `"anonymous"` | Unauthorized role for Hasura |
-| components.hasura.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Hasura |
-| components.hasura.image.repository | string | `"mintproject/graphql-engine"` | Docker image repository for Hasura |
-| components.hasura.image.tag | string | `"305c0dbeba1878eafe348f21fc300fbfc017d9dc"` | Docker image tag for Hasura |
+| components.hasura.image.pullPolicy | string | `"Always"` | Image pull policy for Hasura |
+| components.hasura.image.repository | string | `"ghcr.io/mintproject/graphql-engine"` | Docker image repository for Hasura |
+| components.hasura.image.tag | string | `"latest"` | Docker image tag for Hasura |
 | components.hasura.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.hasura.ingress.className | string | `nil` |  |
 | components.hasura.ingress.enabled | bool | `true` | Enable or disable ingress for Hasura |
@@ -158,9 +158,9 @@ A Helm chart for MINT
 | components.hasura_db.persistence.storageClass | string | `""` |  |
 | components.hasura_db.persistence.subPath | string | `""` | Subpath for Hasura database |
 | components.hasura_db.resources | object | `{}` | Resource specifications for Hasura database |
-| components.mic_api | object | `{"enabled":false,"image":{"pullPolicy":"IfNotPresent","repository":"mintproject/mic-api","tag":"ee71a1a364fc3d384f85243684ad95d37913b049"},"ingress":{"annotations":{"nginx.ingress.kubernetes.io/enable-cors":"true"},"className":"","enabled":true,"hosts":[{"host":"api.mic.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | MIC API component configuration |
+| components.mic_api | object | `{"enabled":false,"image":{"pullPolicy":"Always","repository":"mintproject/mic-api","tag":"ee71a1a364fc3d384f85243684ad95d37913b049"},"ingress":{"annotations":{"nginx.ingress.kubernetes.io/enable-cors":"true"},"className":"","enabled":true,"hosts":[{"host":"api.mic.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | MIC API component configuration |
 | components.mic_api.enabled | bool | `false` | Enable or disable MIC API |
-| components.mic_api.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for MIC API |
+| components.mic_api.image.pullPolicy | string | `"Always"` | Image pull policy for MIC API |
 | components.mic_api.image.repository | string | `"mintproject/mic-api"` | Docker image repository for MIC API |
 | components.mic_api.image.tag | string | `"ee71a1a364fc3d384f85243684ad95d37913b049"` | Docker image tag for MIC API |
 | components.mic_api.ingress.enabled | bool | `true` | Enable or disable ingress for MIC API |
@@ -181,7 +181,7 @@ A Helm chart for MINT
 | components.mic_ui.enabled | bool | `false` | Enable or disable MIC UI |
 | components.mic_ui.image.environment.airflow_url | string | `"https://airflow.mint.isi.edu/api/v1"` | Airflow URL for MIC UI |
 | components.mic_ui.image.environment.api_url | string | `nil` | API URL for MIC UI |
-| components.mic_ui.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for MIC UI |
+| components.mic_ui.image.pullPolicy | string | `"Always"` | Image pull policy for MIC UI |
 | components.mic_ui.image.repository | string | `"mintproject/mic-web"` | Docker image repository for MIC UI |
 | components.mic_ui.image.tag | string | `"a736ac5841d471de4679bec80c13b0fb646ae073"` | Docker image tag for MIC UI |
 | components.mic_ui.ingress.annotations | object | `{}` |  |
@@ -192,13 +192,13 @@ A Helm chart for MINT
 | components.mic_ui.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | components.mic_ui.ingress.tls | list | `[]` |  |
 | components.mic_ui.resources | object | `{}` | Resource specifications for MIC UI |
-| components.model_catalog_api.api_version | string | `"v1.8.0"` | API version for Model Catalog API |
+| components.model_catalog_api.api_version | string | `"v2.0.0"` |  |
 | components.model_catalog_api.enabled | bool | `true` | Enable or disable Model Catalog API |
-| components.model_catalog_api.environment.context_dir | string | `"contexts/"` | Context directory for Model Catalog API |
-| components.model_catalog_api.environment.queries_dir | string | `"queries/"` | Queries directory for Model Catalog API |
-| components.model_catalog_api.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Model Catalog API |
-| components.model_catalog_api.image.repository | string | `"mintproject/model-catalog-fastapi"` | Docker image repository for Model Catalog API |
-| components.model_catalog_api.image.tag | string | `"7dd88dc5bf1fe6a6d4703ea0a077afee45cb2561"` | Docker image tag for Model Catalog API |
+| components.model_catalog_api.environment.hasura_graphql_url | string | `""` | Hasura GraphQL URL for Model Catalog API. Defaults to internal service DNS (http://<prefix>-hasura/v1/graphql) |
+| components.model_catalog_api.environment.log_level | string | `"info"` | Log level for Model Catalog API |
+| components.model_catalog_api.image.pullPolicy | string | `"Always"` | Image pull policy for Model Catalog API |
+| components.model_catalog_api.image.repository | string | `"ghcr.io/mintproject/model-catalog-api"` | Docker image repository for Model Catalog API |
+| components.model_catalog_api.image.tag | string | `"latest"` | Docker image tag for Model Catalog API |
 | components.model_catalog_api.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.model_catalog_api.ingress.className | string | `""` |  |
 | components.model_catalog_api.ingress.enabled | bool | `true` | Enable or disable ingress for Model Catalog API |
@@ -207,13 +207,13 @@ A Helm chart for MINT
 | components.model_catalog_api.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | components.model_catalog_api.ingress.tls | list | `[]` |  |
 | components.model_catalog_api.resources | object | `{}` | Resource specifications for Model Catalog API |
-| components.model_catalog_endpoint.enabled | bool | `true` | Enable or disable Model Catalog Endpoint |
+| components.model_catalog_endpoint.enabled | bool | `false` | Enable or disable Model Catalog Endpoint |
 | components.model_catalog_endpoint.environment.backup_file | string | `"/fuseki-base/seeds/model-catalog.trig"` | Backup file path for Model Catalog Endpoint |
 | components.model_catalog_endpoint.environment.dataset | string | `"modelcatalog"` | Dataset name for Model Catalog Endpoint Apache Jena Fuseki |
 | components.model_catalog_endpoint.environment.graph_base | string | `"http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/"` | Graph base URL for Model Catalog Endpoint. The triples are stored in this graph |
 | components.model_catalog_endpoint.environment.prefix | string | `"https://w3id.org/okn/i/mint/"` | Prefix URL for Model Catalog Endpoint |
 | components.model_catalog_endpoint.environment.seeds_url | string | `"https://raw.githubusercontent.com/mintproject/model-catalog-endpoint/main/data/model-catalog.trig"` | Seeds URL for Model Catalog Endpoint |
-| components.model_catalog_endpoint.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Model Catalog Endpoint |
+| components.model_catalog_endpoint.image.pullPolicy | string | `"Always"` | Image pull policy for Model Catalog Endpoint |
 | components.model_catalog_endpoint.image.repository | string | `"mintproject/model-catalog-endpoint"` | Docker image repository for Model Catalog Endpoint |
 | components.model_catalog_endpoint.image.tag | string | `"29256555a6fbaefae4729d5cd259564708a4ab04"` | Docker image tag for Model Catalog Endpoint |
 | components.model_catalog_endpoint.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
@@ -233,7 +233,7 @@ A Helm chart for MINT
 | components.model_catalog_endpoint.persistence.storageClass | string | `""` |  |
 | components.model_catalog_endpoint.resources | object | `{}` | Resource specifications for Model Catalog Endpoint |
 | components.model_catalog_explorer.enabled | bool | `true` | Enable or disable Model Catalog Explorer |
-| components.model_catalog_explorer.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Model Catalog Explorer |
+| components.model_catalog_explorer.image.pullPolicy | string | `"Always"` | Image pull policy for Model Catalog Explorer |
 | components.model_catalog_explorer.image.repository | string | `"mintproject/model-catalog-explorer"` | Docker image repository for Model Catalog Explorer |
 | components.model_catalog_explorer.image.tag | string | `"0b2f9f0a9124076aeb492add2f123d0757066f6b"` | Docker image tag for Model Catalog Explorer |
 | components.model_catalog_explorer.ingress.annotations | object | `{}` |  |
@@ -251,9 +251,9 @@ A Helm chart for MINT
 | components.ui.config.ingestion_api | string | `""` |  |
 | components.ui.config.visualization_url | string | `""` |  |
 | components.ui.enabled | bool | `true` | Enable or disable UI |
-| components.ui.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for UI |
+| components.ui.image.pullPolicy | string | `"Always"` | Image pull policy for UI |
 | components.ui.image.repository | string | `"mintproject/mint-ui-lit"` | Docker image repository for UI |
-| components.ui.image.tag | string | `"c52818e6b0d28e556c8696667cf4a5e3771d040d"` | Docker image tag for UI |
+| components.ui.image.tag | string | `"latest"` | Docker image tag for UI |
 | components.ui.ingress.annotations | object | `{}` |  |
 | components.ui.ingress.className | string | `""` |  |
 | components.ui.ingress.enabled | bool | `true` | Enable or disable ingress for UI |
@@ -264,6 +264,7 @@ A Helm chart for MINT
 | components.ui.resources | object | `{}` | Resource specifications for UI |
 | default_user | string | `"mint@isi.edu"` | Default user email |
 | external_services.ckan.enabled | bool | `false` | Enable or disable CKAN service |
+| external_services.ckan.extra.default_dataset_id | string | `""` | Default dataset ID for CKAN service. Used by Ensemble Manager to upload data when a task has no dataset_id |
 | external_services.ckan.extra.owner_organization_id | string | `""` | Owner organization ID for CKAN service |
 | external_services.ckan.extra.owner_provenance_id | string | `""` | Owner provenance ID for CKAN service |
 | external_services.ckan.type | string | `"CKAN"` | CKAN service type |
@@ -283,7 +284,7 @@ A Helm chart for MINT
 | imagePullSecrets | list | `[]` |  |
 | jobs.hasura.enabled | bool | `true` | Enable or disable MINT Database initialization |
 | jobs.hasura.resources | object | `{}` | Resource specifications for MINT Database initialization |
-| jobs.model_catalog_endpoint.enabled | bool | `true` | Enable or disable Model Catalog API initialization |
+| jobs.model_catalog_endpoint.enabled | bool | `false` | Enable or disable Model Catalog API initialization |
 | jobs.model_catalog_endpoint.resources | object | `{}` | Resource specifications for Model Catalog API initialization |
 | nameOverride | string | `""` |  |
 | nodeSelector | object | `{}` |  |

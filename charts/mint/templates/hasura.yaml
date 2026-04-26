@@ -254,10 +254,8 @@ spec:
               path: /
               port: http
           readinessProbe:
-            exec:
-              command:
-              - pg_isready
-              - -h
-              - {{ include "mint.prefix" . }}-hasura-db
-              - -U
-              - {{ .Values.secrets.database.hasura.username | default "mint" }}
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10

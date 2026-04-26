@@ -8,10 +8,12 @@ data:
    config.json: |
       {
          "data_catalog_api": "http://{{ include "mint.prefix" . }}-data-catalog",
-         "model_catalog_api": "http://{{ include "mint.prefix" . }}-model-catalog/{{ .Values.components.model_catalog_api.api_version }}",
          {{- with .Values.components.ensemble_manager }}
             {{- if  .enabled }}
                "ensemble_manager_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
+               {{- with .config.tapis_webhook_base_url }}
+               "tapis_webhook_base_url": {{ . | quote }},
+               {{- end }}
             {{- end }}
          {{- end }}
          "graphql": {

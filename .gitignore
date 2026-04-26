@@ -1,6 +1,7 @@
 .venv
 kubeconfig
 uscd.yaml
+dynamo-values.yaml
 # Created by https://www.toptal.com/developers/gitignore/api/osx
 # Edit at https://www.toptal.com/developers/gitignore?templates=osx
 

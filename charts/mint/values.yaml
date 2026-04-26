@@ -25,7 +25,7 @@ components:
       # -- Docker image tag for Cromo
       tag: 3c75586989aedf2573c37f5352f960c294377931
       # -- Image pull policy for Cromo
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     ingress:
       # -- Enable or disable ingress for Cromo
       enabled: true
@@ -49,7 +49,7 @@ components:
       # -- Docker image tag for MIC UI
       tag: a736ac5841d471de4679bec80c13b0fb646ae073
       # -- Image pull policy for MIC UI
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
       environment:
         # -- API URL for MIC UI
         api_url: null
@@ -78,7 +78,7 @@ components:
       # -- Docker image tag for MIC API
       tag: ee71a1a364fc3d384f85243684ad95d37913b049
       # -- Image pull policy for MIC API
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     ingress:
       # -- Enable or disable ingress for MIC API
       enabled: true
@@ -124,21 +124,21 @@ components:
   # -- Data Catalog component configuration
   data_catalog:
     # -- Enable or disable Data Catalog
-    enabled: true
+    enabled: false
     image:
       # -- Docker image repository for Data Catalog
       repository: mintproject/data-catalog
       # -- Docker image tag for Data Catalog
       tag: 9be70359feabe03ed55bfdbf92c20a7e43ab928b
       # -- Image pull policy for Data Catalog
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     arm_image:
       # -- Docker image repository for ARM-based Data Catalog
       repository: mintproject/data-catalog
       # -- Docker image tag for ARM-based Data Catalog
       tag: 8a6af95cae183320d596dc5219f2f76d1f234749
       # -- Image pull policy for ARM-based Data Catalog
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Data Catalog
     resources: {}
     ingress:
@@ -160,14 +160,14 @@ components:
       # -- Docker image tag for Data Catalog database
       tag: 9be70359feabe03ed55bfdbf92c20a7e43ab928b
       # -- Image pull policy for Data Catalog database
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     arm_image:
       # -- Docker image repository for ARM-based Data Catalog database
       repository: mintproject/data-catalog-db
       # -- Docker image tag for ARM-based Data Catalog database
       tag: 8a6af95cae183320d596dc5219f2f76d1f234749
       # -- Image pull policy for ARM-based Data Catalog database
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Data Catalog database
     resources: {}
     persistence:
@@ -185,14 +185,14 @@ components:
         helm.sh/resource-policy: keep
   model_catalog_endpoint:
     # -- Enable or disable Model Catalog Endpoint
-    enabled: true
+    enabled: false
     image:
       # -- Docker image repository for Model Catalog Endpoint
       repository: mintproject/model-catalog-endpoint
       # -- Docker image tag for Model Catalog Endpoint
       tag: 29256555a6fbaefae4729d5cd259564708a4ab04
       # -- Image pull policy for Model Catalog Endpoint
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Model Catalog Endpoint
     resources: {}
     environment:
@@ -235,11 +235,11 @@ components:
     enabled: true
     image:
       # -- Docker image repository for Hasura
-      repository: mintproject/graphql-engine
+      repository: ghcr.io/mintproject/graphql-engine
       # -- Docker image tag for Hasura
-      tag: 56ebce44a8c15fd9386ae5fc1c183b53db49778c
+      tag: latest
       # -- Image pull policy for Hasura
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Hasura
     resources: {}
     environment:
@@ -252,7 +252,7 @@ components:
     # -- Authentication configuration for Hasura
     auth:
       # -- Authentication type (jwt or webhook)
-      type: jwt
+      type: webhook
       jwt:
         # -- JWT claims configuration
         claims:
@@ -271,9 +271,9 @@ components:
           resources: {}
         config:
           # -- JWKS URI for Tapis authentication
-          tapisJwksUri: "https://tacc.tapis.io/v3/tenants/tacc"
+          tapisJwksUri: "https://portals.tapis.io/v3/tenants/portals"
           # -- Token issuer for Tapis authentication
-          tapisTokenIssuer: "https://tacc.tapis.io/v3/tokens"
+          tapisTokenIssuer: "https://portals.tapis.io/v3/tokens"
     ingress:
       # -- Enable or disable ingress for Hasura
       enabled: true
@@ -326,7 +326,7 @@ components:
       # -- Docker image tag for Model Catalog Explorer
       tag: 0b2f9f0a9124076aeb492add2f123d0757066f6b
       # -- Image pull policy for Model Catalog Explorer
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Model Catalog Explorer
     resources: {}
     ingress:
@@ -343,22 +343,21 @@ components:
   model_catalog_api:
     # -- Enable or disable Model Catalog API
     enabled: true
-    # -- API version for Model Catalog API
-    api_version: v1.8.0
+    api_version: v2.0.0
     image:
       # -- Docker image repository for Model Catalog API
-      repository: mintproject/model-catalog-fastapi
+      repository: ghcr.io/mintproject/model-catalog-api
       # -- Docker image tag for Model Catalog API
-      tag: 7dd88dc5bf1fe6a6d4703ea0a077afee45cb2561
+      tag: latest
       # -- Image pull policy for Model Catalog API
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for Model Catalog API
     resources: {}
     environment:
-      # -- Context directory for Model Catalog API
-      context_dir: contexts/
-      # -- Queries directory for Model Catalog API
-      queries_dir: queries/
+      # -- Hasura GraphQL URL for Model Catalog API. Defaults to internal service DNS (http://<prefix>-hasura/v1/graphql)
+      hasura_graphql_url: ""
+      # -- Log level for Model Catalog API
+      log_level: info
     ingress:
       # -- Enable or disable ingress for Model Catalog API
       enabled: true
@@ -378,9 +377,9 @@ components:
       # -- Docker image repository for UI
       repository: mintproject/mint-ui-lit
       # -- Docker image tag for UI
-      tag: 5ec5a06c8bc68634aee3d09f79ac89d228dfd814
+      tag: latest
       # -- Image pull policy for UI
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Resource specifications for UI
     resources: {}
     config:
@@ -411,9 +410,9 @@ components:
       # -- Docker image repository for Ensemble Manager
       repository: mintproject/ensemble-manager
       # -- Docker image tag for Ensemble Manager
-      tag: d4e2d9d370077ec1ec12d2d9f3a7abea3e80da7d
+      tag: latest
       # -- Image pull policy for Ensemble Manager
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- Ensemble Manager deployment strategy (Recreate or RollingUpdate)
     strategy:
       # -- Type of deployment strategy
@@ -477,7 +476,7 @@ components:
 jobs:
   model_catalog_endpoint:
     # -- Enable or disable Model Catalog API initialization
-    enabled: true
+    enabled: false
     # -- Resource specifications for Model Catalog API initialization
     resources: {}
   hasura:
