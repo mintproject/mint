@@ -124,7 +124,7 @@ components:
   # -- Data Catalog component configuration
   data_catalog:
     # -- Enable or disable Data Catalog
-    enabled: true
+    enabled: false
     image:
       # -- Docker image repository for Data Catalog
       repository: mintproject/data-catalog
