@@ -11,6 +11,9 @@ data:
          {{- with .Values.components.ensemble_manager }}
             {{- if  .enabled }}
                "ensemble_manager_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
+               {{- with .config.tapis_webhook_base_url }}
+               "tapis_webhook_base_url": {{ . | quote }},
+               {{- end }}
             {{- end }}
          {{- end }}
          "graphql": {
