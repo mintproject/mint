@@ -79,7 +79,6 @@ spec:
             - name: HASURA_ADMIN_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "mint.prefix" . }}-secrets
-                  key: hasura_admin_secret
-                  optional: true
+                  name: {{ include "mint.prefix" . }}-hasura-secrets
+                  key: admin_secret
 {{ end }}
