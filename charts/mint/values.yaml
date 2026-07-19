@@ -400,6 +400,58 @@ components:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+  ui_react:
+    # -- Enable or disable the React UI. Deployed alongside the legacy `ui`
+    # component rather than replacing it; the cutover is a separate decision.
+    # Disabled by default because enabling it requires an OAuth2 client
+    # registered with the identity provider, and rendering fails without one.
+    enabled: false
+    image:
+      # -- Docker image repository for the React UI
+      repository: mintproject/mint-ui-react
+      # -- Docker image tag for the React UI.
+      # Unlike the other components, this application lives in the monorepo
+      # rather than in a submodule, so this tag is a *monorepo* commit SHA.
+      # The image-tag bump automation only resolves submodule SHAs and will
+      # not update this component -- set it by hand.
+      tag: 55a3472a975b11af51fcfedf3f6f9b66db024bf0
+      # -- Image pull policy for the React UI
+      pullPolicy: Always
+    # -- Resource specifications for the React UI
+    resources: {}
+    config:
+      # -- OAuth2 client ID for the React UI. Required when this component is
+      # enabled, and must be a client distinct from the legacy UI's: the
+      # identity provider allows one callback URL per client, so sharing one
+      # would break login on the existing UI.
+      client_id: ""
+      # -- Origin to use for the OAuth2 callback. Leave empty to use the
+      # deployment's own origin, which is correct for a real cluster host.
+      auth_callback_origin: ""
+      # Explicit endpoint overrides. Each is derived from the corresponding
+      # component's own ingress when left empty; setting one takes precedence
+      # and is used verbatim, including any path.
+      # -- Overrides the Hasura GraphQL endpoint URL
+      hasura_endpoint: ""
+      # -- Overrides the data catalog API URL
+      data_catalog_api: ""
+      # -- Overrides the model catalog API URL
+      model_catalog_api: ""
+      # -- Overrides the ensemble manager API URL
+      ensemble_manager_api: ""
+    ingress:
+      # -- Enable or disable ingress for the React UI
+      enabled: true
+      className: ""
+      annotations: {}
+      hosts:
+        # Its own host rather than a path prefix on the legacy UI's: the
+        # application is built to be served from the root.
+        - host: next.mint.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
   ensemble_manager:
     # -- Enable or disable Ensemble Manager
     enabled: true

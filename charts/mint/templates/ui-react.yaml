@@ -1,0 +1,76 @@
+{{- if .Values.components.ui_react.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-ui-react
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: {{ .Values.service.port }}
+      targetPort: http
+      {{- if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.ui_react_node_port" . }}
+      {{- end }}
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-ui-react
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-ui-react
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-ui-react
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-ui-react
+      annotations:
+        # The entrypoint reads this configuration once, at startup, so a
+        # ConfigMap change must roll the pods to take effect.
+        checksum/config: {{ include (print $.Template.BasePath "/ui-react-config.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: ui-react
+          {{- with .Values.components.ui_react }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- end }}
+          # The entrypoint generates the runtime config script from these at
+          # startup. Note that this writes into the web root, so a read-only
+          # root filesystem would break startup.
+          envFrom:
+            - configMapRef:
+                name: {{ include "mint.prefix" . }}-ui-react-config-map
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+{{- end }}

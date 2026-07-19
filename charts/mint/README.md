@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 9.0.0-beta.2](https://img.shields.io/badge/Version-9.0.0--beta.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 9.0.0-beta.3](https://img.shields.io/badge/Version-9.0.0--beta.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -262,6 +262,24 @@ A Helm chart for MINT
 | components.ui.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | components.ui.ingress.tls | list | `[]` |  |
 | components.ui.resources | object | `{}` | Resource specifications for UI |
+| components.ui_react.config.auth_callback_origin | string | `""` | Origin to use for the OAuth2 callback. Leave empty to use the deployment's own origin, which is correct for a real cluster host. |
+| components.ui_react.config.client_id | string | `""` | OAuth2 client ID for the React UI. Required when this component is enabled, and must be a client distinct from the legacy UI's: the identity provider allows one callback URL per client, so sharing one would break login on the existing UI. |
+| components.ui_react.config.data_catalog_api | string | `""` | Overrides the data catalog API URL |
+| components.ui_react.config.ensemble_manager_api | string | `""` | Overrides the ensemble manager API URL |
+| components.ui_react.config.hasura_endpoint | string | `""` | Overrides the Hasura GraphQL endpoint URL |
+| components.ui_react.config.model_catalog_api | string | `""` | Overrides the model catalog API URL |
+| components.ui_react.enabled | bool | `false` | Enable or disable the React UI. Deployed alongside the legacy `ui` component rather than replacing it; the cutover is a separate decision. Disabled by default because enabling it requires an OAuth2 client registered with the identity provider, and rendering fails without one. |
+| components.ui_react.image.pullPolicy | string | `"Always"` | Image pull policy for the React UI |
+| components.ui_react.image.repository | string | `"mintproject/mint-ui-react"` | Docker image repository for the React UI |
+| components.ui_react.image.tag | string | `"55a3472a975b11af51fcfedf3f6f9b66db024bf0"` | Docker image tag for the React UI. Unlike the other components, this application lives in the monorepo rather than in a submodule, so this tag is a *monorepo* commit SHA. The image-tag bump automation only resolves submodule SHAs and will not update this component -- set it by hand. |
+| components.ui_react.ingress.annotations | object | `{}` |  |
+| components.ui_react.ingress.className | string | `""` |  |
+| components.ui_react.ingress.enabled | bool | `true` | Enable or disable ingress for the React UI |
+| components.ui_react.ingress.hosts[0].host | string | `"next.mint.local"` |  |
+| components.ui_react.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.ui_react.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.ui_react.ingress.tls | list | `[]` |  |
+| components.ui_react.resources | object | `{}` | Resource specifications for the React UI |
 | default_user | string | `"mint@isi.edu"` | Default user email |
 | external_services.ckan.enabled | bool | `false` | Enable or disable CKAN service |
 | external_services.ckan.extra.default_dataset_id | string | `""` | Default dataset ID for CKAN service. Used by Ensemble Manager to upload data when a task has no dataset_id |
