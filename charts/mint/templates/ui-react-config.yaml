@@ -1,0 +1,51 @@
+{{- if .Values.components.ui_react.enabled }}
+{{- $cfg := .Values.components.ui_react.config }}
+{{- if not $cfg.client_id }}
+{{- fail "components.ui_react.config.client_id is required when components.ui_react.enabled is true. The React UI must use its own OAuth2 client, registered separately from the legacy UI's: an identity provider allows one callback URL per client, so sharing the legacy client would break login on the existing UI. Register a client for this deployment's host and set components.ui_react.config.client_id." }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mint.prefix" . }}-ui-react-config-map
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+data:
+  # Consumed as environment variables by the image's entrypoint, which renders
+  # them into the runtime config script at startup. The generator in the image
+  # -- not this template -- owns the config shape and its defaults, so a key
+  # omitted here falls back to that default rather than being blanked out.
+
+  # Service endpoints, derived from each component's own ingress declaration
+  # unless overridden explicitly on ui_react.config.
+  {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.hasura_endpoint "component" .Values.components.hasura "suffix" "/v1/graphql") }}
+  HASURA_ENDPOINT: {{ . | quote }}
+  {{- end }}
+  {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.data_catalog_api "component" .Values.components.data_catalog "suffix" "") }}
+  DATA_CATALOG_API: {{ . | quote }}
+  {{- end }}
+  {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.model_catalog_api "component" .Values.components.model_catalog_api "suffix" (printf "/%s" (default "" .Values.components.model_catalog_api.api_version))) }}
+  MODEL_CATALOG_API: {{ . | quote }}
+  {{- end }}
+  {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.ensemble_manager_api "component" .Values.components.ensemble_manager "suffix" (printf "/%s" (default "" .Values.components.ensemble_manager.api_version))) }}
+  ENSEMBLE_MANAGER_API: {{ . | quote }}
+  {{- end }}
+
+  # Authentication. Server and provider are inherited from the chart's
+  # top-level auth values; the client ID is deliberately per-component.
+  # Keycloak is not plumbed through the chart, so AUTH_REALM is not emitted.
+  AUTH_PROVIDER: {{ .Values.auth.provider | quote }}
+  AUTH_SERVER: {{ .Values.auth.server | quote }}
+  AUTH_CLIENT_ID: {{ $cfg.client_id | quote }}
+  {{- with $cfg.auth_callback_origin }}
+  AUTH_CALLBACK_ORIGIN: {{ . | quote }}
+  {{- end }}
+
+  {{- with .Values.welcome_message }}
+  WELCOME_MESSAGE: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.google.maps.key }}
+  GOOGLE_MAPS_KEY: {{ . | quote }}
+  {{- end }}
+{{- end }}

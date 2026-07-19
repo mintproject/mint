@@ -249,3 +249,65 @@ Usage:
         {{- tpl (.value | toYaml) .context }}
     {{- end }}
 {{- end -}}
+
+{{- define "helm.ui_react_node_port" -}}
+{{- if .Values.service.type }}
+{{- if eq .Values.service.type "NodePort" }}
+{{- if .Values.service.port }}
+{{- add .Values.service.port 11 }}
+{{- else }}
+{{- add 30000 11 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Base URL of a component, derived from its own ingress declaration.
+
+Renders "http://host" or "https://host" -- the scheme from that component's
+own TLS setting. Renders nothing at all when the component is disabled, has
+no ingress hosts, or its first host is blank. Callers must treat empty as
+"no endpoint" rather than appending a path to it.
+
+Unlike the legacy ui ConfigMap, the host list is guarded before `first` is
+called, so an empty `hosts` does not fail the render.
+
+Usage:
+{{ include "mint.component_url" (dict "component" .Values.components.hasura) }}
+*/}}
+{{- define "mint.component_url" -}}
+{{- $c := .component -}}
+{{- if and $c $c.enabled $c.ingress -}}
+{{- with $c.ingress.hosts -}}
+{{- $host := (first .).host -}}
+{{- if $host -}}
+http{{ if $c.ingress.tls }}s{{ end }}://{{ $host }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Resolve one ui_react endpoint, with the explicit override taking precedence
+over the value derived from the target component's ingress.
+
+An override is used verbatim -- the suffix is not appended, because an
+operator stating a URL explicitly is stating the whole URL. When there is no
+override and the component yields no base URL, this renders nothing, so the
+key is omitted from the ConfigMap and the application falls back to its own
+default.
+
+Usage:
+{{ include "mint.ui_react.endpoint" (dict "override" $cfg.hasura_endpoint "component" .Values.components.hasura "suffix" "/v1/graphql") }}
+*/}}
+{{- define "mint.ui_react.endpoint" -}}
+{{- if .override -}}
+{{- .override -}}
+{{- else -}}
+{{- $base := include "mint.component_url" (dict "component" .component) -}}
+{{- if $base -}}
+{{- $base }}{{ .suffix -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
