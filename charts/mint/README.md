@@ -198,7 +198,7 @@ A Helm chart for MINT
 | components.model_catalog_api.environment.log_level | string | `"info"` | Log level for Model Catalog API |
 | components.model_catalog_api.image.pullPolicy | string | `"Always"` | Image pull policy for Model Catalog API |
 | components.model_catalog_api.image.repository | string | `"ghcr.io/mintproject/model-catalog-api"` | Docker image repository for Model Catalog API |
-| components.model_catalog_api.image.tag | string | `"latest"` | Docker image tag for Model Catalog API |
+| components.model_catalog_api.image.tag | string | `"f711a6b49d4ed523f6fd365d1da488669b127735"` | Docker image tag for Model Catalog API |
 | components.model_catalog_api.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.model_catalog_api.ingress.className | string | `""` |  |
 | components.model_catalog_api.ingress.enabled | bool | `true` | Enable or disable ingress for Model Catalog API |

@@ -348,7 +348,7 @@ components:
       # -- Docker image repository for Model Catalog API
       repository: ghcr.io/mintproject/model-catalog-api
       # -- Docker image tag for Model Catalog API
-      tag: latest
+      tag: f711a6b49d4ed523f6fd365d1da488669b127735
       # -- Image pull policy for Model Catalog API
       pullPolicy: Always
     # -- Resource specifications for Model Catalog API
