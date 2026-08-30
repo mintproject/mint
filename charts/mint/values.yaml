@@ -7,13 +7,15 @@ global:
   # names the whole system state.
   #
   # A per-service `components.<name>.image.tag` still wins over this value.
-  # Leave both empty and the chart falls back to `.Chart.AppVersion`.
+  # The four ship with an empty tag, so this value is what a bare install uses.
+  # Leave both empty and the chart falls back to `.Chart.AppVersion`, which
+  # names no image these services publish.
   #
   # It does **not** reach `cromo`, `mic_ui`, `mic_api`, `data_catalog`,
   # `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`,
   # `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not
   # come from the single repository.
-  imageTag: ""
+  imageTag: "0.1.0"
 # -- Welcome message for MINT
 welcome_message: Welcome to MINT
 # -- Default user email
@@ -252,12 +254,11 @@ components:
     image:
       # -- Docker image repository for Hasura
       repository: ghcr.io/mintproject/graphql-engine
-      # -- Docker image tag for Hasura.
-      # A commit SHA, not `latest`: the graphql_engine workflow publishes only
-      # `:main` and `:<full-sha>`, so `:latest` is a stale image it never
-      # republishes. Migrations are baked into this image, so the schema a
-      # deployment can reach is exactly the one this tag carries.
-      tag: 06492bdedd05ca3534b943739f7ffffe877851da
+      # -- Docker image tag for Hasura. Empty by default, so `global.imageTag`
+      # applies. Set it only to pin Hasura away from the rest of the system.
+      # Migrations are baked into this image, so the schema a deployment can
+      # reach is exactly the one this tag carries.
+      tag: ""
       # -- Image pull policy for Hasura
       pullPolicy: Always
     # -- Resource specifications for Hasura
@@ -367,8 +368,9 @@ components:
     image:
       # -- Docker image repository for Model Catalog API
       repository: ghcr.io/mintproject/model-catalog-api
-      # -- Docker image tag for Model Catalog API
-      tag: f711a6b49d4ed523f6fd365d1da488669b127735
+      # -- Docker image tag for Model Catalog API. Empty by default, so
+      # `global.imageTag` applies.
+      tag: ""
       # -- Image pull policy for Model Catalog API
       pullPolicy: Always
     # -- Resource specifications for Model Catalog API
@@ -428,13 +430,10 @@ components:
     enabled: false
     image:
       # -- Docker image repository for the React UI
-      repository: mintproject/mint-ui-react
-      # -- Docker image tag for the React UI.
-      # Unlike the other components, this application lives in the monorepo
-      # rather than in a submodule, so this tag is a *monorepo* commit SHA.
-      # The image-tag bump automation only resolves submodule SHAs and will
-      # not update this component -- set it by hand.
-      tag: 55a3472a975b11af51fcfedf3f6f9b66db024bf0
+      repository: ghcr.io/mintproject/mint-ui-react
+      # -- Docker image tag for the React UI. Empty by default, so
+      # `global.imageTag` applies.
+      tag: ""
       # -- Image pull policy for the React UI
       pullPolicy: Always
     # -- Resource specifications for the React UI
@@ -488,9 +487,10 @@ components:
     # -- Docker image repository for Ensemble Manager
     image:
       # -- Docker image repository for Ensemble Manager
-      repository: mintproject/ensemble-manager
-      # -- Docker image tag for Ensemble Manager
-      tag: latest
+      repository: ghcr.io/mintproject/ensemble-manager
+      # -- Docker image tag for Ensemble Manager. Empty by default, so
+      # `global.imageTag` applies.
+      tag: ""
       # -- Image pull policy for Ensemble Manager
       pullPolicy: Always
     # -- Ensemble Manager deployment strategy (Recreate or RollingUpdate)

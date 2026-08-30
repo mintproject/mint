@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 9.0.0-beta.7](https://img.shields.io/badge/Version-9.0.0--beta.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 9.0.0-beta.8](https://img.shields.io/badge/Version-9.0.0--beta.8-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -93,10 +93,10 @@ A Helm chart for MINT
 | components.ensemble_manager.config.graphql.use_secret | bool | `true` |  |
 | components.ensemble_manager.enabled | bool | `true` | Enable or disable Ensemble Manager |
 | components.ensemble_manager.environment.data_dir | string | `"/var/mint"` |  |
-| components.ensemble_manager.image | object | `{"pullPolicy":"Always","repository":"mintproject/ensemble-manager","tag":"latest"}` | Docker image repository for Ensemble Manager |
+| components.ensemble_manager.image | object | `{"pullPolicy":"Always","repository":"ghcr.io/mintproject/ensemble-manager","tag":""}` | Docker image repository for Ensemble Manager |
 | components.ensemble_manager.image.pullPolicy | string | `"Always"` | Image pull policy for Ensemble Manager |
-| components.ensemble_manager.image.repository | string | `"mintproject/ensemble-manager"` | Docker image repository for Ensemble Manager |
-| components.ensemble_manager.image.tag | string | `"latest"` | Docker image tag for Ensemble Manager |
+| components.ensemble_manager.image.repository | string | `"ghcr.io/mintproject/ensemble-manager"` | Docker image repository for Ensemble Manager |
+| components.ensemble_manager.image.tag | string | `""` | Docker image tag for Ensemble Manager. Empty by default, so `global.imageTag` applies. |
 | components.ensemble_manager.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.ensemble_manager.ingress.className | string | `""` |  |
 | components.ensemble_manager.ingress.enabled | bool | `true` |  |
@@ -133,7 +133,7 @@ A Helm chart for MINT
 | components.hasura.environment.unauthorized_role | string | `"anonymous"` | Unauthorized role for Hasura |
 | components.hasura.image.pullPolicy | string | `"Always"` | Image pull policy for Hasura |
 | components.hasura.image.repository | string | `"ghcr.io/mintproject/graphql-engine"` | Docker image repository for Hasura |
-| components.hasura.image.tag | string | `"06492bdedd05ca3534b943739f7ffffe877851da"` | Docker image tag for Hasura. A commit SHA, not `latest`: the graphql_engine workflow publishes only `:main` and `:<full-sha>`, so `:latest` is a stale image it never republishes. Migrations are baked into this image, so the schema a deployment can reach is exactly the one this tag carries. |
+| components.hasura.image.tag | string | `""` | Docker image tag for Hasura. Empty by default, so `global.imageTag` applies. Set it only to pin Hasura away from the rest of the system. Migrations are baked into this image, so the schema a deployment can reach is exactly the one this tag carries. |
 | components.hasura.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.hasura.ingress.className | string | `nil` |  |
 | components.hasura.ingress.enabled | bool | `true` | Enable or disable ingress for Hasura |
@@ -198,7 +198,7 @@ A Helm chart for MINT
 | components.model_catalog_api.environment.log_level | string | `"info"` | Log level for Model Catalog API |
 | components.model_catalog_api.image.pullPolicy | string | `"Always"` | Image pull policy for Model Catalog API |
 | components.model_catalog_api.image.repository | string | `"ghcr.io/mintproject/model-catalog-api"` | Docker image repository for Model Catalog API |
-| components.model_catalog_api.image.tag | string | `"f711a6b49d4ed523f6fd365d1da488669b127735"` | Docker image tag for Model Catalog API |
+| components.model_catalog_api.image.tag | string | `""` | Docker image tag for Model Catalog API. Empty by default, so `global.imageTag` applies. |
 | components.model_catalog_api.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
 | components.model_catalog_api.ingress.className | string | `""` |  |
 | components.model_catalog_api.ingress.enabled | bool | `true` | Enable or disable ingress for Model Catalog API |
@@ -270,8 +270,8 @@ A Helm chart for MINT
 | components.ui_react.config.hasura_endpoint | string | `""` | Overrides the Hasura GraphQL endpoint URL |
 | components.ui_react.enabled | bool | `false` | Enable or disable the React UI. Deployed alongside the legacy `ui` component rather than replacing it; the cutover is a separate decision. Disabled by default because enabling it requires an OAuth2 client registered with the identity provider, and rendering fails without one. |
 | components.ui_react.image.pullPolicy | string | `"Always"` | Image pull policy for the React UI |
-| components.ui_react.image.repository | string | `"mintproject/mint-ui-react"` | Docker image repository for the React UI |
-| components.ui_react.image.tag | string | `"55a3472a975b11af51fcfedf3f6f9b66db024bf0"` | Docker image tag for the React UI. Unlike the other components, this application lives in the monorepo rather than in a submodule, so this tag is a *monorepo* commit SHA. The image-tag bump automation only resolves submodule SHAs and will not update this component -- set it by hand. |
+| components.ui_react.image.repository | string | `"ghcr.io/mintproject/mint-ui-react"` | Docker image repository for the React UI |
+| components.ui_react.image.tag | string | `""` | Docker image tag for the React UI. Empty by default, so `global.imageTag` applies. |
 | components.ui_react.ingress.annotations | object | `{}` |  |
 | components.ui_react.ingress.className | string | `""` |  |
 | components.ui_react.ingress.enabled | bool | `true` | Enable or disable ingress for the React UI |
@@ -297,8 +297,8 @@ A Helm chart for MINT
 | external_services.s3.region | string | `""` | S3 region |
 | external_services.s3.type | string | `"S3"` | S3 configuration |
 | fullnameOverride | string | `""` |  |
-| global | object | `{"imageTag":""}` | Values shared by every subchart and by the four services that ship from `mintproject/monorepo`. |
-| global.imageTag | string | `""` | One image tag for the four services built out of the single repository: `hasura` (graphql-engine), `model_catalog_api`, `ui_react` and `ensemble_manager`. Every single-repo commit builds all four, so one tag names the whole system state.  A per-service `components.<name>.image.tag` still wins over this value. Leave both empty and the chart falls back to `.Chart.AppVersion`.  It does **not** reach `cromo`, `mic_ui`, `mic_api`, `data_catalog`, `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`, `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not come from the single repository. |
+| global | object | `{"imageTag":"0.1.0"}` | Values shared by every subchart and by the four services that ship from `mintproject/monorepo`. |
+| global.imageTag | string | `"0.1.0"` | One image tag for the four services built out of the single repository: `hasura` (graphql-engine), `model_catalog_api`, `ui_react` and `ensemble_manager`. Every single-repo commit builds all four, so one tag names the whole system state.  A per-service `components.<name>.image.tag` still wins over this value. The four ship with an empty tag, so this value is what a bare install uses. Leave both empty and the chart falls back to `.Chart.AppVersion`, which names no image these services publish.  It does **not** reach `cromo`, `mic_ui`, `mic_api`, `data_catalog`, `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`, `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not come from the single repository. |
 | google.maps.key | string | `"AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM"` | API key for Google Maps |
 | hostname | string | `"localhost"` | Hostname for the application |
 | imagePullSecrets | list | `[]` |  |
