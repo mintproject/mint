@@ -1,7 +1,16 @@
 {{- if .Values.components.ui_react.enabled }}
 {{- $cfg := .Values.components.ui_react.config }}
 {{- if not $cfg.client_id }}
-{{- fail "components.ui_react.config.client_id is required when components.ui_react.enabled is true. The React UI must use its own OAuth2 client, registered separately from the legacy UI's: an identity provider allows one callback URL per client, so sharing the legacy client would break login on the existing UI. Register a client for this deployment's host and set components.ui_react.config.client_id." }}
+{{- fail "components.ui_react.config.client_id is required when components.ui_react.enabled is true. An identity provider allows one callback URL per client, so the client set here must be the one whose callback URL is this deployment's own origin. Where the React UI takes over the legacy UI's host, that is the legacy UI's client -- the two never serve the origin at once. Register or reuse a client for this deployment's host and set components.ui_react.config.client_id." }}
+{{- end }}
+{{- /*
+CKAN base URL for this deployment, when it is an external CKAN rather than the
+chart's own data_catalog component. ui-config.yaml reads the same value for the
+legacy UI, so the two UIs cannot disagree about which catalog they are in.
+*/}}
+{{- $ckanUrl := "" }}
+{{- if .Values.external_services.ckan.enabled }}
+{{- $ckanUrl = .Values.external_services.ckan.url }}
 {{- end }}
 ---
 apiVersion: v1
@@ -22,14 +31,28 @@ data:
   {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.hasura_endpoint "component" .Values.components.hasura "suffix" "/v1/graphql") }}
   HASURA_ENDPOINT: {{ . | quote }}
   {{- end }}
-  {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.data_catalog_api "component" .Values.components.data_catalog "suffix" "") }}
+  {{- /*
+  An external CKAN takes precedence over the data_catalog component, matching
+  ui-config.yaml, where the external_services block is written last and wins.
+  Without this the key is omitted on a deployment that uses an external CKAN,
+  and the application falls back to a compiled-in default -- correct only by
+  coincidence.
+  */}}
+  {{- with $cfg.data_catalog_api | default $ckanUrl | default (include "mint.component_url" (dict "component" .Values.components.data_catalog)) }}
   DATA_CATALOG_API: {{ . | quote }}
-  {{- end }}
-  {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.model_catalog_api "component" .Values.components.model_catalog_api "suffix" (printf "/%s" (default "" .Values.components.model_catalog_api.api_version))) }}
-  MODEL_CATALOG_API: {{ . | quote }}
   {{- end }}
   {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.ensemble_manager_api "component" .Values.components.ensemble_manager "suffix" (printf "/%s" (default "" .Values.components.ensemble_manager.api_version))) }}
   ENSEMBLE_MANAGER_API: {{ . | quote }}
+  {{- end }}
+
+  # Which execution backend this deployment's Ensemble Manager runs, so the
+  # application posts run submissions to the route that backend actually
+  # serves. It is a property of the deployment, not a user choice -- so it is
+  # derived from the Ensemble Manager's own configuration, the same value
+  # ui-config.yaml gives the legacy UI. Override only to point this UI at an
+  # execution engine other than the one this chart configures.
+  {{- with $cfg.execution_engine | default (dig "config" "execution_engine" "type" "" .Values.components.ensemble_manager) }}
+  EXECUTION_ENGINE: {{ . | quote }}
   {{- end }}
 
   # Authentication. Server and provider are inherited from the chart's

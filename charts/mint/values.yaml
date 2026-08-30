@@ -425,22 +425,30 @@ components:
     resources: {}
     config:
       # -- OAuth2 client ID for the React UI. Required when this component is
-      # enabled, and must be a client distinct from the legacy UI's: the
-      # identity provider allows one callback URL per client, so sharing one
-      # would break login on the existing UI.
+      # enabled. The identity provider allows one callback URL per client, so
+      # this must be the client whose callback URL is this deployment's own
+      # origin. Where the React UI takes over the legacy UI's host, that is the
+      # legacy UI's own client -- the two never serve the origin at once.
       client_id: ""
       # -- Origin to use for the OAuth2 callback. Leave empty to use the
       # deployment's own origin, which is correct for a real cluster host.
       auth_callback_origin: ""
+      # -- Overrides the execution engine the React UI submits runs to. Leave
+      # empty to inherit
+      # `components.ensemble_manager.config.execution_engine.type`, which is
+      # the engine this chart configures the Ensemble Manager to run and the
+      # same value the legacy UI is given. Set this only to point the React UI
+      # at a different engine than this chart's Ensemble Manager.
+      execution_engine: ""
       # Explicit endpoint overrides. Each is derived from the corresponding
       # component's own ingress when left empty; setting one takes precedence
       # and is used verbatim, including any path.
       # -- Overrides the Hasura GraphQL endpoint URL
       hasura_endpoint: ""
-      # -- Overrides the data catalog API URL
+      # -- Overrides the data catalog API URL. Left empty, an enabled
+      # `external_services.ckan` supplies it -- as it does for the legacy UI --
+      # and the `data_catalog` component's ingress is the last resort.
       data_catalog_api: ""
-      # -- Overrides the model catalog API URL
-      model_catalog_api: ""
       # -- Overrides the ensemble manager API URL
       ensemble_manager_api: ""
     ingress:

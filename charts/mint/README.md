@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 9.0.0-beta.5](https://img.shields.io/badge/Version-9.0.0--beta.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 9.0.0-beta.6](https://img.shields.io/badge/Version-9.0.0--beta.6-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -263,11 +263,11 @@ A Helm chart for MINT
 | components.ui.ingress.tls | list | `[]` |  |
 | components.ui.resources | object | `{}` | Resource specifications for UI |
 | components.ui_react.config.auth_callback_origin | string | `""` | Origin to use for the OAuth2 callback. Leave empty to use the deployment's own origin, which is correct for a real cluster host. |
-| components.ui_react.config.client_id | string | `""` | OAuth2 client ID for the React UI. Required when this component is enabled, and must be a client distinct from the legacy UI's: the identity provider allows one callback URL per client, so sharing one would break login on the existing UI. |
-| components.ui_react.config.data_catalog_api | string | `""` | Overrides the data catalog API URL |
+| components.ui_react.config.client_id | string | `""` | OAuth2 client ID for the React UI. Required when this component is enabled. The identity provider allows one callback URL per client, so this must be the client whose callback URL is this deployment's own origin. Where the React UI takes over the legacy UI's host, that is the legacy UI's own client -- the two never serve the origin at once. |
+| components.ui_react.config.data_catalog_api | string | `""` | Overrides the data catalog API URL. Left empty, an enabled `external_services.ckan` supplies it -- as it does for the legacy UI -- and the `data_catalog` component's ingress is the last resort. |
 | components.ui_react.config.ensemble_manager_api | string | `""` | Overrides the ensemble manager API URL |
+| components.ui_react.config.execution_engine | string | `""` | Overrides the execution engine the React UI submits runs to. Leave empty to inherit `components.ensemble_manager.config.execution_engine.type`, which is the engine this chart configures the Ensemble Manager to run and the same value the legacy UI is given. Set this only to point the React UI at a different engine than this chart's Ensemble Manager. |
 | components.ui_react.config.hasura_endpoint | string | `""` | Overrides the Hasura GraphQL endpoint URL |
-| components.ui_react.config.model_catalog_api | string | `""` | Overrides the model catalog API URL |
 | components.ui_react.enabled | bool | `false` | Enable or disable the React UI. Deployed alongside the legacy `ui` component rather than replacing it; the cutover is a separate decision. Disabled by default because enabling it requires an OAuth2 client registered with the identity provider, and rendering fails without one. |
 | components.ui_react.image.pullPolicy | string | `"Always"` | Image pull policy for the React UI |
 | components.ui_react.image.repository | string | `"mintproject/mint-ui-react"` | Docker image repository for the React UI |
