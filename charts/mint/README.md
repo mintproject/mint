@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 9.0.0-beta.8](https://img.shields.io/badge/Version-9.0.0--beta.8-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 9.0.0-beta.9](https://img.shields.io/badge/Version-9.0.0--beta.9-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -250,10 +250,10 @@ A Helm chart for MINT
 | components.ui.config.execution_component_from_tapis_tenant | string | `""` |  |
 | components.ui.config.ingestion_api | string | `""` |  |
 | components.ui.config.visualization_url | string | `""` |  |
-| components.ui.enabled | bool | `true` | Enable or disable UI |
+| components.ui.enabled | bool | `false` | Enable or disable the legacy LitElement UI. Off by default: `ui_react` is the maintained frontend. Set it to `true` to keep serving the old app. |
 | components.ui.image.pullPolicy | string | `"Always"` | Image pull policy for UI |
 | components.ui.image.repository | string | `"ghcr.io/mintproject/mint-ui-lit"` | Docker image repository for UI |
-| components.ui.image.tag | string | `"latest"` | Docker image tag for UI |
+| components.ui.image.tag | string | `"latest"` | Docker image tag for UI. Only `latest` and `main` exist in GHCR. The per-commit SHA tags were never pushed there and live only on Docker Hub, so a SHA pin against this repository fails to pull. |
 | components.ui.ingress.annotations | object | `{}` |  |
 | components.ui.ingress.className | string | `""` |  |
 | components.ui.ingress.enabled | bool | `true` | Enable or disable ingress for UI |
