@@ -236,8 +236,12 @@ components:
     image:
       # -- Docker image repository for Hasura
       repository: ghcr.io/mintproject/graphql-engine
-      # -- Docker image tag for Hasura
-      tag: latest
+      # -- Docker image tag for Hasura.
+      # A commit SHA, not `latest`: the graphql_engine workflow publishes only
+      # `:main` and `:<full-sha>`, so `:latest` is a stale image it never
+      # republishes. Migrations are baked into this image, so the schema a
+      # deployment can reach is exactly the one this tag carries.
+      tag: 06492bdedd05ca3534b943739f7ffffe877851da
       # -- Image pull policy for Hasura
       pullPolicy: Always
     # -- Resource specifications for Hasura
