@@ -43,7 +43,7 @@ spec:
         command: ["/bin/bash"]
         args: ["-c", "env && pushd /hasura && hasura migrate apply && hasura metadata apply && hasura seeds apply"]
         {{- with .Values.components.hasura  }}
-        image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+        image: "{{ .image.repository }}:{{ .image.tag | default $.Values.global.imageTag | default $.Chart.AppVersion }}"
         {{ end }}
         {{- with .Values.jobs.hasura }}
         resources:

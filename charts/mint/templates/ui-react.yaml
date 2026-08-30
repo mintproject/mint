@@ -50,7 +50,7 @@ spec:
       containers:
         - name: ui-react
           {{- with .Values.components.ui_react }}
-          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Values.global.imageTag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
           resources:
             {{- toYaml .resources | nindent 12 }}

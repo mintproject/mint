@@ -77,7 +77,7 @@ spec:
       containers:
         - name: head
           {{- with .Values.components.ensemble_manager }}
-          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Values.global.imageTag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
           resources:
             {{- toYaml .resources | nindent 12 }}
