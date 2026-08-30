@@ -428,9 +428,7 @@ components:
   ui_react:
     # -- Enable or disable the React UI. Deployed alongside the legacy `ui`
     # component rather than replacing it; the cutover is a separate decision.
-    # Disabled by default because enabling it requires an OAuth2 client
-    # registered with the identity provider, and rendering fails without one.
-    enabled: false
+    enabled: true
     image:
       # -- Docker image repository for the React UI
       repository: ghcr.io/mintproject/mint-ui-react
@@ -442,12 +440,15 @@ components:
     # -- Resource specifications for the React UI
     resources: {}
     config:
-      # -- OAuth2 client ID for the React UI. Required when this component is
-      # enabled. The identity provider allows one callback URL per client, so
-      # this must be the client whose callback URL is this deployment's own
-      # origin. Where the React UI takes over the legacy UI's host, that is the
-      # legacy UI's own client -- the two never serve the origin at once.
-      client_id: ""
+      # -- OAuth2 client ID for the React UI. Defaults to the `mint-local`
+      # client, whose callback URL is the `mint.local` development host, and
+      # which `auth.client_id` already uses for the legacy UI. Every other
+      # deployment must override it: the identity provider allows one callback
+      # URL per client, so this must be the client whose callback URL is this
+      # deployment's own origin. Where the React UI takes over the legacy UI's
+      # host, that is the legacy UI's own client -- the two never serve the
+      # origin at once.
+      client_id: mint-local
       # -- Origin to use for the OAuth2 callback. Leave empty to use the
       # deployment's own origin, which is correct for a real cluster host.
       auth_callback_origin: ""
@@ -475,9 +476,10 @@ components:
       className: ""
       annotations: {}
       hosts:
-        # Its own host rather than a path prefix on the legacy UI's: the
-        # application is built to be served from the root.
-        - host: next.mint.local
+        # The legacy UI's own host. `ui` is off by default, so the two never
+        # contend for it, and the default `mint-local` client's callback URL
+        # is this origin. Serve both at once and one of them must move.
+        - host: mint.local
           paths:
             - path: /
               pathType: ImplementationSpecific
