@@ -393,12 +393,15 @@ components:
               pathType: ImplementationSpecific
       tls: []
   ui:
-    # -- Enable or disable UI
-    enabled: true
+    # -- Enable or disable the legacy LitElement UI. Off by default: `ui_react`
+    # is the maintained frontend. Set it to `true` to keep serving the old app.
+    enabled: false
     image:
       # -- Docker image repository for UI
       repository: ghcr.io/mintproject/mint-ui-lit
-      # -- Docker image tag for UI
+      # -- Docker image tag for UI. Only `latest` and `main` exist in GHCR.
+      # The per-commit SHA tags were never pushed there and live only on Docker
+      # Hub, so a SHA pin against this repository fails to pull.
       tag: latest
       # -- Image pull policy for UI
       pullPolicy: Always
