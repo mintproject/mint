@@ -1,3 +1,19 @@
+# -- Values shared by every subchart and by the four services that ship from
+# `mintproject/monorepo`.
+global:
+  # -- One image tag for the four services built out of the single repository:
+  # `hasura` (graphql-engine), `model_catalog_api`, `ui_react` and
+  # `ensemble_manager`. Every single-repo commit builds all four, so one tag
+  # names the whole system state.
+  #
+  # A per-service `components.<name>.image.tag` still wins over this value.
+  # Leave both empty and the chart falls back to `.Chart.AppVersion`.
+  #
+  # It does **not** reach `cromo`, `mic_ui`, `mic_api`, `data_catalog`,
+  # `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`,
+  # `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not
+  # come from the single repository.
+  imageTag: ""
 # -- Welcome message for MINT
 welcome_message: Welcome to MINT
 # -- Default user email
@@ -379,7 +395,7 @@ components:
     enabled: true
     image:
       # -- Docker image repository for UI
-      repository: mintproject/mint-ui-lit
+      repository: ghcr.io/mintproject/mint-ui-lit
       # -- Docker image tag for UI
       tag: latest
       # -- Image pull policy for UI

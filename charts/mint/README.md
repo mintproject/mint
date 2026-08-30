@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 9.0.0-beta.6](https://img.shields.io/badge/Version-9.0.0--beta.6-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 9.0.0-beta.7](https://img.shields.io/badge/Version-9.0.0--beta.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -252,7 +252,7 @@ A Helm chart for MINT
 | components.ui.config.visualization_url | string | `""` |  |
 | components.ui.enabled | bool | `true` | Enable or disable UI |
 | components.ui.image.pullPolicy | string | `"Always"` | Image pull policy for UI |
-| components.ui.image.repository | string | `"mintproject/mint-ui-lit"` | Docker image repository for UI |
+| components.ui.image.repository | string | `"ghcr.io/mintproject/mint-ui-lit"` | Docker image repository for UI |
 | components.ui.image.tag | string | `"latest"` | Docker image tag for UI |
 | components.ui.ingress.annotations | object | `{}` |  |
 | components.ui.ingress.className | string | `""` |  |
@@ -297,6 +297,8 @@ A Helm chart for MINT
 | external_services.s3.region | string | `""` | S3 region |
 | external_services.s3.type | string | `"S3"` | S3 configuration |
 | fullnameOverride | string | `""` |  |
+| global | object | `{"imageTag":""}` | Values shared by every subchart and by the four services that ship from `mintproject/monorepo`. |
+| global.imageTag | string | `""` | One image tag for the four services built out of the single repository: `hasura` (graphql-engine), `model_catalog_api`, `ui_react` and `ensemble_manager`. Every single-repo commit builds all four, so one tag names the whole system state.  A per-service `components.<name>.image.tag` still wins over this value. Leave both empty and the chart falls back to `.Chart.AppVersion`.  It does **not** reach `cromo`, `mic_ui`, `mic_api`, `data_catalog`, `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`, `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not come from the single repository. |
 | google.maps.key | string | `"AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM"` | API key for Google Maps |
 | hostname | string | `"localhost"` | Hostname for the application |
 | imagePullSecrets | list | `[]` |  |
