@@ -1,7 +1,7 @@
 {{- if .Values.components.ui_react.enabled }}
 {{- $cfg := .Values.components.ui_react.config }}
 {{- if not $cfg.client_id }}
-{{- fail "components.ui_react.config.client_id is required when components.ui_react.enabled is true. An identity provider allows one callback URL per client, so the client set here must be the one whose callback URL is this deployment's own origin. Where the React UI takes over the legacy UI's host, that is the legacy UI's client -- the two never serve the origin at once. Register or reuse a client for this deployment's host and set components.ui_react.config.client_id." }}
+{{- fail "components.ui_react.config.client_id must not be empty when components.ui_react.enabled is true. An identity provider allows one callback URL per client, so the client set here must be the one whose callback URL is this deployment's own origin. Where the React UI takes over the legacy UI's host, that is the legacy UI's client -- the two never serve the origin at once. Register or reuse a client for this deployment's host and set components.ui_react.config.client_id." }}
 {{- end }}
 {{- /*
 CKAN base URL for this deployment, when it is an external CKAN rather than the
