@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 9.0.0-beta.10](https://img.shields.io/badge/Version-9.0.0--beta.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 9.0.0-beta.11](https://img.shields.io/badge/Version-9.0.0--beta.11-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -263,6 +263,7 @@ A Helm chart for MINT
 | components.ui.ingress.tls | list | `[]` |  |
 | components.ui.resources | object | `{}` | Resource specifications for UI |
 | components.ui_react.config.auth_callback_origin | string | `""` | Origin to use for the OAuth2 callback. Leave empty to use the deployment's own origin, which is correct for a real cluster host. |
+| components.ui_react.config.branding | string | `""` | Co-branding chrome the React UI renders: the branding strip, the footer and the dark header. `tacc` shows the TACC and UT Austin marks; `none` shows no institutional chrome. Names a preset held in the image, so the logo files, link targets and alt text stay under code review. Leave empty to inherit the image's own default, which is unbranded. Set this only on a deployment entitled to show that institution's marks. |
 | components.ui_react.config.client_id | string | `"mint-local"` | OAuth2 client ID for the React UI. Defaults to the `mint-local` client, whose callback URL is the `mint.local` development host, and which `auth.client_id` already uses for the legacy UI. Every other deployment must override it: the identity provider allows one callback URL per client, so this must be the client whose callback URL is this deployment's own origin. Where the React UI takes over the legacy UI's host, that is the legacy UI's own client -- the two never serve the origin at once. |
 | components.ui_react.config.data_catalog_api | string | `""` | Overrides the data catalog API URL. Left empty, an enabled `external_services.ckan` supplies it -- as it does for the legacy UI -- and the `data_catalog` component's ingress is the last resort. |
 | components.ui_react.config.ensemble_manager_api | string | `""` | Overrides the ensemble manager API URL |
