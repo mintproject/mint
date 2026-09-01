@@ -65,13 +65,13 @@ data:
   AUTH_CALLBACK_ORIGIN: {{ . | quote }}
   {{- end }}
 
+  {{- with $cfg.branding }}
   # Presentation. Which co-branding chrome the application renders -- the
   # branding strip, the footer and the dark header. It names a preset held in
   # the image, so the logo files, link targets and alt text stay under code
-  # review rather than living in these values. Left empty, the image's own
-  # default applies, which is unbranded. Set it only on a deployment entitled
-  # to show that institution's marks.
-  {{- with $cfg.branding }}
+  # review rather than living in these values. Set only on a deployment
+  # entitled to show that institution's marks; left empty the key is omitted
+  # and the image's own default applies, which is unbranded.
   BRANDING: {{ . | quote }}
   {{- end }}
 
