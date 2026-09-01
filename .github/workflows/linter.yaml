@@ -1,22 +1,27 @@
 name: Lint and Test Charts
 
-# on pull request or any branch
 on:
   pull_request:
 
+concurrency:
+  group: lint-charts-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  lint-test:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4.2.0
+        uses: azure/setup-helm@v4.3.0
         with:
-          version: v3.14.4
+          version: v3.16.4
 
       - uses: actions/setup-python@v5
         with:
@@ -24,24 +29,67 @@ jobs:
           check-latest: true
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.6.1
+        uses: helm/chart-testing-action@v2.7.0
 
+      # --config is mandatory. chart-testing resolves its config from
+      # CT_CONFIG_DIR inside the tool cache, never from the repository root, so
+      # without this flag ct.yaml is silently ignored.
       - name: Run chart-testing (list-changed)
         id: list-changed
         run: |
-          changed=$(ct list-changed --target-branch ${{ github.event.repository.default_branch }})
+          changed=$(ct list-changed --config ct.yaml)
           if [[ -n "$changed" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run chart-testing (lint)
         if: steps.list-changed.outputs.changed == 'true'
-        run: ct lint --target-branch ${{ github.event.repository.default_branch }}
+        run: ct lint --config ct.yaml
 
-      - name: Create kind cluster
-        if: steps.list-changed.outputs.changed == 'true'
-        uses: helm/kind-action@v1.10.0
+  render:
+    name: Render (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            args: ""
+          - name: ui-react
+            args: "-f charts/mint/ci/ui-react-values.yaml"
+          - name: arm64
+            args: "--set arm_support=true --set components.data_catalog.enabled=false"
+          # data_catalog is off by default, so this is the only permutation
+          # that renders datacatalog.yaml at all, and the only one that reaches
+          # its two arm_support branches.
+          - name: all-components-arm64
+            args: "--set arm_support=true --set components.data_catalog.enabled=true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Run chart-testing (install)
-        if: steps.list-changed.outputs.changed == 'true'
-        run: ct install --target-branch ${{ github.event.repository.default_branch }}
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.0
+        with:
+          version: v3.16.4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL -o /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          sudo install /tmp/kubeconform /usr/local/bin/kubeconform
+
+      # helm template proves the chart renders; kubeconform proves what it
+      # renders is valid Kubernetes. helm lint catches neither duplicate keys
+      # nor bad apiVersions.
+      - name: Render and validate
+        run: |
+          helm template mint charts/mint ${{ matrix.args }} > /tmp/manifests.yaml
+          kubeconform \
+            -strict \
+            -summary \
+            -kubernetes-version 1.29.0 \
+            -ignore-missing-schemas \
+            /tmp/manifests.yaml
