@@ -7,7 +7,6 @@ metadata:
   namespace: {{ .Release.Namespace | quote }}
   {{- if or .Values.components.hasura_db.persistence.annotations .Values.commonAnnotations }}
   annotations:
-    helm.sh/resource-policy: keep
     {{- if .Values.components.hasura_db.persistence.annotations }}
     {{- include "common.tplvalues.render" ( dict "value" .Values.components.hasura_db.persistence.annotations "context" $ ) | nindent 4 }}
     {{- end }}
