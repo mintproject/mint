@@ -1,0 +1,51 @@
+name: Install Charts (kind)
+
+# Deliberately not on pull_request. Installing the full MINT stack on a
+# single-node kind cluster on a 2-vCPU runner takes ~7 minutes and depends on
+# every upstream image and backing service being reachable and healthy, so it
+# cannot act as a merge gate. It runs nightly and on demand instead.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * *"
+
+concurrency:
+  group: chart-install
+  cancel-in-progress: false
+
+jobs:
+  install:
+    name: ct install
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.0
+        with:
+          version: v3.16.4
+
+      # Pinned deliberately. "3.x" with check-latest floats to the newest
+      # Python, which is how this workflow broke without a code change:
+      # chart-testing bundles yamale, yamale references ast.Num, and ast.Num
+      # was removed in Python 3.12.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.7.0
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.12.0
+
+      # --config is mandatory, see linter.yaml. Without it the 600s
+      # helm-extra-args timeout in ct.yaml is dropped and helm falls back to
+      # 300s, which is not enough for this stack.
+      # --all because a scheduled run has no PR diff for list-changed.
+      - name: Run chart-testing (install)
+        run: ct install --config ct.yaml --all
