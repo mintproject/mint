@@ -452,6 +452,13 @@ components:
       # -- Origin to use for the OAuth2 callback. Leave empty to use the
       # deployment's own origin, which is correct for a real cluster host.
       auth_callback_origin: ""
+      # -- Co-branding chrome the React UI renders: the branding strip, the
+      # footer and the dark header. `tacc` shows the TACC and UT Austin marks;
+      # `none` shows no institutional chrome. Names a preset held in the image,
+      # so the logo files, link targets and alt text stay under code review.
+      # Leave empty to inherit the image's own default, which is unbranded. Set
+      # this only on a deployment entitled to show that institution's marks.
+      branding: ""
       # -- Overrides the execution engine the React UI submits runs to. Leave
       # empty to inherit
       # `components.ensemble_manager.config.execution_engine.type`, which is
