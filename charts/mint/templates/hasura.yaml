@@ -245,6 +245,12 @@ spec:
                 key: admin_secret
           - name: DB_HOST
             value: {{ include "mint.prefix" . }}-hasura-db
+          # Nine event triggers in the metadata declare
+          # `webhook_from_env: SVO_SEMANTIC_SEARCH_WEBHOOK_URL`. Hasura rejects
+          # the whole `metadata apply` when the variable is absent, so set it
+          # even when `components.semantic_search.enabled` is false.
+          - name: SVO_SEMANTIC_SEARCH_WEBHOOK_URL
+            value: {{ .Values.components.semantic_search.environment.webhook_url | default (printf "http://%s-semantic-search:8091/events/catalog" (include "mint.prefix" .)) | quote }}
           ports:
             - name: http
               containerPort: 8080

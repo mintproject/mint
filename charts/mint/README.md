@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 9.0.0-beta.12](https://img.shields.io/badge/Version-9.0.0--beta.12-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 9.0.0-beta.13](https://img.shields.io/badge/Version-9.0.0--beta.13-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -146,8 +146,8 @@ A Helm chart for MINT
 | components.hasura_db.arm_image.repository | string | `"imresamu/postgis-arm64"` | Docker image repository for ARM-based Hasura database |
 | components.hasura_db.arm_image.tag | string | `"12-3.4-alpine"` | Docker image tag for ARM-based Hasura database |
 | components.hasura_db.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Hasura database |
-| components.hasura_db.image.repository | string | `"postgis/postgis"` | Docker image repository for Hasura database |
-| components.hasura_db.image.tag | string | `"10-3.2-alpine"` | Docker image tag for Hasura database |
+| components.hasura_db.image.repository | string | `"ghcr.io/mintproject/postgres-pgvector"` | Docker image repository for Hasura database |
+| components.hasura_db.image.tag | string | `"develop"` | Docker image tag for Hasura database |
 | components.hasura_db.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | components.hasura_db.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
 | components.hasura_db.persistence.dataSource | object | `{}` |  |
@@ -244,6 +244,13 @@ A Helm chart for MINT
 | components.model_catalog_explorer.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | components.model_catalog_explorer.ingress.tls | list | `[]` |  |
 | components.model_catalog_explorer.resources | object | `{}` | Resource specifications for Model Catalog Explorer |
+| components.semantic_search.enabled | bool | `true` | Enable or disable the semantic search service |
+| components.semantic_search.environment.embedding_refresh_seconds | int | `60` | Seconds between embedding refresh passes |
+| components.semantic_search.environment.webhook_url | string | `""` | Webhook URL that the Hasura event triggers call. Defaults to internal service DNS (http://<prefix>-semantic-search:8091/events/catalog) |
+| components.semantic_search.image.pullPolicy | string | `"Always"` | Image pull policy for the semantic search service |
+| components.semantic_search.image.repository | string | `"ghcr.io/mintproject/semantic-search"` | Docker image repository for the semantic search service |
+| components.semantic_search.image.tag | string | `""` | Docker image tag for the semantic search service. Empty by default, so `global.imageTag` applies. |
+| components.semantic_search.resources | object | `{}` | Resource specifications for the semantic search service |
 | components.ui.config.airflow_api | string | `""` |  |
 | components.ui.config.airflow_dag_download_thread_id | string | `""` |  |
 | components.ui.config.execution_component_from_tapis | bool | `false` |  |
