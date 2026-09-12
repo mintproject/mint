@@ -308,13 +308,29 @@ components:
               pathType: ImplementationSpecific
       tls: []
   hasura_db:
+    # The image carries PostGIS *and* pgvector. Migration
+    # `1771200021000_standard_variable_embeddings` runs `CREATE EXTENSION vector`.
+    # `postgis/postgis` ships no pgvector, so every `hasura migrate apply` failed
+    # with `could not open extension control file ".../vector.control"`.
+    #
+    # BREAKING: this image is PostgreSQL 16. The previous default was PostgreSQL
+    # 10. PostgreSQL 16 refuses to start on PostgreSQL 10 data files. An existing
+    # deployment must do this before the upgrade:
+    #   1. Scale the Hasura deployment to 0.
+    #   2. Dump the database with a PostgreSQL 16 `pg_dump`.
+    #   3. Delete the PVC `data-<release>-hasura-db-0`.
+    #   4. Upgrade, then restore the dump with `pg_restore`.
+    # The PVC carries `helm.sh/resource-policy: keep`, so Helm never deletes it.
     image:
       # -- Docker image repository for Hasura database
-      repository: postgis/postgis
+      repository: ghcr.io/mintproject/postgres-pgvector
       # -- Docker image tag for Hasura database
-      tag: 10-3.2-alpine
+      tag: develop
       # -- Image pull policy for Hasura database
       pullPolicy: IfNotPresent
+    # ARM has no pgvector image yet. `mintproject/monorepo` builds
+    # `postgres-pgvector` for linux/amd64 only. An ARM deployment keeps the old
+    # PostGIS image and cannot apply the embedding migration.
     arm_image:
       # -- Docker image repository for ARM-based Hasura database
       repository: imresamu/postgis-arm64
@@ -338,6 +354,32 @@ components:
       selector: {}
       annotations:
         helm.sh/resource-policy: keep
+  # The semantic search service. Hasura event triggers post catalog changes to
+  # it, and it writes the embeddings back into `modelcatalog_standard_variable`.
+  #
+  # `SVO_SEMANTIC_SEARCH_WEBHOOK_URL` is always set on the Hasura pod, even when
+  # this component is disabled. The metadata in `mintproject/monorepo` declares
+  # nine event triggers with `webhook_from_env: SVO_SEMANTIC_SEARCH_WEBHOOK_URL`.
+  # Hasura rejects the whole `metadata apply` when the variable is absent.
+  semantic_search:
+    # -- Enable or disable the semantic search service
+    enabled: true
+    image:
+      # -- Docker image repository for the semantic search service
+      repository: ghcr.io/mintproject/semantic-search
+      # -- Docker image tag for the semantic search service. Empty by default, so
+      # `global.imageTag` applies.
+      tag: ""
+      # -- Image pull policy for the semantic search service
+      pullPolicy: Always
+    # -- Resource specifications for the semantic search service
+    resources: {}
+    environment:
+      # -- Seconds between embedding refresh passes
+      embedding_refresh_seconds: 60
+      # -- Webhook URL that the Hasura event triggers call. Defaults to internal
+      # service DNS (http://<prefix>-semantic-search:8091/events/catalog)
+      webhook_url: ""
   model_catalog_explorer:
     # -- Enable or disable Model Catalog Explorer
     enabled: true
