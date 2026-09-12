@@ -44,6 +44,16 @@ data:
   {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.ensemble_manager_api "component" .Values.components.ensemble_manager "suffix" (printf "/%s" (default "" .Values.components.ensemble_manager.api_version))) }}
   ENSEMBLE_MANAGER_API: {{ . | quote }}
   {{- end }}
+  {{- /*
+  The React UI reads the catalog itself through Hasura, so this base serves only
+  the routes Hasura cannot -- today the Tapis application proxy behind the
+  component location picker. Omit the key and the image falls back to
+  http://api.models.mint.local/v2.0.0, which only a local deployment can reach,
+  and the picker fails for every user of every other deployment.
+  */}}
+  {{- with include "mint.ui_react.endpoint" (dict "override" $cfg.model_catalog_api "component" .Values.components.model_catalog_api "suffix" (printf "/%s" (default "" .Values.components.model_catalog_api.api_version))) }}
+  MODEL_CATALOG_API: {{ . | quote }}
+  {{- end }}
 
   # Which execution backend this deployment's Ensemble Manager runs, so the
   # application posts run submissions to the route that backend actually

@@ -276,6 +276,7 @@ A Helm chart for MINT
 | components.ui_react.config.ensemble_manager_api | string | `""` | Overrides the ensemble manager API URL |
 | components.ui_react.config.execution_engine | string | `""` | Overrides the execution engine the React UI submits runs to. Leave empty to inherit `components.ensemble_manager.config.execution_engine.type`, which is the engine this chart configures the Ensemble Manager to run and the same value the legacy UI is given. Set this only to point the React UI at a different engine than this chart's Ensemble Manager. |
 | components.ui_react.config.hasura_endpoint | string | `""` | Overrides the Hasura GraphQL endpoint URL |
+| components.ui_react.config.model_catalog_api | string | `""` | Overrides the model catalog API URL. The React UI reads the catalog itself through Hasura, so this base serves only the routes Hasura cannot -- today the Tapis application proxy behind the component location picker. |
 | components.ui_react.enabled | bool | `true` | Enable or disable the React UI. Deployed alongside the legacy `ui` component rather than replacing it; the cutover is a separate decision. |
 | components.ui_react.image.pullPolicy | string | `"Always"` | Image pull policy for the React UI |
 | components.ui_react.image.repository | string | `"ghcr.io/mintproject/mint-ui-react"` | Docker image repository for the React UI |

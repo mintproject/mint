@@ -520,6 +520,11 @@ components:
       data_catalog_api: ""
       # -- Overrides the ensemble manager API URL
       ensemble_manager_api: ""
+      # -- Overrides the model catalog API URL. The React UI reads the catalog
+      # itself through Hasura, so this base serves only the routes Hasura
+      # cannot -- today the Tapis application proxy behind the component
+      # location picker.
+      model_catalog_api: ""
     ingress:
       # -- Enable or disable ingress for the React UI
       enabled: true
