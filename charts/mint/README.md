@@ -1,6 +1,6 @@
 # MINT
 
-![Version: 9.0.0-beta.14](https://img.shields.io/badge/Version-9.0.0--beta.14-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+![Version: 9.0.0-beta.15](https://img.shields.io/badge/Version-9.0.0--beta.15-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
 
 A Helm chart for MINT
 
@@ -147,7 +147,7 @@ A Helm chart for MINT
 | components.hasura_db.arm_image.tag | string | `"12-3.4-alpine"` | Docker image tag for ARM-based Hasura database |
 | components.hasura_db.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Hasura database |
 | components.hasura_db.image.repository | string | `"ghcr.io/mintproject/postgres-pgvector"` | Docker image repository for Hasura database |
-| components.hasura_db.image.tag | string | `"develop"` | Docker image tag for Hasura database |
+| components.hasura_db.image.tag | string | `"sha-1d23b2c"` | Docker image tag for Hasura database. `postgres-pgvector` has no 40-character SHA tag, so `global.imageTag` cannot name it. `sha-1d23b2c` is the same monorepo commit as `global.imageTag`. |
 | components.hasura_db.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | components.hasura_db.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
 | components.hasura_db.persistence.dataSource | object | `{}` |  |
@@ -249,7 +249,7 @@ A Helm chart for MINT
 | components.semantic_search.environment.webhook_url | string | `""` | Webhook URL that the Hasura event triggers call. Defaults to internal service DNS (http://<prefix>-semantic-search:8091/events/catalog) |
 | components.semantic_search.image.pullPolicy | string | `"Always"` | Image pull policy for the semantic search service |
 | components.semantic_search.image.repository | string | `"ghcr.io/mintproject/semantic-search"` | Docker image repository for the semantic search service |
-| components.semantic_search.image.tag | string | `""` | Docker image tag for the semantic search service. Empty by default, so `global.imageTag` applies. |
+| components.semantic_search.image.tag | string | `"sha-1d23b2c"` | Docker image tag for the semantic search service. This image has no 40-character SHA tag, so `global.imageTag` cannot name it. `sha-1d23b2c` is the same monorepo commit as `global.imageTag`. |
 | components.semantic_search.resources | object | `{}` | Resource specifications for the semantic search service |
 | components.ui.config.airflow_api | string | `""` |  |
 | components.ui.config.airflow_dag_download_thread_id | string | `""` |  |
@@ -306,8 +306,8 @@ A Helm chart for MINT
 | external_services.s3.region | string | `""` | S3 region |
 | external_services.s3.type | string | `"S3"` | S3 configuration |
 | fullnameOverride | string | `""` |  |
-| global | object | `{"imageTag":"0.1.0"}` | Values shared by every subchart and by the four services that ship from `mintproject/monorepo`. |
-| global.imageTag | string | `"0.1.0"` | One image tag for the four services built out of the single repository: `hasura` (graphql-engine), `model_catalog_api`, `ui_react` and `ensemble_manager`. Every single-repo commit builds all four, so one tag names the whole system state.  A per-service `components.<name>.image.tag` still wins over this value. The four ship with an empty tag, so this value is what a bare install uses. Leave both empty and the chart falls back to `.Chart.AppVersion`, which names no image these services publish.  It does **not** reach `cromo`, `mic_ui`, `mic_api`, `data_catalog`, `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`, `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not come from the single repository. |
+| global | object | `{"imageTag":"1d23b2c79dbe00f980857850b206a506bceb5362"}` | Values shared by every subchart and by the four services that ship from `mintproject/monorepo`. |
+| global.imageTag | string | `"1d23b2c79dbe00f980857850b206a506bceb5362"` | One image tag for the four services built out of the single repository: `hasura` (graphql-engine), `model_catalog_api`, `ui_react` and `ensemble_manager`. Every single-repo commit builds all four, so one tag names the whole system state.  A per-service `components.<name>.image.tag` still wins over this value. The four ship with an empty tag, so this value is what a bare install uses. Leave both empty and the chart falls back to `.Chart.AppVersion`, which names no image these services publish.  It does **not** reach `cromo`, `mic_ui`, `mic_api`, `data_catalog`, `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`, `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not come from the single repository. |
 | google.maps.key | string | `"AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM"` | API key for Google Maps |
 | hostname | string | `"localhost"` | Hostname for the application |
 | imagePullSecrets | list | `[]` |  |

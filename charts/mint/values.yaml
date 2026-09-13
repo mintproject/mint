@@ -15,7 +15,7 @@ global:
   # `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`,
   # `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not
   # come from the single repository.
-  imageTag: "0.1.0"
+  imageTag: "1d23b2c79dbe00f980857850b206a506bceb5362"
 # -- Welcome message for MINT
 welcome_message: Welcome to MINT
 # -- Default user email
@@ -324,8 +324,10 @@ components:
     image:
       # -- Docker image repository for Hasura database
       repository: ghcr.io/mintproject/postgres-pgvector
-      # -- Docker image tag for Hasura database
-      tag: develop
+      # -- Docker image tag for Hasura database. `postgres-pgvector` has no
+      # 40-character SHA tag, so `global.imageTag` cannot name it. `sha-1d23b2c`
+      # is the same monorepo commit as `global.imageTag`.
+      tag: sha-1d23b2c
       # -- Image pull policy for Hasura database
       pullPolicy: IfNotPresent
     # ARM has no pgvector image yet. `mintproject/monorepo` builds
@@ -367,9 +369,10 @@ components:
     image:
       # -- Docker image repository for the semantic search service
       repository: ghcr.io/mintproject/semantic-search
-      # -- Docker image tag for the semantic search service. Empty by default, so
-      # `global.imageTag` applies.
-      tag: ""
+      # -- Docker image tag for the semantic search service. This image has no
+      # 40-character SHA tag, so `global.imageTag` cannot name it. `sha-1d23b2c`
+      # is the same monorepo commit as `global.imageTag`.
+      tag: sha-1d23b2c
       # -- Image pull policy for the semantic search service
       pullPolicy: Always
     # -- Resource specifications for the semantic search service
