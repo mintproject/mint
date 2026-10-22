@@ -15,7 +15,7 @@ global:
   # `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`,
   # `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not
   # come from the single repository.
-  imageTag: "1d23b2c79dbe00f980857850b206a506bceb5362"
+  imageTag: "ab89663cc198c9981b8fa5b3a8f544c93cb89002"
 # -- Welcome message for MINT
 welcome_message: Welcome to MINT
 # -- Default user email
@@ -325,8 +325,9 @@ components:
       # -- Docker image repository for Hasura database
       repository: ghcr.io/mintproject/postgres-pgvector
       # -- Docker image tag for Hasura database. `postgres-pgvector` has no
-      # 40-character SHA tag, so `global.imageTag` cannot name it. `sha-1d23b2c`
-      # is the same monorepo commit as `global.imageTag`.
+      # 40-character SHA tag, so `global.imageTag` cannot name it. CI builds this
+      # image only when `docker/postgres-pgvector` changes. `sha-1d23b2c` is the
+      # newest develop build, and its source matches `global.imageTag`.
       tag: sha-1d23b2c
       # -- Image pull policy for Hasura database
       pullPolicy: IfNotPresent
@@ -370,9 +371,10 @@ components:
       # -- Docker image repository for the semantic search service
       repository: ghcr.io/mintproject/semantic-search
       # -- Docker image tag for the semantic search service. This image has no
-      # 40-character SHA tag, so `global.imageTag` cannot name it. `sha-1d23b2c`
-      # is the same monorepo commit as `global.imageTag`.
-      tag: sha-1d23b2c
+      # 40-character SHA tag, so `global.imageTag` cannot name it. CI builds this
+      # image only when `semantic-search-service` changes. `sha-5009a52` is the
+      # newest develop build, and its source matches `global.imageTag`.
+      tag: sha-5009a52
       # -- Image pull policy for the semantic search service
       pullPolicy: Always
     # -- Resource specifications for the semantic search service
