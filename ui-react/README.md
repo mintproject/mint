@@ -4,7 +4,7 @@ New React/TypeScript frontend for the MINT Model Catalog, replacing the legacy L
 
 ## Requirements
 
-- Node 20+
+- Node 24+
 - npm 10+
 
 ## Running locally
@@ -108,7 +108,7 @@ npm test           # run once
 npm run test:watch # watch mode
 ```
 
-Requires Node 20+. If `npm test` fails with a `crypto.getRandomValues` error, switch to Node 20 (`nvm use 20` or set PATH to use `/opt/homebrew/opt/node@20/bin`).
+Requires Node 24+. If `npm test` fails with a `crypto.getRandomValues` error, switch to Node 24 (`nvm use`).
 
 ## Model ownership
 

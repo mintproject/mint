@@ -30,11 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Node 20 matches model-catalog-api/Dockerfile. Testing on a Node the
+      # Node 24 matches model-catalog-api/Dockerfile. Testing on a Node the
       # image does not use gives a green build that fails in the cluster.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: model-catalog-api/package-lock.json
 
