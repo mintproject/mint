@@ -59,7 +59,7 @@
     "zod": "^3.23.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "devDependencies": {
     "@eslint/js": "^9.7.0",

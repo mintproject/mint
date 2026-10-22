@@ -4,7 +4,7 @@
 # and regenerates env-config.js at container startup from environment variables,
 # using the same generator Vercel runs at build time.
 
-FROM --platform=$BUILDPLATFORM node:20-alpine AS build
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 
 WORKDIR /app
 
