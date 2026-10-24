@@ -1,5 +1,15 @@
 BEGIN;
 
+-- This is a data repair. On a cold start it runs before the catalog rows
+-- exist: `hasura migrate apply` runs first, and the catalog loads after it.
+-- The statements below reference catalog rows, so they fail on an empty
+-- catalog. An empty catalog has nothing to repair, so the block returns.
+DO $$
+BEGIN
+IF NOT EXISTS (SELECT 1 FROM public.modelcatalog_configuration) THEN
+  RETURN;
+END IF;
+
 INSERT INTO public.modelcatalog_standard_variable
   (id, label, description, same_as)
 VALUES (
@@ -57,5 +67,8 @@ VALUES (
   FALSE
 )
 ON CONFLICT DO NOTHING;
+
+END
+$$;
 
 COMMIT;
