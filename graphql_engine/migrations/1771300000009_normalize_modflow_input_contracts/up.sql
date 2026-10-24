@@ -1,5 +1,15 @@
 BEGIN;
 
+-- This is a data repair. On a cold start it runs before the catalog rows
+-- exist: `hasura migrate apply` runs first, and the catalog loads after it.
+-- The statements below reference catalog rows, so they fail on an empty
+-- catalog. An empty catalog has nothing to repair, so the block returns.
+DO $$
+BEGIN
+IF NOT EXISTS (SELECT 1 FROM public.modelcatalog_configuration) THEN
+  RETURN;
+END IF;
+
 -- All four supported MODFLOW families use the same semantic input contract.
 -- Archive inputs contain the complete model package; WEL and RCH inputs are
 -- explicit override candidates for problem formulation and adapter planning.
@@ -364,5 +374,8 @@ UPDATE public.modelcatalog_variable_presentation
 SET has_standard_variable =
   'https://w3id.org/okn/i/mint/61e86974-f1bb-406c-ae52-f6c6eccb6c59'
 WHERE id = 'https://w3id.org/okn/i/mint/modflow2005_q';
+
+END
+$$;
 
 COMMIT;
