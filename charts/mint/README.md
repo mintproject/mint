@@ -306,7 +306,7 @@ A Helm chart for MINT
 | external_services.s3.region | string | `""` | S3 region |
 | external_services.s3.type | string | `"S3"` | S3 configuration |
 | fullnameOverride | string | `""` |  |
-| global | object | `{"imageTag":"42e235494d73ca7e43060bb3bf29c6262703f63f"}` | Values shared by every subchart and by the four services that ship from `mintproject/monorepo`. |
+| global | object | `{"imageTag":"42e235494d73ca7e43060bb3bf29c6262703f63f"}` | Values shared by every subchart and by the four services that ship from `mintproject/mint`. |
 | global.imageTag | string | `"42e235494d73ca7e43060bb3bf29c6262703f63f"` | One image tag for the four services built out of the single repository: `hasura` (graphql-engine), `model_catalog_api`, `ui_react` and `ensemble_manager`. Every single-repo commit builds all four, so one tag names the whole system state.  A per-service `components.<name>.image.tag` still wins over this value. The four ship with an empty tag, so this value is what a bare install uses. Leave both empty and the chart falls back to `.Chart.AppVersion`, which names no image these services publish.  It does **not** reach `cromo`, `mic_ui`, `mic_api`, `data_catalog`, `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`, `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not come from the single repository. |
 | google.maps.key | string | `"AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM"` | API key for Google Maps |
 | hostname | string | `"localhost"` | Hostname for the application |

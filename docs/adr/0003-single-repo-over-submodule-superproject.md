@@ -2,13 +2,13 @@
 
 - **Status:** Accepted — not yet executed. The steps are in [`docs/runbook-single-repo-cutover.md`](../runbook-single-repo-cutover.md).
 - **Deciders:** MetaLearn engineering
-- **Related:** wayfinder map [#138](https://github.com/mintproject/monorepo/issues/138) and its eight tickets; [ADR-0002](0002-react-frontend-replaces-litelement-ui.md)
+- **Related:** wayfinder map [#138](https://github.com/mintproject/mint/issues/138) and its eight tickets; [ADR-0002](0002-react-frontend-replaces-litelement-ui.md)
 
 ---
 
 ## Context
 
-`mintproject/monorepo` is a **superproject**: it holds each MINT service as a git
+`mintproject/mint` is a **superproject**: it holds each MINT service as a git
 submodule. `.gitmodules` declares nine. Three of them hold services that ship in
 the MINT chart and change every week — `model-catalog-api`,
 `mint-ensemble-manager` and `graphql_engine`.
@@ -33,7 +33,7 @@ Two failures show the cost is not theoretical.
 carry no content. They exist to tell the superproject that a submodule moved.
 
 **The deploy automation already has a hole shaped like this.**
-[#70](https://github.com/mintproject/monorepo/issues/70) recorded that
+[#70](https://github.com/mintproject/mint/issues/70) recorded that
 `ui_react`'s image tag in the chart is a superproject SHA. The bump automation
 resolves tags with `git ls-remote` against a per-service repository, finds no row
 for `ui_react`, and **silently skips it**. That tag is set by hand today.
@@ -47,7 +47,7 @@ is in another repository, which the agent does not clone. It guesses instead.
 ## Decision
 
 **Import `model-catalog-api`, `mint-ensemble-manager` and `graphql_engine` into
-`mintproject/monorepo` as plain directories, each with its full mainline history,
+`mintproject/mint` as plain directories, each with its full mainline history,
 and archive their source repositories.**
 
 Four choices inside that decision are worth recording, because a future reader
@@ -79,7 +79,7 @@ The alternative — build only what changed — was rejected on measurement, not
 taste. The repository is public, the Actions timing API reports 0 billable ms,
 GHCR storage for public packages is free, and traffic is about 6 commits a week.
 So a path filter buys a few minutes of wall clock. Partial tags are what broke
-`ui_react` in [#70](https://github.com/mintproject/monorepo/issues/70): a tag that
+`ui_react` in [#70](https://github.com/mintproject/mint/issues/70): a tag that
 is a partial function has holes, and the automation falls through them quietly.
 
 A path filter also turns out to cost the publish gate. GitHub path filters are
@@ -89,13 +89,13 @@ a few minutes is a bad trade.
 
 ### 3. `helm-charts` and `ui` stay out
 
-`helm-charts` (the repository `mintproject/mint`) is a published Helm chart
+`helm-charts` (the repository `mintproject/mint-chart-archive`) is a published Helm chart
 repository with a committed `index.yaml`, packaged `releases/*.tgz`, and external
 consumers. It has 2 forks; every service repository has 0. External consumers
 keep it external.
 
 `ui` is deprecated and is being removed from TACC by
-[#81](https://github.com/mintproject/monorepo/issues/81). Importing history that
+[#81](https://github.com/mintproject/mint/issues/81). Importing history that
 is about to be deleted is waste. Its submodule stub stays until then. Its image
 still moves to GHCR, because dropping Docker Hub is about the registry, not about
 which repository builds.
@@ -157,18 +157,18 @@ chart could roll back to.
   visibility. Prove each package pulls anonymously before the chart pins it.
 - **A Helm upgrade does not run the Hasura migrations.** The migration job is a
   post-install hook. See
-  [#117](https://github.com/mintproject/monorepo/issues/117).
+  [#117](https://github.com/mintproject/mint/issues/117).
 
 ## References
 
-- Wayfinder map [#138](https://github.com/mintproject/monorepo/issues/138)
-- Tickets [#140](https://github.com/mintproject/monorepo/issues/140),
-  [#141](https://github.com/mintproject/monorepo/issues/141),
-  [#142](https://github.com/mintproject/monorepo/issues/142),
-  [#143](https://github.com/mintproject/monorepo/issues/143),
-  [#144](https://github.com/mintproject/monorepo/issues/144),
-  [#145](https://github.com/mintproject/monorepo/issues/145),
-  [#146](https://github.com/mintproject/monorepo/issues/146),
-  [#147](https://github.com/mintproject/monorepo/issues/147),
-  [#149](https://github.com/mintproject/monorepo/issues/149)
+- Wayfinder map [#138](https://github.com/mintproject/mint/issues/138)
+- Tickets [#140](https://github.com/mintproject/mint/issues/140),
+  [#141](https://github.com/mintproject/mint/issues/141),
+  [#142](https://github.com/mintproject/mint/issues/142),
+  [#143](https://github.com/mintproject/mint/issues/143),
+  [#144](https://github.com/mintproject/mint/issues/144),
+  [#145](https://github.com/mintproject/mint/issues/145),
+  [#146](https://github.com/mintproject/mint/issues/146),
+  [#147](https://github.com/mintproject/mint/issues/147),
+  [#149](https://github.com/mintproject/mint/issues/149)
 - [`docs/runbook-single-repo-cutover.md`](../runbook-single-repo-cutover.md)

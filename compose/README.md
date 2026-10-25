@@ -201,7 +201,7 @@ docker compose build --no-cache <service>
 
 ## Acceptance checklist
 
-The checklist of [issue #186](https://github.com/mintproject/monorepo/issues/186).
+The checklist of [issue #186](https://github.com/mintproject/mint/issues/186).
 Run it from empty volumes: `docker compose down -v && docker compose up -d --wait`.
 
 | # | Check | How to run it |
