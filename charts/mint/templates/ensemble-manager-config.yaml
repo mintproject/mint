@@ -1,0 +1,96 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager-config-map
+  namespace: {{ .Release.Namespace }}
+data:
+   config.json: |
+      {
+         "data_catalog_api": "http://{{ include "mint.prefix" . }}-data-catalog",
+         {{- with .Values.components.ensemble_manager }}
+            {{- if  .enabled }}
+               "ensemble_manager_api": "http{{ if .ingress.tls }}s{{ end }}://{{ with (first .ingress.hosts ) }}{{ .host }}{{ end }}/{{ .api_version }}",
+               {{- with .config.tapis_webhook_base_url }}
+               "tapis_webhook_base_url": {{ . | quote }},
+               {{- end }}
+            {{- end }}
+         {{- end }}
+         "graphql": {
+            "endpoint": "{{ include "mint.prefix" . }}-hasura/v1/graphql",
+            "enable_ssl": false,
+            "use_secret": true
+         },
+
+         {{- with .Values.components.ensemble_manager.config }}
+         {{- if .execution_engine.type }}
+         "execution_engine": {{ .execution_engine.type | quote }},
+         "{{ .execution_engine.type }}":
+            {{ .execution_engine | toRawJson | nindent 12}},
+         {{- end }}
+
+         {{- end}}
+
+         {{ if eq .Values.external_services.ckan.enabled true }}
+         "data_catalog_key": {{ .Values.secrets.external_services.ckan.api_key | quote }},
+         {{ with .Values.external_services}}
+         "data_catalog_api": {{ .ckan.url | quote }},
+         "data_catalog_type": {{ .ckan.type | quote }},
+         "data_catalog_extra": {
+            "owner_organization_id": {{ .ckan.extra.owner_organization_id | quote }},
+            "owner_provenance_id": {{ .ckan.extra.owner_provenance_id | quote }},
+            "default_dataset_id": {{ .ckan.extra.default_dataset_id | quote }}
+         },
+         {{end}}
+         {{end}}
+
+         {{- if eq .Values.external_services.s3.enabled true }}
+         "data_server_type": {{ .Values.external_services.s3.type | quote }},
+         "data_server": {
+            "region": {{ .Values.external_services.s3.region | quote }},
+            "bucket": {{ .Values.external_services.s3.bucket | quote }},
+            "access_key": {{ .Values.secrets.external_services.s3.access_key | quote }},
+            "secret_access_key": {{ .Values.secrets.external_services.s3.secret_key | quote }}
+         },
+         {{- end}}
+
+         {{- if eq .Values.external_services.kubernetes.enabled true }}
+         "kubernetes": {
+            "namespace": {{ .Values.external_services.kubernetes.namespace | quote }},
+            "use": {{ .Values.external_services.kubernetes.enabled }},
+            "cpu_limit": {{ .Values.external_services.kubernetes.cpu_limit | quote }},
+            "node_affinity": {{ .Values.external_services.kubernetes.node_affinity }},
+            "memory_limit": {{ .Values.external_services.kubernetes.memory_limit | quote }}
+         },
+         {{- end}}
+
+         {{- with .Values.auth }}
+         {{- if .url }}
+         "auth_server": {{ .url | quote }},
+         {{- end }}
+         {{- if .realm }}
+         "auth_realm": {{ .realm | quote }},
+         {{- end }}
+         {{- if .ui_client_id }}
+         "auth_client_id": {{ .ui_client_id | quote }},
+         {{- end }}
+         {{- end }}
+
+         "visualization_url": "",
+         "ingestion_api": "",
+         "auth": {
+            "client_id": {{ .Values.components.ensemble_manager.config.auth.client_id | quote }},
+            "authorization_url": {{ .Values.components.ensemble_manager.config.auth.authorization_url | quote }},
+            "public_key": {{ .Values.components.ensemble_manager.config.auth.public_key | quote }},
+            "algorithms": {{ .Values.components.ensemble_manager.config.auth.algorithms | quote }}
+         },
+
+         "openapi": {
+            "servers": [
+               {
+                  "url": "http{{ if .Values.components.ensemble_manager.ingress.tls }}s{{ end }}://{{ with (first .Values.components.ensemble_manager.ingress.hosts) }}{{ .host }}{{ end }}/{{ .Values.components.ensemble_manager.api_version }}",
+                  "description": "Default Server"
+               }
+            ]
+         }
+      }

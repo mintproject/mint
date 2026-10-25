@@ -1,0 +1,9 @@
+components:
+  backups:
+    enabled: true
+  ensemble_manager:
+    enabled: true
+    persistence:
+      enabled: true
+      accessModes:
+        - ReadWriteOnce

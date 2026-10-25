@@ -60,3 +60,8 @@ metalearn/
 
 # Dependencies and build caches
 node_modules/
+
+# MINT chart: local deploy files that can hold secrets (from mintproject/mint)
+kubeconfig
+dynamo-values.yaml
+uscd.yaml

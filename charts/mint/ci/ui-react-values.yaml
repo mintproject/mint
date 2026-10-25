@@ -1,0 +1,23 @@
+# Installs the chart with the React UI enabled.
+#
+# Covers, as rendering behaviour:
+#   - endpoint derivation from each component's own ingress declaration
+#     (hasura, model_catalog_api and ensemble_manager are left to derive)
+#   - per-key override precedence (data_catalog_api is set explicitly and must
+#     win over the value that would have been derived)
+#   - the component's own deployment, service and ingress reaching Ready,
+#     which is also the check that the pinned image tag is pullable
+#
+# Not covered here: the required-client-ID failure. chart-testing has no
+# "expect this render to fail" mode, so a values file omitting client_id would
+# just turn CI red. That path is enforced by a `fail` in ui-react-config.yaml.
+components:
+  ui_react:
+    enabled: true
+    config:
+      # Any non-empty value satisfies the required check; nothing in CI
+      # authenticates against a real identity provider.
+      client_id: mint-ci
+      # Set explicitly so the rendered ConfigMap must show this value rather
+      # than the one derived from components.data_catalog.ingress.
+      data_catalog_api: https://data-catalog.example.test/override

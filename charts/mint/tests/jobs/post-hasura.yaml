@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mint-hasura-post-install
+spec:
+  selector:
+    matchLabels:
+      app: mint-hasura-post-install
+  template:
+    metadata:
+      labels:
+        app: mint-hasura-post-install
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: busybox
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              cpu: 110m
+              memory: 110Mi
+          command:
+            [
+              "sh",
+              "-c",
+              "until nc -z ${DB_HOST} 5432; do echo waiting for db; sleep 2; done;",
+            ]
+          env:
+            - name: DB_HOST
+              value: mint-hasura
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: ALL
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mint-hasura-secrets
+                  key: username
+
+      containers:
+        - name: post-install-hasura
+          command: ["/bin/bash"]
+          args:
+            [
+              "-c",
+              "env && pushd /hasura && hasura migrate apply && hasura metadata apply && hasura seeds apply",
+            ]
+          image: "mintproject/graphql-engine:305c0dbeba1878eafe348f21fc300fbfc017d9dc"
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 1000Mi
+            limits:
+              cpu: 1100m
+              memory: 1100Mi
+          env:
+            - name: HASURA_GRAPHQL_ENDPOINT
+              value: http://mint-hasura
+            - name: HASURA_GRAPHQL_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mint-hasura-secrets
+                  key: admin_secret
