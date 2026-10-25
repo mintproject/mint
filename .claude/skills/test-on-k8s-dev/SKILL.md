@@ -21,7 +21,7 @@ Verified 2026-08-30:
 
 The cluster is remote, not on the laptop. `kubectl get nodes` is the fastest liveness check.
 
-**Two stale names to ignore.** The MINT chart's own README (in [`mintproject/mint`](https://github.com/mintproject/mint), not in this repository) documents installing the release as `testing-mint`, and `model-catalog-api/src/hasura/client.ts` defaults `HASURA_GRAPHQL_URL` to `http://testing-mint-hasura.mint.svc.cluster.local/v1/graphql`. Neither matches this cluster, where the release is `mint` and the in-cluster URL is `http://mint-hasura/v1/graphql`. Resource names are `mint-*`, not `testing-mint-*`.
+**Two stale names to ignore.** The MINT chart's own README ([`charts/mint/README.md`](../../../charts/mint/README.md)) documents installing the release as `testing-mint`, and `model-catalog-api/src/hasura/client.ts` defaults `HASURA_GRAPHQL_URL` to `http://testing-mint-hasura.mint.svc.cluster.local/v1/graphql`. Neither matches this cluster, where the release is `mint` and the in-cluster URL is `http://mint-hasura/v1/graphql`. Resource names are `mint-*`, not `testing-mint-*`.
 
 ## Component map
 

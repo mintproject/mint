@@ -1,0 +1,61 @@
+{{- if .Values.components.model_catalog_endpoint.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mint.prefix" . }}-model-catalog-endpoint-post-install
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-6"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-model-catalog-endpoint-post-install"
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-model-catalog-endpoint
+          image: alpine/curl
+          command: ["sh", "-c", "until curl -sk {{ include "mint.prefix" . }}-model-catalog-endpoint:3030/$/ping; do echo waiting for model-catalog-endpoint; sleep 2; done"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      containers:
+      - name: post-install-model-catalog-endpoint
+        command: ["/bin/bash"]
+        args: ["-c", "curl 'http://{{ include "mint.prefix" $ }}-model-catalog-endpoint:3030/$/datasets' \
+          -X POST \
+          -u admin:${ADMIN_PASSWORD} \
+          --data-raw \"dbName={{ .Values.components.model_catalog_endpoint.environment.dataset  }}&dbType=tdb2\" \
+          && curl -o /tmp/seeds.trig {{ .Values.components.model_catalog_endpoint.environment.seeds_url }} \
+          && curl \
+         'http://{{ include "mint.prefix" $ }}-model-catalog-endpoint:3030/{{ .Values.components.model_catalog_endpoint.environment.dataset }}/data' \
+                    -X POST \
+           -u admin:${ADMIN_PASSWORD} \
+           --upload-file /tmp/seeds.trig \
+           -H  \"Content-Type: application/trig\"
+          "]
+        {{- with .Values.components.model_catalog_endpoint  }}
+        image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+        {{ end }}
+        {{- with .Values.jobs.model_catalog_endpoint }}
+        resources:
+          {{- toYaml .resources | nindent 12 }}
+        {{ end }}
+        env:
+          - name: ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-model-catalog-endpoint-secrets
+                key: password
+          - name: DATASET
+            value: {{ .Values.components.model_catalog_endpoint.environment.dataset }}
+          - name: SEEDS_URL
+            value: {{ .Values.components.model_catalog_endpoint.environment.seeds_url }}
+{{- end }}

@@ -1,0 +1,357 @@
+# MINT
+
+![Version: 9.0.0-beta.17](https://img.shields.io/badge/Version-9.0.0--beta.17-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.3](https://img.shields.io/badge/AppVersion-1.16.3-informational?style=flat-square)
+
+A Helm chart for MINT
+
+## Maintainers
+
+| Name | Email | Url |
+| ---- | ------ | --- |
+| mosoriob | <maxiosorio@gmail.com> | <https://github.com/mosoriob> |
+
+## Values
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| affinity | object | `{}` |  |
+| arm_support | bool | `false` | Enable or disable ARM support |
+| auth.auth_url | string | `"/v3/oauth2/authorize"` | Authorization URL for authentication service |
+| auth.client_id | string | `"mint-local"` | URL for authentication service |
+| auth.discovery_url | string | `"/v3/oauth2/.well-known/oauth-authorization-server"` | Discovery URL for authentication service |
+| auth.logout_url | string | `"/v3/oauth2/tokens/revoke"` | Logout URL for authentication service |
+| auth.provider | string | `"tapis"` | Provider for authentication service: "tapis" or "keycloak" |
+| auth.realm | string | `""` |  |
+| auth.server | string | `"https://portals.tapis.io"` | Auth server |
+| auth.token_url | string | `"/v3/oauth2/token"` | Token URL for authentication service |
+| auth.ui_client_id | string | `""` |  |
+| auth.url | string | `""` |  |
+| autoscaling.enabled | bool | `false` |  |
+| autoscaling.maxReplicas | int | `100` |  |
+| autoscaling.minReplicas | int | `1` |  |
+| autoscaling.targetCPUUtilizationPercentage | int | `80` |  |
+| components.backups.enabled | bool | `false` | Enable or disable backups |
+| components.cromo.enabled | bool | `false` | Enable or disable Cromo |
+| components.cromo.image.pullPolicy | string | `"Always"` | Image pull policy for Cromo |
+| components.cromo.image.repository | string | `"mintproject/cromo"` | Docker image repository for Cromo |
+| components.cromo.image.tag | string | `"3c75586989aedf2573c37f5352f960c294377931"` | Docker image tag for Cromo |
+| components.cromo.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
+| components.cromo.ingress.className | string | `""` |  |
+| components.cromo.ingress.enabled | bool | `true` | Enable or disable ingress for Cromo |
+| components.cromo.ingress.hosts[0].host | string | `"cromo.mint.local"` |  |
+| components.cromo.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.cromo.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.cromo.ingress.tls | list | `[]` |  |
+| components.cromo.resources | object | `{}` | Resource specifications for Cromo |
+| components.data_catalog | object | `{"arm_image":{"pullPolicy":"Always","repository":"mintproject/data-catalog","tag":"8a6af95cae183320d596dc5219f2f76d1f234749"},"enabled":false,"image":{"pullPolicy":"Always","repository":"mintproject/data-catalog","tag":"9be70359feabe03ed55bfdbf92c20a7e43ab928b"},"ingress":{"annotations":{"nginx.ingress.kubernetes.io/enable-cors":"true"},"className":"","enabled":true,"hosts":[{"host":"datacatalog.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | Data Catalog component configuration |
+| components.data_catalog.arm_image.pullPolicy | string | `"Always"` | Image pull policy for ARM-based Data Catalog |
+| components.data_catalog.arm_image.repository | string | `"mintproject/data-catalog"` | Docker image repository for ARM-based Data Catalog |
+| components.data_catalog.arm_image.tag | string | `"8a6af95cae183320d596dc5219f2f76d1f234749"` | Docker image tag for ARM-based Data Catalog |
+| components.data_catalog.enabled | bool | `false` | Enable or disable Data Catalog |
+| components.data_catalog.image.pullPolicy | string | `"Always"` | Image pull policy for Data Catalog |
+| components.data_catalog.image.repository | string | `"mintproject/data-catalog"` | Docker image repository for Data Catalog |
+| components.data_catalog.image.tag | string | `"9be70359feabe03ed55bfdbf92c20a7e43ab928b"` | Docker image tag for Data Catalog |
+| components.data_catalog.ingress.enabled | bool | `true` | Enable or disable ingress for Data Catalog |
+| components.data_catalog.resources | object | `{}` | Resource specifications for Data Catalog |
+| components.data_catalog_db.arm_image.pullPolicy | string | `"Always"` | Image pull policy for ARM-based Data Catalog database |
+| components.data_catalog_db.arm_image.repository | string | `"mintproject/data-catalog-db"` | Docker image repository for ARM-based Data Catalog database |
+| components.data_catalog_db.arm_image.tag | string | `"8a6af95cae183320d596dc5219f2f76d1f234749"` | Docker image tag for ARM-based Data Catalog database |
+| components.data_catalog_db.image.pullPolicy | string | `"Always"` | Image pull policy for Data Catalog database |
+| components.data_catalog_db.image.repository | string | `"mintproject/data-catalog-db"` | Docker image repository for Data Catalog database |
+| components.data_catalog_db.image.tag | string | `"9be70359feabe03ed55bfdbf92c20a7e43ab928b"` | Docker image tag for Data Catalog database |
+| components.data_catalog_db.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| components.data_catalog_db.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
+| components.data_catalog_db.persistence.dataSource | object | `{}` |  |
+| components.data_catalog_db.persistence.enabled | bool | `true` | Enable or disable persistence for Data Catalog database |
+| components.data_catalog_db.persistence.existingClaim | string | `""` |  |
+| components.data_catalog_db.persistence.selector | object | `{}` |  |
+| components.data_catalog_db.persistence.size | string | `"30Gi"` |  |
+| components.data_catalog_db.persistence.storageClass | string | `""` |  |
+| components.data_catalog_db.persistence.subPath | string | `""` |  |
+| components.data_catalog_db.resources | object | `{}` | Resource specifications for Data Catalog database |
+| components.ensemble_manager.api_version | string | `"v1"` | API version for Ensemble Manager |
+| components.ensemble_manager.config.auth.algorithms[0] | string | `"RS256"` |  |
+| components.ensemble_manager.config.auth.authorization_url | string | `"https://portals.tapis.io/v3/oauth2/authorize"` |  |
+| components.ensemble_manager.config.auth.client_id | string | `"me3"` |  |
+| components.ensemble_manager.config.auth.public_key | string | `"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw/gduKqo2Pjv6puw1TLxEF/CzVacsBYVGYAeyhNg0opB4ScnDlZhGtG84co/9vBVTtKznoZ+L7a3a4gqFZXY404K0TdkkZkRUWW6uU06oMK22EQxQTCPkI+MgqX6nRE6T2RAixluRGVI2qDP620IFLXJCm7l4ZHCDJITpVADdpAnrDe2y6PuYC9nWz+VXVRNs3rkmEV2aHM6F5PTfT1cOuvWxaDCSdzJUQlUNb2h0fWNVPAz0KETzjx4QQ1XFV5KONaMwSGJ6b4RVefaOVp7fgs35TISiO57pX1Cv9KjW3BFG6CWb2TurLtv4HM+mYIUIk3t1XywUonP1oyXSnwPaQIDAQAB\n-----END PUBLIC KEY-----"` |  |
+| components.ensemble_manager.config.execution_engine.basePath | string | `""` |  |
+| components.ensemble_manager.config.execution_engine.code_dir | string | `"/home/node/app/data/code"` |  |
+| components.ensemble_manager.config.execution_engine.data_dir | string | `"/home/node/app/data/data"` |  |
+| components.ensemble_manager.config.execution_engine.data_url | string | `"s3://mintdata"` |  |
+| components.ensemble_manager.config.execution_engine.log_dir | string | `"/home/node/app/data/logs"` |  |
+| components.ensemble_manager.config.execution_engine.log_url | string | `"s3://mintdata"` |  |
+| components.ensemble_manager.config.execution_engine.parallelism | int | `2` |  |
+| components.ensemble_manager.config.execution_engine.temp_dir | string | `"/home/node/app/data/temp"` |  |
+| components.ensemble_manager.config.execution_engine.type | string | `"localex"` |  |
+| components.ensemble_manager.config.execution_engine.username | string | `""` |  |
+| components.ensemble_manager.config.execution_engine.wings_dot_path | string | `""` |  |
+| components.ensemble_manager.config.execution_engine.wings_export_url | string | `""` |  |
+| components.ensemble_manager.config.execution_engine.wings_ont_url | string | `""` |  |
+| components.ensemble_manager.config.execution_engine.wings_storage | string | `""` |  |
+| components.ensemble_manager.config.graphql.enable_ssl | bool | `false` |  |
+| components.ensemble_manager.config.graphql.endpoint | string | `"localhost:30003/v1/graphql"` |  |
+| components.ensemble_manager.config.graphql.use_secret | bool | `true` |  |
+| components.ensemble_manager.enabled | bool | `true` | Enable or disable Ensemble Manager |
+| components.ensemble_manager.environment.data_dir | string | `"/var/mint"` |  |
+| components.ensemble_manager.image | object | `{"pullPolicy":"Always","repository":"ghcr.io/mintproject/ensemble-manager","tag":""}` | Docker image repository for Ensemble Manager |
+| components.ensemble_manager.image.pullPolicy | string | `"Always"` | Image pull policy for Ensemble Manager |
+| components.ensemble_manager.image.repository | string | `"ghcr.io/mintproject/ensemble-manager"` | Docker image repository for Ensemble Manager |
+| components.ensemble_manager.image.tag | string | `""` | Docker image tag for Ensemble Manager. Empty by default, so `global.imageTag` applies. |
+| components.ensemble_manager.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
+| components.ensemble_manager.ingress.className | string | `""` |  |
+| components.ensemble_manager.ingress.enabled | bool | `true` |  |
+| components.ensemble_manager.ingress.hosts[0].host | string | `"ensemble-manager.mint.local"` |  |
+| components.ensemble_manager.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.ensemble_manager.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.ensemble_manager.ingress.tls | list | `[]` |  |
+| components.ensemble_manager.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| components.ensemble_manager.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
+| components.ensemble_manager.persistence.dataSource | object | `{}` |  |
+| components.ensemble_manager.persistence.enabled | bool | `true` |  |
+| components.ensemble_manager.persistence.existingClaim | string | `""` |  |
+| components.ensemble_manager.persistence.name | string | `"ensemble-manager"` |  |
+| components.ensemble_manager.persistence.selector | object | `{}` |  |
+| components.ensemble_manager.persistence.size | string | `"10Gi"` |  |
+| components.ensemble_manager.persistence.storageClass | string | `""` |  |
+| components.ensemble_manager.resources | object | `{}` | Resource specifications for Ensemble Manager |
+| components.ensemble_manager.serviceAccountName | string | `"default"` | Service account name for Ensemble Manager, used to run jobs |
+| components.ensemble_manager.strategy | object | `{"type":"Recreate"}` | Ensemble Manager deployment strategy (Recreate or RollingUpdate) |
+| components.ensemble_manager.strategy.type | string | `"Recreate"` | Type of deployment strategy |
+| components.hasura.auth | object | `{"jwt":{"claims":{"namespace":"https://hasura.io/jwt/claims"}},"type":"webhook","webhook":{"config":{"tapisJwksUri":"https://portals.tapis.io/v3/tenants/portals","tapisTokenIssuer":"https://portals.tapis.io/v3/tokens"},"service":{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"1.0.0"},"resources":{}}}}` | Authentication configuration for Hasura |
+| components.hasura.auth.jwt.claims | object | `{"namespace":"https://hasura.io/jwt/claims"}` | JWT claims configuration |
+| components.hasura.auth.type | string | `"webhook"` | Authentication type (jwt or webhook) |
+| components.hasura.auth.webhook.config.tapisJwksUri | string | `"https://portals.tapis.io/v3/tenants/portals"` | JWKS URI for Tapis authentication |
+| components.hasura.auth.webhook.config.tapisTokenIssuer | string | `"https://portals.tapis.io/v3/tokens"` | Token issuer for Tapis authentication |
+| components.hasura.auth.webhook.service | object | `{"image":{"pullPolicy":"IfNotPresent","repository":"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook","tag":"1.0.0"},"resources":{}}` | Webhook service configuration |
+| components.hasura.auth.webhook.service.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for auth webhook |
+| components.hasura.auth.webhook.service.image.repository | string | `"ghcr.io/in-for-disaster-analytics/hasura-tapis-auth-webhook"` | Docker image repository for auth webhook |
+| components.hasura.auth.webhook.service.image.tag | string | `"1.0.0"` | Docker image tag for auth webhook |
+| components.hasura.auth.webhook.service.resources | object | `{}` | Resource specifications for auth webhook |
+| components.hasura.enabled | bool | `true` | Enable or disable Hasura |
+| components.hasura.environment.enable_console | bool | `true` | Enable or disable Hasura console |
+| components.hasura.environment.enable_dev_mode | bool | `false` | Enable or disable Hasura dev mode |
+| components.hasura.environment.unauthorized_role | string | `"anonymous"` | Unauthorized role for Hasura |
+| components.hasura.image.pullPolicy | string | `"Always"` | Image pull policy for Hasura |
+| components.hasura.image.repository | string | `"ghcr.io/mintproject/graphql-engine"` | Docker image repository for Hasura |
+| components.hasura.image.tag | string | `""` | Docker image tag for Hasura. Empty by default, so `global.imageTag` applies. Set it only to pin Hasura away from the rest of the system. Migrations are baked into this image, so the schema a deployment can reach is exactly the one this tag carries. |
+| components.hasura.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
+| components.hasura.ingress.className | string | `nil` |  |
+| components.hasura.ingress.enabled | bool | `true` | Enable or disable ingress for Hasura |
+| components.hasura.ingress.hosts[0].host | string | `"graphql.mint.local"` |  |
+| components.hasura.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.hasura.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.hasura.ingress.tls | list | `[]` |  |
+| components.hasura.resources | object | `{}` | Resource specifications for Hasura |
+| components.hasura_db.arm_image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for ARM-based Hasura database |
+| components.hasura_db.arm_image.repository | string | `"imresamu/postgis-arm64"` | Docker image repository for ARM-based Hasura database |
+| components.hasura_db.arm_image.tag | string | `"12-3.4-alpine"` | Docker image tag for ARM-based Hasura database |
+| components.hasura_db.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for Hasura database |
+| components.hasura_db.image.repository | string | `"ghcr.io/mintproject/postgres-pgvector"` | Docker image repository for Hasura database |
+| components.hasura_db.image.tag | string | `"sha-1d23b2c"` | Docker image tag for Hasura database. `postgres-pgvector` has no 40-character SHA tag, so `global.imageTag` cannot name it. CI builds this image only when `docker/postgres-pgvector` changes. `sha-1d23b2c` is the newest develop build, and its source matches `global.imageTag`. |
+| components.hasura_db.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| components.hasura_db.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
+| components.hasura_db.persistence.dataSource | object | `{}` |  |
+| components.hasura_db.persistence.enabled | bool | `true` | Enable or disable persistence for Hasura database |
+| components.hasura_db.persistence.existingClaim | string | `""` |  |
+| components.hasura_db.persistence.selector | object | `{}` |  |
+| components.hasura_db.persistence.size | string | `"30Gi"` |  |
+| components.hasura_db.persistence.storageClass | string | `""` |  |
+| components.hasura_db.persistence.subPath | string | `""` | Subpath for Hasura database |
+| components.hasura_db.resources | object | `{}` | Resource specifications for Hasura database |
+| components.mic_api | object | `{"enabled":false,"image":{"pullPolicy":"Always","repository":"mintproject/mic-api","tag":"ee71a1a364fc3d384f85243684ad95d37913b049"},"ingress":{"annotations":{"nginx.ingress.kubernetes.io/enable-cors":"true"},"className":"","enabled":true,"hosts":[{"host":"api.mic.mint.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]},"resources":{}}` | MIC API component configuration |
+| components.mic_api.enabled | bool | `false` | Enable or disable MIC API |
+| components.mic_api.image.pullPolicy | string | `"Always"` | Image pull policy for MIC API |
+| components.mic_api.image.repository | string | `"mintproject/mic-api"` | Docker image repository for MIC API |
+| components.mic_api.image.tag | string | `"ee71a1a364fc3d384f85243684ad95d37913b049"` | Docker image tag for MIC API |
+| components.mic_api.ingress.enabled | bool | `true` | Enable or disable ingress for MIC API |
+| components.mic_api.resources | object | `{}` | Resource specifications for MIC API |
+| components.mic_api_db.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for MIC API database |
+| components.mic_api_db.image.repository | string | `"postgres"` | Docker image repository for MIC API database |
+| components.mic_api_db.image.tag | float | `14.6` | Docker image tag for MIC API database |
+| components.mic_api_db.persistence.accessModes | list | `["ReadWriteOnce"]` | Access modes for MIC API database |
+| components.mic_api_db.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
+| components.mic_api_db.persistence.dataSource | object | `{}` |  |
+| components.mic_api_db.persistence.enabled | bool | `true` | Enable or disable persistence for MIC API database |
+| components.mic_api_db.persistence.existingClaim | string | `""` | Existing claim for MIC API database |
+| components.mic_api_db.persistence.selector | object | `{}` |  |
+| components.mic_api_db.persistence.size | string | `"10Gi"` | Size for MIC API database |
+| components.mic_api_db.persistence.storageClass | string | `""` | Storage class for MIC API database |
+| components.mic_api_db.persistence.subPath | string | `""` | Subpath for MIC API database |
+| components.mic_api_db.resources | object | `{}` | Resource specifications for MIC API database |
+| components.mic_ui.enabled | bool | `false` | Enable or disable MIC UI |
+| components.mic_ui.image.environment.airflow_url | string | `"https://airflow.mint.isi.edu/api/v1"` | Airflow URL for MIC UI |
+| components.mic_ui.image.environment.api_url | string | `nil` | API URL for MIC UI |
+| components.mic_ui.image.pullPolicy | string | `"Always"` | Image pull policy for MIC UI |
+| components.mic_ui.image.repository | string | `"mintproject/mic-web"` | Docker image repository for MIC UI |
+| components.mic_ui.image.tag | string | `"a736ac5841d471de4679bec80c13b0fb646ae073"` | Docker image tag for MIC UI |
+| components.mic_ui.ingress.annotations | object | `{}` |  |
+| components.mic_ui.ingress.className | string | `""` |  |
+| components.mic_ui.ingress.enabled | bool | `true` | Enable or disable ingress for MIC UI |
+| components.mic_ui.ingress.hosts[0].host | string | `"mic.mint.local"` |  |
+| components.mic_ui.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.mic_ui.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.mic_ui.ingress.tls | list | `[]` |  |
+| components.mic_ui.resources | object | `{}` | Resource specifications for MIC UI |
+| components.model_catalog_api.api_version | string | `"v2.0.0"` |  |
+| components.model_catalog_api.enabled | bool | `true` | Enable or disable Model Catalog API |
+| components.model_catalog_api.environment.hasura_graphql_url | string | `""` | Hasura GraphQL URL for Model Catalog API. Defaults to internal service DNS (http://<prefix>-hasura/v1/graphql) |
+| components.model_catalog_api.environment.log_level | string | `"info"` | Log level for Model Catalog API |
+| components.model_catalog_api.image.pullPolicy | string | `"Always"` | Image pull policy for Model Catalog API |
+| components.model_catalog_api.image.repository | string | `"ghcr.io/mintproject/model-catalog-api"` | Docker image repository for Model Catalog API |
+| components.model_catalog_api.image.tag | string | `""` | Docker image tag for Model Catalog API. Empty by default, so `global.imageTag` applies. |
+| components.model_catalog_api.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
+| components.model_catalog_api.ingress.className | string | `""` |  |
+| components.model_catalog_api.ingress.enabled | bool | `true` | Enable or disable ingress for Model Catalog API |
+| components.model_catalog_api.ingress.hosts[0].host | string | `"api.models.mint.local"` |  |
+| components.model_catalog_api.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.model_catalog_api.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.model_catalog_api.ingress.tls | list | `[]` |  |
+| components.model_catalog_api.resources | object | `{}` | Resource specifications for Model Catalog API |
+| components.model_catalog_endpoint.enabled | bool | `false` | Enable or disable Model Catalog Endpoint |
+| components.model_catalog_endpoint.environment.backup_file | string | `"/fuseki-base/seeds/model-catalog.trig"` | Backup file path for Model Catalog Endpoint |
+| components.model_catalog_endpoint.environment.dataset | string | `"modelcatalog"` | Dataset name for Model Catalog Endpoint Apache Jena Fuseki |
+| components.model_catalog_endpoint.environment.graph_base | string | `"http://endpoint.mint.isi.edu/modelCatalog-1.8.0/data/"` | Graph base URL for Model Catalog Endpoint. The triples are stored in this graph |
+| components.model_catalog_endpoint.environment.prefix | string | `"https://w3id.org/okn/i/mint/"` | Prefix URL for Model Catalog Endpoint |
+| components.model_catalog_endpoint.environment.seeds_url | string | `"https://raw.githubusercontent.com/mintproject/model-catalog-endpoint/main/data/model-catalog.trig"` | Seeds URL for Model Catalog Endpoint |
+| components.model_catalog_endpoint.image.pullPolicy | string | `"Always"` | Image pull policy for Model Catalog Endpoint |
+| components.model_catalog_endpoint.image.repository | string | `"mintproject/model-catalog-endpoint"` | Docker image repository for Model Catalog Endpoint |
+| components.model_catalog_endpoint.image.tag | string | `"29256555a6fbaefae4729d5cd259564708a4ab04"` | Docker image tag for Model Catalog Endpoint |
+| components.model_catalog_endpoint.ingress.annotations."nginx.ingress.kubernetes.io/enable-cors" | string | `"true"` |  |
+| components.model_catalog_endpoint.ingress.className | string | `""` |  |
+| components.model_catalog_endpoint.ingress.enabled | bool | `true` | Enable or disable ingress for Model Catalog Endpoint |
+| components.model_catalog_endpoint.ingress.hosts[0].host | string | `"endpoint.models.mint.local"` |  |
+| components.model_catalog_endpoint.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.model_catalog_endpoint.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.model_catalog_endpoint.ingress.tls | list | `[]` |  |
+| components.model_catalog_endpoint.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
+| components.model_catalog_endpoint.persistence.annotations."helm.sh/resource-policy" | string | `"keep"` |  |
+| components.model_catalog_endpoint.persistence.dataSource | object | `{}` |  |
+| components.model_catalog_endpoint.persistence.enabled | bool | `true` | Enable or disable persistence for Model Catalog Endpoint |
+| components.model_catalog_endpoint.persistence.existingClaim | string | `""` |  |
+| components.model_catalog_endpoint.persistence.selector | object | `{}` |  |
+| components.model_catalog_endpoint.persistence.size | string | `"20Gi"` |  |
+| components.model_catalog_endpoint.persistence.storageClass | string | `""` |  |
+| components.model_catalog_endpoint.resources | object | `{}` | Resource specifications for Model Catalog Endpoint |
+| components.model_catalog_explorer.enabled | bool | `true` | Enable or disable Model Catalog Explorer |
+| components.model_catalog_explorer.image.pullPolicy | string | `"Always"` | Image pull policy for Model Catalog Explorer |
+| components.model_catalog_explorer.image.repository | string | `"mintproject/model-catalog-explorer"` | Docker image repository for Model Catalog Explorer |
+| components.model_catalog_explorer.image.tag | string | `"0b2f9f0a9124076aeb492add2f123d0757066f6b"` | Docker image tag for Model Catalog Explorer |
+| components.model_catalog_explorer.ingress.annotations | object | `{}` |  |
+| components.model_catalog_explorer.ingress.className | string | `""` |  |
+| components.model_catalog_explorer.ingress.enabled | bool | `true` | Enable or disable ingress for Model Catalog Explorer |
+| components.model_catalog_explorer.ingress.hosts[0].host | string | `"models.mint.local"` |  |
+| components.model_catalog_explorer.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.model_catalog_explorer.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.model_catalog_explorer.ingress.tls | list | `[]` |  |
+| components.model_catalog_explorer.resources | object | `{}` | Resource specifications for Model Catalog Explorer |
+| components.semantic_search.enabled | bool | `true` | Enable or disable the semantic search service |
+| components.semantic_search.environment.embedding_refresh_seconds | int | `60` | Seconds between embedding refresh passes |
+| components.semantic_search.environment.webhook_url | string | `""` | Webhook URL that the Hasura event triggers call. Defaults to internal service DNS (http://<prefix>-semantic-search:8091/events/catalog) |
+| components.semantic_search.image.pullPolicy | string | `"Always"` | Image pull policy for the semantic search service |
+| components.semantic_search.image.repository | string | `"ghcr.io/mintproject/semantic-search"` | Docker image repository for the semantic search service |
+| components.semantic_search.image.tag | string | `"sha-5009a52"` | Docker image tag for the semantic search service. This image has no 40-character SHA tag, so `global.imageTag` cannot name it. CI builds this image only when `semantic-search-service` changes. `sha-5009a52` is the newest develop build, and its source matches `global.imageTag`. |
+| components.semantic_search.resources | object | `{}` | Resource specifications for the semantic search service |
+| components.ui.config.airflow_api | string | `""` |  |
+| components.ui.config.airflow_dag_download_thread_id | string | `""` |  |
+| components.ui.config.execution_component_from_tapis | bool | `false` |  |
+| components.ui.config.execution_component_from_tapis_tenant | string | `""` |  |
+| components.ui.config.ingestion_api | string | `""` |  |
+| components.ui.config.visualization_url | string | `""` |  |
+| components.ui.enabled | bool | `false` | Enable or disable the legacy LitElement UI. Off by default: `ui_react` is the maintained frontend. Set it to `true` to keep serving the old app. |
+| components.ui.image.pullPolicy | string | `"Always"` | Image pull policy for UI |
+| components.ui.image.repository | string | `"ghcr.io/mintproject/mint-ui-lit"` | Docker image repository for UI |
+| components.ui.image.tag | string | `"latest"` | Docker image tag for UI. Only `latest` and `main` exist in GHCR. The per-commit SHA tags were never pushed there and live only on Docker Hub, so a SHA pin against this repository fails to pull. |
+| components.ui.ingress.annotations | object | `{}` |  |
+| components.ui.ingress.className | string | `""` |  |
+| components.ui.ingress.enabled | bool | `true` | Enable or disable ingress for UI |
+| components.ui.ingress.hosts[0].host | string | `"mint.local"` |  |
+| components.ui.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.ui.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.ui.ingress.tls | list | `[]` |  |
+| components.ui.resources | object | `{}` | Resource specifications for UI |
+| components.ui_react.config.auth_callback_origin | string | `""` | Origin to use for the OAuth2 callback. Leave empty to use the deployment's own origin, which is correct for a real cluster host. |
+| components.ui_react.config.branding | string | `""` | Co-branding chrome the React UI renders: the branding strip, the footer and the dark header. `tacc` shows the TACC and UT Austin marks; `none` shows no institutional chrome. Names a preset held in the image, so the logo files, link targets and alt text stay under code review. Leave empty to inherit the image's own default, which is unbranded. Set this only on a deployment entitled to show that institution's marks. |
+| components.ui_react.config.client_id | string | `"mint-local"` | OAuth2 client ID for the React UI. Defaults to the `mint-local` client, whose callback URL is the `mint.local` development host, and which `auth.client_id` already uses for the legacy UI. Every other deployment must override it: the identity provider allows one callback URL per client, so this must be the client whose callback URL is this deployment's own origin. Where the React UI takes over the legacy UI's host, that is the legacy UI's own client -- the two never serve the origin at once. |
+| components.ui_react.config.data_catalog_api | string | `""` | Overrides the data catalog API URL. Left empty, an enabled `external_services.ckan` supplies it -- as it does for the legacy UI -- and the `data_catalog` component's ingress is the last resort. |
+| components.ui_react.config.ensemble_manager_api | string | `""` | Overrides the ensemble manager API URL |
+| components.ui_react.config.execution_engine | string | `""` | Overrides the execution engine the React UI submits runs to. Leave empty to inherit `components.ensemble_manager.config.execution_engine.type`, which is the engine this chart configures the Ensemble Manager to run and the same value the legacy UI is given. Set this only to point the React UI at a different engine than this chart's Ensemble Manager. |
+| components.ui_react.config.hasura_endpoint | string | `""` | Overrides the Hasura GraphQL endpoint URL |
+| components.ui_react.config.model_catalog_api | string | `""` | Overrides the model catalog API URL. The React UI reads the catalog itself through Hasura, so this base serves only the routes Hasura cannot -- today the Tapis application proxy behind the component location picker. |
+| components.ui_react.enabled | bool | `true` | Enable or disable the React UI. Deployed alongside the legacy `ui` component rather than replacing it; the cutover is a separate decision. |
+| components.ui_react.image.pullPolicy | string | `"Always"` | Image pull policy for the React UI |
+| components.ui_react.image.repository | string | `"ghcr.io/mintproject/mint-ui-react"` | Docker image repository for the React UI |
+| components.ui_react.image.tag | string | `""` | Docker image tag for the React UI. Empty by default, so `global.imageTag` applies. |
+| components.ui_react.ingress.annotations | object | `{}` |  |
+| components.ui_react.ingress.className | string | `""` |  |
+| components.ui_react.ingress.enabled | bool | `true` | Enable or disable ingress for the React UI |
+| components.ui_react.ingress.hosts[0].host | string | `"mint.local"` |  |
+| components.ui_react.ingress.hosts[0].paths[0].path | string | `"/"` |  |
+| components.ui_react.ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
+| components.ui_react.ingress.tls | list | `[]` |  |
+| components.ui_react.resources | object | `{}` | Resource specifications for the React UI |
+| default_user | string | `"mint@isi.edu"` | Default user email |
+| external_services.ckan.enabled | bool | `false` | Enable or disable CKAN service |
+| external_services.ckan.extra.default_dataset_id | string | `""` | Default dataset ID for CKAN service. Used by Ensemble Manager to upload data when a task has no dataset_id |
+| external_services.ckan.extra.owner_organization_id | string | `""` | Owner organization ID for CKAN service |
+| external_services.ckan.extra.owner_provenance_id | string | `""` | Owner provenance ID for CKAN service |
+| external_services.ckan.type | string | `"CKAN"` | CKAN service type |
+| external_services.ckan.url | string | `"http://localhost:5000"` | CKAN service configuration |
+| external_services.kubernetes.cpu_limit | string | `"256m"` | Job CPU limit |
+| external_services.kubernetes.enabled | bool | `false` | Enable or disable Kubernetes service to run jobs used by Ensemble Manager |
+| external_services.kubernetes.memory_limit | string | `"512Mi"` | Job memory limit |
+| external_services.kubernetes.namespace | string | `"default"` | Kubernetes namespace |
+| external_services.kubernetes.node_affinity | bool | `true` | Toggle for node affinity. The job will be scheduled on the same node as the Ensemble Manager |
+| external_services.s3.bucket | string | `""` | S3 bucket |
+| external_services.s3.enabled | bool | `false` | Enable or disable S3 |
+| external_services.s3.region | string | `""` | S3 region |
+| external_services.s3.type | string | `"S3"` | S3 configuration |
+| fullnameOverride | string | `""` |  |
+| global | object | `{"imageTag":"42e235494d73ca7e43060bb3bf29c6262703f63f"}` | Values shared by every subchart and by the four services that ship from `mintproject/monorepo`. |
+| global.imageTag | string | `"42e235494d73ca7e43060bb3bf29c6262703f63f"` | One image tag for the four services built out of the single repository: `hasura` (graphql-engine), `model_catalog_api`, `ui_react` and `ensemble_manager`. Every single-repo commit builds all four, so one tag names the whole system state.  A per-service `components.<name>.image.tag` still wins over this value. The four ship with an empty tag, so this value is what a bare install uses. Leave both empty and the chart falls back to `.Chart.AppVersion`, which names no image these services publish.  It does **not** reach `cromo`, `mic_ui`, `mic_api`, `data_catalog`, `data_catalog_db`, `model_catalog_endpoint`, `model_catalog_explorer`, `ui` (mint-ui-lit), `hasura_db` or the auth webhook. Those images do not come from the single repository. |
+| google.maps.key | string | `"AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM"` | API key for Google Maps |
+| hostname | string | `"localhost"` | Hostname for the application |
+| imagePullSecrets | list | `[]` |  |
+| jobs.hasura.enabled | bool | `true` | Enable or disable MINT Database initialization |
+| jobs.hasura.resources | object | `{}` | Resource specifications for MINT Database initialization |
+| jobs.model_catalog_endpoint.enabled | bool | `false` | Enable or disable Model Catalog API initialization |
+| jobs.model_catalog_endpoint.resources | object | `{}` | Resource specifications for Model Catalog API initialization |
+| nameOverride | string | `""` |  |
+| nodeSelector | object | `{}` |  |
+| podAnnotations | object | `{}` |  |
+| podSecurityContext | object | `{}` |  |
+| resources | object | `{}` |  |
+| secrets.backups.s3 | object | `{"access_key":"CHANGEME","bucket":"CHANGEME","endpoint":"example.com","path":"CHANGEME","region":null,"secret_key":"CHANGEME"}` | S3 configuration for backups of MINT databases |
+| secrets.backups.s3.access_key | string | `"CHANGEME"` | Access key for S3 |
+| secrets.backups.s3.bucket | string | `"CHANGEME"` | Region for S3 |
+| secrets.backups.s3.endpoint | string | `"example.com"` | Url for S3 |
+| secrets.backups.s3.path | string | `"CHANGEME"` | Bucket for S3 |
+| secrets.backups.s3.region | string | `nil` | Path for S3 |
+| secrets.backups.s3.secret_key | string | `"CHANGEME"` | Secret key for S3 |
+| secrets.database.data_catalog.database | string | `"datacatalog"` | Database name for Data Catalog database |
+| secrets.database.data_catalog.password | string | `"CHANGEME"` | Password for Data Catalog database |
+| secrets.database.data_catalog.username | string | `"datacatalog"` | Username for Data Catalog database |
+| secrets.database.hasura.database | string | `"hasura"` | Database name for Hasura database |
+| secrets.database.hasura.password | string | `"CHANGEME"` | Password for Hasura database |
+| secrets.database.hasura.username | string | `"hasura"` | Username for Hasura database |
+| secrets.database.mic_api.database | string | `"mic"` | Database name for Mic API database |
+| secrets.database.mic_api.password | string | `"CHANGEME"` | Password for Mic API database |
+| secrets.database.mic_api.username | string | `"mic"` | Username for Mic API database |
+| secrets.database.model_catalog_endpoint.password | string | `"CHANGEME"` | Password for Model Catalog Apache Jena Fuseki database |
+| secrets.database.model_catalog_endpoint.username | string | `"admin"` | Username for Model Catalog Apache Jena Fuseki database |
+| secrets.external_services.ckan.api_key | string | `"CHANGEME"` | API key for CKAN service. Used by Ensemble Manager to upload data |
+| secrets.external_services.s3.access_key | string | `"CHANGEME"` | Access key for S3. Used by Ensemble Manager to upload data |
+| secrets.external_services.s3.secret_key | string | `"CHANGEME"` | Secret key for S3 |
+| secrets.hasura.admin_secret | string | `"CHANGEME"` | Admin secret for Hasura used to access the console |
+| secrets.hasura.jwt_secret | string | `"{\"type\": \"RS256\", \"key\": \"-----BEGIN CERTIFICATE-----\\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyQQ56WKKsVCUs8n9swlv5DV7st7UUdvNoDSnwovdU2vinQQ686//vRqlUJ5vpyI7r75qTXCPkXUitDhPvGEMfChnb9tuWdymSyZmMmT+34oaYo/2bGSZjTlLRVfRJjUnFYeWoVLoXVKJolyDWtU6bXbFNnUyysb/6YIpg5sSwxkLs/9yl6HsWdFconxPJO6KmMPSjcOc0fZermNq+cOEvj1OqRhVkxDqBebreI+zcgrJHNSN8d6cxTmfVQl1jIPHvxE5oN7qUdfYmK4D+SOlj8FlkUvwis+3Ix2AQsvNoOD1OzuqUOd/FpXBnEGaeTq9EMwDxplNqltR/qT3/poUwIDAQAB\\n-----END CERTIFICATE-----\", \"allowed_skew\": 2}"` | JWT verification secret for Hasura (only used when auth.type is jwt) |
+| securityContext | object | `{}` |  |
+| service | object | `{"port":80,"type":"ClusterIP"}` | Service configuration |
+| service.port | int | `80` | Port number for the service |
+| service.type | string | `"ClusterIP"` | Type of Kubernetes service |
+| serviceAccount.annotations | object | `{}` |  |
+| serviceAccount.create | bool | `true` |  |
+| serviceAccount.name | string | `""` |  |
+| tolerations | list | `[]` |  |
+| welcome_message | string | `"Welcome to MINT"` | Welcome message for MINT |
+
+----------------------------------------------
+Autogenerated from chart metadata using [helm-docs v1.14.2](https://github.com/norwoodj/helm-docs/releases/v1.14.2)

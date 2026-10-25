@@ -1,0 +1,128 @@
+---
+{{ if .Values.components.ensemble_manager.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-ensemble-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager-files
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-ensemble-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-ensemble-manager
+  namespace: {{ .Release.Namespace }}
+spec:
+  strategy:
+    type: {{ .Values.components.ensemble_manager.strategy.type }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-ensemble-manager
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-ensemble-manager
+    spec:
+      serviceAccountName: {{ .Values.components.ensemble_manager.serviceAccountName }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "mint.prefix" . }}-ensemble-manager-config-map
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ include "mint.prefix" . }}-{{ .Values.components.ensemble_manager.persistence.name }}
+      initContainers:
+        - name: volume-mount-hack
+          image: busybox
+          command: ["sh", "-c", "chown -R 1000:1000 /home/node/app/data"]
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          volumeMounts:
+          - name: storage
+            mountPath: /home/node/app/data
+      containers:
+        - name: head
+          {{- with .Values.components.ensemble_manager }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Values.global.imageTag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: 3000
+              name: api
+          env:
+            - name: TMPDIR
+              value: /home/node/app/data/temp
+            - name: ENSEMBLE_MANAGER_PVC
+              value: {{ include "mint.prefix" . }}-{{ .Values.components.ensemble_manager.persistence.name }}
+            - name: HASURA_GRAPHQL_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-hasura-secrets
+                  key: admin_secret
+            - name: ENSEMBLE_MANAGER_CONFIG_FILE
+              value: /home/node/app/config.json
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          volumeMounts:
+            - name: storage
+              mountPath: /home/node/app/data
+            - name: config
+              mountPath: /home/node/app/config.json
+              subPath: config.json
+        - name: files
+          {{- with .Values.components.ensemble_manager }}
+          image: "nginx"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          ports:
+            - containerPort: 80
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: storage
+              mountPath: /usr/share/nginx/html
+        - name: redis
+          image: redis
+          imagePullPolicy: IfNotPresent
+          command: ['redis-server', '--port', '7379']
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+{{ end }}

@@ -1,0 +1,6 @@
+welcome_message: Welcome to MINT Demo
+arm_support: true
+
+components:
+  data_catalog:
+    enabled: false

@@ -1,0 +1,89 @@
+---
+{{ if .Values.components.semantic_search.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-semantic-search
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: "http"
+      port: 8091
+      targetPort: 8091
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-semantic-search
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-semantic-search
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-semantic-search
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-semantic-search
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      # The service reads and writes the Hasura database directly. Wait for it,
+      # the same way the Hasura deployment does.
+      initContainers:
+      - name: wait-for-db
+        image: postgres:13-alpine
+        command: ['sh', '-c',
+          'until pg_isready -h {{ include "mint.prefix" . }}-hasura-db -U $POSTGRES_USER; do echo waiting for database; sleep 2; done;']
+        env:
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: username
+      containers:
+        - name: semantic-search
+          {{- with .Values.components.semantic_search }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Values.global.imageTag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8091
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          env:
+            - name: SVO_EMBEDDING_REFRESH_SECONDS
+              value: "{{ .environment.embedding_refresh_seconds }}"
+          {{- end }}
+            # libpq accepts the `postgres://` scheme that this secret carries.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mint.prefix" . }}-hasura-secrets
+                  key: database_url
+{{ end }}

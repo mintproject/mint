@@ -1,31 +1,59 @@
 name: Release Please
 
-# One version for the whole repository. Every single-repo commit builds all
-# four services, so one tag names the whole system state.
+# Two packages, two branches. See ADR-0005 and monorepo#290.
+#
+# - `.` is the service line. One version for every service, cut from `main`
+#   only. Every single-repo commit builds all four services, so one tag names
+#   the whole system state.
+# - `charts/mint` is the MINT chart. It keeps its own `9.x` line, because a
+#   published chart version must never go back. `main` cuts stable; `develop`
+#   cuts `beta` (`9.0.0-beta.N`).
+#
+# release-please reads its config and manifest from the target branch. Each
+# branch has its own filenames, so a develop -> main merge never collides them.
+#
+# The first stable chart needs a `Release-As: 9.0.0` commit footer on `main`.
+# Without it, the default versioning bumps 9.0.0-beta.N to 9.0.1 or 9.1.0.
 #
 # `release-as` and `bootstrap-sha` came off after the first release, 0.1.0 on
-# 2026-08-30. Both were bootstrap settings. `release-as` fixed the version at
-# 0.1.0, and `bootstrap-sha` stopped the changelog walk at the last commit
-# before the three service histories were imported. release-please now anchors
-# on the `chore(main): release 0.1.0` commit, so it computes the next version
-# from the conventional commits after it. See monorepo#282.
+# 2026-08-30. See monorepo#282. Do not put them back as config pins.
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
 
+# Two runs on one branch must not both write gh-pages.
+concurrency:
+  group: release-please-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      chart_released: ${{ steps.rp.outputs['charts/mint--release_created'] }}
+      chart_tag: ${{ steps.rp.outputs['charts/mint--tag_name'] }}
     steps:
       - uses: googleapis/release-please-action@v4
+        id: rp
         with:
           # Pinned. The action defaults to the repository default branch, which
-          # is `develop`. Releases are cut from `main`, the production line.
-          target-branch: main
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          # is `develop`, so the main job must name its branch.
+          target-branch: ${{ github.ref_name }}
+          config-file: ${{ github.ref_name == 'main' && 'release-please-config.json' || 'release-please-config-develop.json' }}
+          manifest-file: ${{ github.ref_name == 'main' && '.release-please-manifest.json' || '.release-please-manifest-develop.json' }}
+
+  # Publish in the same run. A tag pushed with GITHUB_TOKEN fires no workflow,
+  # so a separate on-tag workflow would never run.
+  publish-chart:
+    needs: release-please
+    if: needs.release-please.outputs.chart_released == 'true'
+    uses: ./.github/workflows/publish-chart.yml
+    with:
+      ref: ${{ needs.release-please.outputs.chart_tag }}
+    permissions:
+      contents: write

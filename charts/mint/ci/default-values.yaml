@@ -1,0 +1,9 @@
+# Installs the chart with its default values.
+#
+# This file exists to preserve coverage that was previously implicit: with no
+# ci/ directory, chart-testing installed the chart once using values.yaml as-is.
+# Adding any file to ci/ replaces that behaviour with one install per file, so
+# without this the default-values install would silently stop being tested.
+#
+# Deliberately empty -- the point is to change nothing.
+{}

@@ -1,0 +1,12 @@
+components:
+  ensemble_manager:
+    enabled: true
+    execution_engine:
+      type: tapis
+      config:
+        codedir: /home/node/app/data/code
+        datadir: /home/node/app/data/data
+        tempdir: /home/node/app/data/temp
+        logdir: /home/node/app/data/logs
+        dataurl: http://localhost:30010/data
+        parallelism: 1

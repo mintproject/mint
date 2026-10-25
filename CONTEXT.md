@@ -42,7 +42,7 @@ _Avoid_: dependency, subrepo
 
 **external repository**:
 A repository that MINT deploys or maintains, and that this repository does not
-hold. Today: `mintproject/mint` (the MINT chart) and `mint-ui-lit` (`ui`). Read
+hold. Today: `mint-ui-lit` (`ui`). Read
 it where it lives. Do not add a gitlink for it.
 _Avoid_: submodule, vendored repo, third-party repo
 
@@ -62,10 +62,11 @@ _Avoid_: the frontend (unqualified), the old UI
 ### Deployment
 
 **the MINT chart**:
-The Helm chart that deploys the whole platform. Its repository is
-`mintproject/mint`, and it publishes to `https://mintproject.github.io/mint`
-under the chart name `MINT`. It is an external repository. It was the directory
-`helm-charts/` until the gitlink was removed.
+The Helm chart that deploys the whole platform. It lives in `charts/mint/`, and
+it publishes to `https://mintproject.github.io/mint` under the chart name `MINT`.
+It was an external repository, `mintproject/mint`, until
+[ADR-0005](docs/adr/0005-chart-lives-here-and-this-repository-is-named-mint.md)
+moved it here. That old repository becomes `mintproject/mint-chart-archive`.
 _Avoid_: helm-charts (as a directory or a repository name), the mint repo
 
 **`dynamo`**:

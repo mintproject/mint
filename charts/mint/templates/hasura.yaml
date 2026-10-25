@@ -1,0 +1,267 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 8080
+      {{ if eq .Values.service.type "NodePort" }}
+      nodePort: {{ include "helm.hasura_node_port" . }}
+      {{ end }}
+      protocol: TCP
+    - name: "postgres"
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-hasura
+---
+{{- if eq .Values.components.hasura.auth.type "webhook" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura-auth-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ include "mint.prefix" . }}-hasura-auth-webhook
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura-auth-webhook
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-hasura-auth-webhook
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-hasura-auth-webhook
+    spec:
+      containers:
+        - name: auth-webhook
+          {{- with .Values.components.hasura.auth.webhook.service }}
+          image: "{{ .image.repository }}:{{ .image.tag }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- end }}
+          env:
+            - name: TAPIS_JWKS_URI
+              value: {{ .Values.components.hasura.auth.webhook.config.tapisJwksUri }}
+            - name: TAPIS_TOKEN_ISSUER
+              value: {{ .Values.components.hasura.auth.webhook.config.tapisTokenIssuer }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: {{ include "mint.prefix" . }}-hasura-db
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura-db
+  namespace: {{ .Release.Namespace }}
+spec:
+  serviceName: {{ include "mint.prefix" . }}-hasura-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-hasura-db
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-hasura-db
+    spec:
+      containers:
+      - name: postgresql
+        {{- if .Values.arm_support  }}
+        {{- with .Values.components.hasura_db }}
+        image: "{{ .arm_image.repository }}:{{ .arm_image.tag | default $.Chart.AppVersion }}"
+        imagePullPolicy: {{ .arm_image.pullPolicy }}
+        resources:
+          {{- toYaml .resources | nindent 12 }}
+        {{- end }}
+        {{- else }}
+        {{- with .Values.components.hasura_db }}
+        image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+        imagePullPolicy: {{ .image.pullPolicy }}
+        resources:
+          {{- toYaml .resources | nindent 12 }}
+        {{- end }}
+        {{- end }}
+        env:
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: password
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: username
+        ports:
+        - containerPort: 5432
+          name: postgresql
+        readinessProbe:
+          exec:
+            command:
+              - pg_isready
+              - -U
+              - {{ .Values.secrets.database.hasura.username }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+          {{- if .Values.components.hasura_db.persistence.subPath }}
+          subPath: {{ .Values.components.hasura_db.persistence.subPath }}
+          {{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.components.hasura_db.persistence.storageClass }}
+      storageClassName: {{ .Values.components.hasura_db.persistence.storageClass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.components.hasura_db.persistence.size | default "10Gi" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "mint.prefix" . }}-hasura
+  template:
+    metadata:
+      labels:
+        app: {{ include "mint.prefix" . }}-hasura
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      # Add init container to wait for database
+      initContainers:
+      - name: wait-for-db
+        image: postgres:13-alpine
+        command: ['sh', '-c',
+          'until pg_isready -h {{ include "mint.prefix" . }}-hasura-db -U $POSTGRES_USER; do echo waiting for database; sleep 2; done;']
+        env:
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: username
+      containers:
+        - name: hasura
+          {{- with .Values.components.hasura  }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Values.global.imageTag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          env:
+          - name: HASURA_GRAPHQL_ENABLE_CONSOLE
+            value: "{{ .environment.enable_console }}"
+          - name: HASURA_GRAPHQL_DEV_MODE
+            value: "{{ .environment.enable_dev_mode }}"
+          {{- if eq .auth.type "webhook" }}
+          - name: HASURA_GRAPHQL_AUTH_HOOK
+            value: "http://{{ include "mint.prefix" $ }}-hasura-auth-webhook:3000/auth-webhook"
+          - name: HASURA_GRAPHQL_AUTH_HOOK_MODE
+            value: "POST"
+          {{- else }}
+          - name: HASURA_GRAPHQL_UNAUTHORIZED_ROLE
+            value: "{{ .environment.unauthorized_role }}"
+          - name: HASURA_GRAPHQL_JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" $ }}-hasura-secrets
+                key: jwt_secret
+          {{- end }}
+          {{- end }}
+          - name: HASURA_GRAPHQL_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: database_url
+          - name: HASURA_GRAPHQL_ADMIN_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: admin_secret
+          - name: DB_HOST
+            value: {{ include "mint.prefix" . }}-hasura-db
+          # Nine event triggers in the metadata declare
+          # `webhook_from_env: SVO_SEMANTIC_SEARCH_WEBHOOK_URL`. Hasura rejects
+          # the whole `metadata apply` when the variable is absent, so set it
+          # even when `components.semantic_search.enabled` is false.
+          - name: SVO_SEMANTIC_SEARCH_WEBHOOK_URL
+            value: {{ .Values.components.semantic_search.environment.webhook_url | default (printf "http://%s-semantic-search:8091/events/catalog" (include "mint.prefix" .)) | quote }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
