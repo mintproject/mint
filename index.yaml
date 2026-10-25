@@ -3,6 +3,20 @@ entries:
   MINT:
   - apiVersion: v2
     appVersion: 1.16.3
+    created: "2026-10-25T11:58:37.931360808Z"
+    description: A Helm chart for MINT
+    digest: 8610d706f19add41df510bcf604bc423700cd0336eaee9c7f5c4670f459ff37d
+    maintainers:
+    - email: maxiosorio@gmail.com
+      name: mosoriob
+      url: https://github.com/mosoriob
+    name: MINT
+    type: application
+    urls:
+    - https://mintproject.github.io/mint/releases/MINT-9.0.0-beta.18.tgz
+    version: 9.0.0-beta.18
+  - apiVersion: v2
+    appVersion: 1.16.3
     created: "2026-10-25T08:07:56.244225-03:00"
     description: A Helm chart for MINT
     digest: 9723c48de9a686255a05599d97fbf7ec0fa32c5607b797fa3c8552cc8044b6bb
@@ -1727,4 +1741,4 @@ entries:
     urls:
     - https://mintproject.github.io/mint/releases/MINT-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-25T08:07:56.045149-03:00"
+generated: "2026-10-25T11:58:37.92872989Z"
