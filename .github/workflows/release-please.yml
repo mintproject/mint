@@ -9,6 +9,11 @@ name: Release Please
 #   published chart version must never go back. `main` cuts stable; `develop`
 #   cuts `beta` (`9.0.0-beta.N`).
 #
+# Tags: the service line is `v<version>`. The chart is the plain semver
+# `<version>`, with no `MINT-` prefix and no `v`. Releases up to
+# 9.0.0-beta.18 used `MINT-<version>`. The tag `9.0.0-beta.18` marks the same
+# commit as `MINT-9.0.0-beta.18`, so release-please finds the last chart release.
+#
 # release-please reads its config and manifest from the target branch. Each
 # branch has its own filenames, so a develop -> main merge never collides them.
 #
