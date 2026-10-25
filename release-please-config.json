@@ -4,11 +4,19 @@
   "include-component-in-tag": false,
   "packages": {
     ".": {
+      "exclude-paths": ["charts/mint"],
       "extra-files": [
         { "type": "json", "path": "model-catalog-api/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "mint-ensemble-manager/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "ui-react/package.json", "jsonpath": "$.version" }
       ]
+    },
+    "charts/mint": {
+      "release-type": "helm",
+      "component": "MINT",
+      "include-component-in-tag": true,
+      "include-v-in-tag": false,
+      "tag-separator": "-"
     }
   }
 }
