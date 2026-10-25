@@ -21,9 +21,9 @@ permissions:
 jobs:
   retag:
     name: Re-tag
-    # A chart release (tag MINT-<version>) builds no image. Only the service
-    # line, tag v<version>, has images to re-tag.
-    if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'MINT-')
+    # A chart release (tag <version>, no prefix) builds no image. Only the
+    # service line, tag v<version>, has images to re-tag.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - name: Resolve the version and the SHA

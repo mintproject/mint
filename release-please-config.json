@@ -13,10 +13,9 @@
     },
     "charts/mint": {
       "release-type": "helm",
-      "component": "MINT",
-      "include-component-in-tag": true,
+      "include-component-in-tag": false,
       "include-v-in-tag": false,
-      "tag-separator": "-"
+      "include-v-in-release-name": false
     }
   }
 }
