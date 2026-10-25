@@ -17,7 +17,7 @@ branch — see `CLAUDE.md` § Branch model.
 | UI (React) | [![UI React](https://github.com/mintproject/monorepo/actions/workflows/ui-react.yml/badge.svg?branch=main)](https://github.com/mintproject/monorepo/actions/workflows/ui-react.yml) |
 | Hasura GraphQL engine | [![GraphQL Engine](https://github.com/mintproject/monorepo/actions/workflows/graphql_engine.yml/badge.svg?branch=main)](https://github.com/mintproject/monorepo/actions/workflows/graphql_engine.yml) |
 | UI (LitElement, external repo [mint-ui-lit](https://github.com/mintproject/mint-ui-lit)) | [![ui](https://github.com/mintproject/mint-ui-lit/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/mintproject/mint-ui-lit/actions/workflows/docker-publish.yml) |
-| The MINT chart (external repo [mint](https://github.com/mintproject/mint)) | [![Lint and Test Charts](https://github.com/mintproject/mint/actions/workflows/linter.yaml/badge.svg)](https://github.com/mintproject/mint/actions/workflows/linter.yaml) [![Helm Docs](https://github.com/mintproject/mint/actions/workflows/docs.yaml/badge.svg)](https://github.com/mintproject/mint/actions/workflows/docs.yaml) |
+| The MINT chart (`charts/mint/`) | [![Lint and Test Charts](https://github.com/mintproject/monorepo/actions/workflows/linter.yaml/badge.svg)](https://github.com/mintproject/monorepo/actions/workflows/linter.yaml) |
 
 MINT is a scientific modeling platform that enables researchers to discover, configure, and execute computational models. It provides a unified catalog of models, datasets, and variables, allowing scientists to set up and run model ensembles for complex scenarios such as climate impact analysis, hydrology, and agriculture.
 
@@ -88,16 +88,14 @@ The services live directly in this repository. It holds no submodules.
 | `mint-ensemble-manager/` | Model execution orchestration service | TypeScript, Express |
 | `ui-react/` | Web frontend (current) | TypeScript, React, Vite |
 | `graphql_engine/` | Hasura schema, migrations, and metadata | SQL, YAML |
+| `charts/mint/` | The MINT Helm chart (chart name `MINT`) | Helm, YAML |
 | `knowledge-base/` | MINT domain wiki | Markdown |
 | `docs/` | Architecture decisions, runbooks, agent guides | Markdown |
 | `scripts/` | Deployment and maintenance utilities | Shell, SQL |
 | `backups/` | Committed PostgreSQL dump (23 MB) | SQL |
 
-Two things MINT deploys are not in this repository. Read them where they live:
+One thing MINT deploys is not in this repository. Read it where it lives:
 
-- **The MINT chart** — [`mintproject/mint`](https://github.com/mintproject/mint). It is a
-  published Helm repository at `https://mintproject.github.io/mint`, and it has external
-  consumers. Install it from there, not from a clone.
 - **`ui`**, the deprecated LitElement frontend —
   [`mintproject/mint-ui-lit`](https://github.com/mintproject/mint-ui-lit). It is being
   removed from TACC by [#81](https://github.com/mintproject/monorepo/issues/81).
@@ -163,15 +161,18 @@ does nothing.
 
 ### Kubernetes Deployment
 
-The MINT chart deploys the platform. It is published as a Helm repository:
+The MINT chart deploys the platform. Its source is `charts/mint/`. It is published as a
+Helm repository:
 
 ```bash
 helm repo add mintproject https://mintproject.github.io/mint
 helm install mint mintproject/MINT -n mint --create-namespace
 ```
 
-For the chart source and its installation guide, see
-[`mintproject/mint`](https://github.com/mintproject/mint).
+For the values and the installation guide, see [`charts/mint/README.md`](charts/mint/README.md).
+`main` publishes stable versions and `develop` publishes `beta` versions to the same
+index. A plain `helm install` takes the newest stable version. Add `--devel` for a `beta`
+version. See [ADR-0005](docs/adr/0005-chart-lives-here-and-this-repository-is-named-mint.md).
 
 ### Database Setup
 

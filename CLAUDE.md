@@ -20,21 +20,23 @@ there. A plain `git clone` is complete; there is nothing to `git submodule updat
 | `mint-ensemble-manager/` | Execution orchestration | TypeScript/Express | yes |
 | `ui-react/` | Frontend (current) | TypeScript/React + Vite | yes |
 | `graphql_engine/` | Hasura schema, migrations, metadata | SQL/YAML | - |
+| `charts/mint/` | The MINT Helm chart (chart name `MINT`) | Helm/YAML | - |
 | `knowledge-base/` | MINT domain wiki | Markdown | yes |
 | `docs/` | ADRs, runbooks, agent guides | Markdown | - |
 | `scripts/` | Deployment and maintenance utilities | Shell/SQL | - |
 | `backups/` | Committed PostgreSQL dump (23 MB) | SQL | - |
 
-> **The MINT chart and `ui` are not here.** Both were submodule stubs. Both are gone
-> ([ADR-0004](docs/adr/0004-no-submodule-stubs-for-external-repositories.md)).
->
-> - **The MINT chart** — [`mintproject/mint`](https://github.com/mintproject/mint),
->   published at `https://mintproject.github.io/mint` (chart name `MINT`). It has
->   external consumers, so it stays external. Install it from the Helm repository.
->   `dynamo` pins the deployed version; nothing in this repository does.
-> - **`ui`**, the deprecated LitElement frontend —
->   [`mintproject/mint-ui-lit`](https://github.com/mintproject/mint-ui-lit), removed
->   from TACC by [#81](https://github.com/mintproject/monorepo/issues/81).
+> **`ui` is not here.** It was a submodule stub, and it is gone
+> ([ADR-0004](docs/adr/0004-no-submodule-stubs-for-external-repositories.md)). It is the
+> deprecated LitElement frontend,
+> [`mintproject/mint-ui-lit`](https://github.com/mintproject/mint-ui-lit), removed from TACC
+> by [#81](https://github.com/mintproject/monorepo/issues/81).
+
+> **The MINT chart lives here, in `charts/mint/`**
+> ([ADR-0005](docs/adr/0005-chart-lives-here-and-this-repository-is-named-mint.md)). It
+> publishes to `https://mintproject.github.io/mint` (chart name `MINT`) from the `gh-pages`
+> branch. `dynamo` pins the deployed version; nothing in this repository does. The old chart
+> repository, `mintproject/mint`, is frozen. Do not open a pull request there.
 
 > **Four repositories left this checkout in the single-repo cutover**
 > ([#146](https://github.com/mintproject/monorepo/issues/146)):
