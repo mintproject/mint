@@ -163,6 +163,26 @@ the allocation used by Ensemble Manager's Tapis app runs. Override it with
 `SVO_ADAPTER_TAPIS_ALLOCATION` when deploying to a different allocation. The
 value is service-managed and is not a user-entered dataset parameter.
 
+### Per-run Tapis tokens for long workflows
+
+The caller's UI token can expire while a workflow is still running (the
+composite model stage then fails with `MODEL_PROVIDER_AUTH_FAILED`). Set
+`SVO_ADAPTER_RUN_TOKEN_ENABLED=true` and `/workflows/submit` and
+`/transform-specs/{id}/test` will swap the `tapis_token` workflow arg for a
+separate user-associated token minted via `POST /v3/tokens`. Registration and
+the run call still use the caller's token.
+
+- `SVO_ADAPTER_RUN_TOKEN_TTL_SECONDS` (default 43200), clamped to
+  `..._TTL_MIN_SECONDS` (900) and `..._TTL_MAX_SECONDS` (172800).
+- `SVO_ADAPTER_RUN_TOKEN_TARGET_PREFIX` (default `svo-adapter-run`).
+- The token is not stored or logged, and is not revoked early; it expires after
+  its TTL. If minting fails the submit returns 502 `RUN_TOKEN_MINT_FAILED` and
+  the caller's token is never used for the run.
+- Runs longer than the TTL still fail; a refresh broker is a possible follow-up
+  (see `../docs/design/2026-10-28-svo-adapter-workflow-token-lifecycle.md`).
+- Off by default. The mint contract is verified only for SUBSIDE on `portals`;
+  confirm it against a sandbox run before enabling.
+
 ## Demo UI (zero infra)
 
 A bundled standalone single-page UI (`static/index.html`) walks the whole flow —
