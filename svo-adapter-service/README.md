@@ -178,10 +178,25 @@ the run call still use the caller's token.
 - The token is not stored or logged, and is not revoked early; it expires after
   its TTL. If minting fails the submit returns 502 `RUN_TOKEN_MINT_FAILED` and
   the caller's token is never used for the run.
-- Runs longer than the TTL still fail; a refresh broker is a possible follow-up
-  (see `../docs/design/2026-10-28-svo-adapter-workflow-token-lifecycle.md`).
+- The composite model stage renews its own token while it waits (see below), so
+  the model wait is not bounded by the TTL. Stages after the model still use the
+  token the run was submitted with; a refresh broker is the follow-up for runs
+  that outlast it (see
+  `../docs/design/2026-10-28-svo-adapter-workflow-token-lifecycle.md`).
 - Off by default. The mint contract is verified only for SUBSIDE on `portals`;
   confirm it against a sandbox run before enabling.
+
+### How the model stage waits
+
+The composite model stage submits the Tapis job and polls its status until the
+job reaches a terminal state (FINISHED, FAILED, CANCELLED, ...). There is no poll
+limit: queue time and runtime are bounded by Tapis, not by the workflow. When
+`SVO_ADAPTER_RUN_TOKEN_ENABLED` is on, the stage mints a fresh token from the one
+it holds (`POST /v3/tokens`, same TTL as the run token) in the last quarter of the
+token's life, so a wait of any length keeps authenticating. A failed renewal is
+retried every 30 seconds and the current token is used until Tapis rejects it
+(`MODEL_PROVIDER_AUTH_FAILED`). The pipeline task's `max_exec_time` is
+`SVO_ADAPTER_MODEL_TASK_MAX_EXEC_SECONDS` (default 172800).
 
 ## Demo UI (zero infra)
 

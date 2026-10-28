@@ -1,10 +1,13 @@
+import base64
 import json
 import io
+import time
 import urllib.request
 import urllib.error
 
 import pytest
 
+from app.config import settings
 from app.tapis import generate_tapis_workflow
 
 
@@ -48,8 +51,8 @@ class _Response:
         return json.dumps(self.payload).encode()
 
 
-def _run(code, monkeypatch, capsys, responder):
-    monkeypatch.setenv("TAPIS_TOKEN", "diagnostic-token")
+def _run(code, monkeypatch, capsys, responder, token="diagnostic-token"):
+    monkeypatch.setenv("TAPIS_TOKEN", token)
     monkeypatch.setenv("TAPIS_BASE_URL", "https://portals.example")
 
     def urlopen(request, timeout=90):
@@ -154,3 +157,90 @@ def test_model_stage_reports_auth_failure_without_echoing_the_token(monkeypatch,
     output = capsys.readouterr().out
     assert "MODEL_PROVIDER_AUTH_FAILED" in output
     assert secret not in output
+
+
+def _jwt(expires_in: int) -> str:
+    def part(value):
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
+
+    return ".".join([
+        part({"alg": "none"}),
+        part({"exp": int(time.time()) + expires_in,
+              "tapis/username": "alice", "tapis/tenant_id": "portals"}),
+        "sig",
+    ])
+
+
+def _job_responder(statuses, seen_tokens, mint=None):
+    """Serve one model job whose status walks through ``statuses``."""
+    polls = iter(statuses)
+
+    def responder(request, _timeout):
+        seen_tokens.append((request.get_method(), request.full_url.rsplit("/v3", 1)[1],
+                            request.headers["X-tapis-token"]))
+        if request.full_url.endswith("/v3/tokens"):
+            return _Response(mint(request))
+        if request.full_url.endswith("/v3/jobs/submit"):
+            return _Response({"result": {"uuid": "long-job"}})
+        if request.full_url.endswith("/v3/jobs/long-job/status"):
+            return _Response({"result": {"status": next(polls)}})
+        if request.full_url.endswith("/v3/jobs/long-job"):
+            return _Response({"result": {"uuid": "long-job", "archiveSystemId": "ls6"}})
+        if request.full_url.endswith("/v3/jobs/long-job/output/list/"):
+            return _Response({"result": [{"type": "file", "name": "model.cbb", "path": "/m/model.cbb"}]})
+        raise AssertionError(request.full_url)
+
+    return responder
+
+
+def test_model_stage_polls_until_the_job_is_terminal_with_no_poll_limit(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    seen = []
+    # Far more polls than any fixed window would have allowed.
+    statuses = ["QUEUED"] * 2000 + ["RUNNING"] * 50 + ["FINISHED"]
+
+    result = _run(_model_code(), monkeypatch, capsys, _job_responder(statuses, seen))
+
+    assert result["status"] == "ok"
+    assert sum(1 for _m, path, _t in seen if path.endswith("/status")) == len(statuses)
+
+
+def test_model_stage_renews_its_token_before_it_expires(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(settings, "run_token_enabled", True)
+    monkeypatch.setattr(settings, "run_token_ttl_seconds", 3600)
+    expiring, fresh = _jwt(60), _jwt(3600)
+    minted = []
+
+    def mint(request):
+        minted.append(json.loads(request.data))
+        return {"result": {"access_token": {"access_token": fresh}}}
+
+    seen = []
+    result = _run(_model_code(), monkeypatch, capsys,
+                  _job_responder(["QUEUED", "RUNNING", "FINISHED"], seen, mint), token=expiring)
+
+    assert result["status"] == "ok"
+    assert len(minted) == 1
+    assert minted[0]["token_username"] == "alice" and minted[0]["access_token_ttl"] == 3600
+    # The renewal call authenticates with the expiring token; every call after uses the fresh one.
+    mint_index = next(i for i, (_m, path, _t) in enumerate(seen) if path == "/tokens")
+    assert seen[mint_index][2] == expiring
+    assert all(token == fresh for _m, _p, token in seen[mint_index + 1:])
+    assert fresh not in json.dumps(result)
+
+
+def test_model_stage_keeps_polling_when_a_renewal_attempt_fails(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(settings, "run_token_enabled", True)
+    expiring = _jwt(120)
+
+    def mint(_request):
+        raise OSError("tokens API unavailable")
+
+    seen = []
+    result = _run(_model_code(), monkeypatch, capsys,
+                  _job_responder(["QUEUED", "FINISHED"], seen, mint), token=expiring)
+
+    assert result["status"] == "ok"
+    assert {token for _m, _p, token in seen} == {expiring}
