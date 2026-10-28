@@ -42,7 +42,7 @@ from fastapi.staticfiles import StaticFiles
 
 log = logging.getLogger(__name__)
 
-from . import ntgam, qaqc, stac, tapis
+from . import ntgam, qaqc, run_tokens, stac, tapis
 from .config import settings
 from .hasura import (
     DATA_OBJECT_CONTRACT_QUERY,
@@ -817,6 +817,7 @@ async def test_transform_spec(spec_id: str, body: TestTransformIn, authorization
         args["tapis_token"] = {"value": token}
     if body.dry_run:
         return {"status": "generated", "spec_id": spec_id, "tapis_workflow_definition": pipeline, "args": args}
+    args = await _with_run_token(args, token)
     try:
         result = await run_in_threadpool(tapis.submit_tapis_workflow, pipeline, args, token=token, run_name=body.run_name, recreate=True)
     except Exception as exc:
@@ -2010,6 +2011,17 @@ def _validate_deferred_execution_id(
         })
 
 
+async def _with_run_token(args: dict[str, Any], caller_token: str | None) -> dict[str, Any]:
+    """Swap the caller's token arg for a bounded per-run token (when enabled)."""
+    try:
+        return await run_in_threadpool(run_tokens.apply_run_token, args, caller_token)
+    except run_tokens.RunTokenError as exc:
+        raise HTTPException(502, detail={
+            "code": "RUN_TOKEN_MINT_FAILED",
+            "message": safe_error_message(exc),
+        })
+
+
 def _validate_plan_args(
     plan_json: dict[str, Any],
     args: dict[str, Any],
@@ -2225,6 +2237,8 @@ async def submit_workflow(
     args = _validate_plan_args(
         workflow_plan.get("plan_json") or {}, service_args, token, require_required=not body.dry_run
     )
+    if not body.dry_run:
+        args = await _with_run_token(args, token)
 
     # Record the run before triggering, so a failed submit still leaves a trail.
     run_obj: dict[str, Any] = {

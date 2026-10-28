@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     # forward their own token instead (see main.submit_workflow); this is the
     # service-level fallback for unattended runs.
     tapis_token: str | None = None
+    # Swap the caller's token in workflow args for a bounded per-run token so a
+    # long run survives UI-token expiry. Off by default; TTL is clamped to min/max.
+    run_token_enabled: bool = False
+    run_token_ttl_seconds: int = 43200
+    run_token_ttl_min_seconds: int = 900
+    run_token_ttl_max_seconds: int = 172800
+    run_token_target_prefix: str = "svo-adapter-run"
     # Workflows group the generated pipeline is registered into + run from.
     tapis_workflow_group: str = "adapter-ops"
     # Owner placeholder Tapis fills in at registration (matches SUBSIDE's YAML).
