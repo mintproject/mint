@@ -1,3 +1,4 @@
+from app.config import settings
 from app.tapis import generate_tapis_workflow
 
 
@@ -40,7 +41,7 @@ def test_composite_workflow_runs_model_and_preserves_modular_adapter_tasks():
         "type": "string",
         "value_from": {"args": "tapis_token"},
     }
-    assert model_task["execution_profile"]["max_exec_time"] == 600
+    assert model_task["execution_profile"]["max_exec_time"] == settings.model_task_max_exec_seconds
     assert "/v3/jobs/submit" in model_task["code"]
     assert "/v3/jobs/" in model_task["code"]
     assert "/output/list/" in model_task["code"]

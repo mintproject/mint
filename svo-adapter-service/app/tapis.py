@@ -31,7 +31,9 @@ import time
 import textwrap
 from typing import Any
 
+from .config import settings
 from .etl_contract import normalize_env_from_args
+from .run_tokens import run_token_ttl
 
 try:
     from .config import settings
@@ -92,10 +94,12 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
     job_definition = model_task.get("job_definition") or {}
     output_name = model_task.get("output_name") or ""
     output_format = model_task.get("output_format") or ""
-    max_minutes = max(1, int(model_task.get("max_minutes") or 60))
+    # Renewal only when per-run tokens are on; otherwise the stage keeps the
+    # token it was given for the whole wait, as before.
+    renew_ttl = run_token_ttl() if settings.run_token_enabled else 0
     source = textwrap.dedent(
         """
-        import json, socket, time, urllib.error as _ue, urllib.parse as _up, urllib.request as _ur
+        import base64, json, socket, time, urllib.error as _ue, urllib.parse as _up, urllib.request as _ur
         try:
             from owe_python_sdk.runtime import execution_context as _ctx
         except Exception:
@@ -144,13 +148,56 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         _job_name = __JOB_NAME__
         _output_name = __OUTPUT_NAME__.lower()
         _output_format = __OUTPUT_FORMAT__.lower()
-        _max_polls = __MAX_POLLS__
+        _renew_ttl = __RENEW_TTL__
         if not _token:
             _die("TAPIS_TOKEN is required for the composite model stage", "MODEL_SUBMISSION_AUTH_REQUIRED")
+        # The live token sits in a dict so renewal can swap it without rebinding a global.
+        _auth = {"token": _token, "retry_at": 0.0}
+
+        def _claims(token):
+            try:
+                payload = token.split(".")[1]
+                payload += "=" * (-len(payload) % 4)
+                return json.loads(base64.urlsafe_b64decode(payload))
+            except Exception:
+                return {}
+
+        def _renew_if_due():
+            # Mint a fresh token from the live one before it expires, so the wait is
+            # bounded by the job and not by any single token's lifetime. A failed
+            # renewal is retried shortly; the current token keeps working until it
+            # actually expires, and a rejected token still ends the stage.
+            if not _renew_ttl or time.time() < _auth["retry_at"]:
+                return
+            claims = _claims(_auth["token"])
+            expires_at = claims.get("exp")
+            if not expires_at or int(expires_at) - time.time() > max(300, _renew_ttl // 4):
+                return
+            body = {
+                "token_tenant_id": claims.get("tapis/tenant_id") or "portals",
+                "account_type": "user",
+                "token_username": claims.get("tapis/username"),
+                "target_site_id": "__TARGET_PREFIX__-%x" % int(time.time()),
+                "access_token_ttl": _renew_ttl,
+            }
+            request = _ur.Request(
+                _base + "/v3/tokens", data=json.dumps(body).encode(),
+                headers={"X-Tapis-Token": _auth["token"], "Content-Type": "application/json"},
+                method="POST")
+            try:
+                with _ur.urlopen(request, timeout=90) as response:
+                    fresh = (((json.loads(response.read().decode()) or {}).get("result") or {})
+                             .get("access_token") or {}).get("access_token")
+            except Exception:
+                fresh = None
+            if fresh:
+                _auth["token"] = fresh
+            else:
+                _auth["retry_at"] = time.time() + 30
 
         def _request(path, method="GET", payload=None):
             body = None if payload is None else json.dumps(payload).encode()
-            headers = {"X-Tapis-Token": _token, "Accept": "application/json"}
+            headers = {"X-Tapis-Token": _auth["token"], "Accept": "application/json"}
             if body is not None:
                 headers["Content-Type"] = "application/json"
             request = _ur.Request(_base + path, data=body, headers=headers, method=method)
@@ -198,7 +245,8 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         _job_uuid = str(_job_uuid)
         _status_path = "/v3/jobs/%s/status" % _up.quote(_job_uuid, safe="")
         _terminal = None
-        for _attempt in range(_max_polls):
+        while True:
+            _renew_if_due()
             _status_payload = _request(_status_path)
             _status_result = ((_status_payload or {}).get("result")
                               if isinstance(_status_payload, dict) else None)
@@ -218,9 +266,6 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 _die("model job %s ended with status %s" % (_job_uuid, _status),
                      "MODEL_PROVIDER_JOB_FAILED", {"job_uuid": _job_uuid, "status": _status})
             time.sleep(5)
-        if _terminal is None:
-            _die("model job did not finish within the configured polling window",
-                 "MODEL_PROVIDER_JOB_TIMEOUT", {"job_uuid": _job_uuid})
 
         _detail = _request("/v3/jobs/%s" % _up.quote(_job_uuid, safe=""))
         _job = (_detail.get("result") if isinstance(_detail, dict) else None) or {}
@@ -273,7 +318,8 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         .replace("__JOB_NAME__", repr(job_definition.get("name") or ""))
         .replace("__OUTPUT_NAME__", repr(output_name))
         .replace("__OUTPUT_FORMAT__", repr(output_format))
-        .replace("__MAX_POLLS__", str(max(1, (max_minutes * 60) // 5)))
+        .replace("__RENEW_TTL__", str(renew_ttl))
+        .replace("__TARGET_PREFIX__", settings.run_token_target_prefix)
     )
 
 
@@ -345,7 +391,6 @@ def generate_tapis_workflow(
         job_definition = dict(model_task.get("job_definition") or {})
         if not job_definition.get("appId") or not job_definition.get("appVersion"):
             raise ValueError("composite model task requires appId and appVersion")
-        max_minutes = max(1, int(model_task.get("max_minutes") or 60))
         job_definition.setdefault("execSystemInputDir", "${JobWorkingDir}")
         job_definition.setdefault("execSystemOutputDir", "${JobWorkingDir}/output")
         model_id = str(model_task.get("stage_id") or "model")
@@ -369,7 +414,7 @@ def generate_tapis_workflow(
             },
             "execution_profile": {
                 "max_retries": 0,
-                "max_exec_time": max_minutes * 60 + 300,
+                "max_exec_time": settings.model_task_max_exec_seconds,
             },
         })
         prev_id = model_id

@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     run_token_ttl_min_seconds: int = 900
     run_token_ttl_max_seconds: int = 172800
     run_token_target_prefix: str = "svo-adapter-run"
+    # Ceiling on the composite model task's pipeline max_exec_time. The task polls
+    # until the Tapis job is terminal (renewing its token as it goes), so this only
+    # needs to exceed the longest expected queue wait plus runtime.
+    model_task_max_exec_seconds: int = 172800
     # Workflows group the generated pipeline is registered into + run from.
     tapis_workflow_group: str = "adapter-ops"
     # Owner placeholder Tapis fills in at registration (matches SUBSIDE's YAML).
