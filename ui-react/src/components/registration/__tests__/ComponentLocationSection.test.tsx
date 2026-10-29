@@ -37,7 +37,6 @@ function tapisDeployment() {
     AUTH_PROVIDER: 'tapis',
     AUTH_SERVER: 'https://portals.tapis.io',
     EXECUTION_ENGINE: 'tapis',
-    MODEL_CATALOG_API: 'http://localhost:3002/v2.0.0',
   });
   localStorage.setItem('mint.access_token', 'tok-123');
 }
@@ -45,7 +44,9 @@ function tapisDeployment() {
 function mockApi() {
   return vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
     const url = String(input);
-    const body = url.endsWith('/apps') ? APP_LIST : APP_DETAIL;
+    // The list is `/v3/apps?listType=...`; one app is `/v3/apps/{id}/{version}`.
+    const isList = /\/v3\/apps\?/.test(url);
+    const body = { result: isList ? APP_LIST : APP_DETAIL };
     return Promise.resolve(
       new Response(JSON.stringify(body), {
         status: 200,
