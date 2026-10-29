@@ -1,45 +1,151 @@
 /*
- * Aligns the user guide with the DYNAMO app chrome (src/styles/globals.css):
- * the dark #222 bar with a #7f7f7f rule, Roboto, and the app's slate palette.
+ * Aligns the user guide with the DYNAMO app (src/styles/globals.css, Header,
+ * Sidebar, Footer): the dark #222 bar with a #7f7f7f rule, the shadcn slate
+ * palette, the platform sans stack, and a light bordered sidebar.
  * Keep the values below in sync with the app's tokens.
  */
-:root {
-  --md-primary-fg-color: #222222;
+:root,
+[data-md-color-scheme="default"] {
+  --dynamo-fg: hsl(222.2 84% 4.9%);
+  --dynamo-muted: hsl(215.4 16.3% 46.9%);
+  --dynamo-border: hsl(214.3 31.8% 91.4%);
+  --dynamo-accent-bg: hsl(210 40% 96.1%);
+  --dynamo-chrome: #222222;
+  --dynamo-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --md-text-font: var(--dynamo-font);
+  --md-primary-fg-color: var(--dynamo-chrome);
   --md-primary-fg-color--light: #444444;
-  --md-primary-fg-color--dark: #222222;
+  --md-primary-fg-color--dark: var(--dynamo-chrome);
   --md-primary-bg-color: #ffffff;
-  --md-accent-fg-color: #1d4ed8;
-  --md-default-fg-color: hsl(222.2 84% 4.9%);
-  --md-typeset-a-color: #1d4ed8;
+  --md-accent-fg-color: var(--dynamo-fg);
+  --md-default-fg-color: var(--dynamo-fg);
+  --md-default-fg-color--light: var(--dynamo-muted);
+  --md-typeset-color: var(--dynamo-fg);
+  --md-typeset-a-color: var(--dynamo-fg);
 }
 
+body,
+.md-typeset {
+  font-family: var(--dynamo-font);
+}
+
+/* Header: same bar as the app. */
 .md-header {
+  height: 50px;
+  background-color: var(--dynamo-chrome);
   border-bottom: 1px solid #7f7f7f;
   box-shadow: none;
 }
-
-.md-header__title,
-.md-tabs {
-  font-size: 0.8125rem;
+.md-header__inner {
+  height: 50px;
+  align-items: center;
 }
-
+.md-header__title {
+  font-size: 1rem;
+  font-weight: 500;
+}
+.md-header__button.md-logo {
+  padding: 0 0.4rem;
+}
 .md-header__button.md-logo img {
+  height: 1.6rem;
   border-radius: 6px;
 }
+.md-search__form {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 0.375rem;
+}
+.md-search__form:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+}
 
-.md-nav__title {
+/* Sidebar: light, bordered, shadcn-style captions and active state. */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar--primary {
+    border-right: 1px solid var(--dynamo-border);
+    width: 15rem;
+  }
+  .md-sidebar--primary .md-sidebar__scrollwrap {
+    padding-top: 0.5rem;
+  }
+}
+.md-nav__title,
+.md-nav--primary .md-nav__item--section > .md-nav__link {
+  font-size: 0.75rem;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-size: 0.7rem;
-  color: hsl(215.4 16.3% 46.9%);
+  text-transform: uppercase;
+  color: var(--dynamo-muted);
+}
+.md-nav__link {
+  border-radius: 0.375rem;
+  padding: 0.35rem 0.5rem;
+  margin-top: 0;
+  color: var(--dynamo-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.md-nav__link:hover {
+  background-color: var(--dynamo-accent-bg);
+  color: var(--dynamo-fg);
+}
+.md-nav__link--active {
+  background-color: var(--dynamo-accent-bg);
+  color: var(--dynamo-fg);
 }
 
-.md-footer-meta {
-  background-color: #222222;
+/* Content: bold tracking-tight headings like the app pages. */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  color: var(--dynamo-fg);
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
-
+.md-typeset h1 {
+  font-size: 1.875rem;
+}
+.md-typeset h2 {
+  font-size: 1.25rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--dynamo-border);
+}
+.md-typeset a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .md-typeset table:not([class]) {
-  border-color: hsl(214.3 31.8% 91.4%);
+  border: 1px solid var(--dynamo-border);
   border-radius: 0.5rem;
+  box-shadow: none;
+}
+.md-typeset table:not([class]) th {
+  background-color: var(--dynamo-accent-bg);
+  color: var(--dynamo-fg);
+}
+.md-typeset code {
+  background-color: var(--dynamo-accent-bg);
+}
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 0.5rem;
+  box-shadow: none;
+}
+
+/* Prev/next footer: slim #222 bar like the app footer. */
+.md-footer {
+  background-color: var(--dynamo-chrome);
+  color: var(--dynamo-muted);
+  font-size: 0.8125rem;
+}
+.md-footer__link {
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+.md-footer__title {
+  font-size: 0.875rem;
+}
+.md-footer__direction {
+  font-size: 0.6875rem;
 }
