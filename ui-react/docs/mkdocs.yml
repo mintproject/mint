@@ -8,17 +8,15 @@
       "navigation.top",
       "search.suggest",
       "search.highlight",
-      "content.code.copy",
-      "navigation.footer"
+      "content.code.copy"
     ],
     "logo": "assets/dynamo.svg",
     "favicon": "assets/dynamo.svg",
-    "font": {
-      "text": "Roboto",
-      "code": "Roboto Mono"
-    },
+    "font": false,
     "palette": {
-      "scheme": "default"
+      "scheme": "default",
+      "primary": "custom",
+      "accent": "custom"
     }
   },
   "nav": [
