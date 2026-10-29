@@ -195,7 +195,11 @@ limit: queue time and runtime are bounded by Tapis, not by the workflow. When
 it holds (`POST /v3/tokens`, same TTL as the run token) in the last quarter of the
 token's life, so a wait of any length keeps authenticating. A failed renewal is
 retried every 30 seconds and the current token is used until Tapis rejects it
-(`MODEL_PROVIDER_AUTH_FAILED`). The pipeline task's `max_exec_time` is
+(`MODEL_PROVIDER_AUTH_FAILED`). Network errors, timeouts, HTTP 5xx and 429
+while polling are retried every 15 seconds; the stage fails with
+`MODEL_PROVIDER_REQUEST_FAILED` only if Tapis stays unreachable for
+`SVO_ADAPTER_MODEL_POLL_OUTAGE_SECONDS` (default 1800). Auth failures (401/403)
+still end the stage at once. The pipeline task's `max_exec_time` is
 `SVO_ADAPTER_MODEL_TASK_MAX_EXEC_SECONDS` (default 172800).
 
 ## Demo UI (zero infra)

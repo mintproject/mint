@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # until the Tapis job is terminal (renewing its token as it goes), so this only
     # needs to exceed the longest expected queue wait plus runtime.
     model_task_max_exec_seconds: int = 172800
+    # How long the model task keeps retrying when Tapis is unreachable while it
+    # polls a job, before it fails the stage. Auth failures end the stage at once.
+    model_poll_outage_seconds: int = 1800
     # Workflows group the generated pipeline is registered into + run from.
     tapis_workflow_group: str = "adapter-ops"
     # Owner placeholder Tapis fills in at registration (matches SUBSIDE's YAML).
