@@ -17,6 +17,10 @@ The data step offers datasets that carry the same standard variable as the input
 
 Check three things on its details: it has a component location (a configuration without one can be described but not run), its inputs and outputs have variables and units, and its region is not limited to somewhere other than where you are looking. Turn on **My models** in **Browse Models** to see only your own.
 
+## My cookbook is not in the list when I register a model
+
+The list shows the applications your signed-in account can use. Check that the application was created in the Cookbook UI with the same TACC account, that it is enabled, and that the id and version you expect are there. If it is still missing, ask the person who manages your TACC project to confirm your account has access to it.
+
 ## A page says it failed to load
 
 Reload the page and try again. If you were signed in, try signing out and back in. If it keeps happening, note the page and the time and report it.
