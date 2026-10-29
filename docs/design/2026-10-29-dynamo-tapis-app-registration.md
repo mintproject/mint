@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented (2026-10-29). Deviations are listed under Decisions. The live end-to-end check on the dev tenant is still to do, and needs approval at run time.
+Implemented (2026-10-29). Deviations are listed under Decisions. Live end-to-end check done on the dev tenant (see Implementation notes).
 
 ## Objective
 
@@ -282,7 +282,8 @@ None. Both earlier questions were answered by the user on 2026-10-29 (see Decisi
 - `ui-react/src/components/registration/RegisterTapisAppDialog.tsx`: the dialog.
 - `ComponentLocationSection.tsx` and `TapisAppPicker.tsx`: button, reload, and a picker that takes its list as a prop.
 - Tests: 13 dialog tests, library tests for every pre-send check and request, and the existing section tests moved to the direct Tapis URLs. The full suite passes (131 files, 1251 tests), and typecheck and lint are clean. A deliberate break in the share step is caught by exactly the two share tests.
-- Not yet done: guide update (waits on the cookbook guide PR), a dialog screenshot (needs the deployed dev site), DSO-Architecture note, and the live check.
+- Live check (2026-10-29, with the user's approval): this branch's UI, run locally against the real `portals` Tapis tenant with the signed-in user's token. The picker listed 164 apps straight from Tapis. The real Docker command template, with only its id and description changed (`dynamo-ui-test-20261029`, including `"owner": "${apiUserId}"`), passed the checks and reviewed correctly. Create made the app under the user's account, sharing made it public (Tapis reported `publicShare: true` and it appeared in the public list), the picker selected it, and the form filled with the `Greeting` and `Target` settings. Cleanup: the app was then made private and disabled through Tapis (owner, no administrator needed). It cannot be deleted. The create-failure, share-failure and read-back-failure paths are covered by the unit tests only, not live.
+- Not yet done: guide update (waits on the cookbook guide PR), a dialog screenshot for the guide (captured locally, held back until the guide page merges), and the DSO-Architecture note (held until this feature is merged, so the docs do not describe unmerged behaviour).
 
 ## User feedback / decisions
 
