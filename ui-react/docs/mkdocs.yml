@@ -51,6 +51,7 @@
     },
     {
       "Reference": [
+        "reference/why-metadata.md",
         "reference/glossary.md"
       ]
     }

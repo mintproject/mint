@@ -20,6 +20,12 @@ Open **Datasets → Browse**. Type a phrase such as "groundwater" into the searc
 
 ![The Datasets page, with the search box, temporal coverage sliders, and spatial coverage map](assets/images/datasets-browse.png)
 
+## Search datasets by keyword or variable
+
+**Datasets → Search Datasets** also finds data by source name, keyword or standard variable name. Results are only as good as the tags the data provider registered, which is why [registration metadata](reference/why-metadata.md) matters.
+
+![The Search Datasets page, with a search box and a Dataset names selector](assets/images/datasets-search.png)
+
 ## Find a standard variable
 
 **Variables** lists the standard variables that models and datasets share, with their category and units. Search by name or filter by category to find the variable that matches your data or model input.
@@ -31,5 +37,9 @@ Open **Datasets → Browse**. Type a phrase such as "groundwater" into the searc
 **Regions → Overview** groups geographic areas by category, such as agricultural and hydrological regions. Each dataset and model is linked to a region.
 
 ![The Regions overview page, listing region categories](assets/images/regions.png)
+
+The **Region Editor** shows the regions on a map, grouped by administrative level. Regions are added from GeoJSON files, and a model or dataset registered against a region is what appears when you search by that region.
+
+![The Region Editor, with the administrative levels and a map of existing regions](assets/images/region-editor.png)
 
 Check each model's full input contract and each dataset's coverage before assuming they fit together.
