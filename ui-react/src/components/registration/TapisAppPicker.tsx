@@ -3,7 +3,7 @@
  *
  * The selection is stored as the canonical app URL, so `value` is the component
  * location itself and no view state duplicates it. The app list comes from the
- * model catalog API's Tapis proxy, which needs a signed-in user.
+ * user's own Tapis token, read directly from Tapis, so it needs a signed-in user.
  *
  * Ported from the legacy UI's ModelCatalogTapisApp
  * (`ui/src/screens/models/configure/resources/tapis-app.ts`), including its
@@ -23,17 +23,18 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import type { TapisAppsList } from '@/hooks/useTapisApps';
 import {
   buildTapisAppUrl,
   getTapisApp,
-  listTapisApps,
   parseTapisAppUrl,
   type TapisApp,
   type TapisAppRef,
 } from '@/lib/tapis-apps';
 
 export interface TapisAppPickerProps {
-  tenant: string;
+  /** The applications to choose from, read by the caller so it can reload them. */
+  list: TapisAppsList;
   /** The component location URL, or '' when no app is chosen. */
   value: string;
   onChange: (url: string) => void;
@@ -48,40 +49,16 @@ function appKey(app: TapisAppRef): string {
 }
 
 export function TapisAppPicker({
-  tenant,
+  list,
   value,
   onChange,
   onSync,
   syncWarning,
 }: TapisAppPickerProps) {
   const [open, setOpen] = React.useState(false);
-  const [apps, setApps] = React.useState<TapisAppRef[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [listError, setListError] = React.useState<string | null>(null);
+  const { apps, loading, error: listError } = list;
   const [syncing, setSyncing] = React.useState(false);
   const [syncError, setSyncError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setListError(null);
-    listTapisApps(tenant)
-      .then((rows) => {
-        if (cancelled) return;
-        rows.sort((a, b) => appKey(a).localeCompare(appKey(b)));
-        setApps(rows);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setListError(err instanceof Error ? err.message : 'Could not list applications.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tenant]);
 
   const selected = parseTapisAppUrl(value);
 

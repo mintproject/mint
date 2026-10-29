@@ -21,16 +21,22 @@ import { useFormContext } from 'react-hook-form';
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { useTapisApps } from '@/hooks/useTapisApps';
 import {
   buildSeedFromTapisApp,
+  buildTapisAppUrl,
+  getTapisApp,
   getTapisTenant,
   parseTapisAppUrl,
   usesTapisComponents,
   type TapisApp,
+  type TapisAppRef,
 } from '@/lib/tapis-apps';
 import { emptyInputRow, emptyParameterRow } from '@/schemas/configuration';
 import type { CreateModelSchema } from '@/schemas/registration';
+import { RegisterTapisAppDialog } from './RegisterTapisAppDialog';
 import { TapisAppPicker } from './TapisAppPicker';
 
 type Mode = 'tapis' | 'url';
@@ -53,6 +59,9 @@ export function ComponentLocationSection() {
   const [mode, setMode] = React.useState<Mode>(() =>
     initialMode(getValues('componentLocation') ?? '', tapisAvailable),
   );
+
+  const list = useTapisApps(tapisAvailable ? tenant : null);
+  const [registerOpen, setRegisterOpen] = React.useState(false);
 
   const inputCount = watch('inputs')?.length ?? 0;
   const parameterCount = watch('parameters')?.length ?? 0;
@@ -93,6 +102,17 @@ export function ComponentLocationSection() {
     });
   };
 
+  /** A created app becomes the model's component, and joins the list. */
+  const handleCreated = (ref: TapisAppRef) => {
+    setValue('componentLocation', buildTapisAppUrl(ref), { shouldDirty: true });
+    list.reload();
+  };
+
+  /** Read the app back from Tapis, so the seed matches what Tapis stored. */
+  const handleFill = async (ref: TapisAppRef) => {
+    applySeed(await getTapisApp(ref));
+  };
+
   const handleModeChange = (next: string) => {
     setMode(next === 'tapis' ? 'tapis' : 'url');
     // Clearing on a mode switch would throw away a value the other mode cannot
@@ -124,7 +144,7 @@ export function ComponentLocationSection() {
             <FormControl>
               {tapisAvailable && mode === 'tapis' ? (
                 <TapisAppPicker
-                  tenant={tenant}
+                  list={list}
                   value={value}
                   onChange={field.onChange}
                   onSync={applySeed}
@@ -143,6 +163,23 @@ export function ComponentLocationSection() {
           </FormItem>
         )}
       />
+
+      {tapisAvailable && mode === 'tapis' && tenant && (
+        <div className="mt-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setRegisterOpen(true)}>
+            Register a new application
+          </Button>
+          <RegisterTapisAppDialog
+            open={registerOpen}
+            onOpenChange={setRegisterOpen}
+            tenant={tenant}
+            existingApps={list.apps}
+            hasRows={inputCount + parameterCount > 0}
+            onCreated={handleCreated}
+            onFill={handleFill}
+          />
+        </div>
+      )}
     </section>
   );
 }
