@@ -4,4 +4,18 @@ Inspect a model’s scientific purpose, regional applicability, required inputs,
 
 A shared variable name is a useful discovery clue. Check the full input contract and coverage before assuming a dataset is ready for a model.
 
-Detailed search steps and screenshots will be verified against the supported release.
+## Search for datasets
+
+Open **Datasets → Browse**. Type a phrase such as "groundwater" into the search box, narrow the temporal range, or use **Draw box** on the map to keep only datasets that overlap an area. Browsing datasets does not require signing in.
+
+![Animation: typing "groundwater" into the dataset search box on the Datasets page](assets/images/dataset-search.gif)
+
+![The Datasets page, with the search box, temporal coverage sliders, and spatial coverage map](assets/images/datasets-browse.png)
+
+## Browse by region
+
+**Regions → Overview** groups geographic areas by category, such as agricultural and hydrological regions. Each dataset and model is linked to a region.
+
+![The Regions overview page, listing region categories](assets/images/regions.png)
+
+Detailed model-search steps are pending verification against the supported release.

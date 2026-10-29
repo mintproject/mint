@@ -149,3 +149,9 @@ body,
 .md-footer__direction {
   font-size: 0.6875rem;
 }
+
+/* Screenshots and animations: framed like the app's cards. */
+.md-typeset img:not(.twemoji) {
+  border: 1px solid var(--dynamo-border);
+  border-radius: 0.5rem;
+}
