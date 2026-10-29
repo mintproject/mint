@@ -1,43 +1,41 @@
-# Transformations and curation
+# Connect resources with transformations
 
-Reusable ETL processes describe transformations between explicit input and output contracts. Record scientific variables, units, formats, runtime references, and versions so users can assess compatibility.
+A transformation is a reusable step that converts data from one form into another, such as metres into feet, or a shapefile into a format a model can read. Registering one lets DYNAMO offer it automatically when a model needs data in a different form from what is available.
 
-Planned walkthrough: register and inspect a transformation, verify compatibility, and maintain regional and semantic metadata where permitted. Permissions and exact form behavior remain to be verified.
+## See what already exists
 
-## Browse existing transformations
-
-**Models → Browse ETL Processes** lists registered transformations. Each card shows its version, runtime, and its input and output contracts, which are scientific variables and formats. Use **Register ETL process** to add one. You must be signed in to register.
+Open **Models → Browse ETL Processes**. Each card shows the transformation's name, version, how it runs, and what it takes in and produces. Check here before you register a new one, so you reuse what exists.
 
 ![The ETL processes page listing transformations with their runtime, inputs, and outputs](../assets/images/etl-browse.png)
 
-## The registration form, and why each field matters
+## Register one
 
-Open **Models → Register ETL Process**. A transformation is only useful if the catalog can tell which data it accepts and which data it produces, so most of this form is about making those two things explicit.
+Open **Models → Register ETL Process**. You must be signed in.
 
-![The top of the ETL registration form: stable ID, name, version, visibility, description, and runtime](../assets/images/register-etl-top.png)
+![The top of the transformation form: stable ID, name, version, visibility, description, and how it runs](../assets/images/register-etl-top.png)
 
-- **Stable ID:** an optional permanent identifier that workflows use to refer to the process. Choose one you will never need to change, because things that reference it break if it moves.
-- **Name:** use a name a scientist can recognise, such as "Convert water level from meters to feet", not a function name.
-- **Version:** increase it whenever the code or the variable meaning changes, so workflows that already ran remain reproducible.
-- **Visibility:** *private*, *shared* (every signed-in user) or *public* (also anonymous catalog readers). A transformation nobody can see cannot be discovered, so choose the widest visibility you are comfortable with.
-- **Description:** what it does, what data it expects and what it produces. The catalog shows this to users.
+Fill in the fields, and note why each matters:
 
-### Runtime
+- **Stable ID** (optional): a permanent identifier that other work uses to refer to this step. Choose one you will never need to change, because anything that refers to it breaks if it moves.
+- **Name:** use a name a scientist would recognise, such as "Convert water level from meters to feet", not a code name.
+- **Version:** raise it whenever the code or the meaning of the variables changes, so earlier results can still be reproduced.
+- **Visibility:** *private* keeps it to you, *shared* shows it to every signed-in user, and *public* also shows it to people who are not signed in. A transformation nobody can see cannot be found, so choose the widest setting you are comfortable with.
+- **Description:** say what it does, what data it expects and what it produces. It is shown in the catalog.
 
-Choose an **inline Python function** for a small reusable step, or a **Tapis app** when it needs a registered container, files or substantial compute. For an inline function give the function name the workflow calls (for example `transform`). For a Tapis app give its ID and pin the version so results can be reproduced. The Python source is stored as catalog metadata and run only by the configured Tapis workflow runtime.
+## How it runs
 
-![The runtime fields and Python source](../assets/images/register-etl-runtime.png)
+Choose **Inline Tapis function** for a small step you can write as a short function, or **Tapis app/job** when it needs a registered application, files or heavy computation. For a function, give the function name the step calls, such as `transform`, and enter the code. For an application, give its ID and pin the version, so results stay reproducible.
 
-### Input and output contract
+![How the step runs, and the code field](../assets/images/register-etl-runtime.png)
 
-This is what makes a transformation discoverable and chainable.
+## What goes in and what comes out
 
-- The **input** variable tells the adapter which upstream data the process can consume, so it can offer the process when that data is selected.
-- The **output** variable is what the process creates. The form notes that this output becomes discoverable as the next step's input, which is how steps connect into a workflow.
-- **Unit** and **format** on each side stop mismatches: a step that expects CSV in metres should not be offered data in NetCDF in feet.
+This is the part that makes a transformation findable and chainable, so complete it carefully.
 
-![The input and output contract sections](../assets/images/register-etl-contract.png)
+- Choose the **input variable** the step consumes. DYNAMO uses it to find data this step can work on.
+- Choose the **output variable** the step produces. The form notes that this output becomes available as the next step's input, which is how steps join into a chain.
+- Fill in the **unit** and **format** on both sides, so a step that expects CSV in metres is not offered NetCDF in feet.
 
-If the variables are wrong or empty, the transformation registers but never appears where people need it. Use the same standard variables as the models and datasets it connects, as described in [Why metadata matters](../reference/why-metadata.md).
+![The input and output sections of the form, each with a variable, unit, and format](../assets/images/register-etl-contract.png)
 
-This page describes the form as it appears in the dev environment. Saving and editing have not yet been verified end to end.
+If the variables are wrong or left out, the transformation registers but never shows up where people need it. Use the same standard variables as the models and datasets it connects. See [Why the details you enter matter](../reference/why-metadata.md).

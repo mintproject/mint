@@ -1,6 +1,6 @@
 {
   "site_name": "DYNAMO User Guide",
-  "site_description": "Role-based guidance for preparing, registering, and using scientific models and data.",
+  "site_description": "How to find, set up and register models and data in DYNAMO.",
   "theme": {
     "name": "material",
     "features": [

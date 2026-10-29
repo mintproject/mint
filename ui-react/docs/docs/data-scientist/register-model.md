@@ -1,62 +1,63 @@
 # Register a model
 
-A model configuration is the record people find, compare and run. The form is short, but each section decides how your model is discovered. Read [Why metadata matters](../reference/why-metadata.md) first if you are new to standard variables.
+Registering a model creates the entry people find, compare and run. The form is short, but each section decides whether your model is found and used correctly. Read [Why the details you enter matter](../reference/why-metadata.md) if you have not already.
 
-Open **Models → Register Model Configuration**. You must be signed in. Anything you register is a description of your model, not the model itself: the executable lives where the component location points.
+Open **Models → Register Model Configuration**. You must be signed in. Registering adds a *description* of your model. The model itself stays where the component location points.
 
 ![The Register Model Configuration form, showing the name, description, and component location fields](../assets/images/model-register.png)
 
 ## Name and description
 
-The name is required. Use one a facilitator would recognise next to similar models, with the place or purpose in it, for example "Modflow · Barton Springs" rather than "config2". The description should say what the configuration does, what it is calibrated for, and what it produces. These two fields are what people read in the model list before they open anything.
+Enter a name (required) that someone would recognise next to similar models, with the place or purpose in it, such as "Modflow · Barton Springs" rather than "config2". In the description, say what the configuration is for, where it is calibrated, and what it produces. People read these two fields in the model list before they open anything, so they decide whether your model is even considered.
 
 ## Component location
 
-Where the executable component lives: a Tapis application or any URL. Leave it empty to describe the model only. **A configuration with no component location cannot be run**, so it will be discoverable but not usable.
+Choose where the model runs: a **Tapis application** (the platform that runs models for DYNAMO) or **Any URL**. You can leave it empty to describe the model only, but **a configuration with no component location cannot be run**, so people will find it and then be unable to use it.
 
 ![The Component location and Region sections of the form](../assets/images/register-model-component.png)
 
-When you choose a Tapis application, the form fills in that application's inputs and parameters for you. Then add a standard variable to each input, so the data step can offer datasets for it.
+When you choose an application, the form fills in its inputs and settings for you. Check them, then add a variable to each input so DYNAMO can offer data for it.
 
 ## Region
 
-Off by default, and for good reason: most configurations work anywhere. Turn it on only if the configuration is calibrated for, or its inputs are fixed to, specific regions. The Models list can be filtered by region, so a limited model is only offered where it applies. Turning it on for a model that works anywhere can keep it from users working in other regions.
+Leave this off unless it matters. Most models work anywhere. Turn it on only if the model is calibrated for, or its inputs are fixed to, specific regions. People can filter models by region, so a limited model is then offered only where it applies. Turning it on for a model that works anywhere can keep it from people working elsewhere.
 
-![The Region toggle and the Parameters section](../assets/images/register-model-region.png)
+![The Region switch and the Parameters section](../assets/images/register-model-region.png)
 
 ## Parameters
 
-Parameters are the settings a user chooses when running the model. Give each a label, a data type (string, integer, float, boolean, url or datetime), a description and a default. **Lock to a fixed value** when the model must not be changed at run time; users then cannot override it. A clear description is what lets a facilitator choose a sensible value without asking you.
+Parameters are the settings a person chooses when they run the model. For each one, enter a label, a data type (text, whole number, decimal, true/false, web address or date and time), a description and a default. Use **Lock to a fixed value** when the model must not be changed at run time, because a locked value cannot be overridden. A clear description lets a facilitator choose a sensible value without asking you.
 
-![A parameter row with label, data type, description, default, and a lock option](../assets/images/register-model-parameters.png)
+![A parameter with a label, data type, description, default value, and a lock option](../assets/images/register-model-parameters.png)
 
 ## Inputs and outputs
 
-For each input or output give a label, a format (such as CSV or NetCDF) and a description. Tick **Optional** for an input the model can run without. Then add variables.
+For each input and output, enter a label, a format such as CSV or NetCDF, and a description. Tick **Optional** for an input the model can run without. Then add its variable.
 
-![An input row with label, format, description, an Optional checkbox, and a variable chooser](../assets/images/register-model-inputs.png)
+![An input with a label, format, description, an Optional checkbox, and a variable chooser](../assets/images/register-model-inputs.png)
 
-The **standard variable and unit** is the most important choice on the page.
+Choosing the **standard variable and unit** is the most important step on this page.
 
-- On an **input**, it tells the catalog what data to offer. Without it, the data step has nothing to match.
-- On an **output**, it tells the catalog what question the model answers. The form says it directly: an output with no standard variable still publishes, but it cannot match a modeling task until you give it one.
+- On an **input**, it tells DYNAMO what data to offer. Without it, nothing can be matched.
+- On an **output**, it tells DYNAMO what question the model answers. The form states that an output with no variable is still published but cannot match a modeling task until you give it one.
 
-![An output row; an output without a standard variable cannot match a modeling task](../assets/images/register-model-outputs.png)
+Search for the variable by what the data *is*, then pick the unit. Be exact about the unit and the format: data with the right variable but the wrong unit or format looks like a match and then fails or gives wrong numbers.
 
-Be specific about the unit and format. A dataset with the right variable but the wrong unit or format will look compatible and then fail or give wrong numbers.
+![An output with a note that an output without a standard variable cannot match a modeling task](../assets/images/register-model-outputs.png)
 
 ## Optional details
 
-Model family, license, website and keywords are all optional and can be added later from the configuration page.
+Model family, license, website and keywords are optional.
 
 ![The Optional details section: model family, license, website, and keywords](../assets/images/register-model-optional.png)
 
-They still matter. **Keywords** are how people searching by topic ("groundwater, karst") find the model. **Model family** groups configurations of the same model so versions sit together instead of looking like unrelated models. **License** tells users whether they may reuse it, and **website** tells them where to learn more.
+Link a **model family** when one exists, so versions of the same model sit together and do not look like unrelated models. The form accepts a license, website and keywords, but these are not yet saved for a new configuration, so for now put anything people need to know, such as the license or a link, in the description.
 
 ## Before you submit
 
-Check that the name makes sense on its own, the component location resolves, every input and output that matters has a variable and unit, and the region is limited only if it needs to be. Then select **Create model configuration**.
+1. Does the name make sense on its own?
+2. Does the component location point to a model that can run?
+3. Does every input and output that matters have a variable, unit and format?
+4. Did you limit the region only if the model truly is limited?
 
-After saving, find it under **Models → Browse Models**, switch on **My models**, and check that its inputs and outputs read as you intended.
-
-This page describes the form as it appears in the dev environment. Saving, editing and permissions have not yet been verified end to end.
+Select **Create model configuration**. Then open **Models → Browse Models**, turn on **My models**, and check that your model's inputs and outputs read the way you intended.
