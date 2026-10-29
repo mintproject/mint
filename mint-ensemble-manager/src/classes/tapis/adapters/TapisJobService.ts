@@ -38,7 +38,8 @@ export class TapisJobService {
         model: Model,
         name: string,
         description: string,
-        maxMinutes = 60
+        maxMinutes = 60,
+        logicalQueue?: string
     ): Jobs.ReqSubmitJob => {
         const jobFileInputs = this.createJobFileInputsFromSeed(seed, app, model);
         const jobParameterSet: Jobs.JobParameterSet = {
@@ -63,7 +64,9 @@ export class TapisJobService {
             archiveOnAppError: true,
             execSystemId: app.jobAttributes?.execSystemId || TapisJobService.SYSTEM_ID,
             execSystemLogicalQueue:
-                app.jobAttributes?.execSystemLogicalQueue || TapisJobService.SYSTEM_LOGICAL_QUEUE,
+                logicalQueue ||
+                app.jobAttributes?.execSystemLogicalQueue ||
+                TapisJobService.SYSTEM_LOGICAL_QUEUE,
             parameterSet: jobParameterSet
         };
 

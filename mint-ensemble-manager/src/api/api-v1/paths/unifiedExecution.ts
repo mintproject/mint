@@ -140,6 +140,9 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *                 type: integer
  *                 minimum: 1
  *                 description: Maximum model batch-job wall time in minutes. Defaults to 60.
+ *               queue:
+ *                 type: string
+ *                 description: Tapis logical queue for the model batch job (for example `development`). Defaults to the model app's own queue.
  *               adapter_parameter_values:
  *                 type: object
  *                 additionalProperties: true

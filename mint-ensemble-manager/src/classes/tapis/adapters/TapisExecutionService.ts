@@ -98,7 +98,8 @@ export class TapisExecutionService implements IExecutionService {
         component: TapisComponent,
         threadId: string,
         threadModelId: string,
-        maxMinutes = 60
+        maxMinutes = 60,
+        logicalQueue?: string
     ): Promise<SubmissionResult> {
         this.seeds = [];
         try {
@@ -112,7 +113,8 @@ export class TapisExecutionService implements IExecutionService {
                 model,
                 threadId,
                 threadModelId,
-                maxMinutes
+                maxMinutes,
+                logicalQueue
             );
 
             this.handleSubmissionResults(failedExecutions);
@@ -139,7 +141,8 @@ export class TapisExecutionService implements IExecutionService {
             adapter_resource_overrides?: Parameters<typeof applyExecutionInputOverrides>[2];
         },
         workflowPath: string,
-        maxMinutes = 60
+        maxMinutes = 60,
+        logicalQueue?: string
     ): Promise<{
         execution_id: string;
         output_uri: string;
@@ -193,7 +196,8 @@ export class TapisExecutionService implements IExecutionService {
             executionCreation.model,
             `mint-workflow-model-${execution.id}`,
             `Composite workflow model execution ${execution.id}`,
-            maxMinutes
+            maxMinutes,
+            logicalQueue
         );
 
         // A deterministic, run-owned archive path gives downstream workflow
@@ -236,7 +240,8 @@ export class TapisExecutionService implements IExecutionService {
         model: Model,
         threadId: string,
         threadModelId: string,
-        maxMinutes: number
+        maxMinutes: number,
+        logicalQueue?: string
     ): Promise<{
         submittedExecutions: { execution: Execution; jobId: string }[];
         failedExecutions: { execution: Execution; error: Error }[];
@@ -247,7 +252,14 @@ export class TapisExecutionService implements IExecutionService {
         for (const seed of this.seeds) {
             console.log("Processing seed", JSON.stringify(seed));
             try {
-                const jobId = await this.submitSingleExecution(app, seed, model, threadId, maxMinutes);
+                const jobId = await this.submitSingleExecution(
+                    app,
+                    seed,
+                    model,
+                    threadId,
+                    maxMinutes,
+                    logicalQueue
+                );
                 submittedExecutions.push({ execution: seed.execution, jobId });
             } catch (error) {
                 console.error("Error submitting single execution:", error instanceof Error ? error.message : String(error));
@@ -275,7 +287,8 @@ export class TapisExecutionService implements IExecutionService {
         seed: TapisComponentSeed,
         model: Model,
         threadId: string,
-        maxMinutes: number
+        maxMinutes: number,
+        logicalQueue?: string
     ): Promise<string> {
         const name = this.generateValidJobName(app, seed.execution.id);
         const description = "Job for " + model.name + " execution " + seed.execution.id;
@@ -285,7 +298,8 @@ export class TapisExecutionService implements IExecutionService {
             model,
             name,
             description,
-            maxMinutes
+            maxMinutes,
+            logicalQueue
         );
 
         console.log("Job request", JSON.stringify(jobRequest));

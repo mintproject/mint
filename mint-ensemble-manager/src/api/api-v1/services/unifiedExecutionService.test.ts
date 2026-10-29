@@ -150,6 +150,39 @@ describe("unifiedExecutionService", () => {
         );
     });
 
+    it("forwards a requested logical queue to the Tapis execution engine", async () => {
+        legacy.tapis.submitExecution.mockResolvedValue({ submittedExecutions: ["run-1"] });
+        const service = createUnifiedExecutionService(legacy);
+        const plan = await service.createPlan({
+            executor: "ensemble_manager",
+            thread_id: "thread-1",
+            model_id: "model-1",
+            execution_engine: "tapis"
+        });
+
+        await service.submit({ plan_id: plan.plan_id, queue: "development" }, "Bearer user-token");
+
+        expect(legacy.tapis.submitExecution).toHaveBeenCalledWith(
+            { thread_id: "thread-1", model_id: "model-1", queue: "development" },
+            "Bearer user-token"
+        );
+    });
+
+    it("rejects a queue value that is not a queue name", async () => {
+        const service = createUnifiedExecutionService(legacy);
+        const plan = await service.createPlan({
+            executor: "ensemble_manager",
+            thread_id: "thread-1",
+            model_id: "model-1",
+            execution_engine: "tapis"
+        });
+
+        await expect(
+            service.submit({ plan_id: plan.plan_id, queue: "dev; rm -rf" }, "Bearer user-token")
+        ).rejects.toMatchObject({ statusCode: 422, code: "INVALID_QUEUE" });
+        expect(legacy.tapis.submitExecution).not.toHaveBeenCalled();
+    });
+
     it("rejects a non-positive maximum model runtime", async () => {
         const service = createUnifiedExecutionService(legacy);
         const plan = await service.createPlan({

@@ -309,6 +309,32 @@ function parseMaxMinutes(value: unknown): number {
     return minutes;
 }
 
+// Tapis logical queue names are short slugs (e.g. "development", "vm-small").
+// Tapis itself rejects a queue the execution system does not define.
+function parseQueue(value: unknown): string | undefined {
+    if (value === undefined || value === null || value === "") return undefined;
+    if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(value)) {
+        throw new UnifiedExecutionError(422, "queue must be a queue name", "INVALID_QUEUE");
+    }
+    return value;
+}
+
+function storedQueue(record: UnifiedExecutionRecord): string | undefined {
+    const value = (record.model_result as { __queue?: unknown } | null)?.__queue;
+    return value === undefined ? undefined : parseQueue(value);
+}
+
+function jobOptionsResult(maxMinutes?: number, queue?: string) {
+    return maxMinutes === undefined && queue === undefined
+        ? {}
+        : {
+              model_result: {
+                  ...(maxMinutes === undefined ? {} : { __max_minutes: maxMinutes }),
+                  ...(queue === undefined ? {} : { __queue: queue })
+              }
+          };
+}
+
 function storedMaxMinutes(record: UnifiedExecutionRecord): number | undefined {
     const value = (record.model_result as { __max_minutes?: unknown } | null)?.__max_minutes;
     return value === undefined ? undefined : parseMaxMinutes(value);
@@ -584,12 +610,14 @@ export function createUnifiedExecutionService(
         plan: LegacyPlan,
         authorization: string | undefined,
         adapterResourceOverrides?: unknown[],
-        maxMinutes?: number
+        maxMinutes?: number,
+        queue?: string
     ) => {
         const request = {
             thread_id: plan.thread_id,
             model_id: plan.model_id,
             ...(maxMinutes === undefined ? {} : { max_minutes: maxMinutes }),
+            ...(queue === undefined ? {} : { queue }),
             ...(adapterResourceOverrides?.length
                 ? { adapter_resource_overrides: adapterResourceOverrides }
                 : {})
@@ -1316,7 +1344,8 @@ export function createUnifiedExecutionService(
                 plan,
                 authorization,
                 overrides,
-                storedMaxMinutes(record)
+                storedMaxMinutes(record),
+                storedQueue(record)
             );
             const modelChildId = legacyModelExecutionId(result);
             if (!modelChildId) {
@@ -1604,6 +1633,7 @@ export function createUnifiedExecutionService(
                 body.max_minutes === ""
                     ? undefined
                     : maxMinutes;
+            const requestedQueue = parseQueue(body.queue);
             if (body.plan_id.startsWith("svo_")) {
                 const result = await adapterRequest(
                     "/workflows/submit",
@@ -1655,9 +1685,7 @@ export function createUnifiedExecutionService(
                     model_output_id: null,
                     output_handoff: null,
                     failure_code: null,
-                    ...(requestedMaxMinutes === undefined
-                        ? {}
-                        : { model_result: { __max_minutes: requestedMaxMinutes } })
+                    ...jobOptionsResult(requestedMaxMinutes, requestedQueue)
                 });
                 const dispatchClaim = await store.compareAndSet(parent.id, 0, {
                     status: "model_dispatching"
@@ -1680,7 +1708,8 @@ export function createUnifiedExecutionService(
                             output_name: adapter.model_output_key,
                             ...(requestedMaxMinutes === undefined
                                 ? {}
-                                : { max_minutes: requestedMaxMinutes })
+                                : { max_minutes: requestedMaxMinutes }),
+                            ...(requestedQueue === undefined ? {} : { queue: requestedQueue })
                         },
                         parentRunId(parent.id),
                         authorization || ""
@@ -1719,6 +1748,7 @@ export function createUnifiedExecutionService(
                             ...(requestedMaxMinutes === undefined
                                 ? {}
                                 : { __max_minutes: requestedMaxMinutes }),
+                            ...(requestedQueue === undefined ? {} : { __queue: requestedQueue }),
                             output_uri: modelTask.output_uri,
                             composite_workflow_run_id: submitted.run_id,
                             tapis_workflow_id: submitted.tapis_workflow_id || null,
@@ -1794,9 +1824,7 @@ export function createUnifiedExecutionService(
                     adapter_steps: plan.adapter_steps,
                     adapter_run_ids: [],
                     parameter_values: body.adapter_parameter_values || {},
-                    ...(requestedMaxMinutes === undefined
-                        ? {}
-                        : { model_result: { __max_minutes: requestedMaxMinutes } })
+                    ...jobOptionsResult(requestedMaxMinutes, requestedQueue)
                 });
                 const children: AdapterChildRun[] = [];
                 for (const step of plan.adapter_steps) {
@@ -1865,7 +1893,13 @@ export function createUnifiedExecutionService(
                 await persistWorkflowStages(responseRecord);
                 return parentResponse(responseRecord);
             }
-            const result = await submitLegacy(plan, authorization, undefined, requestedMaxMinutes);
+            const result = await submitLegacy(
+                plan,
+                authorization,
+                undefined,
+                requestedMaxMinutes,
+                requestedQueue
+            );
             const modelChildId = legacyModelExecutionId(result);
             return {
                 ...result,

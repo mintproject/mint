@@ -99,7 +99,9 @@ GET /plans/runs/{run_id}
 
 Submission accepts the plan ID, optional `parameter_values`, and optional
 `max_minutes` for the model batch-job wall time. `max_minutes` must be a
-positive integer and defaults to 60 minutes when omitted. Adapter plans are
+positive integer and defaults to 60 minutes when omitted. An optional `queue`
+names the Tapis logical queue for the model batch job (for example
+`development`); when omitted the model app's own queue applies. Adapter plans are
 validated against their immutable parameter definitions; missing, unknown, or
 invalid required values return `422` and no workflow is started. Ordinary
 model plans continue through the existing execution engine path.

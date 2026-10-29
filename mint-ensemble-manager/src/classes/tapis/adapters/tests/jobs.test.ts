@@ -111,6 +111,28 @@ test("uses the requested maximum runtime for a Tapis batch job", () => {
     expect(request.maxMinutes).toBe(135);
 });
 
+test("uses a requested logical queue instead of the app's default queue", () => {
+    const jobService = new TapisJobService(
+        new Jobs.JobsApi(),
+        new Jobs.SubscriptionsApi(),
+        new Jobs.ShareApi()
+    );
+    const withQueue = (queue?: string) =>
+        jobService.createJobRequest(
+            app,
+            seeds[0],
+            model,
+            "test-job",
+            "test description",
+            60,
+            queue
+        ).execSystemLogicalQueue;
+
+    expect(withQueue("vm-small")).toBe("vm-small");
+    // Without a request the app's own queue (the fixture declares "development") applies.
+    expect(withQueue()).toBe("development");
+});
+
 const seedWithMissingOptionalInput = {
     ...seeds[0],
     datasets: {}
