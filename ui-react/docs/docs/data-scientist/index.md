@@ -4,7 +4,7 @@ You make models, data and transformations findable and usable by other people. D
 
 Read [Why the details you enter matter](../reference/why-metadata.md) first, then work through these pages:
 
-1. [Make a model runnable](make-model.md): what to prepare before you register.
+1. [Make a model runnable](make-model.md): publish your model as a cookbook, using a ready-made template.
 2. [Register a model](register-model.md): the form, field by field.
 3. [Register data](register-data.md): what to provide so a dataset can be found.
 4. [Connect resources with transformations](transformations.md): register steps that convert one kind of data into another.
