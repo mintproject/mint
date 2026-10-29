@@ -18,6 +18,15 @@ COPY . .
 # then overwritten at startup by the entrypoint.
 RUN npm run build
 
+# Static user guide; Python and documentation dependencies stay in this stage.
+FROM python:3.12-slim AS docs
+WORKDIR /docs
+COPY docs/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+COPY docs/mkdocs.yml ./mkdocs.yml
+COPY docs/docs/ ./docs/
+RUN mkdocs build --strict
+
 FROM nginx:1.27-alpine AS runtime
 
 LABEL org.opencontainers.image.title="MINT UI (React)" \
@@ -34,6 +43,7 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=docs /docs/site /usr/share/nginx/html/docs
 
 EXPOSE 80
 

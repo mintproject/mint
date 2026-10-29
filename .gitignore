@@ -65,3 +65,7 @@ node_modules/
 kubeconfig
 dynamo-values.yaml
 uscd.yaml
+
+# Generated user documentation and local Python environment
+ui-react/docs/site/
+ui-react/docs/.venv/

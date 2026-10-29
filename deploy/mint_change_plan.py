@@ -96,6 +96,10 @@ def make_plan(paths: Iterable[str], source_sha: str | None = None) -> dict[str, 
 
     for raw_path in paths:
         path = _clean_path(raw_path)
+        # Published guide Markdown is part of the UI image, not internal docs.
+        if path.startswith("ui-react/docs/docs/"):
+            build.add("ui")
+            continue
         if _is_ignored(path):
             continue
         config_services = DEPLOYMENT_CONFIG_SERVICES.get(path)

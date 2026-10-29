@@ -1,0 +1,52 @@
+{
+  "site_name": "DYNAMO User Guide",
+  "site_description": "Role-based guidance for preparing, registering, and using scientific models and data.",
+  "theme": {
+    "name": "material",
+    "features": [
+      "navigation.sections",
+      "navigation.top",
+      "search.suggest",
+      "search.highlight",
+      "content.code.copy"
+    ]
+  },
+  "nav": [
+    {
+      "Start here": [
+        "index.md",
+        "getting-started.md"
+      ]
+    },
+    {
+      "Find models and data": "discovery.md"
+    },
+    {
+      "Facilitator": [
+        "facilitator/index.md",
+        "facilitator/frame-question.md",
+        "facilitator/use-model.md",
+        "facilitator/results.md"
+      ]
+    },
+    {
+      "Data scientist / model author": [
+        "data-scientist/index.md",
+        "data-scientist/make-model.md",
+        "data-scientist/register-model.md",
+        "data-scientist/register-data.md",
+        "data-scientist/transformations.md"
+      ]
+    },
+    {
+      "Troubleshooting": "troubleshooting.md"
+    },
+    {
+      "Reference": [
+        "reference/glossary.md"
+      ]
+    }
+  ],
+  "strict": true,
+  "use_directory_urls": true
+}
