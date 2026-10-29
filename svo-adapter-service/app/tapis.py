@@ -99,7 +99,7 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
     renew_ttl = run_token_ttl() if settings.run_token_enabled else 0
     source = textwrap.dedent(
         """
-        import base64, json, socket, time, urllib.error as _ue, urllib.parse as _up, urllib.request as _ur
+        import base64, http.client, json, socket, time, urllib.error as _ue, urllib.parse as _up, urllib.request as _ur
         try:
             from owe_python_sdk.runtime import execution_context as _ctx
         except Exception:
@@ -195,7 +195,16 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
             else:
                 _auth["retry_at"] = time.time() + 30
 
-        def _request(path, method="GET", payload=None):
+        class _Transient(Exception):
+            pass
+
+        def _note(entry):
+            _attempts.append(entry)
+            del _attempts[:-200]
+
+        def _request(path, method="GET", payload=None, tolerate=False):
+            # tolerate=True raises _Transient for network errors and 5xx/429 so a
+            # long wait can ride out an outage; auth failures always end the stage.
             body = None if payload is None else json.dumps(payload).encode()
             headers = {"X-Tapis-Token": _auth["token"], "Accept": "application/json"}
             if body is not None:
@@ -203,10 +212,10 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
             request = _ur.Request(_base + path, data=body, headers=headers, method=method)
             try:
                 with _ur.urlopen(request, timeout=90) as response:
-                    _attempts.append({"method": method, "path": path, "status": response.getcode()})
+                    _note({"method": method, "path": path, "status": response.getcode()})
                     return json.loads(response.read().decode())
             except _ue.HTTPError as exc:
-                _attempts.append({"method": method, "path": path, "status": exc.code})
+                _note({"method": method, "path": path, "status": exc.code})
                 if exc.code in (401, 403):
                     _die(
                         "the UI Tapis token was rejected during model %s (HTTP %s)"
@@ -214,13 +223,27 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                         "MODEL_PROVIDER_AUTH_FAILED",
                         {"http_status": exc.code, "operation": method.lower(), "path": path},
                     )
+                if tolerate and (exc.code >= 500 or exc.code in (408, 429)):
+                    raise _Transient()
                 _die("Tapis model request failed with HTTP %s" % exc.code,
                      "MODEL_PROVIDER_REQUEST_FAILED")
-            except (_ue.URLError, TimeoutError, socket.timeout) as exc:
-                _attempts.append({"method": method, "path": path,
-                                  "status": "transport_error", "error": type(exc).__name__})
+            except (_ue.URLError, OSError, http.client.HTTPException, ValueError) as exc:
+                _note({"method": method, "path": path,
+                       "status": "transport_error", "error": type(exc).__name__})
+                if tolerate:
+                    raise _Transient()
                 _die("Tapis model request failed: %s" % type(exc).__name__,
                      "MODEL_PROVIDER_REQUEST_FAILED")
+
+        def _request_retry(path):
+            # One-off reads after the job finished: a blip here must not discard the run.
+            for _try in range(6):
+                try:
+                    return _request(path, tolerate=True)
+                except _Transient:
+                    time.sleep(10)
+            _die("Tapis kept failing after the model job finished",
+                 "MODEL_PROVIDER_REQUEST_FAILED")
 
         def _find(value, names):
             if isinstance(value, dict):
@@ -245,9 +268,19 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         _job_uuid = str(_job_uuid)
         _status_path = "/v3/jobs/%s/status" % _up.quote(_job_uuid, safe="")
         _terminal = None
+        _last_ok = time.time()
         while True:
             _renew_if_due()
-            _status_payload = _request(_status_path)
+            try:
+                _status_payload = _request(_status_path, tolerate=True)
+            except _Transient:
+                # Ride out a Tapis/network outage; give up only if it persists.
+                if time.time() - _last_ok > __OUTAGE_SECONDS__:
+                    _die("Tapis job status was unreachable for over %d seconds" % __OUTAGE_SECONDS__,
+                         "MODEL_PROVIDER_REQUEST_FAILED", {"job_uuid": _job_uuid})
+                time.sleep(15)
+                continue
+            _last_ok = time.time()
             _status_result = ((_status_payload or {}).get("result")
                               if isinstance(_status_payload, dict) else None)
             _status = str(_find(_status_result, {"status", "state", "job_status", "jobStatus"})
@@ -267,9 +300,9 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                      "MODEL_PROVIDER_JOB_FAILED", {"job_uuid": _job_uuid, "status": _status})
             time.sleep(5)
 
-        _detail = _request("/v3/jobs/%s" % _up.quote(_job_uuid, safe=""))
+        _detail = _request_retry("/v3/jobs/%s" % _up.quote(_job_uuid, safe=""))
         _job = (_detail.get("result") if isinstance(_detail, dict) else None) or {}
-        _files_payload = _request("/v3/jobs/%s/output/list/" % _up.quote(_job_uuid, safe=""))
+        _files_payload = _request_retry("/v3/jobs/%s/output/list/" % _up.quote(_job_uuid, safe=""))
         _files_result = (_files_payload or {}).get("result") or []
         if isinstance(_files_result, dict):
             _files_result = (_files_result.get("files") or _files_result.get("items") or
@@ -319,6 +352,7 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         .replace("__OUTPUT_NAME__", repr(output_name))
         .replace("__OUTPUT_FORMAT__", repr(output_format))
         .replace("__RENEW_TTL__", str(renew_ttl))
+        .replace("__OUTAGE_SECONDS__", str(max(0, int(settings.model_poll_outage_seconds))))
         .replace("__TARGET_PREFIX__", settings.run_token_target_prefix)
     )
 

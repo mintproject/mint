@@ -244,3 +244,84 @@ def test_model_stage_keeps_polling_when_a_renewal_attempt_fails(monkeypatch, cap
 
     assert result["status"] == "ok"
     assert {token for _m, _p, token in seen} == {expiring}
+
+
+def _flaky_responder(poll_failures, finish_after=1):
+    """Serve one job whose first status polls raise the given errors."""
+    state = {"polls": 0, "failures": list(poll_failures)}
+
+    def responder(request, _timeout):
+        url = request.full_url
+        if url.endswith("/v3/jobs/submit"):
+            return _Response({"result": {"uuid": "flaky-job"}})
+        if url.endswith("/v3/jobs/flaky-job/status"):
+            if state["failures"]:
+                raise state["failures"].pop(0)
+            state["polls"] += 1
+            return _Response({"result": {"status": "FINISHED" if state["polls"] >= finish_after else "QUEUED"}})
+        if url.endswith("/v3/jobs/flaky-job"):
+            return _Response({"result": {"uuid": "flaky-job", "archiveSystemId": "ls6"}})
+        if url.endswith("/v3/jobs/flaky-job/output/list/"):
+            return _Response({"result": [{"type": "file", "name": "model.cbb", "path": "/m/model.cbb"}]})
+        raise AssertionError(url)
+
+    return responder, state
+
+
+def test_model_stage_rides_out_transient_network_errors_while_polling(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    responder, state = _flaky_responder([
+        urllib.error.URLError("timed out"),
+        urllib.error.HTTPError("https://portals.example/x", 503, "unavailable", {}, None),
+        urllib.error.HTTPError("https://portals.example/x", 429, "slow down", {}, None),
+        ConnectionResetError("reset by peer"),
+    ], finish_after=2)
+
+    result = _run(_model_code(), monkeypatch, capsys, responder)
+
+    assert result["status"] == "ok"
+    assert state["failures"] == []
+
+
+def test_model_stage_fails_when_tapis_stays_unreachable_past_the_outage_window(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(settings, "model_poll_outage_seconds", 0)
+    responder, _state = _flaky_responder([urllib.error.URLError("timed out")] * 50)
+
+    with pytest.raises(RuntimeError, match="MODEL_PROVIDER_REQUEST_FAILED"):
+        _run(_model_code(), monkeypatch, capsys, responder)
+
+
+def test_model_stage_still_fails_at_once_when_a_poll_is_unauthorized(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    responder, _state = _flaky_responder([
+        urllib.error.HTTPError("https://portals.example/x", 401, "unauthorized", {}, None),
+    ])
+
+    with pytest.raises(RuntimeError, match="MODEL_PROVIDER_AUTH_FAILED"):
+        _run(_model_code(), monkeypatch, capsys, responder)
+
+
+def test_model_stage_retries_the_reads_made_after_the_job_finishes(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    calls = {"detail": 0}
+
+    def responder(request, _timeout):
+        url = request.full_url
+        if url.endswith("/v3/jobs/submit"):
+            return _Response({"result": {"uuid": "late-job"}})
+        if url.endswith("/status"):
+            return _Response({"result": {"status": "FINISHED"}})
+        if url.endswith("/v3/jobs/late-job"):
+            calls["detail"] += 1
+            if calls["detail"] < 3:
+                raise urllib.error.URLError("timed out")
+            return _Response({"result": {"uuid": "late-job", "archiveSystemId": "ls6"}})
+        if url.endswith("/output/list/"):
+            return _Response({"result": [{"type": "file", "name": "model.cbb", "path": "/m/model.cbb"}]})
+        raise AssertionError(url)
+
+    result = _run(_model_code(), monkeypatch, capsys, responder)
+
+    assert result["status"] == "ok"
+    assert calls["detail"] == 3
