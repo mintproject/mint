@@ -1,6 +1,15 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronRight, Database, FlaskConical, Home, Map, Variable, Workflow } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronRight,
+  Database,
+  FlaskConical,
+  Home,
+  Map,
+  Variable,
+  Workflow,
+} from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
@@ -118,6 +127,8 @@ export function Sidebar({ collapsed }: SidebarProps) {
             )}
           </div>
         ))}
+        <Separator className="my-2" />
+        <GuideLink collapsed={collapsed} />
       </nav>
     </aside>
   );
@@ -150,6 +161,28 @@ function DirectLink({
       <Icon className="h-4 w-4 shrink-0" />
       {!collapsed && <span>{section.label}</span>}
     </Link>
+  );
+}
+
+/**
+ * The user guide is a separate static site served at /docs/ by the container's
+ * Nginx, not a router route, so this is a plain anchor: a <Link> would hand the
+ * path to React Router, which renders the app's not-found page. It opens in a
+ * new tab to keep the user's place in the app. Vite dev and Vercel builds do
+ * not include the guide, so the link 404s there.
+ */
+function GuideLink({ collapsed }: { collapsed: boolean }) {
+  return (
+    <a
+      href="/docs/"
+      target="_blank"
+      rel="noreferrer"
+      title={collapsed ? 'User Guide' : undefined}
+      className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+    >
+      <BookOpen className="h-4 w-4 shrink-0" />
+      {!collapsed && <span>User Guide</span>}
+    </a>
   );
 }
 

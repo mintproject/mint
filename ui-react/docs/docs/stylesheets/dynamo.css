@@ -1,0 +1,45 @@
+/*
+ * Aligns the user guide with the DYNAMO app chrome (src/styles/globals.css):
+ * the dark #222 bar with a #7f7f7f rule, Roboto, and the app's slate palette.
+ * Keep the values below in sync with the app's tokens.
+ */
+:root {
+  --md-primary-fg-color: #222222;
+  --md-primary-fg-color--light: #444444;
+  --md-primary-fg-color--dark: #222222;
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #1d4ed8;
+  --md-default-fg-color: hsl(222.2 84% 4.9%);
+  --md-typeset-a-color: #1d4ed8;
+}
+
+.md-header {
+  border-bottom: 1px solid #7f7f7f;
+  box-shadow: none;
+}
+
+.md-header__title,
+.md-tabs {
+  font-size: 0.8125rem;
+}
+
+.md-header__button.md-logo img {
+  border-radius: 6px;
+}
+
+.md-nav__title {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.7rem;
+  color: hsl(215.4 16.3% 46.9%);
+}
+
+.md-footer-meta {
+  background-color: #222222;
+}
+
+.md-typeset table:not([class]) {
+  border-color: hsl(214.3 31.8% 91.4%);
+  border-radius: 0.5rem;
+}
