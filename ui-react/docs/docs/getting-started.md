@@ -15,7 +15,7 @@ Registering a model or a dataset in DYNAMO adds a *description*. It does not mov
 
 ## The home page
 
-The home page is split into two parts. **Explore** takes you to models, datasets, regions and variables. **Decide** is where you turn a question into a modeling activity. The **User Guide** link at the bottom of the left-hand menu opens this guide.
+The home page is split into two parts. **Explore** takes you to models, datasets, regions and variables. **Decide** is where you turn a question into a modeling activity: you frame the question, and a guided wizard then takes you through choosing models and data, setting values, running, and reading results. The **User Guide** link at the bottom of the left-hand menu opens this guide.
 
 ![The DYNAMO Model Catalog home page, with the Explore cards and the left-hand menu](assets/images/home.png)
 
