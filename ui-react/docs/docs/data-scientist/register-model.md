@@ -10,4 +10,4 @@ Planned success checks: saved metadata persists, the configuration is discoverab
 
 **Models → Register Model Configuration** opens the form. It asks for a configuration name (required) and description, then the component location: a Tapis application or any URL. A configuration with no component location can be described but cannot be run. You must be signed in.
 
-![The Register Model Configuration form, showing the name, description, and component location fields](assets/images/model-register.png)
+![The Register Model Configuration form, showing the name, description, and component location fields](../assets/images/model-register.png)

@@ -8,4 +8,4 @@ Planned walkthrough: register and inspect a transformation, verify compatibility
 
 **Models → Browse ETL Processes** lists registered transformations. Each card shows its version, runtime, and its input and output contracts, which are scientific variables and formats. Use **Register ETL process** to add one. You must be signed in to register.
 
-![The ETL processes page listing transformations with their runtime, inputs, and outputs](assets/images/etl-browse.png)
+![The ETL processes page listing transformations with their runtime, inputs, and outputs](../assets/images/etl-browse.png)

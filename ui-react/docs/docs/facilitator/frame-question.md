@@ -8,4 +8,4 @@ Planned walkthrough: create or reopen a problem statement, add a task/thread, an
 
 **Modeling → Problem Statements** lists the statements already created. Choose a region to narrow the list or search by name; each card shows its task, sub-task and model counts, its time period, and who last updated it. Use **Add** to start a new one. You must be signed in.
 
-![The Problem Statements page with a region selector, search box, Add button, and two problem statement cards](assets/images/problem-statements.png)
+![The Problem Statements page with a region selector, search box, Add button, and two problem statement cards](../assets/images/problem-statements.png)
