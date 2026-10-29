@@ -77,6 +77,19 @@ class MintChangePlanTests(unittest.TestCase):
         self.assertEqual(plan["build_services"], ["ui"])
         self.assertEqual(plan["restart_services"], ["ui"])
 
+    def test_published_guide_changes_rebuild_only_ui(self):
+        for path in ("ui-react/docs/docs/index.md", "ui-react/docs/docs/assets/example.png"):
+            with self.subTest(path=path):
+                plan = make_plan([path])
+                self.assertEqual(plan["build_services"], ["ui"])
+                self.assertEqual(plan["restart_services"], ["ui"])
+                self.assertFalse(plan["schema_changed"])
+                self.assertFalse(plan["deploy_all"])
+
+    def test_internal_ui_documentation_remains_noop(self):
+        plan = make_plan(["ui-react/docs/README.md", "ui-react/docs/superpowers/plans/example.md"])
+        self.assertFalse(plan["has_changes"])
+
     def test_documentation_only_change_is_noop(self):
         plan = make_plan(["docs/deploy/mint-dev-pods.md", "README.md"])
         self.assertFalse(plan["has_changes"])

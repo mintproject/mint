@@ -107,8 +107,10 @@ One thing MINT deploys is not in this repository. Read it where it lives:
 >
 > - The OWL ontology for the model catalog schema:
 >   [`mintproject/Mint-ModelCatalog-Ontology`](https://github.com/mintproject/Mint-ModelCatalog-Ontology)
-> - The user documentation:
->   [`mintproject/MINT_USERGUIDE`](https://github.com/mintproject/MINT_USERGUIDE)
+> - Historical user documentation:
+>   [`mintproject/MINT_USERGUIDE`](https://github.com/mintproject/MINT_USERGUIDE).
+>   The new DYNAMO role-based guide lives in [`ui-react/docs/`](ui-react/docs/README.md)
+>   and is bundled at `/docs/` in the React UI container.
 >
 > `model-catalog-fastapi` (legacy REST API v1.8.0) and `model-catalog-endpoint` (the
 > Fuseki triplestore) belong to the v1.x architecture. `model-catalog-fastapi` is

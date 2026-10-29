@@ -211,3 +211,9 @@ npm run codegen
 
 [MIT](https://opensource.org/license/mit). Copyright (c) 2026 MINT.
 See [LICENSE](LICENSE).
+
+## DYNAMO user guide
+
+The UI container bundles the role-based Material for MkDocs guide at `/docs/`.
+See [documentation development](docs/README.md) for local preview/build commands
+and content status. Vite and Vercel previews do not bundle this guide.

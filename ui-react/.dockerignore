@@ -6,3 +6,6 @@ coverage
 .husky
 .env.development
 *.log
+
+docs/site
+docs/.venv
