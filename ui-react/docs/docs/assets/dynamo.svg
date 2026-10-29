@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DYNAMO">
+  <rect width="64" height="64" rx="14" fill="#1d4ed8" />
+  <path fill="#fff" d="M16 12h13.5C41.4 12 49 19.6 49 32s-7.6 20-19.5 20H16V12Zm11.5 32c7.2 0 11.5-4 11.5-12s-4.3-12-11.5-12h-3.8v24h3.8Z" />
+</svg>
