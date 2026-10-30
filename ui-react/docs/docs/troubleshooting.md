@@ -17,9 +17,21 @@ The data step offers datasets that carry the same standard variable as the input
 
 Check three things on its details: it has a component location (a configuration without one can be described but not run), its inputs and outputs have variables and units, and its region is not limited to somewhere other than where you are looking. Turn on **My models** in **Browse Models** to see only your own.
 
-## My cookbook is not in the list when I register a model
+## My application is not in the list when I register a model
 
-The list shows the applications your signed-in account can use. Check that the application was created in the Cookbook UI with the same TACC account, that it is enabled, and that the id and version you expect are there. If it is still missing, ask the person who manages your TACC project to confirm your account has access to it.
+The list shows the applications your signed-in account can use: your own, those shared with you, and public ones. Check that the application was created with the same account you are signed in with, that it is enabled, and that the id and version are what you expect. A brand-new application can take a moment to appear, so reload the page. If it is still missing, ask the person who manages your TACC project to confirm your account has access to it.
+
+## Creating an application says it already exists
+
+An application with that id and version is already in Tapis, possibly under another account. Each version can only be created once, so raise the **version** in your `app.json`, or choose a different **id**, and create it again.
+
+## The application was created but could not be made public
+
+The application exists and only you can run it. Select **Make public** in the dialog to try again. If it keeps failing, your account may not be allowed to share applications, so ask a Tapis administrator.
+
+## I need to undo a public application
+
+DYNAMO cannot make an application private or remove it. Ask the application's owner or a Tapis administrator to do it in Tapis.
 
 ## A page says it failed to load
 
