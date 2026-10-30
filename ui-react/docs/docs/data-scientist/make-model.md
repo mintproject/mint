@@ -37,21 +37,32 @@ A third template, the [Jupyter template](https://github.com/In-For-Disaster-Anal
     - **containerImage:** the image you pushed in step 3.
     - **Inputs and settings:** give each input file and each setting a clear name and description, and say which are required. DYNAMO copies these into the model's inputs and parameters, so write them for a facilitator, not for yourself.
     - **Time, memory and cores:** the template starts at 10 minutes, 1 core and 1000 MB. Raise them to what a real run needs, because a run that reaches its limit is stopped and fails.
-5. **Create the application.** Go to the [Cookbook UI](https://in-for-disaster-analytics.github.io/cookbooks-ui/#/apps) and sign in with your TACC account. Select **Create Application**, fill in the form from your `app.json`, and select **Create Application** again. You are taken to the new application's page.
+5. **Create the application.** You can do this without leaving DYNAMO. Open **Models → Register Model Configuration**, find **Component location**, and with **Tapis application** selected choose **Register a new application**. Upload your `app.json`, or paste its contents, then select **Review**. DYNAMO shows what it will create: the id and version, the container image, where it runs, its time, core and memory limits, and its input files and settings. Fix anything it flags, then select **Create application**.
+
+    ![The review step: id, version, container image, where it runs, limits, inputs and settings, and the notice that the application will be public](../assets/images/register-app-review.png)
+
+    Read the notice before you confirm. Creating the application makes a real application under your account **and makes it public**, so anyone signed in to Tapis can see its definition and run it. DYNAMO cannot edit it, remove it or make it private afterwards. Only you or a Tapis administrator can, in Tapis. The application exists even if you never save the model. Never put a password or key in the definition, because everyone can read it.
+
+    Before it sends anything, DYNAMO checks that the image has a version tag (not `:latest`), that the id and version contain no `/`, and that every input and setting has a name. If you prefer, you can create the application in the [Cookbook UI](https://in-for-disaster-analytics.github.io/cookbooks-ui/#/apps) with **Create Application** instead, and then choose it in the form.
 6. **Test it before you register it.** On the application's page select **Run**. Choose your input file or settings, then choose the **Queue**, the **Maximum Job Runtime** and your **Allocation**, and submit. When the job shows **Finished**, open its **Output location** and check the files are what you expect.
 
 ![The run settings page of a cookbook: the application's own settings, then the queue, maximum runtime and allocation](../assets/images/cookbook-run-settings.png)
 
 Test with a small sample first. Fixing a mistake now is far quicker than finding it after facilitators have started using the model. The screenshot shows the command template's example settings, and the layout can change between releases.
 
-## Register it in DYNAMO
+## Finish registering the model
 
-1. Open **Models → Register Model Configuration** and sign in.
-2. Under **Component location**, choose **Tapis application** and pick your cookbook from the list. The list shows the applications your account can use.
-3. The form fills in the inputs and settings from your `app.json`. Check each one.
-4. Add a **standard variable and unit** to each input, so DYNAMO can offer data for it. Then add the model's **outputs** yourself, with their variables, because the application does not declare them.
-5. Complete the rest of the form as described in [Register a model](register-model.md).
+When the application is created, DYNAMO selects it in the form and offers to fill in the inputs and settings from it. If your form already has some, it asks whether to replace them or keep yours.
+
+![The confirmation: the application was created, it is public, and its inputs and settings were filled in](../assets/images/register-app-done.png)
+
+Back in **Models → Register Model Configuration**:
+
+1. If you created the application in the Cookbook UI instead, choose it from the **Tapis application** list. The list shows every application you can use: your own, those shared with you, and public ones.
+2. Check the inputs and settings the form filled in from your `app.json`.
+3. Add a **standard variable and unit** to each input, so DYNAMO can offer data for it. Then add the model's **outputs** yourself, with their variables, because the application does not declare them.
+4. Complete the rest of the form as described in [Register a model](register-model.md).
 
 Then try it as a facilitator would: start a task, choose your model, give each input a dataset, and run it.
 
-If your cookbook is missing from the list, see [Troubleshooting](../troubleshooting.md).
+If your application is missing from the list, or something goes wrong while creating it, see [Troubleshooting](../troubleshooting.md).
