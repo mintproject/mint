@@ -162,16 +162,18 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
             except Exception:
                 return {}
 
-        def _renew_if_due():
+        def _renew_if_due(force=False):
             # Mint a fresh token from the live one before it expires, so the wait is
             # bounded by the job and not by any single token's lifetime. A failed
             # renewal is retried shortly; the current token keeps working until it
             # actually expires, and a rejected token still ends the stage.
-            if not _renew_ttl or time.time() < _auth["retry_at"]:
+            # force=True skips the due check; it is used once, at the end, to hand
+            # the next stage a token with a full lifetime.
+            if not _renew_ttl or (not force and time.time() < _auth["retry_at"]):
                 return
             claims = _claims(_auth["token"])
             expires_at = claims.get("exp")
-            if not expires_at or int(expires_at) - time.time() > max(300, _renew_ttl // 4):
+            if not force and (not expires_at or int(expires_at) - time.time() > max(300, _renew_ttl // 4)):
                 return
             body = {
                 "token_tenant_id": claims.get("tapis/tenant_id") or "portals",
@@ -338,9 +340,14 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         _manifest = {"schema_version": 1, "status": "ok", "resource_uri": _resource_uri,
                      "model_output_key": _output_name, "model_job_name": _job_name,
                      "model_job_uuid": _job_uuid, "archived_name": _selected.get("name")}
+        # Later stages run after this wait, possibly past the lifetime of the token
+        # the run was submitted with, so hand them this stage's live token. A failed
+        # mint keeps the current token, which Tapis may still accept.
+        _renew_if_due(force=True)
         if _ctx is not None:
             try:
                 _ctx.set_output("result", _resource_uri)
+                _ctx.set_output("token", _auth["token"])
             except Exception:
                 pass
         print(json.dumps(_manifest))
@@ -434,7 +441,7 @@ def generate_tapis_workflow(
             "runtime": "python:3.11",
             "installer": "pip",
             "description": "Run the model and resolve its declared output for adapter stages",
-            "output": {"result": {"type": "string"}},
+            "output": {"result": {"type": "string"}, "token": {"type": "string"}},
             "code": _model_execution_code({**model_task, "job_definition": job_definition}),
             "input": {
                 "TAPIS_BASE_URL": {
@@ -554,9 +561,26 @@ def generate_tapis_workflow(
                         }
                     },
                 }
+            # The model stage can outlast the token the run was submitted with, so
+            # every hosted stage after it takes the token the model stage ends with.
+            if model_task and "TAPIS_TOKEN" in inputs:
+                inputs["TAPIS_TOKEN"] = {
+                    "type": "string",
+                    "value_from": {
+                        "task_output": {"task_id": model_task_id, "output_id": "token"}
+                    },
+                }
             if inputs:
                 task["input"] = inputs
         if dependency_ids:
+            if (
+                model_task
+                and not app_id
+                and model_id not in dependency_ids
+                and "TAPIS_TOKEN" in (task.get("input") or {})
+            ):
+                # The token handoff reads the model task's output, so it must run first.
+                dependency_ids = [model_id, *dependency_ids]
             task["depends_on"] = [{"id": dep_id} for dep_id in dependency_ids]
         elif prev_id:
             # Older plans omitted depends_on for a simple chain. Preserve that
