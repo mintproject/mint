@@ -1,5 +1,5 @@
 # -- Values shared by every subchart and by the four services that ship from
-# `mintproject/monorepo`.
+# `mintproject/mint`.
 global:
   # -- One image tag for the four services built out of the single repository:
   # `hasura` (graphql-engine), `model_catalog_api`, `ui_react` and
@@ -332,7 +332,7 @@ components:
       tag: sha-1d23b2c
       # -- Image pull policy for Hasura database
       pullPolicy: IfNotPresent
-    # ARM has no pgvector image yet. `mintproject/monorepo` builds
+    # ARM has no pgvector image yet. `mintproject/mint` builds
     # `postgres-pgvector` for linux/amd64 only. An ARM deployment keeps the old
     # PostGIS image and cannot apply the embedding migration.
     arm_image:
@@ -362,7 +362,7 @@ components:
   # it, and it writes the embeddings back into `modelcatalog_standard_variable`.
   #
   # `SVO_SEMANTIC_SEARCH_WEBHOOK_URL` is always set on the Hasura pod, even when
-  # this component is disabled. The metadata in `mintproject/monorepo` declares
+  # this component is disabled. The metadata in `mintproject/mint` declares
   # nine event triggers with `webhook_from_env: SVO_SEMANTIC_SEARCH_WEBHOOK_URL`.
   # Hasura rejects the whole `metadata apply` when the variable is absent.
   semantic_search:

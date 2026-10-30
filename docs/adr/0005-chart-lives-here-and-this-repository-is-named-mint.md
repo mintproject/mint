@@ -4,8 +4,8 @@
 - **Deciders:** MetaLearn engineering
 - **Related:** reverses [ADR-0003](0003-single-repo-over-submodule-superproject.md) § 3
   for the chart, and [ADR-0004](0004-no-submodule-stubs-for-external-repositories.md) § 1;
-  map [#281](https://github.com/mintproject/monorepo/issues/281); research
-  [#285](https://github.com/mintproject/monorepo/issues/285)
+  map [#281](https://github.com/mintproject/mint/issues/281); research
+  [#285](https://github.com/mintproject/mint/issues/285)
 
 ---
 
@@ -47,7 +47,7 @@ The name `mint` is held by the chart repository. GitHub Pages serves a project s
 repository holds the name `mint`.
 
 GitHub redirects a renamed repository, but it does **not** redirect Pages
-([#285](https://github.com/mintproject/monorepo/issues/285), finding 1). The URL survives only
+([#285](https://github.com/mintproject/mint/issues/285), finding 1). The URL survives only
 if the repository that takes the name `mint` also publishes the chart. So the chart must move
 here before this repository takes the name. A rename alone kills the URL. A move alone leaves
 the URL on a repository that no longer holds the chart.
@@ -95,17 +95,17 @@ keeps its `9.x` line, because a published chart version must never go back. `mai
 **Old chart links change target.** After step 4, a link to `github.com/mintproject/mint/pull/110`
 resolves to pull request #110 of **this** repository, not of the archive. Taking a
 redirect-claimed name destroys that redirect, and it is permanent
-([#285](https://github.com/mintproject/monorepo/issues/285), finding 4). Rewrite every such
+([#285](https://github.com/mintproject/mint/issues/285), finding 4). Rewrite every such
 link to `mintproject/mint-chart-archive` before the cutover.
 
 **Images built before the rename carry the old source label.**
 `org.opencontainers.image.source` is set in each `Dockerfile`, so old images name
 `mintproject/monorepo`. The redirect resolves it. Update the label in the document sweep
-([#294](https://github.com/mintproject/monorepo/issues/294)).
+([#294](https://github.com/mintproject/mint/issues/294)).
 
 **A GHCR package link may break.** GitHub does not document what a rename does to the
 package-to-repository link that grants Actions push access. Test it before the cutover
-([#286](https://github.com/mintproject/monorepo/issues/286)).
+([#286](https://github.com/mintproject/mint/issues/286)).
 
 **TACC changes nothing.** It deploys a vendored chart, and `dynamo` resolves the unchanged URL.
 
@@ -119,9 +119,22 @@ package-to-repository link that grants Actions push access. Test it before the c
   redirect from the old name.
 - **The chart name is still `MINT`.** `helm install mint mintproject/MINT`.
 
+## Outcome
+
+The cutover ran on 2026-10-25 at 16:41 UTC. The Helm URL was dead for about 11 seconds.
+
+- `mintproject/mint` became `mintproject/mint-chart-archive`, and it is archived.
+- `mintproject/monorepo` became `mintproject/mint`. The old name redirects.
+- Pages serves `gh-pages` from this repository at `https://mintproject.github.io/mint`.
+- `dynamo` resolves `MINT 9.0.0-beta.16` with no edit.
+
+In the Context and Decision sections above, `mintproject/mint` means the old chart
+repository, which is now the archive. The rehearsal of the rename on two throwaway
+repositories is in [#286](https://github.com/mintproject/mint/issues/286).
+
 ## References
 
 - [ADR-0003](0003-single-repo-over-submodule-superproject.md) § 3
 - [ADR-0004](0004-no-submodule-stubs-for-external-repositories.md)
 - [Renaming a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/renaming-a-repository) — GitHub Docs
-- [#281](https://github.com/mintproject/monorepo/issues/281) — the map; #293 holds the cutover steps
+- [#281](https://github.com/mintproject/mint/issues/281) — the map; #293 holds the cutover steps

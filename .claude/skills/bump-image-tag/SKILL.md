@@ -1,6 +1,6 @@
 ---
 name: bump-image-tag
-description: Pin a MINT deployment to one commit of `mintproject/monorepo` by writing `global.imageTag` in a helm values file. Use when asked to deploy a monorepo branch or release, bump helm image tags, or refresh a values file to the latest images.
+description: Pin a MINT deployment to one commit of `mintproject/mint` by writing `global.imageTag` in a helm values file. Use when asked to deploy a monorepo branch or release, bump helm image tags, or refresh a values file to the latest images.
 ---
 
 # bump-image-tag
@@ -22,7 +22,7 @@ One single-repo commit builds all four services, so **one tag names the whole sy
 
 The chart resolves `.image.tag | default .Values.global.imageTag | default .Chart.AppVersion`, so **a per-service tag wins over the global**. The chart's own defaults pin all four, which is why the script clears them. Leaving one set is the silent failure this skill exists to remove: the deploy reports success and runs the old image.
 
-The four services that come from `mintproject/monorepo`:
+The four services that come from `mintproject/mint`:
 
 | Component key | Image |
 |---|---|
@@ -39,7 +39,7 @@ Helm reads globals only from the **root** `global` key, even when MINT is a subc
 
 ## Two aborts, both deliberate
 
-- **A repository that is not the GHCR one.** A tag from `mintproject/monorepo` does not exist on Docker Hub. Fix the chart before pinning.
+- **A repository that is not the GHCR one.** A tag from `mintproject/mint` does not exist on Docker Hub. Fix the chart before pinning.
 - **An image missing at that tag.** Every one of the four must be in GHCR before the pin is real. Wait for CI. `--skip-image-check` overrides, for a tag you know is still building.
 
 Chart `9.0.0-beta.8` or newer. Earlier charts have no `global.imageTag` at all, or

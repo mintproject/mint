@@ -3,7 +3,7 @@
 # See SKILL.md.
 set -euo pipefail
 
-SOURCE_REPO="mintproject/monorepo"
+SOURCE_REPO="mintproject/mint"
 
 # chart component key|GHCR repository
 SERVICES=(
