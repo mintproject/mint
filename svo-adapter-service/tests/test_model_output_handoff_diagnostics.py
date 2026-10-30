@@ -221,12 +221,13 @@ def test_model_stage_renews_its_token_before_it_expires(monkeypatch, capsys):
                   _job_responder(["QUEUED", "RUNNING", "FINISHED"], seen, mint), token=expiring)
 
     assert result["status"] == "ok"
-    assert len(minted) == 1
-    assert minted[0]["token_username"] == "alice" and minted[0]["access_token_ttl"] == 3600
+    # One renewal while waiting, then one forced mint so the next stage gets a full-lifetime token.
+    assert len(minted) == 2
+    assert all(m["token_username"] == "alice" and m["access_token_ttl"] == 3600 for m in minted)
     # The renewal call authenticates with the expiring token; every call after uses the fresh one.
-    mint_index = next(i for i, (_m, path, _t) in enumerate(seen) if path == "/tokens")
-    assert seen[mint_index][2] == expiring
-    assert all(token == fresh for _m, _p, token in seen[mint_index + 1:])
+    mint_indexes = [i for i, (_m, path, _t) in enumerate(seen) if path == "/tokens"]
+    assert seen[mint_indexes[0]][2] == expiring
+    assert all(token == fresh for _m, _p, token in seen[mint_indexes[0] + 1:])
     assert fresh not in json.dumps(result)
 
 

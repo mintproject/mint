@@ -179,9 +179,11 @@ the run call still use the caller's token.
   its TTL. If minting fails the submit returns 502 `RUN_TOKEN_MINT_FAILED` and
   the caller's token is never used for the run.
 - The composite model stage renews its own token while it waits (see below), so
-  the model wait is not bounded by the TTL. Stages after the model still use the
-  token the run was submitted with; a refresh broker is the follow-up for runs
-  that outlast it (see
+  the model wait is not bounded by the TTL. When the model stage finishes it mints
+  one last token and publishes it as the task output `token`; hosted stages after
+  it bind `TAPIS_TOKEN` to that output instead of the submitted arg, so they get a
+  full TTL whatever the wait. A run whose later stages outlast that TTL still needs
+  the refresh broker follow-up (see
   `../docs/design/2026-10-28-svo-adapter-workflow-token-lifecycle.md`).
 - Off by default. The mint contract is verified only for SUBSIDE on `portals`;
   confirm it against a sandbox run before enabling.
