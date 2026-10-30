@@ -75,7 +75,7 @@ instance. It pins a chart version and image tags.
 _Avoid_: the prod repo, the values repo
 
 **the dev cluster**:
-The shared MicroK8s instance used to test a branch before merge.
+The Kubernetes instance used to test a branch before merge.
 _Avoid_: staging, test cluster
 
 ### Migration

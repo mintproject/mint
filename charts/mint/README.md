@@ -311,8 +311,11 @@ A Helm chart for MINT
 | google.maps.key | string | `"AIzaSyAkRnERo4F4dy9AhdrWHAN5vdJWs0vZCgM"` | API key for Google Maps |
 | hostname | string | `"localhost"` | Hostname for the application |
 | imagePullSecrets | list | `[]` |  |
+| jobs.hasura.active_deadline_seconds | int | `900` | Time limit of the job, in seconds. The job does not retry. |
 | jobs.hasura.enabled | bool | `true` | Enable or disable MINT Database initialization |
+| jobs.hasura.guard.max_transaction_age_seconds | int | `60` | The job fails before the migration if a transaction in the database is older than this, in seconds |
 | jobs.hasura.resources | object | `{}` | Resource specifications for MINT Database initialization |
+| jobs.hasura.run_on_upgrade | bool | `false` | Also apply Hasura migrations and metadata on `helm upgrade`. Seeds run on install only. A failed `--wait` skips the hook. Give `helm upgrade` a `--timeout` longer than `active_deadline_seconds`. |
 | jobs.model_catalog_endpoint.enabled | bool | `false` | Enable or disable Model Catalog API initialization |
 | jobs.model_catalog_endpoint.resources | object | `{}` | Resource specifications for Model Catalog API initialization |
 | nameOverride | string | `""` |  |
