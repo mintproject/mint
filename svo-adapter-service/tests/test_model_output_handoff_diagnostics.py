@@ -51,11 +51,20 @@ class _Response:
         return json.dumps(self.payload).encode()
 
 
-def _run(code, monkeypatch, capsys, responder, token="diagnostic-token"):
+lookups = []
+
+
+def _run(code, monkeypatch, capsys, responder, token="diagnostic-token", existing_jobs=()):
+    """Run the generated model task. ``existing_jobs`` is what Tapis already holds under
+    the job name (the re-attach lookup); by default there is none, so the task submits."""
     monkeypatch.setenv("TAPIS_TOKEN", token)
     monkeypatch.setenv("TAPIS_BASE_URL", "https://portals.example")
+    lookups.clear()
 
     def urlopen(request, timeout=90):
+        if "/v3/jobs/list" in request.full_url:
+            lookups.append(request.full_url)
+            return _Response({"result": list(existing_jobs)})
         return responder(request, timeout)
 
     monkeypatch.setattr(urllib.request, "urlopen", urlopen)
@@ -326,3 +335,56 @@ def test_model_stage_retries_the_reads_made_after_the_job_finishes(monkeypatch, 
 
     assert result["status"] == "ok"
     assert calls["detail"] == 3
+
+
+def _attach_responder(submitted):
+    def responder(request, _timeout):
+        url = request.full_url
+        if url.endswith("/v3/jobs/submit"):
+            submitted.append(True)
+            return _Response({"result": {"uuid": "new-job"}})
+        if url.endswith("/status"):
+            return _Response({"result": {"status": "FINISHED"}})
+        job = url.split("/v3/jobs/")[1].split("/")[0]
+        if url.endswith("/output/list/"):
+            return _Response({"result": [{"type": "file", "name": "model.cbb", "path": "/m/model.cbb"}]})
+        return _Response({"result": {"uuid": job, "archiveSystemId": "ls6"}})
+
+    return responder
+
+
+def test_model_stage_attaches_to_a_job_it_already_submitted(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    submitted = []
+    existing = [{"uuid": "orphan-job", "name": "mint-workflow-model-test", "status": "QUEUED"}]
+
+    result = _run(_model_code(), monkeypatch, capsys, _attach_responder(submitted),
+                  existing_jobs=existing)
+
+    assert result["status"] == "ok" and result["model_job_uuid"] == "orphan-job"
+    assert submitted == []
+    assert "name.eq.mint-workflow-model-test" in lookups[0]
+
+
+def test_model_stage_ignores_failed_jobs_and_other_names_when_attaching(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    submitted = []
+    existing = [
+        {"uuid": "dead-job", "name": "mint-workflow-model-test", "status": "FAILED"},
+        {"uuid": "other-job", "name": "mint-workflow-model-test-2", "status": "RUNNING"},
+    ]
+
+    result = _run(_model_code(), monkeypatch, capsys, _attach_responder(submitted),
+                  existing_jobs=existing)
+
+    assert result["model_job_uuid"] == "new-job"
+    assert submitted == [True]
+
+
+def test_model_stage_submits_when_no_job_exists_yet(monkeypatch, capsys):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    submitted = []
+
+    result = _run(_model_code(), monkeypatch, capsys, _attach_responder(submitted))
+
+    assert result["model_job_uuid"] == "new-job" and submitted == [True]

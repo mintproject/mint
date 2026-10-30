@@ -190,6 +190,12 @@ the run call still use the caller's token.
 
 ### How the model stage waits
 
+Before submitting, the stage looks up a Tapis job with the same name (unique per
+execution) and attaches to it if one exists and has not failed or been cancelled.
+So when Tapis Workflows fails the task itself (for example a Kubernetes 504 while it
+polls the task) the engine can retry it, up to `SVO_ADAPTER_MODEL_TASK_MAX_RETRIES`
+(default 2), without submitting a duplicate model job.
+
 The composite model stage submits the Tapis job and polls its status until the
 job reaches a terminal state (FINISHED, FAILED, CANCELLED, ...). There is no poll
 limit: queue time and runtime are bounded by Tapis, not by the workflow. When

@@ -263,11 +263,35 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                         return found
             return None
 
-        _submitted = _request("/v3/jobs/submit", method="POST", payload=_job_definition)
-        _job_uuid = _find(_submitted, {"uuid", "jobUuid", "jobUUID"})
-        if not _job_uuid:
-            _die("Tapis did not return a model job UUID", "MODEL_PROVIDER_JOB_ID_MISSING")
-        _job_uuid = str(_job_uuid)
+        def _existing_job():
+            # The Workflows engine can fail this task (e.g. a Kubernetes 504 while it
+            # polls) after the Tapis job was already submitted, and may then retry the
+            # task. Attach to that job instead of submitting a duplicate. Job names are
+            # unique per execution, and a failed/cancelled job is not worth attaching to.
+            if not _job_name:
+                return None
+            _found = _request_retry(
+                "/v3/jobs/list?search=name.eq.%s&select=uuid,name,status,created"
+                "&orderBy=created(desc)" % _up.quote(_job_name, safe=""))
+            for _candidate in ((_found or {}).get("result") or []):
+                if not isinstance(_candidate, dict) or _candidate.get("name") != _job_name:
+                    continue
+                _state = str(_candidate.get("status") or "").upper()
+                if _state in {"FAILED", "CANCELLED", "CANCELED", "KILLED", "SYSTEM_ERROR"}:
+                    continue
+                if _candidate.get("uuid"):
+                    return str(_candidate["uuid"])
+            return None
+
+        _job_uuid = _existing_job()
+        if _job_uuid:
+            _note({"method": "ATTACH", "path": "/v3/jobs/" + _job_uuid, "status": "existing_job"})
+        else:
+            _submitted = _request("/v3/jobs/submit", method="POST", payload=_job_definition)
+            _job_uuid = _find(_submitted, {"uuid", "jobUuid", "jobUUID"})
+            if not _job_uuid:
+                _die("Tapis did not return a model job UUID", "MODEL_PROVIDER_JOB_ID_MISSING")
+            _job_uuid = str(_job_uuid)
         _status_path = "/v3/jobs/%s/status" % _up.quote(_job_uuid, safe="")
         _terminal = None
         _last_ok = time.time()
@@ -454,7 +478,8 @@ def generate_tapis_workflow(
                 },
             },
             "execution_profile": {
-                "max_retries": 0,
+                # Safe to retry: the task re-attaches to the job it already submitted.
+                "max_retries": settings.model_task_max_retries,
                 "max_exec_time": settings.model_task_max_exec_seconds,
             },
         })
