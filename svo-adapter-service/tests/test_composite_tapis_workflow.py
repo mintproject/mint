@@ -47,6 +47,9 @@ def test_composite_workflow_runs_model_and_preserves_modular_adapter_tasks():
         "value_from": {"args": "tapis_token"},
     }
     assert model_task["execution_profile"]["max_exec_time"] == settings.model_task_max_exec_seconds
+    # Retrying is safe only because the task re-attaches to the job it already submitted.
+    assert model_task["execution_profile"]["max_retries"] == settings.model_task_max_retries
+    assert "/v3/jobs/list" in model_task["code"]
     assert "/v3/jobs/submit" in model_task["code"]
     assert "/v3/jobs/" in model_task["code"]
     assert "/output/list/" in model_task["code"]
