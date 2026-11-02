@@ -162,6 +162,14 @@ database deletion is required.
   produced by the model task's named output after submission. Composite
   submissions recreate the registered pipeline so Tapis cannot reuse an older
   definition that validates this internal handoff as a user argument.
+- 2026-11-02: Reverses the 2026-09-29 poller skip. A coordinator-owned run that
+  nobody was viewing stayed `running` in svo after Tapis had finished or failed
+  it (the model task never submitted a job; the pipeline sat `ACTIVE`). The
+  poller now syncs status for `execution_id` runs
+  (`SVO_ADAPTER_POLL_COORDINATOR_RUNS`, default on), status only; output
+  registration stays with Ensemble Manager. `tasclient_dsso` was added to the
+  `adapter-ops` Workflows group as a non-admin member so it can read those runs
+  (user-approved). Unreadable runs are left unchanged.
 
 ## User feedback / decisions
 
