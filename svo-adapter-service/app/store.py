@@ -192,6 +192,14 @@ class InMemoryHasura:
             row.update(v["set"])
         return {"update_adapter_workflow_run_by_pk": row}
 
+    def _op_UpdateRunIf(self, v):
+        # Compare-and-set on status (run_state transitions).
+        row = STORE.run.get(v["id"])
+        if row and row.get("status") == v["status"]:
+            row.update(v["set"])
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
+
     def _op_Provenance(self, v):
         row = dict(v["obj"])
         row.setdefault("id", _new_id())

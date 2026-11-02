@@ -371,6 +371,11 @@ def build_specs(
                 "SVO_ADAPTER_CKAN_URL": _env("SVO_ADAPTER_CKAN_URL", "https://ckan.tacc.utexas.edu"),
                 "SVO_ADAPTER_STAC_API_URL": _env("SVO_ADAPTER_STAC_API_URL", "https://stacapi.pods.portals.tapis.io/api/v1"),
                 "SVO_ADAPTER_GEO_ACTOR_ID": _env("SVO_ADAPTER_GEO_ACTOR_ID", ""),
+                # Run signals: the model task posts liveness back to this URL with
+                # a per-run HMAC token (svo-adapter-service/app/run_state.py).
+                # Empty secrets leave signalling and the staleness sweep off.
+                "SVO_ADAPTER_PUBLIC_URL": _env("SVO_ADAPTER_PUBLIC_URL", urls["svo"]),
+                "SVO_ADAPTER_RUN_SIGNAL_SECRETS": _env("SVO_ADAPTER_RUN_SIGNAL_SECRETS", ""),
             },
             "time_to_stop_default": -1,
         },
@@ -1079,11 +1084,19 @@ def sync_ui_auth(t: Any, spec: dict[str, Any], *, restart: bool = True) -> int:
 
 
 def sync_svo_runtime(t: Any, spec: dict[str, Any], *, restart: bool = True) -> int:
-    """Apply the managed Geo actor runtime value without rewriting the pod spec."""
+    """Apply the managed SVO runtime values without rewriting the pod spec."""
     pid = spec["pod_id"]
-    configured_actor = _field(spec.get("environment_variables", {}), "SVO_ADAPTER_GEO_ACTOR_ID", "")
+    spec_env = spec.get("environment_variables", {})
+    configured_actor = _field(spec_env, "SVO_ADAPTER_GEO_ACTOR_ID", "")
     if not configured_actor:
         raise RuntimeError("SVO_ADAPTER_GEO_ACTOR_ID is not configured; refusing to clear the SVO runtime value")
+    # Run-signal wiring is managed the same way, so a secret rotation — or an
+    # empty value, which turns the feature off — reaches the live pod without
+    # a full re-registration. Values are never printed.
+    managed = {"SVO_ADAPTER_GEO_ACTOR_ID": configured_actor}
+    for key in ("SVO_ADAPTER_PUBLIC_URL", "SVO_ADAPTER_RUN_SIGNAL_SECRETS"):
+        if key in spec_env:
+            managed[key] = _field(spec_env, key, "")
 
     existing = _get_or_missing(t.pods.get_pod, pod_id=pid)
     if existing is None:
@@ -1098,8 +1111,8 @@ def sync_svo_runtime(t: Any, spec: dict[str, Any], *, restart: bool = True) -> i
     environment = _plain_data(_field(existing, "environment_variables", {}))
     if not isinstance(environment, dict):
         raise RuntimeError(f"[{pid}] returned invalid environment data; refusing to rewrite the runtime configuration")
-    environment["SVO_ADAPTER_GEO_ACTOR_ID"] = configured_actor
-    print(f"  [{pid}] applying Geo actor runtime configuration")
+    environment.update(managed)
+    print(f"  [{pid}] applying SVO runtime configuration ({', '.join(sorted(managed))})")
     t.pods.update_pod(
         pod_id=pid,
         image=current_image,
@@ -1108,8 +1121,9 @@ def sync_svo_runtime(t: Any, spec: dict[str, Any], *, restart: bool = True) -> i
 
     applied = _get_or_missing(t.pods.get_pod, pod_id=pid)
     applied_environment = _plain_data(_field(applied or {}, "environment_variables", {}))
-    if _field(applied_environment, "SVO_ADAPTER_GEO_ACTOR_ID", "") != configured_actor:
-        raise RuntimeError(f"[{pid}] Geo actor runtime configuration did not converge")
+    for key, value in managed.items():
+        if _field(applied_environment, key, "") != value:
+            raise RuntimeError(f"[{pid}] SVO runtime configuration did not converge for {key}")
     if not restart:
         return 0
 

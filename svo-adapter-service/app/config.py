@@ -81,6 +81,33 @@ class Settings(BaseSettings):
     # Set SVO_ADAPTER_POLL_COORDINATOR_RUNS=0 to restore the old skip.
     poll_coordinator_runs: bool = True
 
+    # Run signals (see run_state.py): the composite model task posts
+    # started / job_submitted / finished back to POST /runs/{id}/signal,
+    # authenticated by a per-run HMAC token derived from these secrets.
+    # Comma-separated so a rotation keeps the previous secret valid while
+    # in-flight pipelines (up to ~48 h) still carry tokens made from it.
+    # Empty disables signalling, arming and the staleness sweep.
+    run_signal_secrets: str = ""
+    # Public base URL of this service as the Workflows executor reaches it.
+    # Built from config only, never from a plan or a request, so a signal
+    # token can never be sent to a caller-chosen host.
+    public_base_url: str = ""
+    # Staleness sweep: an armed run with no signal this long after dispatch,
+    # or with `started` but no `job_submitted` this long after it started,
+    # gets health=stalled. Status is never changed by the sweep. 0 disables.
+    stall_after_seconds: int = 900
+    stall_after_started_seconds: int = 300
+    # Tapis usernames allowed to cancel runs they did not submit.
+    cancel_admins: str = ""
+
+    @property
+    def run_signal_secret_list(self) -> list[str]:
+        return [s.strip() for s in self.run_signal_secrets.split(",") if s.strip()]
+
+    @property
+    def cancel_admin_list(self) -> list[str]:
+        return [s.strip() for s in self.cancel_admins.split(",") if s.strip()]
+
     # Demo mode: serve the bundled standalone UI and back every Hasura call with an
     # in-process in-memory store, so the whole flow (register pieces -> readiness ->
     # plan -> generate -> submit dry-run) runs with NO Hasura/Postgres/Tapis. Never

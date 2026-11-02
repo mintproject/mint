@@ -250,6 +250,7 @@ jobs:
           TAPIS_ID: ${{ secrets.TAPIS_ID }}
           TAPIS_PASSWORD: ${{ secrets.TAPIS_PASSWORD }}
           SVO_ADAPTER_GEO_ACTOR_ID: ${{ vars.SVO_ADAPTER_GEO_ACTOR_ID }}
+          SVO_ADAPTER_RUN_SIGNAL_SECRETS: ${{ secrets.SVO_ADAPTER_RUN_SIGNAL_SECRETS }}
         run: |
           set -euo pipefail
           python deploy/tapis/register_mint_stack.py \

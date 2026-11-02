@@ -61,8 +61,27 @@ plans through the existing adapter workflow tables.
 | POST | `/workflows/submit` | Register/run a generated adapter workflow, or return a dry-run. Deferred plans require a coordinator-owned `execution_id` and a concrete, already-resolved `source_uri`; mismatches return `DEFERRED_EXECUTION_ID_MISMATCH`. Internal Ensemble Manager composite submissions may include a server-generated `model_task`; the adapter then submits/polls that model job, discovers the declared output, and hands its URI to the first transform task. Composite descriptors require Ensemble Manager authentication, an `execution_id`, and contain no bearer credentials. Tapis submission failures are persisted and returned with `TAPIS_WORKFLOW_SUBMISSION_FAILED` plus a run ID. Accepts `Idempotency-Key` (or the equivalent `idempotency_key` body field) for replay-safe submissions. |
 | GET | `/runs` | List recent adapter workflow runs. |
 | GET | `/runs/{run_id}` | Retrieve one run. |
-| POST | `/runs/{run_id}/poll` | Poll Tapis and persist the run status transition. |
+| POST | `/runs/{run_id}/poll` | Poll Tapis and persist the run status transition. Also verifies a signalled model job uuid against Tapis (by job name) and clears a `stalled` health verdict when the job exists. Never reverts `cancelled`. |
+| POST | `/runs/{run_id}/signal` | Liveness report from the composite model task (`started`, `job_submitted`, `finished`). Authenticated by `X-Run-Signal-Token` / `X-Run-Signal-Expires`, a per-run HMAC derived from `SVO_ADAPTER_RUN_SIGNAL_SECRETS`. Updates `health`, `started_at`, `last_signal_at` and the job identity; never moves `status` to a terminal value. 503 when signals are not configured; uniform 401 for a bad token or unknown run. |
+| POST | `/runs/{run_id}/cancel` | Terminate the Workflows run and, when the job uuid has been verified, cancel the Tapis job. Bearer token required; the caller (resolved through Tapis `userinfo`) must be the submitter or in `SVO_ADAPTER_CANCEL_ADMINS`. Moves `cancelling` → `cancelled`; a partial failure stays `cancelling` with the error recorded and returns 502. No-op on terminal runs. |
 | GET | `/runs/{run_id}/provenance` | Retrieve provenance events for a run. |
+
+#### Run health and staleness
+
+`health` is a liveness verdict beside the lifecycle `status`: `ok`, `stalled`
+or `reported_failed`. A background sweep (same loop as the Tapis poller, on
+whenever `SVO_ADAPTER_RUN_SIGNAL_SECRETS` is set and
+`SVO_ADAPTER_STALL_AFTER_SECONDS` > 0) marks an armed run `stalled` when no
+signal has arrived `STALL_AFTER_SECONDS` (default 900) after dispatch, or when
+`started` arrived but no `job_submitted` within `STALL_AFTER_STARTED_SECONDS`
+(default 300). After `job_submitted` there is no cutoff: ls6 queue waits of
+many hours are normal and the task itself enforces `max_minutes`. The sweep
+never changes `status`; any later signal, or a `/poll` that sees the job in
+Tapis, clears the verdict. `reported_failed` means the task said it failed;
+`/poll` confirms it from Tapis before `status` becomes `failed`. Only runs
+submitted while signals were configured are armed, so pre-existing rows are
+never flagged. Provenance events use the `run.signal.*`, `run.stalled`,
+`run.cancelled` namespace.
 | POST | `/runs/{run_id}/register-output` | Register a workflow output as a data object. |
 
 When a completed hosted function task emits a scalar JSON result instead of a

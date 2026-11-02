@@ -1,9 +1,10 @@
 """Background polling loop — checks Tapis run status for active adapter_workflow_run
 rows and updates their status (and provenance) in the adapter schema.
 
-Started as an asyncio task at application startup (see main.lifespan).
-Requires SVO_ADAPTER_TAPIS_TOKEN to be set; without it the task is not started.
-Set SVO_ADAPTER_POLL_INTERVAL_SECONDS=0 to disable even when a token is configured.
+Started as an asyncio task at application startup (see main.lifespan) whenever
+SVO_ADAPTER_POLL_INTERVAL_SECONDS > 0 and demo mode is off. Two independent
+halves run each tick: Tapis status polling (needs SVO_ADAPTER_TAPIS_TOKEN) and
+the staleness sweep (needs SVO_ADAPTER_RUN_SIGNAL_SECRETS; see run_state.py).
 
 Design:
 - Every poll_interval_seconds, query Hasura for runs in "running"/"submitting".
@@ -44,7 +45,8 @@ log = logging.getLogger(__name__)
 _LIST_ACTIVE_RUNS = """
 query ListActiveRuns {
   adapter_workflow_run(where: {status: {_in: ["running", "submitting"]}}) {
-    id tapis_workflow_id tapis_run_id execution_id workflow_plan_id
+    id status tapis_workflow_id tapis_run_id execution_id workflow_plan_id
+    health signals_armed dispatched_at started_at last_signal_at model_job_uuid
   }
 }
 """
@@ -360,23 +362,82 @@ async def poll_once(token: str) -> list[dict[str, Any]]:
     return updates
 
 
+async def sweep_stalled(now: datetime | None = None) -> list[dict[str, Any]]:
+    """Mark armed runs that have gone silent (see run_state.stall_decision).
+
+    Writes ``health`` and ``error_message`` only; ``status`` is never touched,
+    and a later signal or a /poll that sees the job alive clears the verdict.
+    Needs no Tapis access, which is the point: it catches the task that never
+    ran, which Tapis itself does not report.
+    """
+    from .hasura import get_client  # noqa: PLC0415 — deferred to avoid import cycle
+    from . import run_state  # noqa: PLC0415
+
+    now = now or datetime.now(tz=timezone.utc)
+    h = get_client(None)
+    rows = (await h.execute(_LIST_ACTIVE_RUNS))["adapter_workflow_run"]
+    flagged: list[dict[str, Any]] = []
+    for run in rows:
+        decision = run_state.stall_decision(
+            run, now,
+            after_seconds=settings.stall_after_seconds,
+            after_started_seconds=settings.stall_after_started_seconds,
+        )
+        if decision is None:
+            continue
+        phase, message = decision
+        try:
+            await h.execute(_UPDATE_RUN, {"id": run["id"], "set": run_state.stalled_update(message)})
+            await h.execute(_INSERT_PROVENANCE, {"obj": {
+                "workflow_run_id": run["id"],
+                "event_type": "run.stalled",
+                "payload_json": {
+                    "phase": phase,
+                    "dispatched_at": run.get("dispatched_at"),
+                    "started_at": run.get("started_at"),
+                    "last_signal_at": run.get("last_signal_at"),
+                    "decided_at": now.isoformat(),
+                },
+            }})
+        except Exception as exc:  # noqa: BLE001
+            log.error("sweep: failed to mark run %s stalled: %s", run["id"], exc)
+            continue
+        flagged.append({"run_id": run["id"], "phase": phase})
+        log.warning("sweep: run %s marked stalled (%s)", run["id"][:12], phase)
+    return flagged
+
+
 async def run_poller() -> None:
     """Long-running asyncio task started by main.lifespan.
 
-    Polls every settings.poll_interval_seconds until cancelled at shutdown.
+    Every settings.poll_interval_seconds: poll Tapis for active runs when a
+    service token is configured, and sweep armed runs for staleness when run
+    signals are configured. Either half can be absent; the loop still runs.
     """
+    from . import run_state  # noqa: PLC0415
+
     token = settings.tapis_token
     interval = settings.poll_interval_seconds
-    log.info("poller: started (interval=%ds, token=%s)", interval, "set" if token else "MISSING")
+    sweep_enabled = run_state.signals_configured() and settings.stall_after_seconds > 0
+    log.info(
+        "poller: started (interval=%ds, tapis_poll=%s, stall_sweep=%s)",
+        interval, "on" if token else "off", "on" if sweep_enabled else "off",
+    )
     while True:
-        try:
-            updates = await poll_once(token)
-            if updates:
-                log.info(
-                    "poller: %d run(s) transitioned: %s",
-                    len(updates),
-                    [(u["run_id"][:8], u["adapter_status"]) for u in updates],
-                )
-        except Exception as exc:  # noqa: BLE001
-            log.error("poller: unexpected error: %s", exc)
+        if token:
+            try:
+                updates = await poll_once(token)
+                if updates:
+                    log.info(
+                        "poller: %d run(s) transitioned: %s",
+                        len(updates),
+                        [(u["run_id"][:8], u["adapter_status"]) for u in updates],
+                    )
+            except Exception as exc:  # noqa: BLE001
+                log.error("poller: unexpected error: %s", exc)
+        if sweep_enabled:
+            try:
+                await sweep_stalled()
+            except Exception as exc:  # noqa: BLE001
+                log.error("sweep: unexpected error: %s", exc)
         await asyncio.sleep(interval)
