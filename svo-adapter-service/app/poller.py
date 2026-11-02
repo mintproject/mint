@@ -11,6 +11,14 @@ Design:
 - On terminal status (COMPLETED / FAILED / etc.), call tapis.get_run_detail to
   collect per-task error messages, then update the adapter_workflow_run row.
 - Emit a "run_status_polled" provenance event for every transition.
+- Runs with an execution_id (owned by Ensemble Manager) are included unless
+  SVO_ADAPTER_POLL_COORDINATOR_RUNS=0. The service token's account must be a
+  member of the Workflows group; a run it cannot read is left unchanged. For
+  those runs the poller syncs status only. Output registration stays with
+  Ensemble Manager (/runs/{id}/poll).
+- A success is not written when the task detail could not be read, because a
+  failed child task would otherwise be recorded as "completed". It is retried
+  on the next pass.
 - Never raises: errors are logged and skipped; the loop keeps running.
 """
 from __future__ import annotations
@@ -282,8 +290,7 @@ async def poll_once(token: str) -> list[dict[str, Any]]:
         run_id = run["id"]
         pipeline_id = run.get("tapis_workflow_id")
         run_uuid = run.get("tapis_run_id")
-        coordinator_owned = bool(run.get("execution_id"))
-        if coordinator_owned and not settings.poll_coordinator_runs:
+        if run.get("execution_id") and not settings.poll_coordinator_runs:
             # Ensemble Manager polls these with the UI caller's bearer token,
             # and only while someone requests the run. Opt out of the service
             # token reading them (see poll_coordinator_runs in config).
@@ -319,6 +326,14 @@ async def poll_once(token: str) -> list[dict[str, Any]]:
             log.debug("poller: could not fetch task detail for run %s: %s", run_id, exc)
         adapter_status, update_set = _terminal_update_set(tapis_status, detail)
         if adapter_status is None:
+            continue
+        if adapter_status == "completed" and (detail.get("tasks_error") or detail.get("run_error")):
+            # Child-task failures are only visible in the task detail; without
+            # it a failed run would be recorded as completed. Retry next pass.
+            log.warning(
+                "poller: run %s reported %s but task detail was unreadable (%s); retrying",
+                run_id[:12], tapis_status, detail.get("tasks_error") or detail.get("run_error"),
+            )
             continue
 
         # --- write -----------------------------------------------------------

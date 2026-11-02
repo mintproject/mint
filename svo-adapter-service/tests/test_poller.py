@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from app import poller
@@ -99,21 +100,16 @@ _COORDINATOR_RUN = {
 
 
 def test_poller_syncs_coordinator_run_status(monkeypatch):
-    import asyncio
-
     monkeypatch.setattr(poller.settings, "poll_coordinator_runs", True)
     fake = _patch_poll(monkeypatch, [dict(_COORDINATOR_RUN)], "FAILED")
 
     updates = asyncio.run(poller.poll_once("token"))
 
     assert [(u["run_id"], u["adapter_status"]) for u in updates] == [("run-1", "failed")]
-    assert "auto_bind" not in updates[0]
     assert any(v and v.get("set", {}).get("status") == "failed" for _, v in fake.writes)
 
 
 def test_poller_leaves_coordinator_run_when_tapis_unreadable(monkeypatch):
-    import asyncio
-
     monkeypatch.setattr(poller.settings, "poll_coordinator_runs", True)
     fake = _patch_poll(monkeypatch, [dict(_COORDINATOR_RUN)], None)
 
@@ -122,10 +118,35 @@ def test_poller_leaves_coordinator_run_when_tapis_unreadable(monkeypatch):
 
 
 def test_poller_skips_coordinator_runs_when_disabled(monkeypatch):
-    import asyncio
-
     monkeypatch.setattr(poller.settings, "poll_coordinator_runs", False)
     fake = _patch_poll(monkeypatch, [dict(_COORDINATOR_RUN)], "FAILED")
 
     assert asyncio.run(poller.poll_once("token")) == []
     assert fake.writes == []
+
+
+def test_poller_does_not_record_success_when_task_detail_is_unreadable(monkeypatch):
+    monkeypatch.setattr(poller.settings, "poll_coordinator_runs", True)
+    fake = _patch_poll(
+        monkeypatch, [dict(_COORDINATOR_RUN)], "COMPLETED",
+        detail={"tasks_error": "ApiException: 403"},
+    )
+
+    assert asyncio.run(poller.poll_once("token")) == []
+    assert fake.writes == []
+
+
+def test_poller_records_completed_coordinator_run_without_binding_output(monkeypatch):
+    monkeypatch.setattr(poller.settings, "poll_coordinator_runs", True)
+    fake = _patch_poll(monkeypatch, [dict(_COORDINATOR_RUN)], "COMPLETED", detail={"tasks": []})
+
+    updates = asyncio.run(poller.poll_once("token"))
+
+    assert [(u["run_id"], u["adapter_status"]) for u in updates] == [("run-1", "completed")]
+    assert not any("output_data_object_id" in str(v) for _, v in fake.writes)
+
+
+def test_poll_coordinator_runs_defaults_on():
+    from app.config import Settings
+
+    assert Settings().poll_coordinator_runs is True
