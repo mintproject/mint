@@ -95,6 +95,7 @@ request may have been accepted.
 GET /plans/{plan_id}
 POST /plans/submit
 GET /plans/runs/{run_id}
+POST /plans/runs/{run_id}/cancel
 ```
 
 Submission accepts the plan ID, optional `parameter_values`, and optional

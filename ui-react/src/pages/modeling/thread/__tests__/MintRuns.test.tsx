@@ -285,6 +285,92 @@ describe('MintRuns', () => {
     expect(screen.getByText(/Tapis Workflows tracking:/)).toBeInTheDocument();
   });
 
+  it('flags a stalled workflow and cancels it only after confirmation', async () => {
+    const onCancelWorkflow = vi.fn().mockResolvedValue(undefined);
+    const unifiedRun: UnifiedRunSnapshot = {
+      run_id: 'ue_parent-1',
+      execution_mode: 'workflow_pipeline',
+      status: 'adapter_running',
+      failure_code: 'COMPOSITE_WORKFLOW_STALLED',
+      error_message:
+        'Dispatched to Tapis Workflows at 2026-11-02 13:05 UTC; no signal has been received from the model task in 15 min.',
+      adapter_runs: [
+        {
+          execution_kind: 'composite_workflow',
+          run_id: 'adapter-run-1',
+          status: 'running',
+          health: 'stalled',
+          error_message:
+            'Dispatched to Tapis Workflows at 2026-11-02 13:05 UTC; no signal has been received from the model task in 15 min.',
+        },
+      ],
+    };
+
+    renderWithProviders(
+      <MintRuns
+        threadData={mockThreadDataSubmitted}
+        executions={emptyExecutions}
+        unifiedRuns={{ 'model-1': unifiedRun }}
+        canWrite
+        canExecute
+        ensembleManagerApi="http://ensemble"
+        onContinue={vi.fn()}
+        onFetchRuns={vi.fn()}
+        onSubmitRuns={vi.fn()}
+        onCancelWorkflow={onCancelWorkflow}
+      />,
+    );
+
+    const alert = screen.getByTestId('workflow-health');
+    expect(alert).toHaveTextContent('This run appears to be stuck.');
+    expect(alert).toHaveTextContent(/no signal has been received/);
+
+    fireEvent.click(screen.getByTestId('cancel-workflow'));
+    expect(onCancelWorkflow).not.toHaveBeenCalled();
+    expect(screen.getByText(/This cannot be undone/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('confirm-cancel-workflow'));
+    await waitFor(() => expect(onCancelWorkflow).toHaveBeenCalledWith('model-1'));
+  });
+
+  it('shows the queued model job and elapsed time for a healthy workflow', () => {
+    const startedAt = new Date(Date.now() - 95 * 60_000).toISOString();
+    const unifiedRun: UnifiedRunSnapshot = {
+      run_id: 'ue_parent-1',
+      execution_mode: 'workflow_pipeline',
+      status: 'model_running',
+      adapter_runs: [
+        {
+          execution_kind: 'composite_workflow',
+          run_id: 'adapter-run-1',
+          status: 'running',
+          health: 'ok',
+          model_job_id: 'b137dd42-86fd-412c-aa19-0a1a76ca2af7-007',
+          started_at: startedAt,
+        },
+      ],
+    };
+
+    renderWithProviders(
+      <MintRuns
+        threadData={mockThreadDataSubmitted}
+        executions={emptyExecutions}
+        unifiedRuns={{ 'model-1': unifiedRun }}
+        canWrite
+        canExecute
+        ensembleManagerApi="http://ensemble"
+        onContinue={vi.fn()}
+        onFetchRuns={vi.fn()}
+        onSubmitRuns={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('workflow-health')).not.toBeInTheDocument();
+    const status = screen.getByTestId('workflow-queue-status');
+    expect(status).toHaveTextContent('b137dd42-86fd-412c-aa19-0a1a76ca2af7-007');
+    expect(status).toHaveTextContent(/1 h 35 min ago/);
+  });
+
   it('shows the modeled spring-flow scalar in the workflow panel', () => {
     renderWithProviders(
       <MintRuns

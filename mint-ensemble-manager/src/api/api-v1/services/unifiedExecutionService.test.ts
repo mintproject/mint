@@ -556,6 +556,168 @@ describe("unifiedExecutionService", () => {
         });
     });
 
+    it("surfaces an adapter child's stall verdict as a parent failure code and clears it on recovery", async () => {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                run_id: "adapter-run-1",
+                status: "running",
+                tapis_workflow_id: "workflow-1",
+                tapis_run_id: "tapis-run-1"
+            })
+        });
+        const store = fakeStore();
+        const service = createUnifiedExecutionService(legacy, { store });
+        const plan = await service.createPlan({
+            executor: "ensemble_manager",
+            thread_id: "thread-1",
+            model_id: "model-1",
+            execution_engine: "tapis",
+            adapter_steps: [
+                {
+                    adapter_plan_id: "adapter-plan-1",
+                    model_io_id: "springflow-input",
+                    source_resource_id: "source-1"
+                }
+            ]
+        });
+        await service.submit({ plan_id: plan.plan_id }, "Bearer user-token");
+
+        const stalledRun = {
+            id: "adapter-run-1",
+            status: "running",
+            health: "stalled",
+            error_message:
+                "Dispatched to Tapis Workflows at 2026-11-02 13:05 UTC; no signal has been received",
+            model_job_uuid: null,
+            started_at: null,
+            tapis_workflow_id: "workflow-1",
+            tapis_run_id: "tapis-run-1"
+        };
+        (global.fetch as jest.Mock)
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ status: "running", health: "stalled" })
+            })
+            .mockResolvedValueOnce({ ok: true, json: async () => stalledRun });
+
+        const stalled = await service.getRun("ue_parent-1", "Bearer user-token");
+
+        expect(stalled).toMatchObject({
+            status: "adapter_running",
+            failure_code: "COMPOSITE_WORKFLOW_STALLED",
+            error_message: expect.stringContaining("no signal has been received")
+        });
+        expect((stalled.adapter_runs as any[])[0]).toMatchObject({ health: "stalled" });
+        expect(
+            (stalled.workflow_stages as any[]).find((stage) => stage.type === "adapter_input")
+        ).toMatchObject({ status: "running", health: "stalled" });
+
+        (global.fetch as jest.Mock)
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ status: "running", health: "ok" })
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    ...stalledRun,
+                    health: "ok",
+                    error_message: null,
+                    model_job_uuid: "job-1",
+                    started_at: "2026-11-02T13:05:20Z"
+                })
+            });
+
+        const recovered = await service.getRun("ue_parent-1", "Bearer user-token");
+
+        expect(recovered).toMatchObject({
+            status: "adapter_running",
+            failure_code: null,
+            error_message: null
+        });
+        expect((recovered.adapter_runs as any[])[0]).toMatchObject({
+            health: "ok",
+            model_job_id: "job-1",
+            started_at: "2026-11-02T13:05:20Z"
+        });
+    });
+
+    it("cancels the active adapter children as the caller and records the cancellation", async () => {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                run_id: "adapter-run-1",
+                status: "running",
+                tapis_workflow_id: "workflow-1",
+                tapis_run_id: "tapis-run-1"
+            })
+        });
+        const store = fakeStore();
+        const service = createUnifiedExecutionService(legacy, { store });
+        const plan = await service.createPlan({
+            executor: "ensemble_manager",
+            thread_id: "thread-1",
+            model_id: "model-1",
+            execution_engine: "tapis",
+            adapter_steps: [
+                {
+                    adapter_plan_id: "adapter-plan-1",
+                    model_io_id: "springflow-input",
+                    source_resource_id: "source-1"
+                }
+            ]
+        });
+        await service.submit({ plan_id: plan.plan_id }, "Bearer user-token");
+        (global.fetch as jest.Mock)
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    run_id: "adapter-run-1",
+                    status: "cancelled",
+                    terminated: true
+                })
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    id: "adapter-run-1",
+                    status: "cancelled",
+                    error_message: "Cancelled by alice",
+                    health: null
+                })
+            });
+
+        const cancelled = await service.cancelRun("ue_parent-1", "Bearer user-token");
+
+        expect(cancelled).toMatchObject({
+            status: "failed",
+            failure_code: "CANCELLED_BY_USER",
+            error_message: "Cancelled by alice"
+        });
+        const cancelCall = (global.fetch as jest.Mock).mock.calls.at(-2);
+        expect(cancelCall?.[0]).toBe("http://adapter.local/runs/adapter-run-1/cancel");
+        expect(cancelCall?.[1]).toMatchObject({
+            method: "POST",
+            headers: expect.objectContaining({ Authorization: "Bearer user-token" })
+        });
+        expect((cancelled.adapter_runs as any[])[0]).toMatchObject({ status: "cancelled" });
+
+        await expect(service.cancelRun("ue_parent-1", "Bearer user-token")).rejects.toMatchObject({
+            statusCode: 409,
+            code: "RUN_NOT_CANCELLABLE"
+        });
+    });
+
+    it("refuses to cancel without a bearer token", async () => {
+        const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+        await expect(service.cancelRun("ue_parent-1", undefined)).rejects.toMatchObject({
+            statusCode: 401,
+            code: "AUTHORIZATION_REQUIRED"
+        });
+        expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     it("blocks parent submission when the first adapter child rejects parameters", async () => {
         (global.fetch as jest.Mock).mockResolvedValue({
             ok: false,
@@ -594,26 +756,25 @@ describe("unifiedExecutionService", () => {
     });
 
     it("runs a deferred output adapter after the model execution succeeds", async () => {
-        (global.fetch as jest.Mock)
-            .mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    status: "deferred",
-                    plan_id: "deferred-plan-1",
-                    plan_hash: "deferred-hash-1",
-                    plan_json: {
-                        parameters: [
-                            { name: "allocation", required: true, managed: true },
-                            { name: "geo_actor_id", required: true, managed: true },
-                            { name: "source_uri", required: true, managed: true },
-                            { name: "start_date", required: true },
-                            { name: "end_date", required: true },
-                            { name: "aoi_geojson_uri", required: true },
-                            { name: "threshold", required: true }
-                        ]
-                    }
-                })
-            });
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                status: "deferred",
+                plan_id: "deferred-plan-1",
+                plan_hash: "deferred-hash-1",
+                plan_json: {
+                    parameters: [
+                        { name: "allocation", required: true, managed: true },
+                        { name: "geo_actor_id", required: true, managed: true },
+                        { name: "source_uri", required: true, managed: true },
+                        { name: "start_date", required: true },
+                        { name: "end_date", required: true },
+                        { name: "aoi_geojson_uri", required: true },
+                        { name: "threshold", required: true }
+                    ]
+                }
+            })
+        });
         legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue({
             execution_id: "model-child-1",
             output_uri: "tapis://ls6/mint-workflow-output/ue_parent-1/model/cbb",
@@ -905,9 +1066,7 @@ describe("unifiedExecutionService", () => {
             })
         });
         legacy.tapis.submitExecution.mockResolvedValue({
-            submittedExecutions: [
-                { execution: { id: "model-child-1" }, jobId: "provider-job-1" }
-            ]
+            submittedExecutions: [{ execution: { id: "model-child-1" }, jobId: "provider-job-1" }]
         });
         const store = fakeStore();
         const service = createUnifiedExecutionService(legacy, { store });

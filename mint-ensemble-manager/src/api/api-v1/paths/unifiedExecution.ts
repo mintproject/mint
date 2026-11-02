@@ -212,6 +212,58 @@ export default function (service: any) {
         }
     });
 
+    /**
+     * @openapi
+     * /plans/runs/{runId}/cancel:
+     *   post:
+     *     summary: Cancel a unified execution's adapter workflow and model job.
+     *     description: The SVO adapter terminates the Tapis Workflows run as the calling user, who must be the submitter or a configured cancel admin.
+     *     operationId: cancelUnifiedRun
+     *     security:
+     *       - BearerAuth: []
+     *       - oauth2: []
+     *     parameters:
+     *       - in: path
+     *         name: runId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     responses:
+     *       200:
+     *         description: Unified execution state after cancellation.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               additionalProperties: true
+     *       403:
+     *         description: Caller may not cancel this run.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/UnifiedExecutionError'
+     *       409:
+     *         description: Nothing active to cancel.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/UnifiedExecutionError'
+     *       default:
+     *         description: Cancellation failed or was only partly applied.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/UnifiedExecutionError'
+     */
+    router.post("/runs/:runId/cancel", async (req, res) => {
+        try {
+            const result = await service.cancelRun(req.params.runId, req.headers.authorization);
+            return res.status(200).json(result);
+        } catch (error) {
+            return sendError(res, error);
+        }
+    });
+
     router.get("/:planId", async (req, res) => {
         try {
             const result = await service.getPlan(req.params.planId, req.headers.authorization);
