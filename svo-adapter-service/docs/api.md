@@ -72,6 +72,13 @@ as `output_uri` and exposes a bounded `result` object containing the numeric
 result as a downstream data object while the facilitator view displays the
 scalar answer separately from the artifact.
 
+The background poller also moves Ensemble-Manager-owned runs (those with an
+`execution_id`) to a terminal status, so a run no one is viewing does not stay
+`running`. It reads them with the service token, which must belong to a member
+of the Workflows group (`adapter-ops`); a run it cannot read is left unchanged.
+For these runs it updates status only. Output registration stays with Ensemble
+Manager. Set `SVO_ADAPTER_POLL_COORDINATOR_RUNS=0` to skip them.
+
 If a task exits with a JSON payload whose `status` is `error`, the poller
 marks the adapter run failed even when the workflow wrapper reports
 `COMPLETED`; the response includes the bounded task error in `error_message`.

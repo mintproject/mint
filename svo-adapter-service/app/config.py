@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     # adapter_workflow_run rows in "running"/"submitting" state.
     # Set to 0 to disable polling even when tapis_token is configured.
     poll_interval_seconds: int = 60
+    # Also sync status for Ensemble-Manager-owned runs (those with an
+    # execution_id), so a run no one is viewing still reaches a terminal state.
+    # The service token must be able to read the run in the Workflows group
+    # (add its account to the group); when it cannot, the run is left untouched.
+    # Status only: output registration stays with Ensemble Manager.
+    # Set SVO_ADAPTER_POLL_COORDINATOR_RUNS=0 to restore the old skip.
+    poll_coordinator_runs: bool = True
 
     # Demo mode: serve the bundled standalone UI and back every Hasura call with an
     # in-process in-memory store, so the whole flow (register pieces -> readiness ->

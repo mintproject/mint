@@ -282,12 +282,11 @@ async def poll_once(token: str) -> list[dict[str, Any]]:
         run_id = run["id"]
         pipeline_id = run.get("tapis_workflow_id")
         run_uuid = run.get("tapis_run_id")
-        if run.get("execution_id"):
-            # Coordinator-owned runs are polled by Ensemble Manager with the
-            # UI caller's bearer token. This unattended poller only has the
-            # service fallback token; polling here would substitute
-            # tasclient_dsso for the user who submitted the run and can
-            # produce owner-mismatch failures.
+        coordinator_owned = bool(run.get("execution_id"))
+        if coordinator_owned and not settings.poll_coordinator_runs:
+            # Ensemble Manager polls these with the UI caller's bearer token,
+            # and only while someone requests the run. Opt out of the service
+            # token reading them (see poll_coordinator_runs in config).
             continue
         if not (pipeline_id and run_uuid):
             log.debug("poller: run %s missing pipeline_id/run_uuid, skipping", run_id)
@@ -342,13 +341,6 @@ async def poll_once(token: str) -> list[dict[str, Any]]:
         except Exception as exc:  # noqa: BLE001
             log.error("poller: failed to write update for run %s: %s", run_id, exc)
             continue
-
-        # --- auto-bind on completion ----------------------------------------
-        if adapter_status == "completed" and run.get("execution_id"):
-            admin_h = get_client(None)
-            bind_result = await _auto_bind_completed_run(h, admin_h, run, token)
-            log.info("poller: auto-bind for run %s: %s", run_id[:12], bind_result)
-            updates[-1]["auto_bind"] = bind_result
 
     return updates
 
