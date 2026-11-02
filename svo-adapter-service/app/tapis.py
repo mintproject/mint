@@ -993,10 +993,14 @@ def get_job(token: str, job_uuid: str) -> dict[str, Any] | None:
 
 def terminate_pipeline_run(token: str, pipeline_id: str, run_uuid: str,
                            group_id: str | None = None) -> tuple[bool, int]:
-    """Ask Workflows to terminate a run. Returns (accepted, http_status)."""
+    """Ask Workflows to terminate a run. Returns (accepted, http_status).
+
+    The Workflows API's ``terminatePipeline`` operation is a POST on the run
+    resource itself (no ``/terminate`` suffix; that path 404s).
+    """
     gid = group_id or settings.tapis_workflow_group
     resp = _api(_make_client(token), "POST",
-                f"/v3/workflows/groups/{gid}/pipelines/{pipeline_id}/runs/{run_uuid}/terminate")
+                f"/v3/workflows/groups/{gid}/pipelines/{pipeline_id}/runs/{run_uuid}")
     return 200 <= resp.status_code < 300, resp.status_code
 
 
