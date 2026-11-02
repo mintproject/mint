@@ -28,10 +28,10 @@ import json
 import logging
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -42,7 +42,7 @@ from fastapi.staticfiles import StaticFiles
 
 log = logging.getLogger(__name__)
 
-from . import ntgam, qaqc, run_tokens, stac, tapis
+from . import ntgam, qaqc, run_state, run_tokens, stac, tapis
 from .config import settings
 from .hasura import (
     DATA_OBJECT_CONTRACT_QUERY,
@@ -120,24 +120,20 @@ class TestTransformIn(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start the background Tapis status poller on startup; cancel it on shutdown.
+    """Start the background poller loop on startup; cancel it on shutdown.
 
-    The poller only runs when:
-    - demo_mode is off (no real Tapis in demo)
-    - tapis_token is configured (service-level token for unattended polling)
-    - poll_interval_seconds > 0 (explicit disable path)
+    The loop runs when demo_mode is off and poll_interval_seconds > 0. Inside
+    it, Tapis status polling needs tapis_token and the staleness sweep needs
+    run signals configured (see poller.run_poller); either may be absent.
     """
     task: asyncio.Task | None = None
-    if (not settings.demo_mode
-            and settings.tapis_token
-            and settings.poll_interval_seconds > 0):
+    if not settings.demo_mode and settings.poll_interval_seconds > 0:
         from . import poller
         task = asyncio.create_task(poller.run_poller(), name="svo-adapter-poller")
     else:
         log.info(
-            "poller disabled (demo_mode=%s, token=%s, interval=%d)",
+            "poller disabled (demo_mode=%s, interval=%d)",
             settings.demo_mode,
-            "set" if settings.tapis_token else "unset",
             settings.poll_interval_seconds,
         )
 
@@ -362,6 +358,8 @@ query GetRun($id: String!) {
   adapter_workflow_run_by_pk(id: $id) {
     id status tapis_workflow_id tapis_run_id started_at completed_at
     output_data_object_id logs_uri error_message workflow_plan_id execution_id idempotency_key
+    created_at dispatched_at signals_armed last_signal_at health
+    model_job_uuid model_job_name model_job_verified submitted_by
   }
 }
 """
@@ -392,6 +390,7 @@ query ListRuns($limit: Int!, $offset: Int!) {
   ) {
     id status tapis_workflow_id tapis_run_id started_at completed_at
     output_data_object_id logs_uri error_message workflow_plan_id execution_id
+    dispatched_at last_signal_at health model_job_uuid model_job_verified
   }
   adapter_workflow_run_aggregate { aggregate { count } }
 }
@@ -416,6 +415,14 @@ mutation InsertRun($obj: adapter_workflow_run_insert_input!) {
     on_conflict: {constraint: workflow_run_idempotency_key_key, update_columns: []}
   ) {
     id status tapis_workflow_id tapis_run_id workflow_plan_id idempotency_key
+  }
+}
+"""
+
+UPDATE_RUN_IF = """
+mutation UpdateRunIf($id: String!, $status: String!, $set: adapter_workflow_run_set_input!) {
+  update_adapter_workflow_run(where: {id: {_eq: $id}, status: {_eq: $status}}, _set: $set) {
+    affected_rows
   }
 }
 """
@@ -1961,7 +1968,7 @@ def _wrap_args(args: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def _public_workflow_args(args: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Remove server-injected credentials from workflow responses."""
-    return {key: value for key, value in args.items() if key != "tapis_token"}
+    return {key: value for key, value in args.items() if key not in {"tapis_token", "signal_token"}}
 
 
 def _composite_task_contains_secret(value: Any) -> bool:
@@ -2240,6 +2247,12 @@ async def submit_workflow(
     if not body.dry_run:
         args = await _with_run_token(args, token)
 
+    submitted_by = None
+    if token and not body.dry_run:
+        # Resolved by Tapis, never decoded locally; /runs/{id}/cancel checks
+        # the caller against it.
+        submitted_by = await run_in_threadpool(tapis.userinfo_username, token)
+
     # Record the run before triggering, so a failed submit still leaves a trail.
     run_obj: dict[str, Any] = {
         "workflow_plan_id": stored_plan_id,
@@ -2250,6 +2263,13 @@ async def submit_workflow(
         run_obj["execution_id"] = body.execution_id
     if idempotency_key:
         run_obj["idempotency_key"] = idempotency_key
+    if submitted_by:
+        run_obj["submitted_by"] = submitted_by
+    if body.model_task is not None:
+        # Known at generation time; /poll verifies a signalled job uuid against it.
+        job_name = (body.model_task.get("job_definition") or {}).get("name")
+        if job_name:
+            run_obj["model_job_name"] = str(job_name)
     run = (await h.execute(INSERT_RUN, {"obj": run_obj}))["insert_adapter_workflow_run_one"]
     await h.execute(INSERT_PROVENANCE, {"obj": {
         "workflow_run_id": run["id"], "event_type": "workflow_submit_requested",
@@ -2260,6 +2280,19 @@ async def submit_workflow(
         await h.execute(UPDATE_RUN, {"id": run["id"], "set": {"status": "generated"}})
         return {"run_id": run["id"], "status": "generated",
                 "tapis_workflow_definition": pipeline, "args": _public_workflow_args(args)}
+
+    # Arm run signals for composite runs: the model task reports liveness to
+    # this run's /signal endpoint with a token only this run can use. The sweep
+    # only ever judges armed runs (see run_state.stall_decision).
+    signals_armed = False
+    if body.model_task is not None and run_state.signals_configured():
+        expires = run_state.signal_expiry(
+            datetime.now(tz=timezone.utc), int(body.model_task.get("max_minutes") or 60),
+        )
+        args["signal_url"] = {"value": run_state.signal_url(run["id"])}
+        args["signal_token"] = {"value": run_state.make_signal_token(run["id"], expires)}
+        args["signal_expires"] = {"value": str(expires)}
+        signals_armed = True
 
     try:
         result = await run_in_threadpool(
@@ -2294,9 +2327,17 @@ async def submit_workflow(
             "run_id": run["id"],
         })
 
+    dispatched_at = datetime.now(tz=timezone.utc).isoformat()
     await h.execute(UPDATE_RUN, {"id": run["id"], "set": {
         "status": "running", "tapis_run_id": result.get("uuid"),
+        "dispatched_at": dispatched_at, "signals_armed": signals_armed,
     }})
+    if signals_armed:
+        await h.execute(INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run["id"], "event_type": "run.signal.armed",
+            "payload_json": {"dispatched_at": dispatched_at,
+                             "stall_after_seconds": settings.stall_after_seconds},
+        }})
     return {"run_id": run["id"], **result}
 
 
@@ -2339,6 +2380,10 @@ async def poll_run(run_id: str, authorization: str | None = Header(None)):
     run = (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"]
     if not run:
         raise HTTPException(404, "run not found")
+    if str(run.get("status") or "") == "cancelled":
+        # A user cancelled this run; Tapis may still report it active or
+        # terminated, neither of which revises the user's decision.
+        return run
     # Composite model runs are owned by the user who submitted them. Never
     # substitute the unattended service account for a missing UI credential;
     # that account may be a different Tapis owner and cannot inspect the job.
@@ -2360,12 +2405,16 @@ async def poll_run(run_id: str, authorization: str | None = Header(None)):
     }:
         update = {"status": "running"}
 
-    if update:
-        updated_run = (await h.execute(UPDATE_RUN, {"id": run_id, "set": update}))["update_adapter_workflow_run_by_pk"]
+    # A signalled job uuid is only trusted once Tapis confirms it under the
+    # caller's token; a confirmed job also proves a `stalled` run is alive.
+    health_update = await _verify_model_job(run, token)
+    if update or health_update:
+        updated_run = (await h.execute(UPDATE_RUN, {"id": run_id, "set": {**health_update, **update}}))["update_adapter_workflow_run_by_pk"]
         # The mutation returns only a projection of the row. Preserve the
         # workflow/parent identifiers needed by output registration and
         # reconciliation instead of replacing the full GET result with it.
         run = {**run, **(updated_run or {})}
+    if update:
         await h.execute(INSERT_PROVENANCE, {"obj": {
             "workflow_run_id": run_id,
             "event_type": "run_status_polled",
@@ -2399,6 +2448,191 @@ async def poll_run(run_id: str, authorization: str | None = Header(None)):
         if output_uri:
             response["output_uri"] = output_uri
     return response
+
+
+async def _verify_model_job(run: dict[str, Any], token: str | None) -> dict[str, Any]:
+    """Confirm a signalled job uuid against Tapis; a verified job clears `stalled`."""
+    job_uuid = run.get("model_job_uuid")
+    if not job_uuid or not token:
+        return {}
+    out: dict[str, Any] = {}
+    if not run.get("model_job_verified"):
+        job = await run_in_threadpool(tapis.get_job, token, job_uuid)
+        expected = run.get("model_job_name")
+        if not job or (expected and job.get("name") != expected):
+            return {}
+        out["model_job_verified"] = True
+        if not expected and job.get("name"):
+            out["model_job_name"] = str(job["name"])
+    alive = run_state.observed_alive_update(run)
+    if alive:
+        out.update(alive)
+    return out
+
+
+# Per-run signal rate limit: one run's token can only post this often.
+_SIGNAL_RATE: dict[str, list[float]] = {}
+_SIGNAL_RATE_LIMIT = 60
+_SIGNAL_RATE_WINDOW = 60.0
+_SIGNAL_BODY_LIMIT = 4096
+
+
+def _signal_rate_ok(run_id: str, now_ts: float) -> bool:
+    stamps = [t for t in _SIGNAL_RATE.get(run_id, []) if now_ts - t < _SIGNAL_RATE_WINDOW]
+    if len(stamps) >= _SIGNAL_RATE_LIMIT:
+        _SIGNAL_RATE[run_id] = stamps
+        return False
+    stamps.append(now_ts)
+    _SIGNAL_RATE[run_id] = stamps
+    return True
+
+
+@app.post("/runs/{run_id}/signal", tags=["Core: Runs"])
+async def signal_run(
+    run_id: str,
+    request: Request,
+    signal_token: str | None = Header(None, alias="X-Run-Signal-Token"),
+    signal_expires: str | None = Header(None, alias="X-Run-Signal-Expires"),
+):
+    """Liveness report from the composite model task (see run_state.py).
+
+    Authenticated by a per-run HMAC token; validated before any database
+    access. A bad token and an unknown run get the same 401. Signals update
+    health and the job identity; they never move status to a terminal value.
+    """
+    if not run_state.signals_configured():
+        raise HTTPException(503, detail={"code": "RUN_SIGNALS_DISABLED",
+                                         "message": "run signals are not configured"})
+    if not run_state.verify_signal_token(run_id, signal_expires, signal_token):
+        raise HTTPException(401, detail={"code": "RUN_SIGNAL_REJECTED"})
+    now = datetime.now(tz=timezone.utc)
+    if not _signal_rate_ok(run_id, now.timestamp()):
+        raise HTTPException(429, detail={"code": "RUN_SIGNAL_RATE_LIMITED"})
+    raw = await request.body()
+    if len(raw) > _SIGNAL_BODY_LIMIT:
+        raise HTTPException(413, detail={"code": "RUN_SIGNAL_TOO_LARGE"})
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        raise HTTPException(400, detail={"code": "RUN_SIGNAL_INVALID", "message": "body must be JSON"})
+    event = run_state.validate_signal(body)
+    if isinstance(event, str):
+        raise HTTPException(400, detail={"code": "RUN_SIGNAL_INVALID", "message": event})
+
+    h = get_client(None)
+    run = (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"]
+    if not run:
+        raise HTTPException(401, detail={"code": "RUN_SIGNAL_REJECTED"})
+
+    key = run_state.dedupe_key(event)
+    event_type = f"run.signal.{event['event']}"
+    prior = (await h.execute(GET_PROVENANCE, {"run_id": run_id, "limit": 500})).get(
+        "adapter_provenance_event", [])
+    if any(p.get("event_type") == event_type and (p.get("payload_json") or {}).get("dedupe_key") == key
+           for p in prior):
+        await h.execute(INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run_id, "event_type": "run.signal.duplicate",
+            "payload_json": {"dedupe_key": key, "received_at": now.isoformat()},
+        }})
+        return {"run_id": run_id, "accepted": True, "applied": False, "duplicate": True}
+
+    update = run_state.apply_signal(run, event, now)
+    applied = False
+    if update:
+        result = await h.execute(UPDATE_RUN_IF, {"id": run_id, "status": run.get("status"), "set": update})
+        applied = (result.get("update_adapter_workflow_run") or {}).get("affected_rows", 0) == 1
+    await h.execute(INSERT_PROVENANCE, {"obj": {
+        "workflow_run_id": run_id, "event_type": event_type,
+        "payload_json": {**event, "dedupe_key": key, "applied": applied,
+                         "received_at": now.isoformat()},
+    }})
+    return {
+        "run_id": run_id, "accepted": True, "applied": applied,
+        "health": (update or {}).get("health", run.get("health")),
+        "status": (update or {}).get("status", run.get("status")),
+    }
+
+
+@app.post("/runs/{run_id}/cancel", tags=["Core: Runs"])
+async def cancel_run(run_id: str, request: Request, authorization: str | None = Header(None)):
+    """Terminate the Workflows run and, when verified, cancel its Tapis job.
+
+    A destructive write, so unlike /poll it needs the caller's identity: the
+    bearer is resolved through Tapis userinfo and must match the submitter
+    or be a configured cancel admin. `cancelled` is final; /poll never
+    revises it.
+    """
+    token = _bearer(authorization)
+    if not token:
+        raise HTTPException(401, "log in with a Tapis token to cancel this run")
+    h = get_client(token)
+    run = (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"]
+    if not run:
+        raise HTTPException(404, "run not found")
+    status = str(run.get("status") or "")
+    if status in run_state.TERMINAL_STATUSES:
+        return {"run_id": run_id, "status": status, "already_terminal": True}
+
+    username = await run_in_threadpool(tapis.userinfo_username, token)
+    if not username:
+        raise HTTPException(401, detail={"code": "RUN_CANCEL_IDENTITY_UNKNOWN",
+                                         "message": "Tapis did not confirm the caller's identity"})
+    if not run_state.may_cancel(run, username):
+        raise HTTPException(403, detail={"code": "RUN_CANCEL_FORBIDDEN",
+                                         "message": "only the submitter or a cancel admin may cancel this run"})
+    pipeline_id = run.get("tapis_workflow_id")
+    run_uuid = run.get("tapis_run_id")
+    if not (pipeline_id and run_uuid):
+        raise HTTPException(409, detail={"code": "RUN_NOT_DISPATCHED",
+                                         "message": "this run has no Tapis Workflows run to terminate"})
+
+    now = datetime.now(tz=timezone.utc)
+    if status != "cancelling":
+        claimed = await h.execute(UPDATE_RUN_IF, {"id": run_id, "status": status, "set": {"status": "cancelling"}})
+        if (claimed.get("update_adapter_workflow_run") or {}).get("affected_rows", 0) != 1:
+            raise HTTPException(409, detail={"code": "RUN_STATUS_CHANGED",
+                                             "message": "the run changed state; reload and retry"})
+
+    terminated, terminate_code = await run_in_threadpool(
+        tapis.terminate_pipeline_run, token, pipeline_id, run_uuid,
+    )
+    job_cancelled: bool | None = None
+    job_code: int | None = None
+    if terminated and run.get("model_job_uuid") and run.get("model_job_verified"):
+        job_cancelled, job_code = await run_in_threadpool(tapis.cancel_job, token, run["model_job_uuid"])
+
+    audit = {
+        "username": username,
+        "client_ip": request.client.host if request.client else None,
+        "terminate_http_status": terminate_code,
+        "job_uuid": run.get("model_job_uuid") if job_cancelled is not None else None,
+        "job_cancel_http_status": job_code,
+        "requested_at": now.isoformat(),
+    }
+    if terminated and job_cancelled is not False:
+        await h.execute(UPDATE_RUN_IF, {"id": run_id, "status": "cancelling", "set": {
+            "status": "cancelled", "completed_at": now.isoformat(),
+            "error_message": f"Cancelled by {username}",
+        }})
+        await h.execute(INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run_id, "event_type": "run.cancelled", "payload_json": audit,
+        }})
+        return {"run_id": run_id, "status": "cancelled", "terminated": True,
+                "job_cancelled": job_cancelled}
+
+    failure = (f"Tapis Workflows terminate returned HTTP {terminate_code}" if not terminated
+               else f"Tapis job cancel returned HTTP {job_code}")
+    await h.execute(UPDATE_RUN, {"id": run_id, "set": {
+        "error_message": safe_error_message(f"Cancel requested by {username}; {failure}"),
+    }})
+    await h.execute(INSERT_PROVENANCE, {"obj": {
+        "workflow_run_id": run_id, "event_type": "run.cancel_failed",
+        "payload_json": {**audit, "failure": failure},
+    }})
+    raise HTTPException(502, detail={
+        "code": "RUN_CANCEL_INCOMPLETE", "message": failure,
+        "terminated": terminated, "job_cancelled": job_cancelled, "status": "cancelling",
+    })
 
 
 @app.get("/runs/{run_id}/provenance", tags=["Core: Runs"])

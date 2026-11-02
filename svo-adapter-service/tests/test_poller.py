@@ -150,3 +150,63 @@ def test_poll_coordinator_runs_defaults_on():
     from app.config import Settings
 
     assert Settings().poll_coordinator_runs is True
+
+
+# --- staleness sweep -----------------------------------------------------------------
+def _armed_run(**over):
+    from datetime import timedelta
+    now = datetime.now(tz=timezone.utc)
+    row = {
+        "id": "run-s", "status": "running", "tapis_workflow_id": "p", "tapis_run_id": "u",
+        "execution_id": "ue_s", "signals_armed": True, "health": None,
+        "dispatched_at": (now - timedelta(minutes=20)).isoformat(),
+        "started_at": None, "last_signal_at": None, "model_job_uuid": None,
+    }
+    row.update(over)
+    return row
+
+
+def _patch_sweep(monkeypatch, runs):
+    import app.hasura as hasura
+
+    monkeypatch.setattr(poller.settings, "run_signal_secrets", "s")
+    monkeypatch.setattr(poller.settings, "public_base_url", "https://svo.example")
+    monkeypatch.setattr(poller.settings, "stall_after_seconds", 900)
+    monkeypatch.setattr(poller.settings, "stall_after_started_seconds", 300)
+    fake = _FakeHasura(runs)
+    monkeypatch.setattr(hasura, "get_client", lambda *_a, **_k: fake)
+    return fake
+
+
+def test_sweep_marks_a_silent_armed_run_stalled_without_touching_status(monkeypatch):
+    fake = _patch_sweep(monkeypatch, [_armed_run()])
+
+    flagged = asyncio.run(poller.sweep_stalled())
+
+    assert flagged == [{"run_id": "run-s", "phase": "no_signal"}]
+    update = next(v["set"] for _, v in fake.writes if v and "set" in v)
+    assert update["health"] == "stalled" and "status" not in update
+    assert "cancel and resubmit" in update["error_message"]
+    assert any(v["obj"]["event_type"] == "run.stalled" for _, v in fake.writes if v and "obj" in v)
+
+
+def test_sweep_ignores_unarmed_fresh_and_already_stalled_runs(monkeypatch):
+    from datetime import timedelta
+    fresh = (datetime.now(tz=timezone.utc) - timedelta(minutes=5)).isoformat()
+    fake = _patch_sweep(monkeypatch, [
+        _armed_run(id="unarmed", signals_armed=False),
+        _armed_run(id="fresh", dispatched_at=fresh),
+        _armed_run(id="stalled", health="stalled"),
+        _armed_run(id="queued", last_signal_at=fresh, started_at=fresh, model_job_uuid="job-1"),
+    ])
+
+    assert asyncio.run(poller.sweep_stalled()) == []
+    assert fake.writes == []
+
+
+def test_sweep_flags_a_task_that_started_but_never_submitted_a_job(monkeypatch):
+    from datetime import timedelta
+    started = (datetime.now(tz=timezone.utc) - timedelta(minutes=6)).isoformat()
+    _patch_sweep(monkeypatch, [_armed_run(last_signal_at=started, started_at=started)])
+
+    assert asyncio.run(poller.sweep_stalled()) == [{"run_id": "run-s", "phase": "no_job"}]

@@ -65,6 +65,11 @@ STANDARD_PARAMS: dict[str, dict[str, Any]] = {
     "tapis_base_url": {"type": "string", "default": "https://portals.tapis.io"},
     "tapis_token": {"type": "string", "required": True,
                     "description": "User Tapis bearer token for the job submissions"},
+    # Run-signal wiring, server-injected at submit (see run_state.py). Blank
+    # when signalling is not configured; the model task then skips it.
+    "signal_url": {"type": "string", "default": "", "required": False},
+    "signal_token": {"type": "string", "default": "", "required": False},
+    "signal_expires": {"type": "string", "default": "", "required": False},
     # Point-location params — first-class pipeline params like any MINT model
     # parameter. Tasks that need them declare LAT/LON in their env_from_args.
     "lat": {"type": "number", "required": False, "description": "Point latitude (WGS84)"},
@@ -122,6 +127,39 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 value = os.environ.get(name, default)
             return default if value in (None, "") else value
 
+        _signal_url = _input("SIGNAL_URL", "", allow_environment=False).strip()
+        _signal_token = _input("SIGNAL_TOKEN", "", allow_environment=False).strip()
+        _signal_expires = _input("SIGNAL_EXPIRES", "", allow_environment=False).strip()
+
+        def _signal(event, retry_for=5, **fields):
+            # Best-effort liveness report to the adapter (app/run_state.py). It
+            # never changes this task's outcome, and never prints the request,
+            # the token or an exception: Workflows captures stdout.
+            if not (_signal_url and _signal_token):
+                return
+            payload = {"schema": 1, "event": event, "task_id": "model", "attempt": 1}
+            payload.update({k: v for k, v in fields.items() if v is not None})
+            request = _ur.Request(
+                _signal_url, data=json.dumps(payload).encode(), method="POST",
+                headers={"Content-Type": "application/json",
+                         "X-Run-Signal-Token": _signal_token,
+                         "X-Run-Signal-Expires": _signal_expires})
+            deadline = time.time() + retry_for
+            delay = 1
+            while True:
+                try:
+                    with _ur.urlopen(request, timeout=5):
+                        return
+                except Exception:
+                    if time.time() >= deadline:
+                        return
+                    time.sleep(delay)
+                    delay = min(delay * 2, 10)
+
+        # First action: the staleness sweep treats silence after dispatch as a
+        # task that never ran, so this must go out before anything can fail.
+        _signal("started", retry_for=60)
+
         _attempts = []
 
         def _die(message, code="MODEL_OUTPUT_DISCOVERY_FAILED", details=None):
@@ -136,6 +174,9 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 except Exception:
                     pass
             print(text)
+            _signal("finished", code=code, message=message[:500],
+                    job_uuid=(details or {}).get("job_uuid"),
+                    job_status=(details or {}).get("status"))
             # SystemExit is rendered by Tapis Workflows as `Task Failed: []`,
             # discarding the structured diagnostic.  A bounded RuntimeError
             # keeps the task failed while preserving the safe category/message
@@ -292,6 +333,8 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
             if not _job_uuid:
                 _die("Tapis did not return a model job UUID", "MODEL_PROVIDER_JOB_ID_MISSING")
             _job_uuid = str(_job_uuid)
+        _signal("job_submitted", job_uuid=_job_uuid, job_name=_job_name,
+                attached=bool(_attempts and _attempts[-1].get("status") == "existing_job"))
         _status_path = "/v3/jobs/%s/status" % _up.quote(_job_uuid, safe="")
         _terminal = None
         _last_ok = time.time()
@@ -374,6 +417,8 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 _ctx.set_output("token", _auth["token"])
             except Exception:
                 pass
+        _signal("finished", job_uuid=_job_uuid, job_status=_terminal,
+                condition=str(_job.get("condition") or "") or None)
         print(json.dumps(_manifest))
         """
     )
@@ -476,6 +521,11 @@ def generate_tapis_workflow(
                     "type": "string",
                     "value_from": {"args": "tapis_token"},
                 },
+                # Liveness reports back to the adapter (run_state.py). Blank
+                # when signalling is not configured.
+                "SIGNAL_URL": {"type": "string", "value_from": {"args": "signal_url"}},
+                "SIGNAL_TOKEN": {"type": "string", "value_from": {"args": "signal_token"}},
+                "SIGNAL_EXPIRES": {"type": "string", "value_from": {"args": "signal_expires"}},
             },
             "execution_profile": {
                 # Safe to retry: the task re-attaches to the job it already submitted.
@@ -909,6 +959,51 @@ def _encode_function_code(pipeline: dict[str, Any]) -> dict[str, Any]:
         tasks.append(task)
     out["tasks"] = tasks
     return out
+
+
+def userinfo_username(token: str) -> str | None:
+    """Username for a bearer token, verified by Tapis itself (never decoded locally)."""
+    try:
+        resp = _api(_make_client(token), "GET", "/v3/oauth2/userinfo")
+    except Exception:  # noqa: BLE001 — caller treats None as "unknown"
+        return None
+    if not (200 <= resp.status_code < 300):
+        return None
+    try:
+        result = (resp.json() or {}).get("result") or {}
+    except ValueError:
+        return None
+    username = result.get("username")
+    return str(username) if username else None
+
+
+def get_job(token: str, job_uuid: str) -> dict[str, Any] | None:
+    """Tapis Jobs record for ``job_uuid`` as the caller sees it, or None."""
+    try:
+        resp = _api(_make_client(token), "GET", f"/v3/jobs/{job_uuid}")
+    except Exception:  # noqa: BLE001
+        return None
+    if not (200 <= resp.status_code < 300):
+        return None
+    try:
+        return (resp.json() or {}).get("result") or None
+    except ValueError:
+        return None
+
+
+def terminate_pipeline_run(token: str, pipeline_id: str, run_uuid: str,
+                           group_id: str | None = None) -> tuple[bool, int]:
+    """Ask Workflows to terminate a run. Returns (accepted, http_status)."""
+    gid = group_id or settings.tapis_workflow_group
+    resp = _api(_make_client(token), "POST",
+                f"/v3/workflows/groups/{gid}/pipelines/{pipeline_id}/runs/{run_uuid}/terminate")
+    return 200 <= resp.status_code < 300, resp.status_code
+
+
+def cancel_job(token: str, job_uuid: str) -> tuple[bool, int]:
+    """Cancel a Tapis job. Returns (accepted, http_status)."""
+    resp = _api(_make_client(token), "POST", f"/v3/jobs/{job_uuid}/cancel")
+    return 200 <= resp.status_code < 300, resp.status_code
 
 
 def register_pipeline(client, pipeline: dict[str, Any], group_id: str, recreate: bool = False) -> None:

@@ -1110,6 +1110,57 @@ class SvoRuntimeSyncTests(unittest.TestCase):
             deploy.sync_svo_runtime(t, spec)
         t.pods.update_pod.assert_not_called()
 
+    def test_sync_manages_run_signal_wiring_when_the_spec_declares_it(self):
+        # An empty secret is applied too: that is how the feature is switched off
+        # on the live pod without a full re-registration.
+        spec = {
+            "pod_id": deploy.PODS["svo"],
+            "environment_variables": {
+                "SVO_ADAPTER_GEO_ACTOR_ID": "z8LGLpm7lVqrK",
+                "SVO_ADAPTER_PUBLIC_URL": "https://mintdevsvo.pods.portals.tapis.io",
+                "SVO_ADAPTER_RUN_SIGNAL_SECRETS": "",
+            },
+        }
+        running = {
+            "image": "ghcr.io/mintproject/svo-adapter:develop",
+            "status_container": {"start_time": "old-start"},
+            "environment_variables": {"SVO_ADAPTER_GEO_ACTOR_ID": "old",
+                                      "SVO_ADAPTER_RUN_SIGNAL_SECRETS": "rotated-out"},
+        }
+        applied = {"environment_variables": {
+            "SVO_ADAPTER_GEO_ACTOR_ID": "z8LGLpm7lVqrK",
+            "SVO_ADAPTER_PUBLIC_URL": "https://mintdevsvo.pods.portals.tapis.io",
+            "SVO_ADAPTER_RUN_SIGNAL_SECRETS": "",
+        }}
+        t = Mock()
+        t.pods.get_pod.side_effect = [running, applied]
+        rc = deploy.sync_svo_runtime(t, spec, restart=False)
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            t.pods.update_pod.call_args.kwargs["environment_variables"],
+            applied["environment_variables"],
+        )
+
+    def test_sync_fails_when_signal_wiring_does_not_converge(self):
+        spec = {
+            "pod_id": deploy.PODS["svo"],
+            "environment_variables": {"SVO_ADAPTER_GEO_ACTOR_ID": "z8LGLpm7lVqrK",
+                                      "SVO_ADAPTER_RUN_SIGNAL_SECRETS": "new"},
+        }
+        running = {
+            "image": "ghcr.io/mintproject/svo-adapter:develop",
+            "status_container": {"start_time": "old-start"},
+            "environment_variables": {},
+        }
+        applied = {"environment_variables": {"SVO_ADAPTER_GEO_ACTOR_ID": "z8LGLpm7lVqrK",
+                                             "SVO_ADAPTER_RUN_SIGNAL_SECRETS": "old"}}
+        t = Mock()
+        t.pods.get_pod.side_effect = [running, applied]
+        with self.assertRaises(RuntimeError) as ctx:
+            deploy.sync_svo_runtime(t, spec, restart=False)
+        self.assertIn("SVO_ADAPTER_RUN_SIGNAL_SECRETS", str(ctx.exception))
+        self.assertNotIn("new", str(ctx.exception).replace("SVO_ADAPTER_RUN_SIGNAL_SECRETS", ""))
+
 
 class EnsembleConfigSyncTests(unittest.TestCase):
     def setUp(self):

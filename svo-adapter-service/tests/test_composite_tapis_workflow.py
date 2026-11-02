@@ -174,3 +174,24 @@ def test_deferred_adapter_workflow_consumes_concrete_source_uri():
     assert "output-handoff" not in str(workflow)
     assert task["tapis_job_def"]["fileInputs"][0]["sourceUrl"] == "${args.source_uri}"
     assert {item["key"]: item["value"] for item in task["tapis_job_def"]["parameterSet"]["envVariables"]}["SOURCE_URI"] == "${args.source_uri}"
+
+
+def test_model_task_signals_liveness_and_never_prints_credentials():
+    workflow = generate_tapis_workflow(_composite_plan({"SOURCE_URI": "source_uri"}))
+    model_task = workflow["tasks"][0]
+
+    for key, arg in (("SIGNAL_URL", "signal_url"), ("SIGNAL_TOKEN", "signal_token"),
+                     ("SIGNAL_EXPIRES", "signal_expires")):
+        assert model_task["input"][key] == {"type": "string", "value_from": {"args": arg}}
+        assert workflow["params"][arg]["required"] is False
+
+    code = model_task["code"]
+    compile(code, "<model-task>", "exec")
+    # `started` is the task's first action: the staleness sweep reads silence
+    # after dispatch as a task that never ran.
+    assert code.index('_signal("started"') < code.index("_attempts = []")
+    assert '_signal("job_submitted"' in code
+    assert code.count('_signal("finished"') == 2  # success path and _die
+    for line in code.splitlines():
+        if "print(" in line:
+            assert "_token" not in line and "SIGNAL" not in line, line
