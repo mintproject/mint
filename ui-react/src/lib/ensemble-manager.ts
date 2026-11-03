@@ -152,13 +152,20 @@ export interface UnifiedExecutionPlan {
   [key: string]: unknown;
 }
 
+/** Liveness verdict the adapter keeps beside a run's lifecycle status. */
+export type UnifiedRunHealth = 'ok' | 'stalled' | 'reported_failed' | string;
+
 export interface UnifiedAdapterRun {
   adapter_plan_id?: string;
   model_io_id?: string;
   stage?: string;
   run_id?: string;
   status?: string;
-  execution_kind?: 'workflow';
+  health?: UnifiedRunHealth | null;
+  started_at?: string | null;
+  model_job_id?: string | null;
+  error_message?: string | null;
+  execution_kind?: 'workflow' | 'composite_workflow' | string;
   tapis_workflow_id?: string | null;
   tapis_run_id?: string | null;
 }
@@ -379,6 +386,31 @@ export function fetchUnifiedRun(
     undefined,
     signal,
   );
+}
+
+/**
+ * Cancel a unified execution: Ensemble Manager terminates the adapter's
+ * Tapis Workflows run (and its verified model job) as the calling user.
+ */
+export function cancelUnifiedRun(
+  ensembleManagerApi: string,
+  runId: string,
+  signal?: AbortSignal,
+): Promise<UnifiedRunSnapshot> {
+  return unifiedRequest<UnifiedRunSnapshot>(
+    ensembleManagerApi,
+    `/plans/runs/${encodeURIComponent(runId)}/cancel`,
+    'POST',
+    undefined,
+    signal,
+  );
+}
+
+/** Statuses after which a unified run no longer changes on its own. */
+export const UNIFIED_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+
+export function isUnifiedRunTerminal(run: Pick<UnifiedRunSnapshot, 'status'> | undefined): boolean {
+  return Boolean(run?.status && UNIFIED_TERMINAL_STATUSES.has(String(run.status)));
 }
 
 /** Read the server-owned run history for one problem-formulation subtask. */

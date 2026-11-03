@@ -44,7 +44,9 @@ import {
 import {
   createExecutionPlan,
   EnsembleManagerError,
+  cancelUnifiedRun,
   fetchUnifiedRun,
+  isUnifiedRunTerminal,
   publishExecution,
   publishResults,
   submitExecutionPlan,
@@ -130,6 +132,10 @@ export function MintThread({
   const [unifiedRuns, setUnifiedRuns] = useState<Record<string, UnifiedRunSnapshot>>({});
   const [unifiedRunErrors, setUnifiedRunErrors] = useState<Record<string, string>>({});
   const [unifiedRunRefreshing, setUnifiedRunRefreshing] = useState<Record<string, boolean>>({});
+  const [unifiedRunCancelling, setUnifiedRunCancelling] = useState<Record<string, boolean>>({});
+  // Per-model backoff for the periodic workflow refresh: after a failed fetch
+  // (expired token, adapter down) wait 2, 4, 8… minutes before retrying.
+  const refreshBackoff = useRef<Record<string, { failures: number; nextAt: number }>>({});
   const [adapterPlanRows, setAdapterPlanRows] = useState<ThreadAdapterPlan[]>([]);
   const [adapterPlansLoaded, setAdapterPlansLoaded] = useState(false);
   const [adapterPlanError, setAdapterPlanError] = useState<string | null>(null);
@@ -328,6 +334,35 @@ export function MintThread({
         });
     }
   }, [modelExecutions, rememberUnifiedRun, unifiedRuns]);
+
+  // Keep an open Runs step honest. Ensemble Manager reconciles a unified run
+  // against Tapis with this user's token every time it is fetched, so while
+  // any run is still moving, fetch it every 60 s; this is also what settles a
+  // run that finished while nobody was looking.
+  useEffect(() => {
+    if (currentSection !== 'runs') return;
+    const active = Object.entries(unifiedRuns).filter(([, run]) => !isUnifiedRunTerminal(run));
+    if (active.length === 0) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      for (const [modelId, snapshot] of active) {
+        const backoff = refreshBackoff.current[modelId];
+        if (backoff && backoff.nextAt > now) continue;
+        void refreshUnifiedRun(modelId, snapshot)
+          .then(() => {
+            delete refreshBackoff.current[modelId];
+          })
+          .catch(() => {
+            const failures = (refreshBackoff.current[modelId]?.failures ?? 0) + 1;
+            refreshBackoff.current[modelId] = {
+              failures,
+              nextAt: now + Math.min(2 ** failures, 16) * 60_000,
+            };
+          });
+      }
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [currentSection, refreshUnifiedRun, unifiedRuns]);
 
   const threadExecutionData = useMemo(() => {
     if (!baseThreadExecutionData) return null;
@@ -878,6 +913,32 @@ export function MintThread({
     [modelExecutions, refreshUnifiedRun, unifiedRuns],
   );
 
+  const handleCancelWorkflow = useCallback(
+    async (modelId: string) => {
+      const runId = unifiedRuns[modelId]?.run_id;
+      const ensembleManagerApi = window.__MINT_CONFIG__?.ENSEMBLE_MANAGER_API ?? '';
+      if (!runId?.startsWith('ue_') || !ensembleManagerApi) return;
+      setUnifiedRunCancelling((current) => ({ ...current, [modelId]: true }));
+      try {
+        const cancelled = await cancelUnifiedRun(ensembleManagerApi, runId);
+        rememberUnifiedRun(modelId, cancelled);
+        setUnifiedRunErrors((current) => {
+          const next = { ...current };
+          delete next[modelId];
+          return next;
+        });
+      } catch (error) {
+        setUnifiedRunErrors((current) => ({
+          ...current,
+          [modelId]: error instanceof Error ? error.message : 'Could not cancel the run',
+        }));
+      } finally {
+        setUnifiedRunCancelling((current) => ({ ...current, [modelId]: false }));
+      }
+    },
+    [rememberUnifiedRun, unifiedRuns],
+  );
+
   /**
    * Register this thread's run outputs, then read the counters back.
    *
@@ -1057,6 +1118,8 @@ export function MintThread({
             onRefreshWorkflow={handleRefreshWorkflow}
             workflowRefreshErrors={unifiedRunErrors}
             workflowRefreshing={unifiedRunRefreshing}
+            onCancelWorkflow={handleCancelWorkflow}
+            workflowCancelling={unifiedRunCancelling}
             onPublishExecution={handlePublishExecution}
             onOutputsChanged={handleOutputsChanged}
             adapterPlansLoading={adapterPlansLoading}

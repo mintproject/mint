@@ -71,6 +71,10 @@ interface AdapterChildRun {
     tapis_workflow_id?: string | null;
     tapis_run_id?: string | null;
     error_message?: string | null;
+    // Adapter liveness verdict beside status: "ok" | "stalled" | "reported_failed".
+    health?: string | null;
+    model_job_id?: string | null;
+    started_at?: string | null;
 }
 
 interface UnifiedWorkflowStage {
@@ -82,6 +86,37 @@ interface UnifiedWorkflowStage {
     provider_ids: Record<string, string>;
     output_reference?: unknown;
     error_message?: string | null;
+    health?: string | null;
+}
+
+// Parent failure codes derived from an adapter child's health, not its status.
+const HEALTH_FAILURE_CODES: Record<string, string> = {
+    stalled: "COMPOSITE_WORKFLOW_STALLED",
+    reported_failed: "MODEL_FAILURE_REPORTED"
+};
+
+type AdapterLiveness = Pick<
+    AdapterChildRun,
+    "health" | "model_job_id" | "started_at" | "error_message"
+>;
+
+function healthFailureCode(children: Array<Pick<AdapterLiveness, "health">>): string | null {
+    const unhealthy = children.find((child) => child.health && HEALTH_FAILURE_CODES[child.health]);
+    return unhealthy?.health ? HEALTH_FAILURE_CODES[unhealthy.health] : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+    return typeof value === "string" && value ? value : null;
+}
+
+// Copy the adapter run's liveness fields onto the stored child record.
+function copyAdapterLiveness(
+    child: AdapterLiveness,
+    run: { health?: unknown; model_job_uuid?: unknown; started_at?: unknown }
+) {
+    child.health = stringOrNull(run.health);
+    child.model_job_id = stringOrNull(run.model_job_uuid);
+    child.started_at = stringOrNull(run.started_at);
 }
 
 interface TapisWorkflowTracking {
@@ -213,8 +248,7 @@ async function adapterRequest(
                 ? detail
                 : detailMessage || body?.message || `SVO adapter returned ${response.status}`;
         const code = typeof detail === "object" ? detail?.code : body?.code;
-        const details =
-            detail && typeof detail === "object" ? detail : body?.details ?? detail;
+        const details = detail && typeof detail === "object" ? detail : (body?.details ?? detail);
         throw new UnifiedExecutionError(response.status, message, code, details);
     }
     return body;
@@ -384,7 +418,8 @@ function workflowStages(record: UnifiedExecutionRecord, plan: LegacyPlan): Unifi
             output_reference: child.output_data_object_id
                 ? { data_object_id: child.output_data_object_id }
                 : undefined,
-            error_message: child.error_message || null
+            error_message: child.error_message || null,
+            health: child.health || null
         });
     });
 
@@ -791,6 +826,7 @@ export function createUnifiedExecutionService(
                     run.tapis_workflow_id || compositeChild.tapis_workflow_id || null;
                 compositeChild.tapis_run_id =
                     run.tapis_run_id || compositeChild.tapis_run_id || null;
+                copyAdapterLiveness(compositeChild, run);
                 const nextModelResult = {
                     ...((record.model_result as Record<string, unknown>) || {}),
                     composite_workflow_run: run
@@ -814,7 +850,8 @@ export function createUnifiedExecutionService(
                             status: "output_verifying",
                             adapter_run_ids: adapterChildren,
                             model_result: nextModelResult,
-                            error_message: "Composite workflow completed without a discoverable final output URI"
+                            error_message:
+                                "Composite workflow completed without a discoverable final output URI"
                         });
                         return parentResponse(updated || { ...record, status: "output_verifying" });
                     }
@@ -877,12 +914,18 @@ export function createUnifiedExecutionService(
                     return parentResponse(record);
                 } else {
                     const nextStatus = run.status === "failed" ? "failed" : "model_running";
+                    // A stalled or self-reported failure keeps the lifecycle status
+                    // but is surfaced through the failure code so the UI can act.
+                    const failureCode =
+                        run.status === "failed"
+                            ? "COMPOSITE_WORKFLOW_FAILED"
+                            : healthFailureCode([compositeChild]);
                     const updated = await store.update(record.id, {
                         status: nextStatus,
                         adapter_run_ids: adapterChildren,
                         model_result: nextModelResult,
                         error_message: run.error_message || null,
-                        failure_code: run.status === "failed" ? "COMPOSITE_WORKFLOW_FAILED" : null
+                        failure_code: failureCode
                     });
                     return parentResponse(updated || { ...record, status: nextStatus });
                 }
@@ -1271,6 +1314,7 @@ export function createUnifiedExecutionService(
                 child.status = run.status;
                 child.output_data_object_id = run.output_data_object_id || null;
                 child.error_message = run.error_message || null;
+                copyAdapterLiveness(child, run);
             } catch (error) {
                 const updated = await store.update(record.id, {
                     status: "adapter_unknown",
@@ -1292,9 +1336,25 @@ export function createUnifiedExecutionService(
             return parentResponse(updated || { ...record, status: "failed" });
         }
         if (children.some((child) => child.status !== "completed")) {
+            // Still running as far as Tapis knows; the adapter's liveness verdict
+            // (stalled / self-reported failure) rides along as the failure code
+            // and clears again when the child recovers.
+            const healthCode = healthFailureCode(children);
+            const unhealthy = children.find(
+                (child) => child.health && HEALTH_FAILURE_CODES[child.health]
+            );
+            const clearingHealthCode =
+                !healthCode &&
+                record.failure_code &&
+                Object.values(HEALTH_FAILURE_CODES).includes(record.failure_code);
             const updated = await store.update(record.id, {
                 status: "adapter_running",
-                adapter_run_ids: children
+                adapter_run_ids: children,
+                ...(healthCode
+                    ? { failure_code: healthCode, error_message: unhealthy?.error_message || null }
+                    : clearingHealthCode
+                      ? { failure_code: null, error_message: null }
+                      : {})
             });
             return parentResponse(updated || { ...record, status: "adapter_running" });
         }
@@ -1620,6 +1680,70 @@ export function createUnifiedExecutionService(
                 executor: "svo_adapter",
                 child_execution_id: runId
             };
+        },
+
+        async cancelRun(runId: string, authorization?: string) {
+            if (!authorization) {
+                throw new UnifiedExecutionError(
+                    401,
+                    "a Tapis bearer token is required to cancel a run",
+                    "AUTHORIZATION_REQUIRED"
+                );
+            }
+            if (!runId.startsWith("ue_")) {
+                const result = await adapterRequest(
+                    `/runs/${encodeURIComponent(runId)}/cancel`,
+                    { method: "POST" },
+                    authorization
+                );
+                return { ...result, executor: "svo_adapter", child_execution_id: runId };
+            }
+            const record = await store.getById(runId.slice(3));
+            if (!record) {
+                throw new UnifiedExecutionError(404, "execution run not found", "RUN_NOT_FOUND");
+            }
+            const children = (record.adapter_run_ids || []) as AdapterChildRun[];
+            const active = children.filter(
+                (child) =>
+                    child.run_id &&
+                    !["completed", "failed", "cancelled"].includes(String(child.status || ""))
+            );
+            if (!active.length) {
+                throw new UnifiedExecutionError(
+                    409,
+                    "this run has no active adapter workflow to cancel",
+                    "RUN_NOT_CANCELLABLE"
+                );
+            }
+            // The adapter checks that the caller submitted the run (or is a
+            // cancel admin) and terminates the Tapis Workflows run and its
+            // verified model job; its 403/502 propagate unchanged.
+            let cancelledBy: string | null = null;
+            for (const child of active) {
+                await adapterRequest(
+                    `/runs/${encodeURIComponent(child.run_id)}/cancel`,
+                    { method: "POST" },
+                    authorization
+                );
+                const run = await adapterRequest(
+                    `/runs/${encodeURIComponent(child.run_id)}`,
+                    {},
+                    authorization
+                );
+                child.status = run.status || "cancelled";
+                child.error_message = run.error_message || null;
+                copyAdapterLiveness(child, run);
+                cancelledBy = cancelledBy || run.error_message || null;
+            }
+            const updated = await store.update(record.id, {
+                status: "failed",
+                failure_code: "CANCELLED_BY_USER",
+                adapter_run_ids: children,
+                error_message: cancelledBy || "Cancelled by user"
+            });
+            const latest = updated || { ...record, status: "failed" };
+            await persistWorkflowStages(latest);
+            return parentResponse(latest);
         },
 
         async submit(body: any, authorization: string | undefined) {

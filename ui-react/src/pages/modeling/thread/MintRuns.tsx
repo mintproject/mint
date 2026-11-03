@@ -519,6 +519,39 @@ interface UnifiedExecutionPanelProps {
   onRefresh?: () => Promise<void>;
   refreshing?: boolean;
   refreshError?: string;
+  onCancel?: () => Promise<void>;
+  cancelling?: boolean;
+}
+
+/**
+ * The adapter's liveness verdict for the run, independent of lifecycle status.
+ * `stalled`: the model task never reported in after dispatch. `reported_failed`:
+ * the task said it failed and Tapis has not confirmed yet.
+ */
+function runHealth(run: UnifiedRunSnapshot): {
+  state: 'stalled' | 'reported_failed' | null;
+  message: string | null;
+} {
+  const child = (run.adapter_runs ?? []).find(
+    (candidate) => candidate.health === 'stalled' || candidate.health === 'reported_failed',
+  );
+  if (run.failure_code === 'COMPOSITE_WORKFLOW_STALLED' || child?.health === 'stalled') {
+    return { state: 'stalled', message: child?.error_message ?? run.error_message ?? null };
+  }
+  if (run.failure_code === 'MODEL_FAILURE_REPORTED' || child?.health === 'reported_failed') {
+    return { state: 'reported_failed', message: child?.error_message ?? run.error_message ?? null };
+  }
+  return { state: null, message: null };
+}
+
+function elapsedSince(iso: string | null | undefined, now = Date.now()): string | null {
+  if (!iso) return null;
+  const started = Date.parse(iso);
+  if (Number.isNaN(started)) return null;
+  const minutes = Math.max(0, Math.floor((now - started) / 60000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} h ${String(minutes % 60).padStart(2, '0')} min`;
 }
 
 function UnifiedExecutionPanel({
@@ -528,8 +561,14 @@ function UnifiedExecutionPanel({
   onRefresh,
   refreshing = false,
   refreshError,
+  onCancel,
+  cancelling = false,
 }: UnifiedExecutionPanelProps) {
   const adapterRuns = run.adapter_runs ?? [];
+  const health = runHealth(run);
+  const compositeChild = adapterRuns.find((child) => child.model_job_id || child.started_at);
+  const runIsTerminal = ['completed', 'failed', 'cancelled'].includes(String(run.status ?? ''));
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const isPostModelAdapter = run.adapter_stage === 'post_model';
   const isPipeline =
     run.execution_mode === 'workflow_pipeline' || isPostModelAdapter || adapterRuns.length > 0;
@@ -674,6 +713,68 @@ function UnifiedExecutionPanel({
           status: stageStatusFromLegacyState(stage.state),
         }))}
       />
+      {health.state && !runIsTerminal && (
+        <div
+          role="alert"
+          className={`space-y-2 rounded border px-3 py-2 ${
+            health.state === 'stalled'
+              ? 'border-red-200 bg-red-50 text-red-900'
+              : 'border-amber-200 bg-amber-50 text-amber-900'
+          }`}
+          data-testid="workflow-health"
+        >
+          <p className="font-semibold">
+            {health.state === 'stalled'
+              ? 'This run appears to be stuck.'
+              : 'The model task reported a failure; waiting for Tapis to confirm.'}
+          </p>
+          {health.message && <p>{health.message}</p>}
+          {onCancel &&
+            (confirmingCancel ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span>Cancel this run in Tapis? This cannot be undone.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmingCancel(false);
+                    void onCancel();
+                  }}
+                  disabled={cancelling}
+                  className="rounded border border-red-400 bg-red-600 px-2 py-1 text-white hover:bg-red-700 disabled:opacity-50"
+                  data-testid="confirm-cancel-workflow"
+                >
+                  {cancelling ? 'Cancelling…' : 'Yes, cancel run'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingCancel(false)}
+                  className="rounded border border-gray-300 bg-white px-2 py-1 text-gray-800 hover:bg-gray-100"
+                >
+                  Keep waiting
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingCancel(true)}
+                disabled={cancelling}
+                className="rounded border border-red-300 bg-white px-2 py-1 text-red-800 hover:bg-red-100 disabled:opacity-50"
+                data-testid="cancel-workflow"
+              >
+                Cancel run
+              </button>
+            ))}
+        </div>
+      )}
+      {!health.state && compositeChild?.model_job_id && !runIsTerminal && (
+        <p className="text-blue-900" data-testid="workflow-queue-status">
+          Model job <code>{compositeChild.model_job_id}</code>
+          {compositeChild.started_at
+            ? ` submitted ${elapsedSince(compositeChild.started_at)} ago; `
+            : ' submitted; '}
+          queue waits on ls6 have ranged from 20 minutes to 18 hours.
+        </p>
+      )}
       <RunAnswerCard
         result={(run.output_handoff as { result?: unknown } | null | undefined)?.result}
         label="Modeled spring flow"
@@ -773,6 +874,8 @@ interface MintRunsProps {
   onRefreshWorkflow?: (modelId: string) => Promise<void>;
   workflowRefreshErrors?: Record<string, string>;
   workflowRefreshing?: Record<string, boolean>;
+  onCancelWorkflow?: (modelId: string) => Promise<void>;
+  workflowCancelling?: Record<string, boolean>;
   onContinue: () => void;
   onFetchRuns: (modelId: string, page: number, pageSize: number) => void;
   onSubmitRuns: (modelId: string, maxMinutes: number) => Promise<void>;
@@ -804,6 +907,8 @@ export function MintRuns({
   onRefreshWorkflow,
   workflowRefreshErrors,
   workflowRefreshing,
+  onCancelWorkflow,
+  workflowCancelling,
   onContinue,
   onFetchRuns,
   onSubmitRuns,
@@ -1120,6 +1225,12 @@ export function MintRuns({
                       }
                       refreshing={workflowRefreshing?.[mid]}
                       refreshError={workflowRefreshErrors?.[mid]}
+                      onCancel={
+                        onCancelWorkflow && workflowRun.run_id?.startsWith('ue_')
+                          ? () => onCancelWorkflow(mid)
+                          : undefined
+                      }
+                      cancelling={workflowCancelling?.[mid]}
                     />
                   ) : null}
 
