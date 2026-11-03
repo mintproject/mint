@@ -251,6 +251,15 @@ jobs:
           TAPIS_PASSWORD: ${{ secrets.TAPIS_PASSWORD }}
           SVO_ADAPTER_GEO_ACTOR_ID: ${{ vars.SVO_ADAPTER_GEO_ACTOR_ID }}
           SVO_ADAPTER_RUN_SIGNAL_SECRETS: ${{ secrets.SVO_ADAPTER_RUN_SIGNAL_SECRETS }}
+          # Per-run token lifetime and the token keeper (see
+          # svo-adapter-service/app/run_tokens.py). Each value is applied to the
+          # pod only when the variable/secret is set; an unset one leaves the
+          # pod's current value alone (register_mint_stack._optional_env).
+          SVO_ADAPTER_RUN_TOKEN_ENABLED: ${{ vars.SVO_ADAPTER_RUN_TOKEN_ENABLED }}
+          SVO_ADAPTER_RUN_TOKEN_TTL_SECONDS: ${{ vars.SVO_ADAPTER_RUN_TOKEN_TTL_SECONDS }}
+          SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED: ${{ vars.SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED }}
+          SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS: ${{ secrets.SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS }}
+          SVO_ADAPTER_RUN_TOKEN_KEEPER_SWEEP_ENABLED: ${{ vars.SVO_ADAPTER_RUN_TOKEN_KEEPER_SWEEP_ENABLED }}
         run: |
           set -euo pipefail
           python deploy/tapis/register_mint_stack.py \

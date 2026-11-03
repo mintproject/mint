@@ -321,3 +321,80 @@ def test_composite_submit_is_unarmed_when_signals_are_not_configured(monkeypatch
     args = composite_submit["submits"][0]["args"]
     assert "signal_token" not in args and "signal_url" not in args
     assert STORE.run[response.json()["run_id"]]["signals_armed"] is False
+
+
+# --- token keeper at submit (run_tokens.py, design rev 2) ---------------------------
+def test_composite_submit_stores_the_run_token_and_arms_the_fetch_credential(monkeypatch, composite_submit):
+    from cryptography.fernet import Fernet
+    from app import run_tokens
+
+    monkeypatch.setattr(settings, "run_token_enabled", True)
+    monkeypatch.setattr(settings, "run_token_keeper_enabled", True)
+    monkeypatch.setattr(settings, "run_token_encryption_keys", Fernet.generate_key().decode())
+
+    # BEARER here is not a real JWT, so stub the mint itself (shape is covered
+    # by test_run_tokens.py).
+    monkeypatch.setattr(run_tokens, "mint_run_token", lambda caller: "RUN.JWT.TOKEN")
+
+    response = composite_submit["submit"]()
+    assert response.status_code == 200, response.text
+    run_id = response.json()["run_id"]
+    args = composite_submit["submits"][0]["args"]
+    assert args["tapis_token"]["value"] == "RUN.JWT.TOKEN"
+    assert args["token_url"]["value"] == f"https://svo.example/runs/{run_id}/token"
+    assert run_state.verify_token_fetch_credential(
+        run_id, args["token_fetch_expires"]["value"], args["token_fetch_token"]["value"])
+    # The fetch credential is not a signal token and vice versa.
+    assert not run_state.verify_signal_token(
+        run_id, args["token_fetch_expires"]["value"], args["token_fetch_token"]["value"])
+    # The signal credential now lives as long as the keeper, so a late task can still report.
+    assert int(args["signal_expires"]["value"]) >= int(args["token_fetch_expires"]["value"])
+
+    row = STORE.run[run_id]
+    assert row["run_token_enc"] and "RUN.JWT.TOKEN" not in row["run_token_enc"]
+    assert run_tokens.decrypt_run_token(run_id, row["run_token_enc"]) == "RUN.JWT.TOKEN"
+    assert row["run_token_deadline_at"] and row["run_token_renewals"] == 0
+    assert _events(run_id, "run.token.stored")
+    for secret in ("RUN.JWT.TOKEN", "token_fetch_token", args["signal_token"]["value"]):
+        assert secret not in response.text
+
+
+def test_composite_submit_without_keeper_stores_nothing(monkeypatch, composite_submit):
+    from app import run_tokens
+
+    monkeypatch.setattr(settings, "run_token_enabled", True)
+    monkeypatch.setattr(settings, "run_token_keeper_enabled", False)
+
+    # BEARER here is not a real JWT, so stub the mint itself (shape is covered
+    # by test_run_tokens.py).
+    monkeypatch.setattr(run_tokens, "mint_run_token", lambda caller: "RUN.JWT.TOKEN")
+    response = composite_submit["submit"]()
+    assert response.status_code == 200, response.text
+    args = composite_submit["submits"][0]["args"]
+    assert "token_url" not in args and "token_fetch_token" not in args
+    assert STORE.run[response.json()["run_id"]].get("run_token_enc") is None
+
+
+def test_composite_submit_failure_releases_the_stored_token(monkeypatch, composite_submit):
+    from cryptography.fernet import Fernet
+    from app import run_tokens
+
+    monkeypatch.setattr(settings, "run_token_enabled", True)
+    monkeypatch.setattr(settings, "run_token_keeper_enabled", True)
+    monkeypatch.setattr(settings, "run_token_encryption_keys", Fernet.generate_key().decode())
+    monkeypatch.setattr(run_tokens, "mint_run_token", lambda caller: "RUN.JWT.TOKEN")
+    revoked = []
+    monkeypatch.setattr(run_tokens, "revoke_token", lambda auth, tok: revoked.append(tok) or True)
+
+    def failing_submit(pipeline, args, **kwargs):
+        raise RuntimeError("Tapis Workflows is down")
+    monkeypatch.setattr("app.main.tapis.submit_tapis_workflow", failing_submit)
+
+    response = composite_submit["submit"]()
+    assert response.status_code == 502
+    run_id = response.json()["detail"]["run_id"]
+    row = STORE.run[run_id]
+    assert row["status"] == "failed"
+    assert row["run_token_enc"] is None and row["run_token_expires_at"] is None
+    assert revoked == ["RUN.JWT.TOKEN"]
+    assert _events(run_id, "run.token.cleared")[0]["payload_json"]["reason"] == "submit_failed"

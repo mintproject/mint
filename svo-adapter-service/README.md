@@ -188,6 +188,41 @@ the run call still use the caller's token.
 - Off by default. The mint contract is verified only for SUBSIDE on `portals`;
   confirm it against a sandbox run before enabling.
 
+### Token keeper: tasks the engine starts late
+
+Tapis Workflows can hold a dispatched task for hours before launching it (29 h
+was observed on 2026-11-03). By then the per-run token in the task's args may
+have expired, and the stage's own renewal cannot help because it needs a live
+token. With `SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED=true` the adapter also keeps
+the current per-run token on the run row, encrypted, and the model task fetches
+a live one from `POST /runs/{id}/token` when its baked-in token is expired or
+close to expiry, and once more on any Tapis 401. The task never retries on 403,
+and after a 401 on `/v3/jobs/submit` it looks for a job with its name before
+submitting again, so a late start never duplicates a job.
+
+- Requires `SVO_ADAPTER_RUN_TOKEN_ENABLED`, `SVO_ADAPTER_RUN_SIGNAL_SECRETS`,
+  an https `SVO_ADAPTER_PUBLIC_URL`, and `SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS`
+  (comma-separated Fernet keys; the first encrypts, all decrypt, so rotate by
+  prepending). A keeper that is on but unusable stops the service at startup.
+- The fetch endpoint authenticates with a per-run HMAC credential in its own
+  domain (`X-Run-Token-Credential` / `X-Run-Token-Expires`, derived from the
+  signal secrets), rate-limited per run (`SVO_ADAPTER_RUN_TOKEN_FETCH_RATE_LIMIT`,
+  default 10 per 10 min). It serves only `running`/`submitting` runs before
+  `run_token_deadline_at` (dispatch + `SVO_ADAPTER_RUN_TOKEN_KEEPER_DEADLINE_SECONDS`,
+  default 72 h); a stored token within the renewal margin is replaced by a fresh
+  mint on the way out and the predecessor revoked, at most
+  `SVO_ADAPTER_RUN_TOKEN_KEEPER_MAX_RENEWALS` (default 12) times per run.
+- The stored token is revoked (`POST /v3/tokens/revoke`) and cleared when the
+  run ends, is cancelled, passes its deadline, or cannot be decrypted.
+- `SVO_ADAPTER_RUN_TOKEN_KEEPER_SWEEP_ENABLED=true` (default off) adds a
+  background renewal in the poller loop for waits longer than one TTL.
+- Provenance: `run.token.stored`, `run.token.fetched`, `run.token.renewed`,
+  `run.token.renew_failed`, `run.token.refused`, `run.token.cleared`,
+  `run.token.expired_unrenewed`. None carries a token.
+- Needs the `1771300000035_adapter_workflow_run_token_keeper` migration. A task
+  whose baked token has expired and that cannot fetch fails with
+  `RUN_TOKEN_EXPIRED_BEFORE_START`.
+
 ### How the model stage waits
 
 Before submitting, the stage looks up a Tapis job with the same name (unique per

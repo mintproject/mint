@@ -28,6 +28,8 @@ def test_completed_pipeline_without_failed_tasks_records_completed_at():
     status, update = poller._terminal_update_set("COMPLETED", {"tasks": []}, now=now)
 
     assert status == "completed"
+    # With the token keeper off (default) the update set is unchanged; the
+    # keeper-on variant is covered in test_run_token_keeper.py.
     assert update == {"status": "completed", "completed_at": "2026-08-12T00:00:00+00:00"}
 
 

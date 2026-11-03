@@ -140,6 +140,24 @@ class InMemoryHasura:
                   if r.get("status") in ("running", "submitting")]
         return {"adapter_workflow_run": active}
 
+    # --- token keeper (poller.GET_RUN_TOKEN_STATE / _LIST_KEEPER_RUNS / _UPDATE_RUN_TOKEN_IF)
+    def _op_GetRunTokenState(self, v):
+        return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
+
+    def _op_ListKeeperRuns(self, v):
+        rows = [r for r in STORE.run.values()
+                if r.get("status") in ("running", "submitting", "cancelling") and r.get("run_token_enc")]
+        rows.sort(key=lambda r: str(r.get("run_token_expires_at") or ""))
+        return {"adapter_workflow_run": rows}
+
+    def _op_UpdateRunTokenIf(self, v):
+        # Compare-and-set on the renewal counter (keeper lineage guard).
+        row = STORE.run.get(v["id"])
+        if row and int(row.get("run_token_renewals") or 0) == int(v["renewals"]):
+            row.update(v["set"])
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
+
     # --- writes --------------------------------------------------------------
     def _op_InsertDataObject(self, v):
         row = _insert(STORE.data_object, v["obj"], nested_key="variables")

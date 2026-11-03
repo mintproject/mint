@@ -105,6 +105,11 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
+def _optional_env(*names: str) -> dict[str, str]:
+    """Only the named variables that are set and non-empty."""
+    return {name: os.environ[name] for name in names if os.environ.get(name)}
+
+
 def _postgres_user() -> str:
     return _env("MINTDEV_POSTGRES_USER", "postgres")
 
@@ -376,6 +381,18 @@ def build_specs(
                 # Empty secrets leave signalling and the staleness sweep off.
                 "SVO_ADAPTER_PUBLIC_URL": _env("SVO_ADAPTER_PUBLIC_URL", urls["svo"]),
                 "SVO_ADAPTER_RUN_SIGNAL_SECRETS": _env("SVO_ADAPTER_RUN_SIGNAL_SECRETS", ""),
+                # Per-run tokens + the token keeper (svo-adapter-service/app/run_tokens.py).
+                # Only present when set in the environment: an unset value leaves
+                # whatever the live pod already has (see _optional_env), so a
+                # redeploy never flips a hand-configured pod. The TTL must cover
+                # the longest Workflows-engine start delay seen (29 h, 2026-11-03).
+                **_optional_env(
+                    "SVO_ADAPTER_RUN_TOKEN_ENABLED",
+                    "SVO_ADAPTER_RUN_TOKEN_TTL_SECONDS",
+                    "SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED",
+                    "SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS",
+                    "SVO_ADAPTER_RUN_TOKEN_KEEPER_SWEEP_ENABLED",
+                ),
             },
             "time_to_stop_default": -1,
         },
@@ -1094,7 +1111,15 @@ def sync_svo_runtime(t: Any, spec: dict[str, Any], *, restart: bool = True) -> i
     # empty value, which turns the feature off — reaches the live pod without
     # a full re-registration. Values are never printed.
     managed = {"SVO_ADAPTER_GEO_ACTOR_ID": configured_actor}
-    for key in ("SVO_ADAPTER_PUBLIC_URL", "SVO_ADAPTER_RUN_SIGNAL_SECRETS"):
+    for key in (
+        "SVO_ADAPTER_PUBLIC_URL",
+        "SVO_ADAPTER_RUN_SIGNAL_SECRETS",
+        "SVO_ADAPTER_RUN_TOKEN_ENABLED",
+        "SVO_ADAPTER_RUN_TOKEN_TTL_SECONDS",
+        "SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED",
+        "SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS",
+        "SVO_ADAPTER_RUN_TOKEN_KEEPER_SWEEP_ENABLED",
+    ):
         if key in spec_env:
             managed[key] = _field(spec_env, key, "")
 
@@ -1111,6 +1136,16 @@ def sync_svo_runtime(t: Any, spec: dict[str, Any], *, restart: bool = True) -> i
     environment = _plain_data(_field(existing, "environment_variables", {}))
     if not isinstance(environment, dict):
         raise RuntimeError(f"[{pid}] returned invalid environment data; refusing to rewrite the runtime configuration")
+    keeper_on = str(managed.get("SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED",
+                                environment.get("SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED", ""))).lower()
+    if keeper_on in ("1", "true", "yes") and not (
+        managed.get("SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS")
+        or environment.get("SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS")
+    ):
+        # The pod would fail closed at startup (run_tokens.validate_keeper_config)
+        # and crash-loop; refuse the sync instead.
+        raise RuntimeError(f"[{pid}] SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED is true but no "
+                           "SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS is configured; refusing")
     environment.update(managed)
     print(f"  [{pid}] applying SVO runtime configuration ({', '.join(sorted(managed))})")
     t.pods.update_pod(

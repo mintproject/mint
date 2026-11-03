@@ -31,6 +31,7 @@ from typing import Any
 
 from starlette.concurrency import run_in_threadpool
 
+from . import run_state, run_tokens
 from .config import settings
 from . import tapis as tapis_mod
 from .result_contract import task_result
@@ -55,6 +56,35 @@ _UPDATE_RUN = """
 mutation UpdateRun($id: String!, $set: adapter_workflow_run_set_input!) {
   update_adapter_workflow_run_by_pk(pk_columns: {id: $id}, _set: $set) {
     id status
+  }
+}
+"""
+
+GET_RUN_TOKEN_STATE = """
+query GetRunTokenState($id: String!) {
+  adapter_workflow_run_by_pk(id: $id) {
+    id status dispatched_at run_token_enc run_token_expires_at run_token_deadline_at run_token_renewals
+  }
+}
+"""
+
+_LIST_KEEPER_RUNS = """
+query ListKeeperRuns {
+  adapter_workflow_run(
+    where: {status: {_in: ["running", "submitting", "cancelling"]}, run_token_enc: {_is_null: false}}
+    order_by: {run_token_expires_at: asc}
+  ) {
+    id status dispatched_at run_token_enc run_token_expires_at run_token_deadline_at run_token_renewals
+  }
+}
+"""
+
+# Compare-and-set on the renewal counter so two renewers (a fetch and the
+# sweep, or two replicas) cannot both store a successor for the same lineage.
+_UPDATE_RUN_TOKEN_IF = """
+mutation UpdateRunTokenIf($id: String!, $renewals: Int!, $set: adapter_workflow_run_set_input!) {
+  update_adapter_workflow_run(where: {id: {_eq: $id}, run_token_renewals: {_eq: $renewals}}, _set: $set) {
+    affected_rows
   }
 }
 """
@@ -142,6 +172,10 @@ def _terminal_update_set(
         adapter_status = "failed"
 
     update_set: dict[str, Any] = {"status": adapter_status}
+    if run_tokens.keeper_configured():
+        # Drop the keeper's copy atomically with the status change. Gated so a
+        # database without migration 1771300000035 keeps working with the keeper off.
+        update_set.update(run_state.clear_token_update())
     if adapter_status == "completed":
         stamp = now or datetime.now(tz=timezone.utc)
         update_set["completed_at"] = stamp.isoformat()
@@ -340,6 +374,7 @@ async def poll_once(token: str) -> list[dict[str, Any]]:
 
         # --- write -----------------------------------------------------------
         try:
+            await release_run_token(h, run_id, f"terminal:{adapter_status}")
             await h.execute(_UPDATE_RUN, {"id": run_id, "set": update_set})
             await h.execute(_INSERT_PROVENANCE, {"obj": {
                 "workflow_run_id": run_id,
@@ -407,6 +442,140 @@ async def sweep_stalled(now: datetime | None = None) -> list[dict[str, Any]]:
     return flagged
 
 
+# ---------------------------------------------------------------------------
+# Token keeper (run_tokens.py; token lifecycle design rev 2)
+# ---------------------------------------------------------------------------
+async def _provenance(h, run_id: str, event_type: str, payload: dict[str, Any]) -> None:
+    # Keeper provenance never carries a token; assert it rather than trust callers.
+    if any(run_tokens.looks_like_secret(str(v)) for v in payload.values()):
+        payload = {"redacted": True}
+    try:
+        await h.execute(_INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run_id, "event_type": event_type, "payload_json": payload}})
+    except Exception as exc:  # noqa: BLE001
+        log.debug("keeper: provenance write failed for %s: %s", run_id[:12], type(exc).__name__)
+
+
+async def release_run_token(h, run_id: str, reason: str, *, state: dict[str, Any] | None = None) -> bool | None:
+    """Revoke the keeper's stored token (best effort) when a run ends.
+
+    Returns None when there was nothing stored, else whether Tapis accepted
+    the revoke. Clearing the columns is the caller's job so it can happen in
+    the same update as the status change.
+    """
+    if not run_tokens.keeper_configured():
+        return None
+    try:
+        row = state or (await h.execute(GET_RUN_TOKEN_STATE, {"id": run_id}))["adapter_workflow_run_by_pk"]
+    except Exception as exc:  # noqa: BLE001
+        log.debug("keeper: could not read token state for %s: %s", run_id[:12], type(exc).__name__)
+        return None
+    if not row or not row.get("run_token_enc"):
+        return None
+    try:
+        token = run_tokens.decrypt_run_token(run_id, row["run_token_enc"])
+    except run_tokens.RunTokenError:
+        await _provenance(h, run_id, "run.token.cleared", {"reason": reason, "revoked": False,
+                                                            "note": "decrypt_failed"})
+        return False
+    revoked = await run_in_threadpool(run_tokens.revoke_token, token, token)
+    await _provenance(h, run_id, "run.token.cleared", {"reason": reason, "revoked": revoked})
+    return revoked
+
+
+async def renew_stored_token(h, state: dict[str, Any], current: str, *, now: datetime | None = None,
+                             ) -> tuple[str, datetime | None] | None:
+    """Mint a successor from the live stored token and store it (CAS on the
+    renewal counter). Returns (token, expires_at) or None when nothing changed.
+    The predecessor is revoked only after the successor is stored, so a task
+    holding the old token can still fetch the new one on its next 401."""
+    now = now or datetime.now(tz=timezone.utc)
+    run_id = state["id"]
+    renewals = int(state.get("run_token_renewals") or 0)
+    if renewals >= settings.run_token_keeper_max_renewals:
+        await _provenance(h, run_id, "run.token.renew_capped", {"renewals": renewals})
+        return None
+    try:
+        fresh = await run_in_threadpool(run_tokens.mint_run_token, current)
+    except run_tokens.RunTokenError as exc:
+        await _provenance(h, run_id, "run.token.renew_failed", {"renewals": renewals,
+                                                                 "error": str(exc)[:200]})
+        return None
+    expires_at = run_tokens.token_expires_at(fresh)
+    try:
+        ciphertext = run_tokens.encrypt_run_token(run_id, fresh)
+        result = await h.execute(_UPDATE_RUN_TOKEN_IF, {"id": run_id, "renewals": renewals, "set": {
+            "run_token_enc": ciphertext,
+            "run_token_expires_at": expires_at.isoformat() if expires_at else None,
+            "run_token_renewals": renewals + 1,
+        }})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("keeper: could not store renewed token for %s: %s", run_id[:12], type(exc).__name__)
+        await run_in_threadpool(run_tokens.revoke_token, fresh, fresh)
+        return None
+    if (result.get("update_adapter_workflow_run") or {}).get("affected_rows", 0) != 1:
+        # Someone else renewed first and will revoke `current`; drop ours and
+        # hand back theirs so the caller never receives a token about to die.
+        await run_in_threadpool(run_tokens.revoke_token, fresh, fresh)
+        try:
+            winner = (await h.execute(GET_RUN_TOKEN_STATE, {"id": run_id}))["adapter_workflow_run_by_pk"] or {}
+            if winner.get("run_token_enc"):
+                token = run_tokens.decrypt_run_token(run_id, winner["run_token_enc"])
+                return token, (run_state.parse_ts(winner.get("run_token_expires_at"))
+                               or run_tokens.token_expires_at(token))
+        except Exception as exc:  # noqa: BLE001
+            log.debug("keeper: could not read winner token for %s: %s", run_id[:12], type(exc).__name__)
+        return None
+    await run_in_threadpool(run_tokens.revoke_token, fresh, current)
+    await _provenance(h, run_id, "run.token.renewed", {
+        "renewals": renewals + 1, "expires_at": expires_at.isoformat() if expires_at else None,
+        "renewed_at": now.isoformat()})
+    return fresh, expires_at
+
+
+async def renew_run_tokens(now: datetime | None = None) -> list[str]:
+    """Optional sweep: renew stored tokens that are due, clear ones past the
+    deadline or already expired. Bounded per run by the deadline and the
+    renewal cap; one bad row never blocks the others."""
+    from .hasura import get_client  # noqa: PLC0415 — deferred to avoid import cycle
+
+    if not run_tokens.keeper_configured():
+        return []
+    now = now or datetime.now(tz=timezone.utc)
+    h = get_client(None)
+    rows = (await h.execute(_LIST_KEEPER_RUNS))["adapter_workflow_run"]
+    touched: list[str] = []
+    for state in rows[:50]:
+        run_id = state["id"]
+        try:
+            deadline = run_state.parse_ts(state.get("run_token_deadline_at"))
+            expires_at = run_state.parse_ts(state.get("run_token_expires_at"))
+            if deadline and now >= deadline:
+                await release_run_token(h, run_id, "deadline", state=state)
+                await h.execute(_UPDATE_RUN, {"id": run_id, "set": run_state.clear_token_update()})
+                touched.append(run_id)
+                continue
+            if expires_at and expires_at <= now:
+                await h.execute(_UPDATE_RUN, {"id": run_id, "set": run_state.clear_token_update()})
+                await _provenance(h, run_id, "run.token.expired_unrenewed", {"expired_at": expires_at.isoformat()})
+                touched.append(run_id)
+                continue
+            if not run_tokens.renewal_due(expires_at, now):
+                continue
+            try:
+                current = run_tokens.decrypt_run_token(run_id, state["run_token_enc"])
+            except run_tokens.RunTokenError:
+                await h.execute(_UPDATE_RUN, {"id": run_id, "set": run_state.clear_token_update()})
+                await _provenance(h, run_id, "run.token.cleared", {"reason": "decrypt_failed", "revoked": False})
+                touched.append(run_id)
+                continue
+            if await renew_stored_token(h, state, current, now=now) is not None:
+                touched.append(run_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("keeper: run %s skipped: %s", run_id[:12], type(exc).__name__)
+    return touched
+
+
 async def run_poller() -> None:
     """Long-running asyncio task started by main.lifespan.
 
@@ -419,9 +588,11 @@ async def run_poller() -> None:
     token = settings.tapis_token
     interval = settings.poll_interval_seconds
     sweep_enabled = run_state.signals_configured() and settings.stall_after_seconds > 0
+    keeper_sweep_enabled = run_tokens.keeper_configured() and settings.run_token_keeper_sweep_enabled
     log.info(
-        "poller: started (interval=%ds, tapis_poll=%s, stall_sweep=%s)",
+        "poller: started (interval=%ds, tapis_poll=%s, stall_sweep=%s, token_keeper_sweep=%s)",
         interval, "on" if token else "off", "on" if sweep_enabled else "off",
+        "on" if keeper_sweep_enabled else "off",
     )
     while True:
         if token:
@@ -440,4 +611,9 @@ async def run_poller() -> None:
                 await sweep_stalled()
             except Exception as exc:  # noqa: BLE001
                 log.error("sweep: unexpected error: %s", exc)
+        if keeper_sweep_enabled:
+            try:
+                await renew_run_tokens()
+            except Exception as exc:  # noqa: BLE001
+                log.error("keeper: unexpected error: %s", type(exc).__name__)
         await asyncio.sleep(interval)
