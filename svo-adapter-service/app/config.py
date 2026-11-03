@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # …/modflow-suite (app/ -> svo-adapter-service/ -> monorepo/ -> modflow-suite/)
@@ -117,8 +117,11 @@ class Settings(BaseSettings):
     run_signal_secrets: str = ""
     # Public base URL of this service as the Workflows executor reaches it.
     # Built from config only, never from a plan or a request, so a signal
-    # token can never be sent to a caller-chosen host.
-    public_base_url: str = ""
+    # token can never be sent to a caller-chosen host. The deploy tooling and
+    # docs call it SVO_ADAPTER_PUBLIC_URL; the field name would otherwise map
+    # to SVO_ADAPTER_PUBLIC_BASE_URL, so accept both (the first wins).
+    public_base_url: str = Field(
+        "", validation_alias=AliasChoices("SVO_ADAPTER_PUBLIC_URL", "SVO_ADAPTER_PUBLIC_BASE_URL"))
     # Staleness sweep: an armed run with no signal this long after dispatch,
     # or with `started` but no `job_submitted` this long after it started,
     # gets health=stalled. Status is never changed by the sweep. 0 disables.
