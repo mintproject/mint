@@ -37,7 +37,7 @@ from starlette.concurrency import run_in_threadpool
 
 from pathlib import Path
 
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 log = logging.getLogger(__name__)
@@ -126,6 +126,9 @@ async def lifespan(app: FastAPI):
     it, Tapis status polling needs tapis_token and the staleness sweep needs
     run signals configured (see poller.run_poller); either may be absent.
     """
+    # Fail closed: a keeper that is switched on but cannot encrypt or
+    # authenticate must stop the service, not silently store nothing.
+    run_tokens.validate_keeper_config()
     task: asyncio.Task | None = None
     if not settings.demo_mode and settings.poll_interval_seconds > 0:
         from . import poller
@@ -1968,7 +1971,8 @@ def _wrap_args(args: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def _public_workflow_args(args: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Remove server-injected credentials from workflow responses."""
-    return {key: value for key, value in args.items() if key not in {"tapis_token", "signal_token"}}
+    return {key: value for key, value in args.items()
+            if key not in {"tapis_token", "signal_token", "token_fetch_token"}}
 
 
 def _composite_task_contains_secret(value: Any) -> bool:
@@ -2294,6 +2298,46 @@ async def submit_workflow(
         args["signal_expires"] = {"value": str(expires)}
         signals_armed = True
 
+    # Token keeper (run_tokens.py, design rev 2): keep an encrypted copy of the
+    # per-run token so a task the engine starts late can fetch a live one from
+    # POST /runs/{id}/token with a per-run credential derived like the signal
+    # token. Stored before dispatch; a run the keeper cannot maintain is never
+    # submitted.
+    if signals_armed and run_tokens.keeper_configured():
+        run_token_value = str((args.get("tapis_token") or {}).get("value") or "")
+        if run_token_value:
+            dispatch_estimate = datetime.now(tz=timezone.utc)
+            try:
+                ciphertext = run_tokens.encrypt_run_token(run["id"], run_token_value)
+            except Exception as exc:  # noqa: BLE001 — never echo key material
+                await h.execute(UPDATE_RUN, {"id": run["id"], "set": {
+                    "status": "failed", "error_message": "run-token keeper could not store the token"}})
+                raise HTTPException(502, detail={"code": "RUN_TOKEN_STORE_FAILED",
+                                                 "message": safe_error_message(exc)})
+            token_exp = run_tokens.token_expires_at(run_token_value)
+            deadline = run_tokens.keeper_deadline(dispatch_estimate)
+            await h.execute(UPDATE_RUN, {"id": run["id"], "set": {
+                "run_token_enc": ciphertext,
+                "run_token_expires_at": token_exp.isoformat() if token_exp else None,
+                "run_token_deadline_at": deadline.isoformat(),
+                "run_token_renewals": 0,
+            }})
+            fetch_expires = run_state.token_fetch_expiry(dispatch_estimate)
+            args["token_url"] = {"value": run_state.token_url(run["id"])}
+            args["token_fetch_token"] = {"value": run_state.make_token_fetch_credential(run["id"], fetch_expires)}
+            args["token_fetch_expires"] = {"value": str(fetch_expires)}
+            # A task that starts after the signal credential's normal lifetime
+            # must still be able to report `started`; let it live as long as
+            # the keeper does.
+            if fetch_expires > expires:
+                args["signal_token"] = {"value": run_state.make_signal_token(run["id"], fetch_expires)}
+                args["signal_expires"] = {"value": str(fetch_expires)}
+            await h.execute(INSERT_PROVENANCE, {"obj": {
+                "workflow_run_id": run["id"], "event_type": "run.token.stored",
+                "payload_json": {"expires_at": token_exp.isoformat() if token_exp else None,
+                                 "deadline_at": deadline.isoformat()},
+            }})
+
     try:
         result = await run_in_threadpool(
             tapis.submit_tapis_workflow, pipeline, args,
@@ -2309,8 +2353,13 @@ async def submit_workflow(
         )
     except Exception as exc:  # surface the Tapis error, mark the run failed
         error_message = safe_error_message(f"{type(exc).__name__}: {exc}")
+        # The keeper stored the run token before dispatch; a run that never
+        # dispatched must not leave a live token behind.
+        from . import poller  # noqa: PLC0415 — deferred, as in lifespan
+        await poller.release_run_token(h, run["id"], "submit_failed")
         await h.execute(UPDATE_RUN, {"id": run["id"], "set": {
             "status": "failed", "error_message": error_message,
+            **(run_state.clear_token_update() if run_tokens.keeper_configured() else {}),
         }})
         await h.execute(INSERT_PROVENANCE, {"obj": {
             "workflow_run_id": run["id"],
@@ -2553,6 +2602,105 @@ async def signal_run(
     }
 
 
+_TOKEN_FETCH_RATE: dict[str, list[float]] = {}
+_TOKEN_FETCH_RATE_WINDOW = 600.0
+
+
+def _token_fetch_rate_ok(run_id: str, now_ts: float) -> bool:
+    stamps = [t for t in _TOKEN_FETCH_RATE.get(run_id, []) if now_ts - t < _TOKEN_FETCH_RATE_WINDOW]
+    if len(stamps) >= max(1, settings.run_token_fetch_rate_limit):
+        _TOKEN_FETCH_RATE[run_id] = stamps
+        return False
+    stamps.append(now_ts)
+    _TOKEN_FETCH_RATE[run_id] = stamps
+    return True
+
+
+@app.post("/runs/{run_id}/token", tags=["Core: Runs"])
+async def fetch_run_token(
+    run_id: str,
+    request: Request,
+    fetch_token: str | None = Header(None, alias="X-Run-Token-Credential"),
+    fetch_expires: str | None = Header(None, alias="X-Run-Token-Expires"),
+):
+    """Hand the composite model task the run's current Tapis token.
+
+    For a task the Workflows engine starts after the token in its args has
+    expired (see run_tokens.py, token lifecycle design rev 2). Authenticated by
+    a per-run HMAC credential in its own domain, checked before any database
+    access; a bad credential and an unknown run get the same 401. Serves only
+    non-terminal runs inside the keeper deadline, and mints a successor on the
+    way out when the stored token is close to expiry. The token appears in
+    this response and nowhere else; the response is marked uncacheable.
+    """
+    unavailable = HTTPException(404, detail={"code": "RUN_TOKEN_UNAVAILABLE"})
+    if not run_tokens.keeper_configured():
+        raise unavailable
+    if not run_state.verify_token_fetch_credential(run_id, fetch_expires, fetch_token):
+        raise HTTPException(401, detail={"code": "RUN_TOKEN_FETCH_REJECTED"})
+    now = datetime.now(tz=timezone.utc)
+    if not _token_fetch_rate_ok(run_id, now.timestamp()):
+        raise HTTPException(429, detail={"code": "RUN_TOKEN_FETCH_RATE_LIMITED"})
+
+    from . import poller  # noqa: PLC0415 — deferred, as in lifespan
+    h = get_client(None)
+    state = (await h.execute(poller.GET_RUN_TOKEN_STATE, {"id": run_id}))["adapter_workflow_run_by_pk"]
+    if not state:
+        raise HTTPException(401, detail={"code": "RUN_TOKEN_FETCH_REJECTED"})
+    audit = {"client_ip": request.client.host if request.client else None,
+             "forwarded_for": request.headers.get("x-forwarded-for"),
+             "user_agent": (request.headers.get("user-agent") or "")[:120],
+             "requested_at": now.isoformat()}
+
+    async def refuse(reason: str):
+        await h.execute(INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run_id, "event_type": "run.token.refused",
+            "payload_json": {**audit, "reason": reason}}})
+        raise unavailable
+
+    deadline = run_state.parse_ts(state.get("run_token_deadline_at"))
+    if str(state.get("status") or "") not in {"running", "submitting"}:
+        if state.get("run_token_enc"):
+            # A row that ended without the clear (e.g. stuck in `cancelling`)
+            # still holds a token; this is the moment to drop it.
+            await poller.release_run_token(h, run_id, "run_not_active", state=state)
+            await h.execute(UPDATE_RUN, {"id": run_id, "set": run_state.clear_token_update()})
+        await refuse("run_not_active")
+    if not state.get("run_token_enc"):
+        await refuse("no_stored_token")
+    if deadline and now >= deadline:
+        await poller.release_run_token(h, run_id, "deadline", state=state)
+        await h.execute(UPDATE_RUN, {"id": run_id, "set": run_state.clear_token_update()})
+        await refuse("deadline_passed")
+
+    try:
+        token = run_tokens.decrypt_run_token(run_id, state["run_token_enc"])
+    except run_tokens.RunTokenError:
+        await h.execute(UPDATE_RUN, {"id": run_id, "set": run_state.clear_token_update()})
+        await refuse("decrypt_failed")
+    expires_at = run_state.parse_ts(state.get("run_token_expires_at")) or run_tokens.token_expires_at(token)
+    if expires_at and expires_at <= now:
+        await h.execute(UPDATE_RUN, {"id": run_id, "set": run_state.clear_token_update()})
+        await refuse("stored_token_expired")
+
+    renewed = False
+    if run_tokens.renewal_due(expires_at, now):
+        outcome = await poller.renew_stored_token(h, state, token, now=now)
+        if outcome is not None:
+            token, expires_at = outcome
+            renewed = True
+
+    await h.execute(INSERT_PROVENANCE, {"obj": {
+        "workflow_run_id": run_id, "event_type": "run.token.fetched",
+        "payload_json": {**audit, "renewed": renewed,
+                         "expires_at": expires_at.isoformat() if expires_at else None},
+    }})
+    return JSONResponse(
+        {"token": token, "expires_at": expires_at.isoformat() if expires_at else None},
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
+
+
 @app.post("/runs/{run_id}/cancel", tags=["Core: Runs"])
 async def cancel_run(run_id: str, request: Request, authorization: str | None = Header(None)):
     """Terminate the Workflows run and, when verified, cancel its Tapis job.
@@ -2610,9 +2758,12 @@ async def cancel_run(run_id: str, request: Request, authorization: str | None = 
         "requested_at": now.isoformat(),
     }
     if terminated and job_cancelled is not False:
+        from . import poller  # noqa: PLC0415 — deferred, as in lifespan
+        released = await poller.release_run_token(h, run_id, "cancelled")
         await h.execute(UPDATE_RUN_IF, {"id": run_id, "status": "cancelling", "set": {
             "status": "cancelled", "completed_at": now.isoformat(),
             "error_message": f"Cancelled by {username}",
+            **(run_state.clear_token_update() if run_tokens.keeper_configured() else {}),
         }})
         await h.execute(INSERT_PROVENANCE, {"obj": {
             "workflow_run_id": run_id, "event_type": "run.cancelled", "payload_json": audit,

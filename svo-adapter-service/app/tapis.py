@@ -70,6 +70,12 @@ STANDARD_PARAMS: dict[str, dict[str, Any]] = {
     "signal_url": {"type": "string", "default": "", "required": False},
     "signal_token": {"type": "string", "default": "", "required": False},
     "signal_expires": {"type": "string", "default": "", "required": False},
+    # Token keeper (run_tokens.py): where the model task fetches a live Tapis
+    # token when the one in its args has expired, plus its per-run credential.
+    # Server-injected at submit; blank when the keeper is off.
+    "token_url": {"type": "string", "default": "", "required": False},
+    "token_fetch_token": {"type": "string", "default": "", "required": False},
+    "token_fetch_expires": {"type": "string", "default": "", "required": False},
     # Point-location params — first-class pipeline params like any MINT model
     # parameter. Tasks that need them declare LAT/LON in their env_from_args.
     "lat": {"type": "number", "required": False, "description": "Point latitude (WGS84)"},
@@ -238,6 +244,51 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
             else:
                 _auth["retry_at"] = time.time() + 30
 
+        # Token keeper (adapter run_tokens.py): the engine can start this task
+        # hours after dispatch, after the token in the args has expired. The
+        # adapter keeps a live copy and serves it at TOKEN_URL to the holder of
+        # this run's fetch credential. Best effort and silent, like _signal:
+        # nothing here prints, and a failed fetch just leaves the current token.
+        _token_url = _input("TOKEN_URL", "", allow_environment=False).strip()
+        _fetch_cred = _input("TOKEN_FETCH_TOKEN", "", allow_environment=False).strip()
+        _fetch_expires = _input("TOKEN_FETCH_EXPIRES", "", allow_environment=False).strip()
+        _auth["fetches"] = 0
+
+        def _fetch_token():
+            # True when a different, non-empty token was installed.
+            if not (_token_url and _fetch_cred) or _auth["fetches"] >= 20:
+                return False
+            _auth["fetches"] += 1
+            request = _ur.Request(
+                _token_url, data=b"", method="POST",
+                headers={"X-Run-Token-Credential": _fetch_cred,
+                         "X-Run-Token-Expires": _fetch_expires,
+                         "Accept": "application/json"})
+            for _try in range(3):
+                try:
+                    with _ur.urlopen(request, timeout=5) as response:
+                        fresh = ((json.loads(response.read().decode()) or {}).get("token") or "").strip()
+                    _note({"method": "FETCH", "path": "run-token", "status": "ok" if fresh else "empty"})
+                    if fresh and fresh != _auth["token"]:
+                        _auth["token"] = fresh
+                        return True
+                    return False
+                except _ue.HTTPError as exc:
+                    _note({"method": "FETCH", "path": "run-token", "status": exc.code})
+                    if exc.code in (401, 404, 429):
+                        return False  # refused for good; do not hammer the adapter
+                except Exception:
+                    _note({"method": "FETCH", "path": "run-token", "status": "transport_error"})
+                time.sleep(2 * (_try + 1))
+            return False
+
+        def _token_expired_or_due():
+            expires_at = _claims(_auth["token"]).get("exp")
+            if not expires_at:
+                return False
+            margin = max(300, (_renew_ttl or 0) // 4)
+            return int(expires_at) - time.time() <= margin
+
         class _Transient(Exception):
             pass
 
@@ -245,9 +296,11 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
             _attempts.append(entry)
             del _attempts[:-200]
 
-        def _request(path, method="GET", payload=None, tolerate=False):
+        def _request(path, method="GET", payload=None, tolerate=False, auth_retry=True):
             # tolerate=True raises _Transient for network errors and 5xx/429 so a
-            # long wait can ride out an outage; auth failures always end the stage.
+            # long wait can ride out an outage. A 401 (expired token) gets one
+            # fetch from the adapter's token keeper and one retry; 403 is a real
+            # authorization failure and ends the stage at once.
             body = None if payload is None else json.dumps(payload).encode()
             headers = {"X-Tapis-Token": _auth["token"], "Accept": "application/json"}
             if body is not None:
@@ -259,6 +312,15 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                     return json.loads(response.read().decode())
             except _ue.HTTPError as exc:
                 _note({"method": method, "path": path, "status": exc.code})
+                if exc.code == 401 and auth_retry and _fetch_token():
+                    if method == "POST" and path.endswith("/jobs/submit"):
+                        # Tapis may have accepted the job before the 401 surfaced;
+                        # attach to it by name rather than submit a duplicate.
+                        _dup = _existing_job()
+                        if _dup:
+                            _note({"method": "ATTACH", "path": "/v3/jobs/" + _dup, "status": "existing_job"})
+                            return {"result": {"uuid": _dup}}
+                    return _request(path, method, payload, tolerate, auth_retry=False)
                 if exc.code in (401, 403):
                     _die(
                         "the UI Tapis token was rejected during model %s (HTTP %s)"
@@ -323,6 +385,18 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 if _candidate.get("uuid"):
                     return str(_candidate["uuid"])
             return None
+
+        # Late start (the engine held this task past the baked token's life):
+        # swap in a live token before the first Tapis call, and say so clearly
+        # if none can be had, instead of a misleading "token rejected".
+        if _token_expired_or_due():
+            _fetched = _fetch_token()
+            _exp = _claims(_auth["token"]).get("exp")
+            if not _fetched and _exp and int(_exp) <= time.time():
+                _die("the run token expired before the model task started and no live "
+                     "token could be fetched from the adapter",
+                     "RUN_TOKEN_EXPIRED_BEFORE_START",
+                     {"token_fetch_configured": bool(_token_url and _fetch_cred)})
 
         _job_uuid = _existing_job()
         if _job_uuid:
@@ -526,6 +600,10 @@ def generate_tapis_workflow(
                 "SIGNAL_URL": {"type": "string", "value_from": {"args": "signal_url"}},
                 "SIGNAL_TOKEN": {"type": "string", "value_from": {"args": "signal_token"}},
                 "SIGNAL_EXPIRES": {"type": "string", "value_from": {"args": "signal_expires"}},
+                # Live-token fetch for a task the engine starts late (run_tokens.py).
+                "TOKEN_URL": {"type": "string", "value_from": {"args": "token_url"}},
+                "TOKEN_FETCH_TOKEN": {"type": "string", "value_from": {"args": "token_fetch_token"}},
+                "TOKEN_FETCH_EXPIRES": {"type": "string", "value_from": {"args": "token_fetch_expires"}},
             },
             "execution_profile": {
                 # Safe to retry: the task re-attaches to the job it already submitted.

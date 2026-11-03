@@ -61,21 +61,26 @@ def signal_expiry(created_at: datetime, max_minutes: int) -> int:
     return int((created_at + timedelta(minutes=max(1, max_minutes), seconds=TOKEN_SLACK_SECONDS)).timestamp())
 
 
-def _digest(secret: str, run_id: str, expires: int) -> str:
-    message = f"{_TOKEN_DOMAIN}{run_id}:{expires}".encode()
+# The token-fetch credential (POST /runs/{id}/token, rev 2 of the token
+# lifecycle design) is derived from the same secrets under its own domain, so a
+# leaked signal token cannot fetch a Tapis token and vice versa.
+_TOKEN_FETCH_DOMAIN = "run-token:v1:"
+
+
+def _digest(secret: str, run_id: str, expires: int, domain: str = _TOKEN_DOMAIN) -> str:
+    message = f"{domain}{run_id}:{expires}".encode()
     return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
 
 
-def make_signal_token(run_id: str, expires: int, *, secret: str | None = None) -> str:
+def _make(run_id: str, expires: int, domain: str, secret: str | None) -> str:
     secrets = [secret] if secret else settings.run_signal_secret_list
     if not secrets:
         raise RuntimeError("run signal secrets are not configured")
-    return _digest(secrets[0], run_id, expires)
+    return _digest(secrets[0], run_id, expires, domain)
 
 
-def verify_signal_token(run_id: str, expires_header: str | None, token: str | None,
-                        *, now: datetime | None = None) -> bool:
-    """Constant-time check against every configured secret (current + previous)."""
+def _verify(run_id: str, expires_header: str | None, token: str | None, domain: str,
+            now: datetime | None) -> bool:
     if not token or not expires_header:
         return False
     try:
@@ -87,9 +92,45 @@ def verify_signal_token(run_id: str, expires_header: str | None, token: str | No
     # which one is current.
     matched = False
     for secret in settings.run_signal_secret_list:
-        if hmac.compare_digest(_digest(secret, run_id, expires), token):
+        if hmac.compare_digest(_digest(secret, run_id, expires, domain), token):
             matched = True
     return matched and expires > now_ts
+
+
+def make_signal_token(run_id: str, expires: int, *, secret: str | None = None) -> str:
+    return _make(run_id, expires, _TOKEN_DOMAIN, secret)
+
+
+def verify_signal_token(run_id: str, expires_header: str | None, token: str | None,
+                        *, now: datetime | None = None) -> bool:
+    """Constant-time check against every configured secret (current + previous)."""
+    return _verify(run_id, expires_header, token, _TOKEN_DOMAIN, now)
+
+
+def token_url(run_id: str) -> str:
+    """Where the task fetches a live token. Config-only, like signal_url."""
+    return f"{settings.public_base_url.rstrip('/')}/runs/{run_id}/token"
+
+
+def make_token_fetch_credential(run_id: str, expires: int, *, secret: str | None = None) -> str:
+    return _make(run_id, expires, _TOKEN_FETCH_DOMAIN, secret)
+
+
+def verify_token_fetch_credential(run_id: str, expires_header: str | None, token: str | None,
+                                  *, now: datetime | None = None) -> bool:
+    return _verify(run_id, expires_header, token, _TOKEN_FETCH_DOMAIN, now)
+
+
+def token_fetch_expiry(dispatched_at: datetime) -> int:
+    """The fetch credential dies with the keeper deadline: after that the
+    adapter neither serves nor renews, so a leaked credential is worthless."""
+    from .run_tokens import keeper_deadline  # noqa: PLC0415 — avoid import cycle
+    return int(keeper_deadline(dispatched_at).timestamp())
+
+
+def clear_token_update() -> dict[str, Any]:
+    """Update set that drops the keeper's copy of a run's token."""
+    return {"run_token_enc": None, "run_token_expires_at": None}
 
 
 # ---------------------------------------------------------------------------

@@ -49,6 +49,29 @@ class Settings(BaseSettings):
     run_token_ttl_min_seconds: int = 900
     run_token_ttl_max_seconds: int = 172800
     run_token_target_prefix: str = "svo-adapter-run"
+    # Token keeper (design: docs/design/2026-10-28-svo-adapter-workflow-token-lifecycle.md,
+    # rev 2). The per-run token is also stored encrypted on the run row so a
+    # model task that the Workflows engine starts hours late (after the token
+    # in its args has expired) can fetch a live one from POST /runs/{id}/token,
+    # authenticated by a per-run HMAC credential. Off by default; requires
+    # run_token_enabled, run signals and at least one Fernet key.
+    run_token_keeper_enabled: bool = False
+    # Comma-separated Fernet keys; the first encrypts, every key decrypts, so a
+    # rotation keeps in-flight runs readable. Generate with Fernet.generate_key().
+    run_token_encryption_keys: str = ""
+    # Optional background renewal: mint a successor before the stored token
+    # expires so the keeper covers waits longer than one TTL. Off by default;
+    # the fetch endpoint already mints on demand when the stored token is close
+    # to expiry.
+    run_token_keeper_sweep_enabled: bool = False
+    # Hard stop, measured from dispatch: after this the keeper neither serves nor
+    # renews and the stored token is cleared. Bounds a run the poller never sees
+    # end. 72 h = the model task's 48 h ceiling plus a day of engine delay.
+    run_token_keeper_deadline_seconds: int = 259200
+    # Successor mints per run (fetch + sweep), a second bound on a stuck run.
+    run_token_keeper_max_renewals: int = 12
+    # Fetches per run per 10 minutes; a task fetches once at start and once per 401.
+    run_token_fetch_rate_limit: int = 10
     # Ceiling on the composite model task's pipeline max_exec_time. The task polls
     # until the Tapis job is terminal (renewing its token as it goes), so this only
     # needs to exceed the longest expected queue wait plus runtime.
@@ -107,6 +130,10 @@ class Settings(BaseSettings):
     @property
     def cancel_admin_list(self) -> list[str]:
         return [s.strip() for s in self.cancel_admins.split(",") if s.strip()]
+
+    @property
+    def run_token_encryption_key_list(self) -> list[str]:
+        return [s.strip() for s in self.run_token_encryption_keys.split(",") if s.strip()]
 
     # Demo mode: serve the bundled standalone UI and back every Hasura call with an
     # in-process in-memory store, so the whole flow (register pieces -> readiness ->

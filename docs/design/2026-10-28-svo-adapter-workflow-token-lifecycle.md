@@ -2,7 +2,189 @@
 
 ## Status
 
-Implementing
+Implementing (rev 2, 2026-11-03: Phase 2 redesigned as a server-side token
+keeper, reviewed and revised, code on branch `feat/svo-adapter-run-token-keeper`;
+Phase 1 is Implemented and deployed on the develop pod)
+
+## Rev 2 summary (2026-11-03)
+
+Phase 1 shipped and is on `mintdevsvo` with a 4 h per-run TTL. On 2026-11-03
+two composite runs failed with `MODEL_PROVIDER_AUTH_FAILED` (HTTP 401) on
+their very first Tapis request: the Workflows engine had wedged them for
+4.6 h and 29 h before the task code ran, so the per-run token was already
+expired when the task started. The task's self-renewal (`_renew_if_due`,
+which mints a successor with the live token) cannot help here, because it
+only runs inside the task and needs a token that is still valid.
+
+Two facts changed since the Phase 2 text below was written:
+
+1. A live user access token can mint its own successor via
+   `POST /v3/tokens` (verified live on `portals` 2026-11-03). Phase 2 does
+   not need a refresh token or a login flow.
+2. The run-signal channel (`docs/design/2026-11-02-run-signal-and-staleness.md`)
+   gives every composite run a per-run HMAC credential the task already
+   carries. That is the authenticator for a token-fetch endpoint; nothing new
+   has to be distributed to the task.
+
+Phase 2 (revised) therefore moves renewal from the task to the adapter, which
+is always running: keep each run's token alive server-side and hand the
+current one to the task when it starts late or gets a 401.
+
+### Phase 2 (revised): server-side token keeper
+
+Config, no code (do first): raise `SVO_ADAPTER_RUN_TOKEN_TTL_SECONDS` on the
+develop pod from 14400 to 172800 (the server max and the model task's own
+`max_exec_time`), and set it in the deploy workflow's SVO runtime step so a
+redeploy keeps it. On its own this covers engine delays up to two days.
+
+Code:
+
+1. **Schema.** `adapter.workflow_run` gains `run_token_enc TEXT` (Fernet
+   ciphertext of the current per-run token) and `run_token_expires_at
+   TIMESTAMPTZ`. Both NULL when the keeper is off or the run is terminal.
+2. **Keeper storage.** New settings `run_token_keeper_enabled` (default
+   false) and `run_token_encryption_key` (Fernet key, env
+   `SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEY`). With the keeper on, `/workflows/submit`
+   stores the minted token encrypted on the run row right after the row is
+   inserted. Keeper on without a key fails closed at submit (502), matching
+   the Phase 1 mint-failure behavior. The plaintext token never enters logs,
+   provenance payloads, or API responses other than the endpoint in (4).
+3. **Renewal sweep.** `poller.renew_run_tokens()` runs in the existing
+   poller loop beside `sweep_stalled`. For every run in `running`/`submitting`
+   whose `run_token_expires_at` is within `max(300, ttl // 4)` seconds, it
+   decrypts the stored token, mints a successor with `mint_run_token(stored)`
+   (same request shape as Phase 1), and stores the new ciphertext and expiry.
+   A failed mint is logged without the token and retried next loop; a token
+   that has already expired is cleared, and the run keeps whatever health the
+   stall sweep assigns. The poller's terminal update clears both columns.
+4. **Fetch endpoint.** `POST /runs/{run_id}/token` (POST so no intermediary caches it), authenticated exactly like
+   `POST /runs/{run_id}/signal` (headers `X-Run-Signal-Token` and
+   `X-Run-Signal-Expires`, constant-time check against every configured
+   secret, same per-run rate limit, same 401 for bad token and unknown run).
+   Returns `{"token": <jwt>, "expires_at": <iso>}` when the run is
+   non-terminal and a token is stored; 404 `RUN_TOKEN_UNAVAILABLE` otherwise.
+   Records provenance `run.token.fetched` with no token in the payload.
+5. **Signal-token lifetime.** `run_state.signal_expiry` currently expires the
+   HMAC credential `max_minutes` plus slack after dispatch. A task that starts
+   after an engine delay longer than `max_minutes` could then neither signal
+   nor fetch. Change it to `dispatch + max(max_minutes * 60,
+   model_task_max_exec_seconds) + slack` so the credential outlives any run
+   the engine can still legally start.
+6. **Model task.** New pipeline param/input `token_url` → `TOKEN_URL`,
+   injected at submit beside `signal_url`. The task gains `_fetch_token()`,
+   which GETs `TOKEN_URL` with the signal headers (5 s timeout, 3 tries) and
+   swaps `_auth["token"]` when a token comes back. It is called (a) before the
+   first Tapis request when the baked-in token is expired or within the renew
+   margin, and (b) once inside `_request` on 401/403 before `_die`, retrying
+   the request a single time if the token changed. Existing self-renewal stays
+   as the fast path while the task is running.
+7. **Revocation** stays out of scope (Phase 1 decision). Clearing the columns
+   on terminal status removes the adapter's copy only.
+
+### Rev 2 review outcome (security-reviewer + skeptic, 2026-11-03)
+
+Both returned "revise, do not reject". Changes adopted before implementation:
+
+- **Separate credential.** The fetch endpoint authenticates with its own HMAC
+  domain (`run-token:v1:`), delivered as `token_fetch_token`/`token_fetch_expires`
+  beside the signal credential. A leaked signal token cannot fetch a Tapis
+  token. Its expiry equals the keeper deadline, not `signal_expiry`.
+- **Hard bounds on renewal.** `run_token_deadline_at = dispatch + 72 h`
+  (configurable) stops serving and renewing regardless of status;
+  `run_token_renewals` is capped (default 12). Columns are cleared on every
+  terminal write, on cancel, on deadline, and on decrypt failure. The stored
+  token is **revoked** (`POST /v3/tokens/revoke`, verified live 2026-11-03) when
+  cleared, and each predecessor is revoked after its successor is stored, so at
+  most two tokens per run are live at any time.
+- **On-demand mint first, sweep optional.** The endpoint itself mints a
+  successor when the stored token is within the renewal margin, so a task
+  always gets a token with most of its TTL left. The background sweep is
+  behind `run_token_keeper_sweep_enabled` (default off) and only matters for
+  waits longer than one TTL.
+- **401 only, no blind resubmit.** The task fetches on 401, never on 403. On a
+  401 from `/v3/jobs/submit` it re-checks `_existing_job()` by name before
+  submitting again, so a job Tapis accepted before the 401 surfaced is attached
+  rather than duplicated. Fetches are capped at 20 per task.
+- **Clear failure code.** A task whose baked token is expired and cannot fetch
+  dies with `RUN_TOKEN_EXPIRED_BEFORE_START` instead of "the UI Tapis token was
+  rejected".
+- **Storage.** `MultiFernet` over a comma-separated key list for rotation;
+  ciphertext wraps `{rid, tok}` so a row's ciphertext cannot be moved to another
+  run. Keeper on without a usable key or without run signals fails at startup.
+  The endpoint is POST with `Cache-Control: no-store`. `public_base_url` must
+  be https when the keeper is on.
+- **Leak surfaces.** `token_fetch_token` is stripped by `_public_workflow_args`;
+  keeper provenance is screened for JWT/Fernet-shaped values before writing;
+  `GET_RUN`/`LIST_RUNS` do not select the token columns (a dedicated
+  `GET_RUN_TOKEN_STATE` query does). `adapter.workflow_run` has no non-admin
+  Hasura role permissions, so the new columns are admin-only without a
+  metadata change (checked `graphql_engine/metadata/tables.yaml`).
+- **Verified live before coding:** the Workflows executor reaches the adapter
+  pod (`GET /health` from a canary task, 0.11 s); `POST /v3/tokens` self-mint;
+  `POST /v3/tokens/revoke`. The run row is `running` from dispatch, so the
+  keeper's status filter covers the engine-wedge case.
+- **QA pass (qaqc, 2026-11-03) fixes folded in:** a failed dispatch releases
+  and clears the stored token; the terminal-write clear is gated on the
+  keeper being configured (so a database without the migration keeps working
+  with the keeper off); on a lost renewal CAS the endpoint serves the winner's
+  token; the sweep and the endpoint also clear rows stuck in `cancelling`; a
+  token with no `exp` is served as-is instead of re-minted; deploy values are
+  applied only when the variable/secret is set, and a keeper switched on
+  without a key is refused by the deploy script.
+- **Signal credential lifetime (not in the original rev 2 text):** when the
+  keeper arms a run, the `/signal` credential is re-issued to expire with the
+  keeper deadline (72 h) if that is later than `signal_expiry`, so a task that
+  starts after a long engine delay can still report `started`. It stays a
+  separate domain and cannot fetch a token.
+- **Not changed:** the interim 48 h TTL stays until the keeper has run live;
+  then it should come back down (the keeper makes a short TTL safe).
+  Revisiting the Phase 1 "keep TTL short" decision is recorded below.
+- **Open:** the Ensemble Manager also builds the job definition
+  (`mint-workflow-model-<execution>`); the task attaches by that name, so a late
+  start never duplicates a job the EM already created. Which side owns the job
+  for coordinator runs is documented in the unified execution design, not here.
+
+### Rev 2 files
+
+- `graphql_engine/migrations/<ts>_adapter_workflow_run_token_keeper/{up,down}.sql`
+- `svo-adapter-service/app/run_tokens.py`: Fernet encrypt/decrypt helpers,
+  `renew_margin_seconds()`, `token_expires_at(jwt)`.
+- `svo-adapter-service/app/config.py`: keeper flag, encryption key.
+- `svo-adapter-service/app/main.py`: store at submit, `token_url` arg,
+  `POST /runs/{run_id}/token`.
+- `svo-adapter-service/app/poller.py`: `renew_run_tokens`, column select,
+  terminal clear.
+- `svo-adapter-service/app/run_state.py`: fetch-credential HMAC domain,
+  `token_url`, `token_fetch_expiry`, `clear_token_update` (signal lifetime is
+  extended at submit in main.py, not in `signal_expiry`).
+- `svo-adapter-service/app/tapis.py`: `token_url` param/input, task
+  `_fetch_token`, 401 retry.
+- `svo-adapter-service/app/store.py`: demo-store support for the new columns.
+- `svo-adapter-service/requirements.txt`: `cryptography`.
+- `.github/workflows/deploy-mint-dev-pods.yml` and
+  `deploy/tapis/register_mint_stack.py`: pass the TTL, keeper flag and key.
+- Tests (as built): `tests/test_run_token_keeper.py` (crypto round trip and
+  rotation, margin, config fail-closed, credential domains, endpoint auth /
+  404 / 429 / renew / cap, sweep, release, and the generated task executed
+  against a stubbed urllib for late start, no-keeper failure code, and
+  401-on-submit without a duplicate job); `tests/test_run_signal.py` (submit
+  stores the token and arms the fetch credential; nothing stored when off);
+  `tests/test_poller.py` (terminal write clears the keeper columns).
+
+### Rev 2 risks
+
+- At-rest storage of a user token, encrypted with a service-held key. The
+  key is a new secret with the same handling as `SVO_ADAPTER_RUN_SIGNAL_SECRETS`.
+  A compromised adapter host already holds every in-flight token in Postgres;
+  the Phase 1 design already accepted that the token lives in Tapis run args
+  visible to the run owner.
+- The fetch endpoint turns the per-run HMAC credential into a bearer for a
+  real Tapis token. The credential is bound to one run id, expires, and is
+  only ever delivered to the Workflows executor through run args, so its
+  exposure equals that of `tapis_token` today.
+- Renewal depends on the stored token still being valid when the sweep runs.
+  With a 48 h TTL and a sweep margin of 12 h, the adapter would have to be
+  down for 12 h straight to miss a renewal.
 
 ## Objective
 
@@ -190,6 +372,16 @@ outstanding tokens expire naturally.
   SUBSIDE; Phase 1 per-run token is the required fix and the refresh broker is
   optional Phase 2 (user).
 
+- 2026-11-03: Phase 2 redesigned as a server-side token keeper (encrypted
+  store, renewal sweep, HMAC-authenticated fetch endpoint) after two runs
+  failed on an already-expired token following a multi-hour Workflows engine
+  stall. Trigger: `POST /v3/tokens` self-mint verified live, so no refresh
+  token is needed. Approved by user ("Approve full plan").
+- 2026-11-03: TTL on the develop pod raised to 48 h as the immediate
+  mitigation, independent of the code change.
+
 ## User feedback / decisions
 
 2026-10-28: approved the lean no-store plan; implementing.
+2026-11-03: approved rev 2 (config change now, keeper + endpoint + task
+changes on a branch with security-reviewer and skeptic review before code).
