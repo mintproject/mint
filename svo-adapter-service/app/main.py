@@ -32,6 +32,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -43,6 +45,7 @@ from fastapi.staticfiles import StaticFiles
 log = logging.getLogger(__name__)
 
 from . import ntgam, qaqc, run_state, run_tokens, stac, tapis
+from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
     DATA_OBJECT_CONTRACT_QUERY,
@@ -129,6 +132,7 @@ async def lifespan(app: FastAPI):
     # Fail closed: a keeper that is switched on but cannot encrypt or
     # authenticate must stop the service, not silently store nothing.
     run_tokens.validate_keeper_config()
+    secrets_store.install_log_scrubber()
     task: asyncio.Task | None = None
     if not settings.demo_mode and settings.poll_interval_seconds > 0:
         from . import poller
@@ -427,6 +431,23 @@ mutation UpdateRunIf($id: String!, $status: String!, $set: adapter_workflow_run_
   update_adapter_workflow_run(where: {id: {_eq: $id}, status: {_eq: $status}}, _set: $set) {
     affected_rows
   }
+}
+"""
+
+GET_RUN_CREDENTIALS = """
+query GetRunCredentials($id: String!) {
+  adapter_workflow_run_by_pk(id: $id) {
+    id status signals_armed bound_secrets credentials_issued
+  }
+}
+"""
+
+ISSUE_RUN_CREDENTIALS_IF = """
+mutation IssueRunCredentialsIf($id: String!, $issued: Int!) {
+  update_adapter_workflow_run(
+    where: {id: {_eq: $id}, credentials_issued: {_eq: $issued}}
+    _inc: {credentials_issued: 1}
+  ) { affected_rows }
 }
 """
 
@@ -1972,7 +1993,54 @@ def _wrap_args(args: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def _public_workflow_args(args: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Remove server-injected credentials from workflow responses."""
     return {key: value for key, value in args.items()
-            if key not in {"tapis_token", "signal_token", "token_fetch_token", "earthdata"}}
+            if key not in {"tapis_token", "signal_token", "token_fetch_token"}}
+
+
+async def _resolve_run_secrets(h, body, token: str | None) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Resolve a composite run's declared secrets (app/secrets.py), before the
+    run row or token exists so a rejection queues nothing.
+
+    Returns ``(dry_run_report, bound_secrets)``. A dry run reports ``bound`` and
+    ``missing`` names and never decrypts or raises on a missing secret.
+    """
+    task = body.model_task
+    configuration_id = (task or {}).get("configuration_id")
+    if task is None or not configuration_id:
+        if task is not None and task.get("required_secrets"):
+            raise HTTPException(422, detail={
+                "code": "SECRET_DECLARATION_MISMATCH",
+                "message": "required_secrets needs the model_task configuration_id"})
+        return None, []
+    try:
+        configuration = await secrets_store.fetch_configuration(h, str(configuration_id))
+        declarations = secrets_store.parse_declarations(configuration)
+        secrets_store.check_required_hint(task.get("required_secrets"), declarations)
+        if not declarations:
+            return ({"bound": [], "missing": []} if body.dry_run else None), []
+        if not body.dry_run:
+            if not run_state.signals_configured():
+                raise secrets_store.SecretResolutionError(503, {
+                    "code": "SIGNALS_REQUIRED",
+                    "message": "this model needs credentials, which are delivered through run signals"})
+            if not secrets_store.secrets_configured():
+                raise secrets_store.SecretResolutionError(503, {
+                    "code": "SECRETS_NOT_CONFIGURED",
+                    "message": "the secrets store has no encryption key configured"})
+        resolution = await secrets_store.resolve(
+            secrets_store.FernetSecretStore(h), configuration, declarations,
+            task.get("job_definition") or {})
+        if body.dry_run:
+            missing = [m["name"] for m in resolution.missing] + [
+                r["name"] for r in resolution.mismatched] + list(resolution.incomplete)
+            return {"bound": [b["name"] for b in resolution.bound], "missing": missing}, []
+        if resolution.mismatched:
+            actor = await run_in_threadpool(tapis.userinfo_username, token) if token else "unknown"
+            for row in resolution.mismatched:
+                await secrets_store.record_event(h, "mismatch", row, actor=actor or "unknown")
+        resolution.raise_if_failed()
+    except secrets_store.SecretResolutionError as exc:
+        raise HTTPException(exc.status, detail=exc.detail)
+    return None, resolution.bound
 
 
 def _composite_task_contains_secret(value: Any) -> bool:
@@ -2248,6 +2316,7 @@ async def submit_workflow(
     args = _validate_plan_args(
         workflow_plan.get("plan_json") or {}, service_args, token, require_required=not body.dry_run
     )
+    secret_report, bound_secrets = await _resolve_run_secrets(h, body, token)
     if not body.dry_run:
         args = await _with_run_token(args, token)
 
@@ -2274,7 +2343,14 @@ async def submit_workflow(
         job_name = (body.model_task.get("job_definition") or {}).get("name")
         if job_name:
             run_obj["model_job_name"] = str(job_name)
+    if bound_secrets:
+        run_obj["bound_secrets"] = bound_secrets
     run = (await h.execute(INSERT_RUN, {"obj": run_obj}))["insert_adapter_workflow_run_one"]
+    for item in bound_secrets:
+        await secrets_store.record_event(
+            h, "bound", {"id": item["id"], "scope": secrets_store.SCOPE_MODEL_OWNER, "name": item["name"],
+                         "configuration_id": body.model_task.get("configuration_id")},
+            run_id=run["id"], actor=submitted_by or "unknown", version=item["version"])
     await h.execute(INSERT_PROVENANCE, {"obj": {
         "workflow_run_id": run["id"], "event_type": "workflow_submit_requested",
         "payload_json": {"plan_id": body.plan_id, "dry_run": body.dry_run},
@@ -2283,7 +2359,8 @@ async def submit_workflow(
     if body.dry_run:
         await h.execute(UPDATE_RUN, {"id": run["id"], "set": {"status": "generated"}})
         return {"run_id": run["id"], "status": "generated",
-                "tapis_workflow_definition": pipeline, "args": _public_workflow_args(args)}
+                "tapis_workflow_definition": pipeline, "args": _public_workflow_args(args),
+                **({"secrets": secret_report} if secret_report is not None else {})}
 
     # Arm run signals for composite runs: the model task reports liveness to
     # this run's /signal endpoint with a token only this run can use. The sweep
@@ -2296,8 +2373,7 @@ async def submit_workflow(
         args["signal_url"] = {"value": run_state.signal_url(run["id"])}
         args["signal_token"] = {"value": run_state.make_signal_token(run["id"], expires)}
         args["signal_expires"] = {"value": str(expires)}
-        _app_id = (body.model_task.get("job_definition") or {}).get("appId")
-        if settings.earthdata_configured() and settings.earthdata_app_allowed(_app_id):
+        if bound_secrets:
             args["credentials_url"] = {"value": run_state.credentials_url(run["id"])}
         signals_armed = True
 
@@ -2605,45 +2681,193 @@ async def signal_run(
     }
 
 
-@app.get("/runs/{run_id}/credentials/earthdata", tags=["Core: Runs"])
-async def fetch_earthdata_credential(
+# Credential fetches have their own bucket (not /signal's): a task needs one per
+# job submit, and a leaked signal token must not be able to hammer the store.
+_CREDENTIALS_RATE: dict[str, list[float]] = {}
+_CREDENTIALS_RATE_WINDOW = 600.0
+_CREDENTIALS_RATE_LIMIT = 10
+_CREDENTIALS_MAX_ISSUES = 3
+
+
+def _credentials_rate_ok(run_id: str, now_ts: float) -> bool:
+    stamps = [t for t in _CREDENTIALS_RATE.get(run_id, []) if now_ts - t < _CREDENTIALS_RATE_WINDOW]
+    ok = len(stamps) < _CREDENTIALS_RATE_LIMIT
+    if ok:
+        stamps.append(now_ts)
+    _CREDENTIALS_RATE[run_id] = stamps
+    return ok
+
+
+@app.get("/runs/{run_id}/credentials", tags=["Core: Runs"])
+async def fetch_run_credentials(
     run_id: str,
     signal_token: str | None = Header(None, alias="X-Run-Signal-Token"),
     signal_expires: str | None = Header(None, alias="X-Run-Signal-Expires"),
 ):
-    """Hand the composite model task the shared Earthdata credential.
+    """Hand the composite model task the secrets bound to its run.
 
-    Authorised exactly like /signal (the run's signal token, same rate limit),
-    and only while the run is active with signals armed. The task injects the
-    values into the job's env in memory; they appear in this response only and
-    the response is marked uncacheable. The provenance event names the
-    credential and never carries a value.
+    Authorised like /signal (the run's signal token) but with its own rate
+    bucket, only while the run is active with signals armed, and at most three
+    times per run. Returns ``{"env": {ENV_KEY: value}}`` built from the current
+    rows of the secrets bound at submit; the task replaces those keys in its
+    in-memory job definition. Values appear in this response only, which is
+    marked uncacheable; events and provenance carry ids and names.
     """
-    if not settings.earthdata_configured():
-        raise HTTPException(404, detail={"code": "RUN_CREDENTIAL_UNAVAILABLE"})
     if not run_state.signals_configured():
         raise HTTPException(503, detail={"code": "RUN_SIGNALS_DISABLED",
                                          "message": "run signals are not configured"})
     if not run_state.verify_signal_token(run_id, signal_expires, signal_token):
         raise HTTPException(401, detail={"code": "RUN_SIGNAL_REJECTED"})
     now = datetime.now(tz=timezone.utc)
-    if not _signal_rate_ok(run_id, now.timestamp()):
-        raise HTTPException(429, detail={"code": "RUN_SIGNAL_RATE_LIMITED"})
+    if not _credentials_rate_ok(run_id, now.timestamp()):
+        raise HTTPException(429, detail={"code": "RUN_CREDENTIALS_RATE_LIMITED"})
     h = get_client(None)
-    run = (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"]
+    run = (await h.execute(GET_RUN_CREDENTIALS, {"id": run_id}))["adapter_workflow_run_by_pk"]
     if not run:
         raise HTTPException(401, detail={"code": "RUN_SIGNAL_REJECTED"})
+    bound = run.get("bound_secrets") or []
+    if not bound:
+        raise HTTPException(404, detail={"code": "RUN_CREDENTIAL_UNAVAILABLE"})
     if str(run.get("status") or "") not in {"running", "submitting"} or not run.get("signals_armed"):
         raise HTTPException(409, detail={"code": "RUN_NOT_ACTIVE"})
+    if not secrets_store.secrets_configured():
+        raise HTTPException(503, detail={"code": "SECRETS_NOT_CONFIGURED"})
+    issued = int(run.get("credentials_issued") or 0)
+    if issued >= _CREDENTIALS_MAX_ISSUES:
+        raise HTTPException(409, detail={"code": "CREDENTIALS_EXHAUSTED"})
+    claimed = await h.execute(ISSUE_RUN_CREDENTIALS_IF, {"id": run_id, "issued": issued})
+    if (claimed.get("update_adapter_workflow_run") or {}).get("affected_rows", 0) != 1:
+        raise HTTPException(409, detail={"code": "CREDENTIALS_EXHAUSTED"})
+
+    store = secrets_store.FernetSecretStore(h)
+    env: dict[str, str] = {}
+    issued_rows: list[tuple[dict[str, Any], int]] = []
+    for item in bound:
+        try:
+            found = await store.get(item["id"])
+        except secrets_store.SecretError:
+            raise HTTPException(503, detail={"code": "SECRET_UNREADABLE"})
+        if found is None:
+            raise HTTPException(409, detail={"code": "SECRET_REMOVED", "name": item.get("name")})
+        row, fields = found
+        if f"{row.get('pinned_app_id')}@{row.get('pinned_app_version')}" != item.get("app"):
+            await secrets_store.record_event(h, "mismatch", row, run_id=run_id, actor="credentials")
+            raise HTTPException(403, detail={"code": "SECRET_APP_MISMATCH", "name": item.get("name")})
+        try:
+            for field_name, env_key in (item.get("env") or {}).items():
+                env[env_key] = fields[field_name]
+        except KeyError:
+            raise HTTPException(409, detail={"code": "SECRET_FIELDS_INCOMPLETE", "name": item.get("name")})
+        issued_rows.append((row, int(row["version"])))
+    for row, version in issued_rows:
+        # A version newer than the bound one is used as-is and noted in the event.
+        await secrets_store.record_event(h, "issued", row, run_id=run_id, actor="task",
+                                         token_kind="run_signal", version=version)
+        if issued == 0:
+            await store.touch(row["id"])
     await h.execute(INSERT_PROVENANCE, {"obj": {
         "workflow_run_id": run_id, "event_type": "run.credential.issued",
-        "payload_json": {"credential": "earthdata",
-                         "task_id": run_state.SIGNAL_TASK_ID},
+        "payload_json": {
+            "secrets": [f"{r['name']}@v{v}" for r, v in issued_rows],
+            "task_id": run_state.SIGNAL_TASK_ID},
     }})
-    return JSONResponse(
-        {"username": settings.earthdata_username.get_secret_value(),
-         "password": settings.earthdata_password.get_secret_value()},
-        headers={"Cache-Control": "no-store"})
+    return JSONResponse({"env": env}, headers={"Cache-Control": "no-store"})
+
+
+# --- admin seeding of model-owner secrets (Phase A) -------------------------
+class AdminSecretIn(BaseModel):
+    scope: str = "model_owner"
+    owner_username: str
+    configuration_id: str
+    name: str
+    fields: dict[str, str]
+    acknowledged: bool = False
+
+
+class AdminSecretRefIn(BaseModel):
+    scope: str = "model_owner"
+    owner_username: str
+    configuration_id: str
+    name: str
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: Request, exc: RequestValidationError):
+    """FastAPI's default 422 echoes each offending ``input``; on the secret
+    routes that would reflect the credential back, so strip it (and ``ctx``)."""
+    errors = exc.errors()
+    if request.url.path.startswith(("/admin/secrets", "/secrets")):
+        errors = [{k: v for k, v in e.items() if k not in {"input", "ctx", "url"}} for e in errors]
+    return JSONResponse({"detail": jsonable_encoder(errors)}, status_code=422)
+
+
+def _admin_secret_guard(internal_secret: str | None) -> None:
+    if not _internal_service_authorized(internal_secret):
+        raise HTTPException(403, detail={"code": "INTERNAL_SERVICE_AUTH_REQUIRED"})
+    if not secrets_store.secrets_configured():
+        raise HTTPException(503, detail={"code": "SECRETS_NOT_CONFIGURED",
+                                         "message": "no secrets encryption key is configured"})
+
+
+@app.put("/admin/secrets", tags=["Integrations"])
+async def admin_put_secret(
+    body: AdminSecretIn,
+    internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
+):
+    """Store or replace a model-owner secret. Returns metadata, never values."""
+    _admin_secret_guard(internal_secret)
+    if body.scope != secrets_store.SCOPE_MODEL_OWNER:
+        raise HTTPException(422, detail={"code": "SECRET_SCOPE_UNSUPPORTED"})
+    if not body.acknowledged:
+        raise HTTPException(422, detail={
+            "code": "ACKNOWLEDGEMENT_REQUIRED",
+            "message": "the owner must acknowledge that every runner's Tapis job record shows these values"})
+    h = get_client(None)
+    try:
+        secrets_store.validate_name(body.name)
+        secrets_store.validate_fields(body.fields)
+        configuration = await secrets_store.fetch_configuration(h, body.configuration_id)
+        if not configuration:
+            raise HTTPException(404, detail={"code": "CONFIGURATION_NOT_FOUND"})
+        if not configuration.get("owner_username") or configuration["owner_username"] != body.owner_username:
+            raise HTTPException(403, detail={"code": "SECRET_OWNER_MISMATCH",
+                                             "message": "only the configuration's owner may store its secrets"})
+        if not (configuration.get("tapis_app_id") and configuration.get("tapis_app_version")):
+            raise HTTPException(422, detail={"code": "CONFIGURATION_APP_UNKNOWN"})
+        declaration = next((d for d in secrets_store.parse_declarations(configuration)
+                            if d.name == body.name), None)
+        if declaration is None:
+            raise HTTPException(422, detail={"code": "SECRET_NOT_DECLARED",
+                                             "message": "the configuration declares no secret by this name"})
+        if not set(declaration.env) <= set(body.fields):
+            raise HTTPException(422, detail={"code": "SECRET_FIELDS_INCOMPLETE",
+                                             "fields": declaration.fields})
+        saved = await secrets_store.FernetSecretStore(h).put(
+            scope=body.scope, owner=body.owner_username, name=body.name,
+            configuration_id=body.configuration_id,
+            pinned_app_id=str(configuration["tapis_app_id"]),
+            pinned_app_version=str(configuration["tapis_app_version"]),
+            fields=body.fields, actor="admin")
+    except secrets_store.SecretResolutionError as exc:
+        raise HTTPException(exc.status, detail=exc.detail)
+    except secrets_store.SecretError as exc:
+        raise HTTPException(422, detail={"code": "SECRET_INVALID", "message": str(exc)})
+    return saved
+
+
+@app.delete("/admin/secrets", tags=["Integrations"])
+async def admin_delete_secret(
+    body: AdminSecretRefIn,
+    internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
+):
+    """Delete a stored secret. Returns metadata of the removed row."""
+    _admin_secret_guard(internal_secret)
+    store = secrets_store.FernetSecretStore(get_client(None))
+    row = await store.find(body.scope, body.owner_username, body.name, body.configuration_id)
+    if not row:
+        raise HTTPException(404, detail={"code": "SECRET_NOT_FOUND"})
+    await store.delete(row, actor="admin")
+    return row
 
 
 _TOKEN_FETCH_RATE: dict[str, list[float]] = {}

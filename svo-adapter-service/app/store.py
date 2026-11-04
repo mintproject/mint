@@ -32,6 +32,9 @@ class _Tables:
         self.run: dict[str, dict] = {}
         self.provenance: list[dict] = []
         self.dataset_specification: dict[str, dict] = {}  # model-catalog target rows
+        self.catalog_configuration: dict[str, dict] = {}  # model-catalog configurations (secret declarations)
+        self.secret: dict[str, dict] = {}
+        self.secret_event: list[dict] = []
 
 
 STORE = _Tables()
@@ -234,6 +237,62 @@ class InMemoryHasura:
     def _op_InsertEdges(self, v):
         objects = v.get("objects") or []
         return {"insert_adapter_transform_edge": {"affected_rows": len(objects)}}
+
+    # --- secrets store (secrets.py / hasura.py secret queries) ---------------
+    def _op_GetSecretConfiguration(self, v):
+        return {"modelcatalog_configuration_by_pk": STORE.catalog_configuration.get(v["id"])}
+
+    def _op_FindSecret(self, v):
+        rows = [r for r in STORE.secret.values()
+                if r["scope"] == v["scope"] and r["owner_username"] == v["owner"]
+                and r["name"] == v["name"] and r["configuration_id"] == v["cfg"]]
+        return {"adapter_secret": [{k: x for k, x in r.items() if k != "ciphertext"} for r in rows[:1]]}
+
+    def _op_GetSecret(self, v):
+        return {"adapter_secret_by_pk": STORE.secret.get(v["id"])}
+
+    def _op_ListSecrets(self, v):
+        return {"adapter_secret": list(STORE.secret.values())}
+
+    def _op_InsertSecret(self, v):
+        row = dict(v["obj"])
+        row.setdefault("last_used_at", None)
+        STORE.secret[row["id"]] = row
+        return {"insert_adapter_secret_one": {k: x for k, x in row.items() if k != "ciphertext"}}
+
+    def _op_UpdateSecret(self, v):
+        row = STORE.secret.get(v["id"])
+        if row:
+            row.update(v["set"])
+        return {"update_adapter_secret_by_pk":
+                {k: x for k, x in (row or {}).items() if k != "ciphertext"} or None}
+
+    def _op_TouchSecret(self, v):
+        row = STORE.secret.get(v["id"])
+        if row:
+            row["last_used_at"] = v["at"]
+        return {"update_adapter_secret_by_pk": {"id": v["id"]}}
+
+    def _op_DeleteSecret(self, v):
+        STORE.secret.pop(v["id"], None)
+        return {"delete_adapter_secret_by_pk": {"id": v["id"]}}
+
+    def _op_InsertSecretEvent(self, v):
+        row = dict(v["obj"])
+        row.setdefault("id", _new_id())
+        STORE.secret_event.append(row)
+        return {"insert_adapter_secret_event_one": {"id": row["id"]}}
+
+    def _op_GetRunCredentials(self, v):
+        return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
+
+    def _op_IssueRunCredentialsIf(self, v):
+        # Compare-and-set on the issue counter (per-run cap).
+        row = STORE.run.get(v["id"])
+        if row and int(row.get("credentials_issued") or 0) == int(v["issued"]):
+            row["credentials_issued"] = int(v["issued"]) + 1
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
 
     # --- MINT catalog read (demo: no modelcatalog_* data in-memory) ----------
     def _op_ListMintConfigurations(self, v):

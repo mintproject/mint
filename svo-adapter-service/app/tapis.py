@@ -70,8 +70,8 @@ STANDARD_PARAMS: dict[str, dict[str, Any]] = {
     "signal_url": {"type": "string", "default": "", "required": False},
     "signal_token": {"type": "string", "default": "", "required": False},
     "signal_expires": {"type": "string", "default": "", "required": False},
-    # Earthdata credential fetch (main.fetch_earthdata_credential), authorised
-    # by the signal token above. Blank when no credential is configured.
+    # Run-secret fetch (main.fetch_run_credentials), authorised by the signal
+    # token above. Blank when the run bound no secrets.
     "credentials_url": {"type": "string", "default": "", "required": False},
     # Token keeper (run_tokens.py): where the model task fetches a live Tapis
     # token when the one in its args has expired, plus its per-run credential.
@@ -404,8 +404,8 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         _credentials_url = _input("CREDENTIALS_URL", "", allow_environment=False).strip()
 
         def _submit_definition():
-            # Copy of _job_definition for the submit call only: the Earthdata
-            # credential is fetched from the adapter (authorised by the signal
+            # Copy of _job_definition for the submit call only: the secrets bound
+            # to this run are fetched from the adapter (authorised by the signal
             # token) and added to the copy in memory. _job_definition itself,
             # and anything printed about it, never holds the values.
             _definition = json.loads(json.dumps(_job_definition))
@@ -419,7 +419,7 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 return _definition
             if not _signal_token:
                 _die("credential endpoint configured but no run signal token was issued",
-                     code="EARTHDATA_CREDENTIAL_UNAVAILABLE")
+                     code="SECRET_UNAVAILABLE")
             _creds = None
             for _try in range(3):
                 try:
@@ -431,23 +431,24 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                         _creds = json.loads(_resp.read().decode()) or {}
                     break
                 except _ue.HTTPError as exc:
-                    _note({"method": "FETCH", "path": "earthdata-credential", "status": exc.code})
-                    if exc.code == 404:
-                        return _definition  # no credential configured: carry on without
+                    _note({"method": "FETCH", "path": "run-credentials", "status": exc.code})
                     if exc.code < 500 and exc.code != 429:
-                        break
+                        break  # 404/403/409: the run bound secrets, so this is a failure
                 except Exception:
-                    _note({"method": "FETCH", "path": "earthdata-credential", "status": "transport_error"})
+                    _note({"method": "FETCH", "path": "run-credentials", "status": "transport_error"})
                 time.sleep(2 * (_try + 1))
-            if not (isinstance(_creds, dict) and _creds.get("username") and _creds.get("password")):
-                _die("could not obtain the Earthdata credential from the adapter",
-                     "EARTHDATA_CREDENTIAL_UNAVAILABLE")
+            _env_values = _creds.get("env") if isinstance(_creds, dict) else None
+            if not (isinstance(_env_values, dict) and _env_values):
+                _die("could not obtain the run's secrets from the adapter",
+                     "SECRET_UNAVAILABLE")
             _params = _definition.setdefault("parameterSet", {})
             _env = _params.get("envVariables")
             if not isinstance(_env, list):
                 _env = _params["envVariables"] = []
-            _env.append({"key": "EARTHDATA_USERNAME", "value": str(_creds["username"])})
-            _env.append({"key": "EARTHDATA_PASSWORD", "value": str(_creds["password"])})
+            for _key, _value in _env_values.items():
+                # Replace, never duplicate: Tapis rejects repeated env keys.
+                _env[:] = [_e for _e in _env if not (isinstance(_e, dict) and _e.get("key") == _key)]
+                _env.append({"key": str(_key), "value": str(_value)})
             return _definition
 
         _job_uuid = _existing_job()

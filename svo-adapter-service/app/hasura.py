@@ -235,6 +235,7 @@ query ListMintConfigurations($limit: Int!, $offset: Int!) {
         has_data_type
         has_fixed_value
         has_default_value
+        parameter_type
       }
     }
   }
@@ -273,5 +274,76 @@ query GetSyncStatus {
     order_by: { mint_synced_at: desc }
     limit: 1
   ) { mint_synced_at }
+}
+"""
+
+
+# ---------------------------------------------------------------------------
+# Secrets store (app/secrets.py). adapter.secret and adapter.secret_event carry
+# no Hasura permissions for any role, so only the admin-secret client reads them.
+# ---------------------------------------------------------------------------
+_SECRET_META = """id scope owner_username name configuration_id pinned_app_id
+    pinned_app_version fields version created_at updated_at last_used_at"""
+
+GET_SECRET_CONFIGURATION = """
+query GetSecretConfiguration($id: String!) {
+  modelcatalog_configuration_by_pk(id: $id) {
+    id owner_username tapis_app_id tapis_app_version
+    parameters {
+      parameter { label parameter_type has_accepted_values usage_notes }
+    }
+  }
+}
+"""
+
+FIND_SECRET = """
+query FindSecret($scope: String!, $owner: String!, $name: String!, $cfg: String!) {
+  adapter_secret(
+    where: {scope: {_eq: $scope}, owner_username: {_eq: $owner}, name: {_eq: $name},
+            configuration_id: {_eq: $cfg}}
+    limit: 1
+  ) { %s }
+}
+""" % _SECRET_META
+
+GET_SECRET = """
+query GetSecret($id: uuid!) {
+  adapter_secret_by_pk(id: $id) { %s ciphertext }
+}
+""" % _SECRET_META
+
+LIST_SECRETS = """
+query ListSecrets {
+  adapter_secret { %s ciphertext }
+}
+""" % _SECRET_META
+
+INSERT_SECRET = """
+mutation InsertSecret($obj: adapter_secret_insert_input!) {
+  insert_adapter_secret_one(object: $obj) { %s }
+}
+""" % _SECRET_META
+
+UPDATE_SECRET = """
+mutation UpdateSecret($id: uuid!, $set: adapter_secret_set_input!) {
+  update_adapter_secret_by_pk(pk_columns: {id: $id}, _set: $set) { %s }
+}
+""" % _SECRET_META
+
+TOUCH_SECRET = """
+mutation TouchSecret($id: uuid!, $at: timestamptz!) {
+  update_adapter_secret_by_pk(pk_columns: {id: $id}, _set: {last_used_at: $at}) { id }
+}
+"""
+
+DELETE_SECRET = """
+mutation DeleteSecret($id: uuid!) {
+  delete_adapter_secret_by_pk(id: $id) { id }
+}
+"""
+
+INSERT_SECRET_EVENT = """
+mutation InsertSecretEvent($obj: adapter_secret_event_insert_input!) {
+  insert_adapter_secret_event_one(object: $obj) { id }
 }
 """

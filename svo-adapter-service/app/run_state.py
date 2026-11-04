@@ -59,7 +59,7 @@ def signal_url(run_id: str) -> str:
 
 def credentials_url(run_id: str) -> str:
     """Where the task fetches run-time credentials. Config-only, like signal_url."""
-    return f"{settings.public_base_url.rstrip('/')}/runs/{run_id}/credentials/earthdata"
+    return f"{settings.public_base_url.rstrip('/')}/runs/{run_id}/credentials"
 
 
 def signal_expiry(created_at: datetime, max_minutes: int) -> int:

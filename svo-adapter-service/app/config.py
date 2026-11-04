@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # …/modflow-suite (app/ -> svo-adapter-service/ -> monorepo/ -> modflow-suite/)
@@ -124,23 +123,10 @@ class Settings(BaseSettings):
     # Tapis usernames allowed to cancel runs they did not submit.
     cancel_admins: str = ""
 
-    # Dedicated low-privilege Earthdata account handed to composite model tasks
-    # at run time through GET /runs/{id}/credentials/earthdata. Injected from a
-    # secret, never persisted in a pipeline definition, log or provenance row.
-    earthdata_username: SecretStr | None = None
-    earthdata_password: SecretStr | None = None
-
-    # Tapis app ids whose model task may receive the Earthdata credential.
-    # Every other composite run (the MODFLOW engines) never sees it.
-    earthdata_app_ids: str = "subside-h2i-opera-analysis,subside-werc-opera-analysis"
-
-    def earthdata_app_allowed(self, app_id: str | None) -> bool:
-        allowed = {a.strip() for a in self.earthdata_app_ids.split(",") if a.strip()}
-        return bool(app_id) and str(app_id) in allowed
-
-    def earthdata_configured(self) -> bool:
-        # SecretStr is falsy when empty; the value itself is never read here.
-        return bool(self.earthdata_username and self.earthdata_password)
+    # Secrets store (app/secrets.py): comma-separated Fernet keys for adapter.secret.
+    # A dedicated ring, independent of the run-token keeper's; the first key
+    # encrypts, every key decrypts. Empty makes the feature fail closed (503).
+    secrets_encryption_keys: str = ""
 
     @property
     def run_signal_secret_list(self) -> list[str]:
@@ -149,6 +135,10 @@ class Settings(BaseSettings):
     @property
     def cancel_admin_list(self) -> list[str]:
         return [s.strip() for s in self.cancel_admins.split(",") if s.strip()]
+
+    @property
+    def secrets_encryption_key_list(self) -> list[str]:
+        return [s.strip() for s in self.secrets_encryption_keys.split(",") if s.strip()]
 
     @property
     def run_token_encryption_key_list(self) -> list[str]:

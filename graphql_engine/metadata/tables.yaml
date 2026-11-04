@@ -5042,3 +5042,9 @@
   - name: data_object
     using:
       foreign_key_constraint_on: data_object_id
+- table:
+    name: secret
+    schema: adapter
+- table:
+    name: secret_event
+    schema: adapter

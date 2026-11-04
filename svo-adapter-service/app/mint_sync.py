@@ -149,6 +149,8 @@ def _build_env_from_args(
             continue
         if p.get("has_fixed_value"):
             continue
+        if p.get("parameter_type") == "secret":
+            continue  # delivered by the secrets store, never an env_from_args mapping
         convention = mint_label_mapping(label) or _PARAM_CONVENTION.get(label)
         if convention is None:
             warnings.append(
