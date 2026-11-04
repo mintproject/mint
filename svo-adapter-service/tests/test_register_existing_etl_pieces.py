@@ -16,7 +16,7 @@ class RegistrationTests(unittest.TestCase):
         rows = register.unique_rows(register.manifests(root))
         ids = {row["id"] for row in rows}
 
-        self.assertEqual(len(rows), 52)
+        self.assertEqual(len(rows), 55)
         self.assertIn("ts-subside-h2i-publish", ids)
         self.assertIn("ts-subside-werc-publish", ids)
         self.assertEqual(sum(row["id"] == "ts-subside-stac-publish" for row in rows), 1)

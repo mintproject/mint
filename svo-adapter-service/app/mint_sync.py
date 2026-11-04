@@ -301,10 +301,21 @@ def etl_process_to_spec_row(
             for key in contract_fields
             if key in contract
         }
+        metadata_json = {}
         if contract.get("position") is not None:
-            normalized["metadata_json"] = {
-                "mint_position": contract["position"],
-            }
+            metadata_json["mint_position"] = contract["position"]
+        # The ETL contract table has no catalog column; the marker rides in
+        # schema_requirement_json["_svo"] (see register_existing_etl_pieces).
+        # Lift it into metadata_json and keep it out of the forwarded schema.
+        schema = normalized.get("schema_requirement_json")
+        if isinstance(schema, dict) and "_svo" in schema:
+            schema = dict(schema)
+            svo_marker = schema.pop("_svo") or {}
+            if isinstance(svo_marker, dict) and svo_marker.get("catalog"):
+                metadata_json["catalog"] = svo_marker["catalog"]
+            normalized["schema_requirement_json"] = schema or None
+        if metadata_json:
+            normalized["metadata_json"] = metadata_json
         normalized_contracts.append(normalized)
     return {
         "id": process_id,

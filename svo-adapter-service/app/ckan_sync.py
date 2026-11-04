@@ -51,6 +51,8 @@ STDVAR_TO_SVO: dict[str, str] = {
     "spring__volume_flow_rate":               f"{SVO_NS}spring__volume_flow_rate",
     # Land subsidence
     "land_surface__subsidence_rate":          f"{SVO_NS}land_surface__subsidence_rate",
+    "land_surface__displacement":             f"{SVO_NS}land_surface__displacement",
+    "land_surface__displacement_rate":        f"{SVO_NS}land_surface__displacement_rate",
     "land_surface__elevation":                f"{SVO_NS}land_surface__elevation",
     # Climate / forcing
     "atmosphere_water__precipitation_rate":   f"{SVO_NS}atmosphere_water__precipitation_rate",
