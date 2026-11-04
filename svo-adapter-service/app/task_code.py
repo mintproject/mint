@@ -185,6 +185,8 @@ _FACTORS: dict[tuple[str, str], float] = {
     ("ft", "m"): 0.3048,
     ("m", "cm"): 100.0,
     ("cm", "m"): 0.01,
+    ("m", "mm"): 1000.0,
+    ("mm", "m"): 0.001,
     ("degc", "degf"): None,  # non-linear — handled below
     ("degf", "degc"): None,
     # Flow conversions — GMA spring/stream flow DFC targets
@@ -673,6 +675,8 @@ def _unit_factor_for_step(step):
         ("satthk-ft-to-m", 0.3048, "m"),
         ("thickness-m-to-ft", 3.28084, "ft"),
         ("thickness-ft-to-m", 0.3048, "m"),
+        ("displacement-m-to-mm", 1000.0, "mm"),
+        ("displacement-mm-to-m", 0.001, "m"),
         ("m3s-to-af-month", 2131.7, "af_month"),
         ("m3s-to-cfs", 35.3147, "cfs"),
         ("cfs-to-af-month", 60.376, "af_month"),

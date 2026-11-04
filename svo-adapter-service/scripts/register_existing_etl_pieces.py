@@ -28,6 +28,20 @@ def manifests(root: Path):
         yield "transform_spec_registration.json", payload["transform_spec"]
 
 
+def _schema_requirement(contract):
+    """Schema JSON for a contract, carrying its catalog marker if it has one.
+
+    MINT's contract table has no catalog column, so the marker rides in
+    `schema_requirement_json` under the `_svo` namespace, merged into (never
+    replacing) any existing schema. app.mint_sync lifts it back out on sync.
+    """
+    schema = contract.get("schema_requirement_json")
+    catalog = contract.get("catalog")
+    if not catalog:
+        return schema
+    return {**(schema or {}), "_svo": {"catalog": catalog}}
+
+
 def to_object(spec):
     process_id = spec.get("id") or f"https://w3id.org/okn/i/mint/etl/{spec['name']}"
     method = spec.get("method", "tapis_function")
@@ -53,7 +67,7 @@ def to_object(spec):
              "unit": c.get("unit"), "format": c.get("format"), "dimensionality": c.get("dimensionality"),
              "spatial_type": c.get("spatial_type"), "crs_requirement": c.get("crs_requirement"),
              "temporal_resolution": c.get("temporal_resolution"),
-             "schema_requirement_json": c.get("schema_requirement_json")}
+             "schema_requirement_json": _schema_requirement(c)}
             for i, c in enumerate(spec.get("contracts", []))
         ], "on_conflict": {"constraint": "modelcatalog_etl_process_contract_pkey", "update_columns": [
             "standard_variable_uri", "unit", "format", "dimensionality", "spatial_type",

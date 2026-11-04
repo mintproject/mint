@@ -144,9 +144,13 @@ def _check_accessibility(src: DataObjectContract, tgt: DataObjectContract) -> Di
 
 
 def _catalogs(value: str | None) -> set[str]:
-    """Split a catalog spec ("ckan+stac", "ckan, stac") into a set of catalog ids."""
+    """Split a catalog spec ("ckan+stac", "ckan, stac") into a set of catalog ids.
+
+    A trailing ":<org>" scope ("ckan+stac:stac-datasets", as qaqc writes it) is
+    dropped: the requirement is the catalogs, not the organisation."""
     if not value:
         return set()
+    value = value.split(":", 1)[0]
     return {tok.strip().lower() for tok in value.replace("/", "+").replace(",", "+").split("+") if tok.strip()}
 
 

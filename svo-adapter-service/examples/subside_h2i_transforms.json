@@ -36,6 +36,7 @@
         {
           "id": "c-h2i-out", "role": "output",
           "standard_variable_uri": "https://www.geoscienceontology.org/svo/svl/variable/land_surface__displacement",
+          "unit": "m",
           "format": "displacement-product"
         }
       ]
@@ -108,7 +109,7 @@
   },
 
   "target_model_input_cataloged": {
-    "_about": "Same product, made DISCOVERABLE in CKAN + STAC. Plan = [run-h2i, stac-publish]: one job, then the catalog load on the end.",
+    "_about": "Same product, made DISCOVERABLE in CKAN + STAC. The target-side catalog requirement lives in this variant's own `catalog` key (a plain target has none, which _check_catalog treats as no constraint). Plan = [run-h2i, stac-publish]: one job, then the catalog load on the end.",
     "standard_variable_uri": "https://www.geoscienceontology.org/svo/svl/variable/land_surface__displacement",
     "unit": "m",
     "format": "displacement-product",

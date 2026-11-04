@@ -1,0 +1,39 @@
+{
+  "_about": "Generic displacement unit pieces for SUBSIDE. The H2I job emits land_surface__displacement in metres and a consumer may want millimetres (or vice versa); both share one standard variable, so these let the planner bridge the unit. Factors live in app/task_code.py (_FACTORS for the function body, _unit_factor_for_step for the pipeline-tail marker).",
+  "transform_specs": [
+    {
+      "id": "ts-displacement-m-to-mm",
+      "name": "displacement-m-to-mm",
+      "version": "1.0.0",
+      "description": "Convert a land-surface displacement raster from metres to millimetres.",
+      "transform_type": "unit_convert",
+      "is_lossy": false,
+      "method": "tapis_function",
+      "tapis_app_id": null,
+      "stage": "displacement-convert",
+      "contracts": [
+        {"id": "c-dm2mm-in",  "role": "input",
+         "standard_variable_uri": "https://www.geoscienceontology.org/svo/svl/variable/land_surface__displacement", "unit": "m"},
+        {"id": "c-dm2mm-out", "role": "output",
+         "standard_variable_uri": "https://www.geoscienceontology.org/svo/svl/variable/land_surface__displacement", "unit": "mm"}
+      ]
+    },
+    {
+      "id": "ts-displacement-mm-to-m",
+      "name": "displacement-mm-to-m",
+      "version": "1.0.0",
+      "description": "Convert a land-surface displacement raster from millimetres to metres.",
+      "transform_type": "unit_convert",
+      "is_lossy": false,
+      "method": "tapis_function",
+      "tapis_app_id": null,
+      "stage": "displacement-convert",
+      "contracts": [
+        {"id": "c-dmm2m-in",  "role": "input",
+         "standard_variable_uri": "https://www.geoscienceontology.org/svo/svl/variable/land_surface__displacement", "unit": "mm"},
+        {"id": "c-dmm2m-out", "role": "output",
+         "standard_variable_uri": "https://www.geoscienceontology.org/svo/svl/variable/land_surface__displacement", "unit": "m"}
+      ]
+    }
+  ]
+}

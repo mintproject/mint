@@ -128,7 +128,7 @@
   },
 
   "target_model_input_cataloged": {
-    "_about": "Same product, made DISCOVERABLE in CKAN + STAC. Plan = [run-werc, stac-publish]: one job, then the catalog load on the end.",
+    "_about": "Same product, made DISCOVERABLE in CKAN + STAC. The target-side catalog requirement lives in this variant's own `catalog` key. Plan = [run-werc, stac-publish]: one job, then the catalog load on the end.",
     "standard_variable_uri": "https://www.geoscienceontology.org/svo/svl/variable/land_surface__displacement_rate",
     "unit": "mm/yr",
     "format": "geotiff",
