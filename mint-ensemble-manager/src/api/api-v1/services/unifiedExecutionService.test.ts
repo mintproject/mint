@@ -1,3 +1,6 @@
+import express from "express";
+import request from "supertest";
+import unifiedExecutionRouter from "@/api/api-v1/paths/unifiedExecution";
 import { createUnifiedExecutionService } from "./unifiedExecutionService";
 import {
     UnifiedExecutionRecord,
@@ -130,6 +133,39 @@ describe("unifiedExecutionService", () => {
                 parameters: { geo_actor_id: "required" }
             }
         });
+    });
+
+    it("relays a structured SECRET_REQUIRED adapter 422 with its extra fields to the route response", async () => {
+        const missing = [
+            { name: "earthdata", source: "owner_only", fields: ["username", "password"] }
+        ];
+        (global.fetch as jest.Mock).mockResolvedValue({
+            ok: false,
+            status: 422,
+            json: async () => ({
+                detail: {
+                    code: "SECRET_REQUIRED",
+                    message: "Required secret earthdata is not configured",
+                    missing
+                }
+            })
+        });
+        const app = express();
+        app.use(express.json());
+        app.use("/plans", unifiedExecutionRouter(createUnifiedExecutionService(legacy)));
+
+        const response = await request(app)
+            .post("/plans")
+            .set("Authorization", "Bearer user-token")
+            .send({
+                executor: "svo_adapter",
+                adapter_request: { data_object_id: "source-1", target_contract: {} }
+            });
+
+        expect(response.status).toBe(422);
+        expect(response.body.code).toBe("SECRET_REQUIRED");
+        expect(response.body.message).toBe("Required secret earthdata is not configured");
+        expect(response.body.details.missing).toEqual(missing);
     });
 
     it("forwards a requested maximum model runtime to the Tapis execution engine", async () => {

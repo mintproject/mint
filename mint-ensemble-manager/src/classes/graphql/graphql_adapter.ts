@@ -16,6 +16,8 @@ import {
     Dataset,
     Model,
     ModelParameter,
+    ModelSecretDeclaration,
+    ModelSecretSource,
     DataResource,
     Variable,
     MintPermission,
@@ -477,7 +479,37 @@ export const datasliceFromGQL = (d: any) => {
     } as Dataslice;
 };
 
+export const SECRET_PARAMETER_TYPE = "secret";
+
+const isSecretParameterRow = (p: any): boolean => p?.parameter_type === SECRET_PARAMETER_TYPE;
+
+// Maps a `secret` catalog parameter row to a declaration. has_accepted_values
+// holds "<field>=<ENV_KEY>" entries; usage_notes may carry "source=<value>".
+export const modelSecretFromCatalogGQL = (p: any): ModelSecretDeclaration => {
+    const env: Record<string, string> = {};
+    (Array.isArray(p.has_accepted_values) ? p.has_accepted_values : []).forEach((entry: any) => {
+        const [field, key] = String(entry)
+            .split("=", 2)
+            .map((part) => part.trim());
+        if (field && key) {
+            env[field] = key;
+        }
+    });
+    const sourceMatch = /(?:^|[\s;,])source=([a-z_]+)/.exec(p.usage_notes || "");
+    const requested = sourceMatch?.[1];
+    const source: ModelSecretSource =
+        requested === "user_then_owner" || requested === "user_only" ? requested : "owner_only";
+    const declaration: ModelSecretDeclaration = { name: p.label || p.id, env, source };
+    if (p.description) {
+        declaration.description = p.description;
+    }
+    return declaration;
+};
+
 export const modelFromGQL = (config: any): Model => {
+    // Secret rows are removed from the parameter stream here, once, so no
+    // downstream consumer (bindings, seeds, job args) ever sees them.
+    const parameterRows = (config.parameters || []).map((row: any) => row.parameter);
     return {
         id: config.id,
         name: config.label || config.id,
@@ -488,10 +520,13 @@ export const modelFromGQL = (config: any): Model => {
         software_image: config.has_software_image || "",
         code_url: config.has_component_location || "",
         input_files: (config.inputs || []).map((row: any) => modelIOFromCatalogGQL(row)),
-        output_files: (config.outputs || []).map((row: any) => modelIOFromCatalogGQL(row, 'output')),
-        input_parameters: (config.parameters || []).map((row: any) =>
-            modelParameterFromCatalogGQL(row.parameter)
-        )
+        output_files: (config.outputs || []).map((row: any) =>
+            modelIOFromCatalogGQL(row, "output")
+        ),
+        input_parameters: parameterRows
+            .filter((p: any) => !isSecretParameterRow(p))
+            .map((p: any) => modelParameterFromCatalogGQL(p)),
+        required_secrets: parameterRows.filter(isSecretParameterRow).map(modelSecretFromCatalogGQL)
     } as Model;
 };
 
@@ -499,7 +534,7 @@ export const modelFromGQL = (config: any): Model => {
 // junctionRow has shape { input: {...}, is_optional: boolean } for inputs,
 // or { output: {...} } for outputs (is_optional not present on output junction).
 export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): ModelIO => {
-    const key = entityKey ?? 'input';
+    const key = entityKey ?? "input";
     const io = junctionRow[key] ?? junctionRow;
     return {
         id: io.id,
@@ -509,7 +544,7 @@ export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): Mod
         value: null,
         position: io.position || 0,
         variables: [],
-        is_optional: junctionRow.is_optional ?? false,
+        is_optional: junctionRow.is_optional ?? false
     } as ModelIO;
 };
 

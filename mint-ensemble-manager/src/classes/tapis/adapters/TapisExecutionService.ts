@@ -1,5 +1,11 @@
 import { Apps, Files, Jobs } from "@tapis/tapis-typescript";
-import { Execution, Execution_Result, Model, Region } from "@/classes/mint/mint-types";
+import {
+    Execution,
+    Execution_Result,
+    Model,
+    ModelSecretDeclaration,
+    Region
+} from "@/classes/mint/mint-types";
 import { TapisComponent, TapisComponentSeed } from "@/classes/tapis/typing";
 import { IExecutionService, ExecutionJob, SubmissionResult } from "@/interfaces/IExecutionService";
 import apiGenerator from "@/classes/tapis/utils/apiGenerator";
@@ -145,6 +151,8 @@ export class TapisExecutionService implements IExecutionService {
         logicalQueue?: string
     ): Promise<{
         execution_id: string;
+        configuration_id: string;
+        required_secrets: Pick<ModelSecretDeclaration, "name" | "env" | "source">[];
         output_uri: string;
         output_name: string;
         output_format?: string;
@@ -183,6 +191,8 @@ export class TapisExecutionService implements IExecutionService {
         }
 
         const app = await this.loadTapisApp(executionCreation.component);
+        const requiredSecrets = executionCreation.model.required_secrets || [];
+        this.assertSecretEnvKeysDeclared(app, requiredSecrets);
         const seed = this.seedExecutions(
             executionCreation.executionToBeRun,
             executionCreation.model,
@@ -205,8 +215,7 @@ export class TapisExecutionService implements IExecutionService {
         // Tapis Jobs accepts these fields when omitted, but Tapis Workflows
         // validates the embedded job definition strictly and rejects null
         // execution directories.
-        jobDefinition.execSystemInputDir =
-            jobDefinition.execSystemInputDir || "${JobWorkingDir}";
+        jobDefinition.execSystemInputDir = jobDefinition.execSystemInputDir || "${JobWorkingDir}";
         jobDefinition.execSystemOutputDir =
             jobDefinition.execSystemOutputDir || "${JobWorkingDir}/output";
         const archivePath = `mint-workflow-output/${workflowPath}/model`;
@@ -228,11 +237,45 @@ export class TapisExecutionService implements IExecutionService {
         const outputName = output.name || output.id;
         return {
             execution_id: execution.id,
+            // Catalog configuration id (modelcatalog_configuration.id): the
+            // adapter re-reads the configuration's secret parameters by it.
+            configuration_id: executionCreation.model.id,
+            required_secrets: requiredSecrets.map(({ name, env, source }) => ({
+                name,
+                env,
+                source
+            })),
             output_name: outputName,
             output_format: output.format || "",
             output_uri: `tapis://${jobDefinition.archiveSystemId}/${archivePath}/${outputName}`,
             job_definition: jobDefinition
         };
+    }
+
+    /**
+     * The adapter must never receive a secret-to-env mapping the Tapis app
+     * cannot accept: every env key has to be a declared, non-FIXED envVariable.
+     */
+    private assertSecretEnvKeysDeclared(
+        app: Apps.TapisApp,
+        requiredSecrets: ModelSecretDeclaration[]
+    ) {
+        const settable = new Set(
+            (app.jobAttributes?.parameterSet?.envVariables || [])
+                .filter((entry) => entry.inputMode !== Apps.KeyValueInputModeEnum.Fixed)
+                .map((entry) => entry.key)
+        );
+        for (const secret of requiredSecrets) {
+            for (const key of Object.values(secret.env)) {
+                if (!settable.has(key)) {
+                    const error = new Error(
+                        `Secret "${secret.name}" maps to env key ${key}, which Tapis app ${app.id}/${app.version} does not declare as a non-FIXED envVariable`
+                    ) as Error & { code?: string };
+                    error.code = "SECRET_ENV_UNDECLARED";
+                    throw error;
+                }
+            }
+        }
     }
 
     private async processExecutionSeeds(
@@ -262,7 +305,10 @@ export class TapisExecutionService implements IExecutionService {
                 );
                 submittedExecutions.push({ execution: seed.execution, jobId });
             } catch (error) {
-                console.error("Error submitting single execution:", error instanceof Error ? error.message : String(error));
+                console.error(
+                    "Error submitting single execution:",
+                    error instanceof Error ? error.message : String(error)
+                );
                 console.error("Full error details:", error);
                 await this.handleSingleExecutionFailure(seed, error, threadModelId);
 
@@ -355,7 +401,12 @@ export class TapisExecutionService implements IExecutionService {
                 failedExecutions.forEach((fe) => {
                     const errorMsg = `Execution ${fe.execution.id} failed: ${fe.error.message}`;
                     console.error(errorMsg);
-                    console.error("Full error details for execution", fe.execution.id, ":", fe.error);
+                    console.error(
+                        "Full error details for execution",
+                        fe.execution.id,
+                        ":",
+                        fe.error
+                    );
                     errorMessages.push(fe.error.message);
                 });
                 const contractFailure = failedExecutions.find(
@@ -371,7 +422,12 @@ export class TapisExecutionService implements IExecutionService {
                 console.warn("Some jobs failed to submit:");
                 failedExecutions.forEach((fe) => {
                     console.warn(`Execution ${fe.execution.id} failed: ${fe.error.message}`);
-                    console.warn("Full error details for execution", fe.execution.id, ":", fe.error);
+                    console.warn(
+                        "Full error details for execution",
+                        fe.execution.id,
+                        ":",
+                        fe.error
+                    );
                 });
             }
         }
@@ -690,9 +746,7 @@ export class TapisExecutionService implements IExecutionService {
         const response = await errorDecoder<Files.FileListingResponse>(() =>
             this.filesClient.listFiles({ systemId, path, recurse: false })
         );
-        return (response.result ?? []).filter(
-            (file) => file.type !== Files.FileTypeEnum.Dir
-        );
+        return (response.result ?? []).filter((file) => file.type !== Files.FileTypeEnum.Dir);
     }
 
     /**
