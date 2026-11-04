@@ -70,6 +70,9 @@ STANDARD_PARAMS: dict[str, dict[str, Any]] = {
     "signal_url": {"type": "string", "default": "", "required": False},
     "signal_token": {"type": "string", "default": "", "required": False},
     "signal_expires": {"type": "string", "default": "", "required": False},
+    # Earthdata credential fetch (main.fetch_earthdata_credential), authorised
+    # by the signal token above. Blank when no credential is configured.
+    "credentials_url": {"type": "string", "default": "", "required": False},
     # Token keeper (run_tokens.py): where the model task fetches a live Tapis
     # token when the one in its args has expired, plus its per-run credential.
     # Server-injected at submit; blank when the keeper is off.
@@ -398,11 +401,57 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                      "RUN_TOKEN_EXPIRED_BEFORE_START",
                      {"token_fetch_configured": bool(_token_url and _fetch_cred)})
 
+        _credentials_url = _input("CREDENTIALS_URL", "", allow_environment=False).strip()
+
+        def _submit_definition():
+            # Copy of _job_definition for the submit call only: the Earthdata
+            # credential is fetched from the adapter (authorised by the signal
+            # token) and added to the copy in memory. _job_definition itself,
+            # and anything printed about it, never holds the values.
+            _definition = json.loads(json.dumps(_job_definition))
+            _inputs = _definition.get("fileInputs")
+            if isinstance(_inputs, list):
+                # A user-supplied netrc must never override the system credential.
+                _definition["fileInputs"] = [
+                    _i for _i in _inputs
+                    if not (isinstance(_i, dict) and _i.get("name") == "earthdata-netrc")]
+            if not (_credentials_url and _signal_token):
+                return _definition
+            _creds = None
+            for _try in range(3):
+                try:
+                    with _ur.urlopen(_ur.Request(
+                            _credentials_url, method="GET",
+                            headers={"X-Run-Signal-Token": _signal_token,
+                                     "X-Run-Signal-Expires": _signal_expires,
+                                     "Accept": "application/json"}), timeout=10) as _resp:
+                        _creds = json.loads(_resp.read().decode()) or {}
+                    break
+                except _ue.HTTPError as exc:
+                    _note({"method": "FETCH", "path": "earthdata-credential", "status": exc.code})
+                    if exc.code == 404:
+                        return _definition  # no credential configured: carry on without
+                    if exc.code < 500 and exc.code != 429:
+                        break
+                except Exception:
+                    _note({"method": "FETCH", "path": "earthdata-credential", "status": "transport_error"})
+                time.sleep(2 * (_try + 1))
+            if not (isinstance(_creds, dict) and _creds.get("username") and _creds.get("password")):
+                _die("could not obtain the Earthdata credential from the adapter",
+                     "EARTHDATA_CREDENTIAL_UNAVAILABLE")
+            _params = _definition.setdefault("parameterSet", {})
+            _env = _params.get("envVariables")
+            if not isinstance(_env, list):
+                _env = _params["envVariables"] = []
+            _env.append({"key": "EARTHDATA_USERNAME", "value": str(_creds["username"])})
+            _env.append({"key": "EARTHDATA_PASSWORD", "value": str(_creds["password"])})
+            return _definition
+
         _job_uuid = _existing_job()
         if _job_uuid:
             _note({"method": "ATTACH", "path": "/v3/jobs/" + _job_uuid, "status": "existing_job"})
         else:
-            _submitted = _request("/v3/jobs/submit", method="POST", payload=_job_definition)
+            _submitted = _request("/v3/jobs/submit", method="POST", payload=_submit_definition())
             _job_uuid = _find(_submitted, {"uuid", "jobUuid", "jobUUID"})
             if not _job_uuid:
                 _die("Tapis did not return a model job UUID", "MODEL_PROVIDER_JOB_ID_MISSING")
@@ -600,6 +649,7 @@ def generate_tapis_workflow(
                 "SIGNAL_URL": {"type": "string", "value_from": {"args": "signal_url"}},
                 "SIGNAL_TOKEN": {"type": "string", "value_from": {"args": "signal_token"}},
                 "SIGNAL_EXPIRES": {"type": "string", "value_from": {"args": "signal_expires"}},
+                "CREDENTIALS_URL": {"type": "string", "value_from": {"args": "credentials_url"}},
                 # Live-token fetch for a task the engine starts late (run_tokens.py).
                 "TOKEN_URL": {"type": "string", "value_from": {"args": "token_url"}},
                 "TOKEN_FETCH_TOKEN": {"type": "string", "value_from": {"args": "token_fetch_token"}},
