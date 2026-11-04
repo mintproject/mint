@@ -628,3 +628,12 @@ def test_sentinel_never_leaks_outside_the_credentials_response(caplog, submit):
                   STORE.secret_event, submit["submits"]):
         assert SENTINEL not in json.dumps(state, default=str)
     assert all(SENTINEL not in json.dumps(s["pipeline"]) for s in submit["submits"])
+
+
+def test_fields_are_sent_as_a_postgres_array_literal_and_read_back_as_a_list():
+    from app import secrets as S
+    assert S.pg_text_array(["password", "username"]) == '{"password","username"}'
+    assert S.text_array('{"password","username"}') == ["password", "username"]
+    assert S.text_array(["a", "b"]) == ["a", "b"]
+    assert S.text_array(None) == [] and S.text_array("{}") == []
+    assert S.text_array('{"a\\"b","c"}') == ['a"b', "c"]
