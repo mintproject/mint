@@ -248,8 +248,10 @@ seeding returns 503 `SECRETS_NOT_CONFIGURED`, and a composite run that declares
 secrets is refused at submit.
 
 - `PUT /admin/secrets` and `DELETE /admin/secrets` (header
-  `X-Ensemble-Manager-Secret`, checked against `SVO_ADAPTER_INTERNAL_SERVICE_SECRET`,
-  or `SVO_ADAPTER_HASURA_ADMIN_SECRET` when that is unset)
+  `X-Secrets-Admin-Secret`, checked in constant time against
+  `SVO_ADAPTER_SECRETS_ADMIN_SECRET` only; there is no fallback to the Hasura or
+  Ensemble Manager secrets, and an unset value answers 503
+  `SECRETS_ADMIN_NOT_CONFIGURED`)
   store, replace and remove a model-owner secret and return metadata only. A PUT
   requires `acknowledged: true` and an `owner_username` equal to the
   configuration's owner. Use `scripts/seed_model_owner_secret.py`: values come

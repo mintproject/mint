@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # Shared server-to-server secret for Ensemble Manager-owned model-output
     # registration and deferred-plan binding. Never expose this to the UI.
     internal_service_secret: str | None = None
+    # Dedicated credential for /admin/secrets (never the Hasura or EM secret).
+    secrets_admin_secret: str | None = None
 
     # Tapis Workflows. Submission emulates SUBSIDE's manager so adapter-generated
     # pipelines are interchangeable with SUBSIDE's: same pipeline shape, registered

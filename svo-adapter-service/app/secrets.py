@@ -35,7 +35,8 @@ SECRET_PARAMETER_TYPE = "secret"
 
 NAME_RE = re.compile(r"^[a-z0-9_-]{1,64}$")
 FIELD_RE = re.compile(r"^[a-z0-9_]{1,32}$")
-ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+OWNER_UNSET_MESSAGE = "the model configuration has no owner; set owner_username before storing a secret"
+ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 MAX_FIELDS = 16
 MAX_TOTAL_BYTES = 4096
 
@@ -264,7 +265,7 @@ class Declaration:
 
 def parse_declarations(configuration: dict[str, Any] | None) -> list[Declaration]:
     """``parameter_type == "secret"`` rows: label = name, ``has_accepted_values``
-    = ``field=ENV_KEY`` entries, ``usage_notes`` may carry ``source=owner_only``."""
+    = ``field=ENV_KEY`` entries. Phase A: every source is ``owner_only``."""
     out: list[Declaration] = []
     for wrapper in (configuration or {}).get("parameters") or []:
         param = wrapper.get("parameter") or wrapper
@@ -284,13 +285,7 @@ def parse_declarations(configuration: dict[str, Any] | None) -> list[Declaration
             env[field_name] = env_key
         if not env:
             raise invalid("has_accepted_values must map at least one field")
-        source = SOURCE_OWNER_ONLY
-        for part in re.split(r"[;,\s]+", str(param.get("usage_notes") or "")):
-            if part.startswith("source="):
-                source = part[len("source="):]
-        if source != SOURCE_OWNER_ONLY:
-            raise invalid(f"source {source!r} is not supported")
-        out.append(Declaration(label, env, source))
+        out.append(Declaration(label, env, SOURCE_OWNER_ONLY))
     return out
 
 
@@ -346,6 +341,8 @@ async def resolve(store: FernetSecretStore, configuration: dict[str, Any],
     """Resolve each declaration to its stored row without decrypting anything."""
     result = Resolution()
     owner = configuration.get("owner_username")
+    if declarations and not owner:
+        raise SecretResolutionError(422, {"code": "SECRET_OWNER_UNSET", "message": OWNER_UNSET_MESSAGE})
     app = (str(job_definition.get("appId") or ""), str(job_definition.get("appVersion") or ""))
     for decl in declarations:
         row = await store.find(SCOPE_MODEL_OWNER, owner, decl.name, configuration["id"]) if owner else None

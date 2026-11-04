@@ -34,13 +34,14 @@ SENTINEL = "SENTINEL-pw-9f3a"
 CFG = "cfg-opera"
 APP_ID, APP_VERSION = "subside-h2i-opera-analysis", "1"
 EM = {"X-Ensemble-Manager-Secret": "em-secret"}
+ADMIN = {"X-Secrets-Admin-Secret": "admin-secret"}
 BEARER = {"Authorization": "Bearer caller.jwt.token"}
 ENV_MAP = ["username=EARTHDATA_USERNAME", "password=EARTHDATA_PASSWORD"]
 
 
-def _declaration(name="earthdata", env=ENV_MAP, usage="source=owner_only"):
+def _declaration(name="earthdata", env=ENV_MAP):
     return {"parameter": {"label": name, "parameter_type": "secret",
-                          "has_accepted_values": env, "usage_notes": usage}}
+                          "has_accepted_values": env}}
 
 
 def _configuration(**over):
@@ -55,6 +56,7 @@ def _configured(monkeypatch):
     monkeypatch.setattr(settings, "run_signal_secrets", "current-secret")
     monkeypatch.setattr(settings, "public_base_url", "https://svo.example")
     monkeypatch.setattr(settings, "internal_service_secret", "em-secret")
+    monkeypatch.setattr(settings, "secrets_admin_secret", "admin-secret")
     monkeypatch.setattr(settings, "secrets_encryption_keys", Fernet.generate_key().decode())
     monkeypatch.setattr("app.main.tapis.userinfo_username", lambda token: "alice")
     client.post("/admin/reset")
@@ -75,7 +77,7 @@ def _put_body(**over):
 
 
 def _put(**over):
-    return client.put("/admin/secrets", headers=EM, json=_put_body(**over))
+    return client.put("/admin/secrets", headers=ADMIN, json=_put_body(**over))
 
 
 def _row(**over):
@@ -156,18 +158,45 @@ def test_declarations_parse_from_the_catalog_and_reject_malformed_maps():
     assert decl.name == "earthdata" and decl.env == {
         "username": "EARTHDATA_USERNAME", "password": "EARTHDATA_PASSWORD"}
     for bad in (_declaration(env=["password"]), _declaration(env=[]), _declaration(name="Bad Name"),
-                _declaration(usage="source=user_only")):
+                _declaration(env=["username=earthdata_user"])):
         with pytest.raises(secrets_store.SecretResolutionError):
             secrets_store.parse_declarations({"parameters": [bad]})
 
 
 # --- admin seeding ---------------------------------------------------------------
-def test_admin_put_requires_the_internal_secret_and_a_ring(monkeypatch):
+def test_admin_put_requires_the_dedicated_secret_and_a_ring(monkeypatch):
     assert client.put("/admin/secrets", json=_put_body()).status_code == 403
-    assert client.put("/admin/secrets", headers={"X-Ensemble-Manager-Secret": "x"},
+    assert client.put("/admin/secrets", headers={"X-Secrets-Admin-Secret": "x"},
                       json=_put_body()).status_code == 403
     monkeypatch.setattr(settings, "secrets_encryption_keys", "")
     assert _put().status_code == 503
+
+
+def test_admin_routes_reject_the_em_and_hasura_secrets_alone(monkeypatch):
+    monkeypatch.setattr(settings, "hasura_admin_secret", "hasura-admin")
+    ref = {k: _put_body()[k] for k in ("scope", "owner_username", "configuration_id", "name")}
+    for headers in (EM, {"X-Secrets-Admin-Secret": "em-secret"}, {"X-Secrets-Admin-Secret": "hasura-admin"},
+                    {"X-Hasura-Admin-Secret": "hasura-admin"}):
+        assert client.put("/admin/secrets", headers=headers, json=_put_body()).status_code == 403
+        assert client.request("DELETE", "/admin/secrets", headers=headers, json=ref).status_code == 403
+    assert not STORE.secret
+    assert _put().status_code == 200
+
+
+def test_admin_routes_are_503_when_the_admin_secret_is_unset(monkeypatch):
+    monkeypatch.setattr(settings, "secrets_admin_secret", None)
+    monkeypatch.setattr(settings, "hasura_admin_secret", "hasura-admin")
+    for headers in (ADMIN, EM, {"X-Secrets-Admin-Secret": "hasura-admin"}):
+        resp = client.put("/admin/secrets", headers=headers, json=_put_body())
+        assert resp.status_code == 503 and resp.json()["detail"]["code"] == "SECRETS_ADMIN_NOT_CONFIGURED"
+
+
+def test_admin_put_with_an_unowned_configuration_is_secret_owner_unset():
+    STORE.catalog_configuration[CFG] = _configuration(owner_username=None)
+    resp = _put()
+    assert resp.status_code == 422 and resp.json()["detail"] == {
+        "code": "SECRET_OWNER_UNSET", "message": secrets_store.OWNER_UNSET_MESSAGE}
+    assert not STORE.secret
 
 
 def test_admin_put_returns_metadata_only_and_pins_the_app():
@@ -200,10 +229,10 @@ def test_admin_delete_requires_auth_removes_the_row_and_keeps_the_trail():
     _put()
     ref = {k: _put_body()[k] for k in ("scope", "owner_username", "configuration_id", "name")}
     assert client.request("DELETE", "/admin/secrets", json=ref).status_code == 403
-    resp = client.request("DELETE", "/admin/secrets", headers=EM, json=ref)
+    resp = client.request("DELETE", "/admin/secrets", headers=ADMIN, json=ref)
     assert resp.status_code == 200 and "ciphertext" not in resp.json() and not STORE.secret
     assert STORE.secret_event[-1]["event"] == "deleted"
-    assert client.request("DELETE", "/admin/secrets", headers=EM, json=ref).status_code == 404
+    assert client.request("DELETE", "/admin/secrets", headers=ADMIN, json=ref).status_code == 404
 
 
 # --- resolution at submit -----------------------------------------------------------
@@ -301,6 +330,25 @@ def test_app_pin_mismatch_is_403_with_a_mismatch_event_and_no_side_effects(submi
     assert response.status_code == 403 and response.json()["detail"]["code"] == "SECRET_APP_MISMATCH"
     assert [e["event"] for e in STORE.secret_event][-1] == "mismatch"
     _no_side_effects(submit)
+
+
+def test_submit_with_an_unowned_configuration_is_secret_owner_unset(submit):
+    STORE.catalog_configuration[CFG] = _configuration(owner_username=None)
+    for dry_run in (False, True):
+        response = submit["submit"](dry_run=dry_run)
+        assert response.status_code == 422 and response.json()["detail"] == {
+            "code": "SECRET_OWNER_UNSET", "message": secrets_store.OWNER_UNSET_MESSAGE}
+    _no_side_effects(submit)
+
+
+def test_composite_submit_without_configuration_id_warns_and_skips(submit, caplog):
+    caplog.set_level(logging.WARNING)
+    task = _model_task()
+    del task["configuration_id"]
+    response = submit["submit"](model_task=task)
+    assert response.status_code == 200, response.text
+    assert any("secret resolution skipped" in r.getMessage() for r in caplog.records)
+    assert STORE.run[response.json()["run_id"]].get("bound_secrets") is None
 
 
 def test_incomplete_stored_fields_are_a_422(submit):
@@ -423,10 +471,41 @@ def test_credentials_rate_limit_applies(bound_run, monkeypatch):
 
 
 def test_removed_secret_is_409_and_nothing_is_returned(bound_run):
+    saved = dict(STORE.secret)
     STORE.secret.clear()
     resp = _creds(bound_run)
     assert resp.status_code == 409 and resp.json()["detail"]["code"] == "SECRET_REMOVED"
     assert SENTINEL not in resp.text
+    assert STORE.run[bound_run].get("credentials_issued", 0) == 0  # a failure consumes no issue
+    STORE.secret.update(saved)
+    assert [_creds(bound_run).status_code for _ in range(4)] == [200, 200, 200, 409]
+
+
+def test_a_failed_decrypt_does_not_consume_an_issue(bound_run):
+    secret = next(iter(STORE.secret.values()))
+    good = secret["ciphertext"]
+    secret["ciphertext"] = secrets_store.seal(
+        _row(id="22222222-2222-2222-2222-222222222222"), {"password": SENTINEL})
+    assert [_creds(bound_run).status_code for _ in range(2)] == [503, 503]
+    assert STORE.run[bound_run].get("credentials_issued", 0) == 0
+    secret["ciphertext"] = good
+    assert [_creds(bound_run).status_code for _ in range(4)] == [200, 200, 200, 409]
+    assert STORE.run[bound_run]["credentials_issued"] == 3
+
+
+def test_a_lost_compare_and_set_rereads_and_retries_once(bound_run, monkeypatch):
+    real = type(get_client(None)).execute
+    calls = {"n": 0}
+
+    async def racing(self, query, variables=None):
+        if "IssueRunCredentialsIf" in query and calls["n"] == 0:
+            calls["n"] += 1
+            STORE.run[bound_run]["credentials_issued"] = 1  # a concurrent fetch won
+        return await real(self, query, variables)
+
+    monkeypatch.setattr(type(get_client(None)), "execute", racing)
+    assert _creds(bound_run).status_code == 200
+    assert STORE.run[bound_run]["credentials_issued"] == 2
 
 
 def test_a_newer_version_is_served_and_noted_in_the_event(bound_run):
@@ -503,6 +582,24 @@ def test_public_args_still_hide_server_injected_tokens():
     assert _public_workflow_args({"tapis_token": {"value": "x"}, "a": {"value": 1}}) == {"a": {"value": 1}}
 
 
+def test_a_failing_hasura_write_during_put_never_echoes_the_values(monkeypatch, caplog):
+    secrets_store.install_log_scrubber()
+    caplog.set_level(logging.DEBUG)
+    real = type(get_client(None)).execute
+
+    async def failing(self, query, variables=None):
+        if "InsertSecret(" in query:
+            raise RuntimeError(f"hasura rejected {SENTINEL}")
+        return await real(self, query, variables)
+
+    monkeypatch.setattr(type(get_client(None)), "execute", failing)
+    quiet = TestClient(app, raise_server_exceptions=False)
+    resp = quiet.put("/admin/secrets", headers=ADMIN, json=_put_body())
+    assert resp.status_code in (500, 503) and SENTINEL not in resp.text
+    assert all(SENTINEL not in r.getMessage() for r in caplog.records)
+    assert not STORE.secret
+
+
 def test_sentinel_never_leaks_outside_the_credentials_response(caplog, submit):
     caplog.set_level(logging.DEBUG)
     secrets_store.install_log_scrubber()
@@ -512,14 +609,14 @@ def test_sentinel_never_leaks_outside_the_credentials_response(caplog, submit):
     run_id = real.json()["run_id"]
     assert _creds(run_id).status_code == 200  # the one place the value may appear
     _creds(run_id, secret="wrong")
-    delete = client.request("DELETE", "/admin/secrets", headers=EM,
+    delete = client.request("DELETE", "/admin/secrets", headers=ADMIN,
                             json={k: _put_body()[k] for k in ("scope", "owner_username", "configuration_id", "name")})
     # A deliberately malformed PUT: FastAPI would echo the whole body as `input`.
-    malformed = client.put("/admin/secrets", headers=EM, json={
+    malformed = client.put("/admin/secrets", headers=ADMIN, json={
         "owner_username": "owner1", "configuration_id": CFG,
         "fields": {"username": "edl-user", "password": SENTINEL, "n": 5}})
     assert malformed.status_code == 422 and "input" not in malformed.text
-    bad_json = client.put("/admin/secrets", headers={**EM, "Content-Type": "application/json"},
+    bad_json = client.put("/admin/secrets", headers={**ADMIN, "Content-Type": "application/json"},
                           content=f'{{"fields": {{"password": "{SENTINEL}"}}'.encode())
     assert bad_json.status_code == 422
 

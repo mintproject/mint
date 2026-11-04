@@ -1,1 +1,3 @@
 hasura
+__pycache__/
+*.pyc

@@ -290,7 +290,7 @@ query GetSecretConfiguration($id: String!) {
   modelcatalog_configuration_by_pk(id: $id) {
     id owner_username tapis_app_id tapis_app_version
     parameters {
-      parameter { label parameter_type has_accepted_values usage_notes }
+      parameter { label parameter_type has_accepted_values }
     }
   }
 }

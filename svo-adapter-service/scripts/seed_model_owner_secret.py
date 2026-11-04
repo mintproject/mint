@@ -7,7 +7,7 @@ The adapter pins the secret to the configuration's Tapis app and returns
 metadata only.
 
     SECRET_FIELD_USERNAME=... SECRET_FIELD_PASSWORD=... \\
-    SVO_ADAPTER_INTERNAL_SERVICE_SECRET=... \\
+    SVO_ADAPTER_SECRETS_ADMIN_SECRET=... \\
     python scripts/seed_model_owner_secret.py --adapter-url https://svo.example \\
         --configuration-id <id> --owner <tapis user> --name earthdata \\
         --field username --field password --acknowledge
@@ -44,13 +44,13 @@ def main(argv: list[str] | None = None) -> int:
                         help="the owner accepts that every runner's Tapis job record shows these values")
     args = parser.parse_args(argv)
 
-    secret = os.environ.get("SVO_ADAPTER_INTERNAL_SERVICE_SECRET")
+    secret = os.environ.get("SVO_ADAPTER_SECRETS_ADMIN_SECRET")
     if not secret:
-        print("SVO_ADAPTER_INTERNAL_SERVICE_SECRET is required", file=sys.stderr)
+        print("SVO_ADAPTER_SECRETS_ADMIN_SECRET is required", file=sys.stderr)
         return 2
     resp = httpx.put(
         f"{args.adapter_url.rstrip('/')}/admin/secrets",
-        headers={"X-Ensemble-Manager-Secret": secret},
+        headers={"X-Secrets-Admin-Secret": secret},
         json={"scope": "model_owner", "owner_username": args.owner,
               "configuration_id": args.configuration_id, "name": args.name,
               "fields": _collect_fields(args.fields), "acknowledged": args.acknowledge},

@@ -2006,6 +2006,8 @@ async def _resolve_run_secrets(h, body, token: str | None) -> tuple[dict[str, An
     task = body.model_task
     configuration_id = (task or {}).get("configuration_id")
     if task is None or not configuration_id:
+        if task is not None:
+            log.warning("composite submit without configuration_id: secret resolution skipped")
         if task is not None and task.get("required_secrets"):
             raise HTTPException(422, detail={
                 "code": "SECRET_DECLARATION_MISMATCH",
@@ -2732,13 +2734,6 @@ async def fetch_run_credentials(
         raise HTTPException(409, detail={"code": "RUN_NOT_ACTIVE"})
     if not secrets_store.secrets_configured():
         raise HTTPException(503, detail={"code": "SECRETS_NOT_CONFIGURED"})
-    issued = int(run.get("credentials_issued") or 0)
-    if issued >= _CREDENTIALS_MAX_ISSUES:
-        raise HTTPException(409, detail={"code": "CREDENTIALS_EXHAUSTED"})
-    claimed = await h.execute(ISSUE_RUN_CREDENTIALS_IF, {"id": run_id, "issued": issued})
-    if (claimed.get("update_adapter_workflow_run") or {}).get("affected_rows", 0) != 1:
-        raise HTTPException(409, detail={"code": "CREDENTIALS_EXHAUSTED"})
-
     store = secrets_store.FernetSecretStore(h)
     env: dict[str, str] = {}
     issued_rows: list[tuple[dict[str, Any], int]] = []
@@ -2759,6 +2754,23 @@ async def fetch_run_credentials(
         except KeyError:
             raise HTTPException(409, detail={"code": "SECRET_FIELDS_INCOMPLETE", "name": item.get("name")})
         issued_rows.append((row, int(row["version"])))
+
+    # The issue is consumed only once the bundle is fully assembled, so a
+    # transient failure above never burns one of the capped issues. The
+    # compare-and-set keeps the cap atomic across concurrent fetches.
+    issued = int(run.get("credentials_issued") or 0)
+    for attempt in range(2):
+        if issued >= _CREDENTIALS_MAX_ISSUES:
+            raise HTTPException(409, detail={"code": "CREDENTIALS_EXHAUSTED"})
+        claimed = await h.execute(ISSUE_RUN_CREDENTIALS_IF, {"id": run_id, "issued": issued})
+        if (claimed.get("update_adapter_workflow_run") or {}).get("affected_rows", 0) == 1:
+            break
+        if attempt == 0:  # lost a race: re-read the counter and retry once
+            fresh = (await h.execute(GET_RUN_CREDENTIALS, {"id": run_id}))["adapter_workflow_run_by_pk"]
+            issued = int((fresh or {}).get("credentials_issued") or 0)
+    else:
+        raise HTTPException(409, detail={"code": "CREDENTIALS_EXHAUSTED"})
+
     for row, version in issued_rows:
         # A version newer than the bound one is used as-is and noted in the event.
         await secrets_store.record_event(h, "issued", row, run_id=run_id, actor="task",
@@ -2801,9 +2813,15 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
     return JSONResponse({"detail": jsonable_encoder(errors)}, status_code=422)
 
 
-def _admin_secret_guard(internal_secret: str | None) -> None:
-    if not _internal_service_authorized(internal_secret):
-        raise HTTPException(403, detail={"code": "INTERNAL_SERVICE_AUTH_REQUIRED"})
+def _admin_secret_guard(admin_secret: str | None) -> None:
+    """Only the dedicated secrets-admin secret opens /admin/secrets; there is
+    no fallback to the Hasura admin or Ensemble Manager secrets."""
+    expected = settings.secrets_admin_secret
+    if not expected:
+        raise HTTPException(503, detail={"code": "SECRETS_ADMIN_NOT_CONFIGURED",
+                                         "message": "no secrets admin secret is configured"})
+    if not (admin_secret and hmac.compare_digest(admin_secret.encode(), expected.encode())):
+        raise HTTPException(403, detail={"code": "SECRETS_ADMIN_AUTH_REQUIRED"})
     if not secrets_store.secrets_configured():
         raise HTTPException(503, detail={"code": "SECRETS_NOT_CONFIGURED",
                                          "message": "no secrets encryption key is configured"})
@@ -2812,9 +2830,10 @@ def _admin_secret_guard(internal_secret: str | None) -> None:
 @app.put("/admin/secrets", tags=["Integrations"])
 async def admin_put_secret(
     body: AdminSecretIn,
-    internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
+    internal_secret: str | None = Header(None, alias="X-Secrets-Admin-Secret"),
 ):
     """Store or replace a model-owner secret. Returns metadata, never values."""
+    secrets_store.register_values(body.fields.values())
     _admin_secret_guard(internal_secret)
     if body.scope != secrets_store.SCOPE_MODEL_OWNER:
         raise HTTPException(422, detail={"code": "SECRET_SCOPE_UNSUPPORTED"})
@@ -2829,7 +2848,10 @@ async def admin_put_secret(
         configuration = await secrets_store.fetch_configuration(h, body.configuration_id)
         if not configuration:
             raise HTTPException(404, detail={"code": "CONFIGURATION_NOT_FOUND"})
-        if not configuration.get("owner_username") or configuration["owner_username"] != body.owner_username:
+        if not configuration.get("owner_username"):
+            raise HTTPException(422, detail={"code": "SECRET_OWNER_UNSET",
+                                             "message": secrets_store.OWNER_UNSET_MESSAGE})
+        if configuration["owner_username"] != body.owner_username:
             raise HTTPException(403, detail={"code": "SECRET_OWNER_MISMATCH",
                                              "message": "only the configuration's owner may store its secrets"})
         if not (configuration.get("tapis_app_id") and configuration.get("tapis_app_version")):
@@ -2858,7 +2880,7 @@ async def admin_put_secret(
 @app.delete("/admin/secrets", tags=["Integrations"])
 async def admin_delete_secret(
     body: AdminSecretRefIn,
-    internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
+    internal_secret: str | None = Header(None, alias="X-Secrets-Admin-Secret"),
 ):
     """Delete a stored secret. Returns metadata of the removed row."""
     _admin_secret_guard(internal_secret)
