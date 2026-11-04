@@ -10,6 +10,7 @@ import { useForm, FormProvider } from 'react-hook-form';
 
 import { render } from '@/test/utils/render';
 import type { ConfigurationFormSchema } from '@/schemas/configuration';
+import { parameterRowSchema } from '@/schemas/configuration';
 import { ParameterRow } from '../ParameterRow';
 
 function emptyParam(overrides: Record<string, unknown> = {}) {
@@ -50,6 +51,42 @@ function Harness({ param }: { param: Record<string, unknown> }) {
 }
 
 const state = () => JSON.parse(screen.getByTestId('state').textContent || '{}');
+
+describe('ParameterRow — secret type', () => {
+  it('hides the default value and clears stale values when switched to secret', async () => {
+    render(<Harness param={emptyParam({ hasDefaultValue: '0.5' })} />);
+    expect(screen.getByText('Default Value')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('switch', { name: /secret credential/i }));
+
+    await waitFor(() => {
+      expect(state().parameterType).toBe('secret');
+      expect(state().hasDefaultValue).toBe('');
+    });
+    expect(screen.queryByText('Default Value')).not.toBeInTheDocument();
+    expect(screen.getByText(/accepted values \(field=ENV_KEY\)/i)).toBeInTheDocument();
+  });
+});
+
+describe('parameterRowSchema — secret rows', () => {
+  const secretRow = (hasAcceptedValues: string[]) => ({
+    label: 'earthdata',
+    position: 1,
+    parameterType: 'secret',
+    hasAcceptedValues,
+  });
+
+  it('accepts field=ENV_KEY entries', () => {
+    expect(parameterRowSchema.safeParse(secretRow(['username=EARTHDATA_USERNAME'])).success).toBe(
+      true,
+    );
+  });
+
+  it('rejects a malformed entry', () => {
+    const result = parameterRowSchema.safeParse(secretRow(['username:EARTHDATA_USERNAME']));
+    expect(result.success).toBe(false);
+  });
+});
 
 describe('ParameterRow — lock to a fixed value', () => {
   it('moves the default into the fixed value and clears adjustable fields on lock', async () => {

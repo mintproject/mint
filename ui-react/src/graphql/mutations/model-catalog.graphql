@@ -468,6 +468,7 @@ mutation UpdateModelParameter(
   $hasFixedValue: String
   $hasAcceptedValues: _text
   $position: Int!
+  $parameterType: String
 ) {
   update_modelcatalog_parameter_by_pk(
     pk_columns: { id: $id }
@@ -481,6 +482,7 @@ mutation UpdateModelParameter(
       has_fixed_value: $hasFixedValue
       has_accepted_values: $hasAcceptedValues
       position: $position
+      parameter_type: $parameterType
     }
   ) {
     id

@@ -18,6 +18,12 @@ import {
 } from '@/graphql/generated/execution';
 import { parametersComplete, totalConfigs } from '@/lib/thread-execution';
 import {
+  SECRET_READINESS_HELP,
+  SECRET_READINESS_LABEL,
+  hasSecretParameters,
+  userParameters,
+} from '@/lib/secret-parameters';
+import {
   adapterParameterKey,
   adapterPlanIsTransformRequired,
   adapterPlanParameters,
@@ -246,7 +252,7 @@ export function MintParameters({
 
     for (const mid of modelIds) {
       const model = threadData.models[mid]!;
-      const adjustable = model.input_parameters.filter((p) => !p.value);
+      const adjustable = userParameters(model).filter((p) => !p.value);
       const bindings = newEnsembles[mid]?.bindings ?? {};
       const adapterPlans = threadData.adapter_plans?.[mid] ?? [];
       const adapterParameters = new Map<string, UnifiedParameterDefinition>();
@@ -417,14 +423,14 @@ export function MintParameters({
             const model = threadData.models[mid]!;
             const ensemble = threadData.model_ensembles[mid] ?? { id: '', bindings: {} };
 
-            const fixedParams = model.input_parameters
+            const fixedParams = userParameters(model)
               .filter((p) => !!p.value)
               .sort((a, b) => {
                 if (a.position != null && b.position != null) return a.position - b.position;
                 return (a.name ?? '').localeCompare(b.name ?? '');
               });
 
-            const adjustableParams = model.input_parameters
+            const adjustableParams = userParameters(model)
               .filter((p) => !p.value)
               .sort((a, b) => {
                 if (a.position != null && b.position != null) return a.position - b.position;
@@ -450,6 +456,16 @@ export function MintParameters({
                 <h4 className="mb-2 text-sm font-medium">
                   Model: <span className="text-blue-700">{model.name}</span>
                 </h4>
+                {hasSecretParameters(model) && (
+                  <p
+                    className="mb-2 text-xs text-gray-600"
+                    data-testid={`secret-readiness-${mid}`}
+                    title={SECRET_READINESS_HELP}
+                  >
+                    {SECRET_READINESS_LABEL}
+                    <span className="sr-only">. {SECRET_READINESS_HELP}</span>
+                  </p>
+                )}
                 <ul className="space-y-3">
                   {/* Fixed (expert-set) parameters */}
                   {fixedParams.length > 0 && (

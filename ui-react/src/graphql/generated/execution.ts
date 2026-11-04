@@ -27,6 +27,8 @@ export interface ModelParameter {
   position?: number | null;
   /** A pre-assigned fixed value (expert-set) */
   value?: string | null;
+  /** `secret` marks an owner-registered credential, never a runner input */
+  parameter_type?: string | null;
 }
 
 /** Mirrors ModelIO (input file) from ui legacy */

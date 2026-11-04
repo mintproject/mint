@@ -6,6 +6,7 @@
  *
  * See: .planning/design/DESIGN-DOCUMENT.md §6.4
  */
+import { SECRET_PARAMETER_TYPE, secretEntriesError } from '@/lib/secret-parameters';
 import { z } from 'zod';
 
 // ─── Reference entity selections ─────────────────────────────────────────────
@@ -97,6 +98,18 @@ export const parameterRowSchema = z
     parameterType: z.string().optional(),
   })
   .superRefine((row, ctx) => {
+    // A secret row names a credential: no value, and an explicit field=ENV_KEY map.
+    if (row.parameterType === SECRET_PARAMETER_TYPE) {
+      const entriesError = secretEntriesError(row.hasAcceptedValues);
+      if (entriesError) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: entriesError,
+          path: ['hasAcceptedValues'],
+        });
+      }
+      return;
+    }
     // For ordered types, a present min must not exceed a present max.
     const min = parseBound(row.hasDataType, row.hasMinimumAcceptedValue ?? '');
     const max = parseBound(row.hasDataType, row.hasMaximumAcceptedValue ?? '');

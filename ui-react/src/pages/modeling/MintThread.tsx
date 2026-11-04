@@ -41,6 +41,7 @@ import {
   runsComplete,
   threadExecutionFromGQL,
 } from '@/lib/thread-execution';
+import { userParameters } from '@/lib/secret-parameters';
 import {
   createExecutionPlan,
   EnsembleManagerError,
@@ -453,7 +454,7 @@ export function MintThread({
         // `bindings` holds data and parameter bindings side by side; only the
         // adjustable parameters belong in thread_model_parameter.
         if (!model || !ensemble.id) continue;
-        for (const param of model.input_parameters.filter((p) => !p.value)) {
+        for (const param of userParameters(model).filter((p) => !p.value)) {
           for (const value of ensemble.bindings[param.id] ?? []) {
             modelParams.push({
               thread_model_id: ensemble.id,

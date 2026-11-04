@@ -25,6 +25,7 @@ import type {
   ThreadModelRow,
 } from '@/graphql/generated/thread-execution';
 import { adapterParametersComplete } from './adapter-execution';
+import { userParameters } from './secret-parameters';
 
 /** A model-catalog parameter row as the adjustable/fixed parameter the UI edits. */
 export function parameterFromGQL(p: ParameterRow): ModelParameter {
@@ -42,6 +43,7 @@ export function parameterFromGQL(p: ParameterRow): ModelParameter {
     // one everywhere downstream — MintParameters, MintRuns and the step rail
     // all branch on `!p.value`.
     value: p.has_fixed_value ?? null,
+    parameter_type: p.parameter_type ?? null,
   };
 }
 
@@ -233,7 +235,7 @@ export function totalConfigs(
     );
     total *= resources || 1;
   }
-  for (const p of model.input_parameters.filter((x) => !x.value)) {
+  for (const p of userParameters(model).filter((x) => !x.value)) {
     total *= (bindings[p.id ?? ''] ?? []).length || 1;
   }
   return total;
@@ -294,9 +296,10 @@ export function parametersComplete(threadData: ThreadExecutionData | null): bool
     if (!threadData.execution_summary[mid]) return false;
     const bindings = threadData.model_ensembles[mid]?.bindings ?? {};
     return (
-      threadData.models[mid]!.input_parameters.filter((p) => !p.value).every(
-        (p) => (bindings[p.id ?? ''] ?? []).length > 0,
-      ) && adapterParametersComplete(threadData.adapter_plans?.[mid] ?? [])
+      userParameters(threadData.models[mid]!)
+        .filter((p) => !p.value)
+        .every((p) => (bindings[p.id ?? ''] ?? []).length > 0) &&
+      adapterParametersComplete(threadData.adapter_plans?.[mid] ?? [])
     );
   });
 }

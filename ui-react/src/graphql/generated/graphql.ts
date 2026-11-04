@@ -26432,6 +26432,7 @@ export type UpdateModelParameterMutationVariables = Exact<{
   hasFixedValue?: InputMaybe<Scalars['String']['input']>;
   hasAcceptedValues?: InputMaybe<Scalars['_text']['input']>;
   position: Scalars['Int']['input'];
+  parameterType?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
@@ -27621,10 +27622,10 @@ export type InsertConfigurationOutputJunctionMutationHookResult = ReturnType<typ
 export type InsertConfigurationOutputJunctionMutationResult = Apollo.MutationResult<InsertConfigurationOutputJunctionMutation>;
 export type InsertConfigurationOutputJunctionMutationOptions = Apollo.BaseMutationOptions<InsertConfigurationOutputJunctionMutation, InsertConfigurationOutputJunctionMutationVariables>;
 export const UpdateModelParameterDocument = gql`
-    mutation UpdateModelParameter($id: String!, $label: String!, $description: String, $hasDataType: String, $hasDefaultValue: String, $hasMinimumAcceptedValue: String, $hasMaximumAcceptedValue: String, $hasFixedValue: String, $hasAcceptedValues: _text, $position: Int!) {
+    mutation UpdateModelParameter($id: String!, $label: String!, $description: String, $hasDataType: String, $hasDefaultValue: String, $hasMinimumAcceptedValue: String, $hasMaximumAcceptedValue: String, $hasFixedValue: String, $hasAcceptedValues: _text, $position: Int!, $parameterType: String) {
   update_modelcatalog_parameter_by_pk(
     pk_columns: {id: $id}
-    _set: {label: $label, description: $description, has_data_type: $hasDataType, has_default_value: $hasDefaultValue, has_minimum_accepted_value: $hasMinimumAcceptedValue, has_maximum_accepted_value: $hasMaximumAcceptedValue, has_fixed_value: $hasFixedValue, has_accepted_values: $hasAcceptedValues, position: $position}
+    _set: {label: $label, description: $description, has_data_type: $hasDataType, has_default_value: $hasDefaultValue, has_minimum_accepted_value: $hasMinimumAcceptedValue, has_maximum_accepted_value: $hasMaximumAcceptedValue, has_fixed_value: $hasFixedValue, has_accepted_values: $hasAcceptedValues, position: $position, parameter_type: $parameterType}
   ) {
     id
     label

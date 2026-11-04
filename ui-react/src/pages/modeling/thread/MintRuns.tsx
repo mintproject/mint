@@ -31,6 +31,7 @@ import { fetchExecutionLog, type UnifiedRunSnapshot } from '@/lib/ensemble-manag
 import { adapterParametersComplete, type ThreadAdapterPlan } from '@/lib/adapter-execution';
 import { aggregateRunStatus, stageStatusFromLegacyState } from '@/lib/modeling/run-status';
 import { inputResourceCount } from '@/lib/thread-execution';
+import { secretErrorMessage, userParameters } from '@/lib/secret-parameters';
 import { ExecutionFilesDialog } from './ExecutionFilesDialog';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -928,7 +929,7 @@ export function MintRuns({
       const model = threadData.models[mid];
       if (!model) return true;
       const bindings = threadData.model_ensembles[mid]?.bindings ?? {};
-      return model.input_parameters
+      return userParameters(model)
         .filter((p) => !p.value)
         .every((p) => (bindings[p.id ?? ''] ?? []).length > 0);
     }) &&
@@ -984,7 +985,8 @@ export function MintRuns({
       } catch (error) {
         setRuntimeErrors((errors) => ({
           ...errors,
-          [mid]: error instanceof Error ? error.message : String(error),
+          [mid]:
+            secretErrorMessage(error) ?? (error instanceof Error ? error.message : String(error)),
         }));
       } finally {
         setWaiting((w) => ({ ...w, [mid]: false }));
@@ -1105,7 +1107,7 @@ export function MintRuns({
                     : 'The run is waiting to start.';
 
           // ── count inputs × params for display ──────────────────────────
-          const nParameters = model.input_parameters
+          const nParameters = userParameters(model)
             .map((p) => (threadData.model_ensembles[mid]?.bindings[p.id ?? ''] ?? [0]).length)
             .reduce((a, b) => a * b, 1);
 
@@ -1116,7 +1118,7 @@ export function MintRuns({
 
           // ── adjustable inputs / params for column headers ─────────────
           const adjustableInputs = model.input_files.filter((f) => !f.value);
-          const adjustableParams = model.input_parameters.filter((p) => !p.value);
+          const adjustableParams = userParameters(model).filter((p) => !p.value);
 
           return (
             <li key={mid}>
@@ -1338,7 +1340,7 @@ export function MintRuns({
                           ) : (
                             grouped.executions.map((execution: Execution) => {
                               const paramDefaults: Record<string, string | null | undefined> = {};
-                              model.input_parameters.forEach(
+                              userParameters(model).forEach(
                                 (p) => (paramDefaults[p.id ?? ''] = p.default ?? null),
                               );
                               return (

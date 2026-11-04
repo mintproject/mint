@@ -263,6 +263,26 @@ describe('parametersComplete', () => {
     ).toBe(true);
   });
 
+  it('ignores secret rows: they never need a binding', () => {
+    const base = execData();
+    const withSecret = execData({
+      model_ensembles: bound,
+      execution_summary: {
+        cfgA: { total_runs: 1, submitted_runs: 0, failed_runs: 0, successful_runs: 0 },
+      },
+      models: {
+        cfgA: {
+          ...base.models['cfgA']!,
+          input_parameters: [
+            ...base.models['cfgA']!.input_parameters,
+            { id: 'pSecret', name: 'earthdata', parameter_type: 'secret' },
+          ],
+        },
+      },
+    });
+    expect(parametersComplete(withSecret)).toBe(true);
+  });
+
   it('is false for a model with no adjustable parameters until the step has saved', () => {
     const noParams = execData({
       models: {
@@ -361,6 +381,19 @@ describe('totalConfigs', () => {
     ],
   };
   const data = { 'slice-1': { id: 'slice-1', selected_resources: 5 } };
+
+  it('excludes secret rows from the ensemble size', () => {
+    const withSecret = {
+      ...model,
+      input_parameters: [
+        ...model.input_parameters,
+        { id: 'pSecret', name: 'earthdata', parameter_type: 'secret' },
+      ],
+    };
+    expect(totalConfigs(withSecret, { inA: ['slice-1'], pAdj: ['0.1', '0.2', '0.3'] }, data)).toBe(
+      15,
+    );
+  });
 
   it('multiplies input resources by parameter values', () => {
     expect(totalConfigs(model, { inA: ['slice-1'], pAdj: ['0.1', '0.2', '0.3'] }, data)).toBe(15);
