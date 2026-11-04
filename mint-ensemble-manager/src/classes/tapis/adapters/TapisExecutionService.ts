@@ -17,7 +17,12 @@ import {
 } from "@/classes/tapis/adapters/TapisJobService";
 import errorDecoder from "@/classes/tapis/utils/errorDecoder";
 import { TapisJobSubscriptionService } from "@/classes/tapis/adapters/TapisJobSubscriptionService";
-import { BadRequestError, NoOutputsDeclaredError, NotFoundError } from "@/classes/common/errors";
+import {
+    BadRequestError,
+    NoOutputsDeclaredError,
+    NotFoundError,
+    UnifiedExecutionError
+} from "@/classes/common/errors";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { applyExecutionInputOverrides } from "@/classes/common/execution-input-overrides";
 import { threadFromGQL } from "@/classes/graphql/graphql_adapter";
@@ -215,7 +220,8 @@ export class TapisExecutionService implements IExecutionService {
         // Tapis Jobs accepts these fields when omitted, but Tapis Workflows
         // validates the embedded job definition strictly and rejects null
         // execution directories.
-        jobDefinition.execSystemInputDir = jobDefinition.execSystemInputDir || "${JobWorkingDir}";
+        jobDefinition.execSystemInputDir =
+            jobDefinition.execSystemInputDir || "${JobWorkingDir}";
         jobDefinition.execSystemOutputDir =
             jobDefinition.execSystemOutputDir || "${JobWorkingDir}/output";
         const archivePath = `mint-workflow-output/${workflowPath}/model`;
@@ -268,11 +274,11 @@ export class TapisExecutionService implements IExecutionService {
         for (const secret of requiredSecrets) {
             for (const key of Object.values(secret.env)) {
                 if (!settable.has(key)) {
-                    const error = new Error(
-                        `Secret "${secret.name}" maps to env key ${key}, which Tapis app ${app.id}/${app.version} does not declare as a non-FIXED envVariable`
-                    ) as Error & { code?: string };
-                    error.code = "SECRET_ENV_UNDECLARED";
-                    throw error;
+                    throw new UnifiedExecutionError(
+                        422,
+                        `Secret "${secret.name}" maps to env key ${key}, which Tapis app ${app.id}/${app.version} does not declare as a non-FIXED envVariable`,
+                        "SECRET_ENV_UNDECLARED"
+                    );
                 }
             }
         }
@@ -305,10 +311,7 @@ export class TapisExecutionService implements IExecutionService {
                 );
                 submittedExecutions.push({ execution: seed.execution, jobId });
             } catch (error) {
-                console.error(
-                    "Error submitting single execution:",
-                    error instanceof Error ? error.message : String(error)
-                );
+                console.error("Error submitting single execution:", error instanceof Error ? error.message : String(error));
                 console.error("Full error details:", error);
                 await this.handleSingleExecutionFailure(seed, error, threadModelId);
 
@@ -401,12 +404,7 @@ export class TapisExecutionService implements IExecutionService {
                 failedExecutions.forEach((fe) => {
                     const errorMsg = `Execution ${fe.execution.id} failed: ${fe.error.message}`;
                     console.error(errorMsg);
-                    console.error(
-                        "Full error details for execution",
-                        fe.execution.id,
-                        ":",
-                        fe.error
-                    );
+                    console.error("Full error details for execution", fe.execution.id, ":", fe.error);
                     errorMessages.push(fe.error.message);
                 });
                 const contractFailure = failedExecutions.find(
@@ -422,12 +420,7 @@ export class TapisExecutionService implements IExecutionService {
                 console.warn("Some jobs failed to submit:");
                 failedExecutions.forEach((fe) => {
                     console.warn(`Execution ${fe.execution.id} failed: ${fe.error.message}`);
-                    console.warn(
-                        "Full error details for execution",
-                        fe.execution.id,
-                        ":",
-                        fe.error
-                    );
+                    console.warn("Full error details for execution", fe.execution.id, ":", fe.error);
                 });
             }
         }
@@ -746,7 +739,9 @@ export class TapisExecutionService implements IExecutionService {
         const response = await errorDecoder<Files.FileListingResponse>(() =>
             this.filesClient.listFiles({ systemId, path, recurse: false })
         );
-        return (response.result ?? []).filter((file) => file.type !== Files.FileTypeEnum.Dir);
+        return (response.result ?? []).filter(
+            (file) => file.type !== Files.FileTypeEnum.Dir
+        );
     }
 
     /**

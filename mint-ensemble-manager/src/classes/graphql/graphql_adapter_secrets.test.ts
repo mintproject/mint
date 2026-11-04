@@ -3,6 +3,7 @@ import {
     modelSecretFromCatalogGQL,
     threadParameterBindingsToGQL
 } from "@/classes/graphql/graphql_adapter";
+import { UnifiedExecutionError } from "@/classes/common/errors";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { getInputsParameters } from "@/classes/tapis/helpers";
 import { Model, Region } from "@/classes/mint/mint-types";
@@ -62,9 +63,35 @@ describe("secret catalog parameters", () => {
             modelSecretFromCatalogGQL({ ...secretRow, usage_notes: "source=user_then_owner" })
                 .source
         ).toBe("user_then_owner");
-        expect(
-            modelSecretFromCatalogGQL({ ...secretRow, usage_notes: "source=bogus" }).source
-        ).toBe("owner_only");
+        expect(modelSecretFromCatalogGQL(secretRow).source).toBe("owner_only");
+    });
+
+    test.each([
+        ["entry not matching the field=ENV_KEY grammar", { has_accepted_values: ["user=lower"] }],
+        ["entry with an uppercase field", { has_accepted_values: ["User=USER_ENV"] }],
+        ["entry without a key", { has_accepted_values: ["username="] }],
+        ["field longer than 32 chars", { has_accepted_values: [`${"a".repeat(33)}=SOME_ENV`] }],
+        ["label with invalid characters", { label: "Earth Data" }],
+        ["label longer than 64 chars", { label: "a".repeat(65) }],
+        ["unknown source", { usage_notes: "source=bogus" }],
+        ["duplicate fields", { has_accepted_values: ["username=ONE", "username=TWO"] }],
+        [
+            "two fields mapped to one env key",
+            { has_accepted_values: ["username=SAME_KEY", "password=SAME_KEY"] }
+        ]
+    ])("rejects a declaration with %s as SECRET_DECLARATION_INVALID", (_label, override) => {
+        const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+        expect.assertions(3);
+        try {
+            modelSecretFromCatalogGQL({ ...secretRow, ...override });
+        } catch (error: any) {
+            expect(error).toMatchObject({ statusCode: 422, code: "SECRET_DECLARATION_INVALID" });
+        }
+        expect(() => modelSecretFromCatalogGQL({ ...secretRow, ...override })).toThrow(
+            UnifiedExecutionError
+        );
+        expect(consoleError).toHaveBeenCalled();
+        consoleError.mockRestore();
     });
 
     test("getInputsParameters never sees the secret", () => {

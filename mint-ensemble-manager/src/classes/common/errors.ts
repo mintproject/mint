@@ -71,3 +71,19 @@ export class InternalServerError extends HttpError {
         this.name = "InternalServerError";
     }
 }
+
+/**
+ * A failure the unified execution API reports to the client with a stable
+ * machine-readable code (and optional structured details).
+ */
+export class UnifiedExecutionError extends Error {
+    constructor(
+        public statusCode: number,
+        message: string,
+        public code?: string,
+        public details?: unknown
+    ) {
+        super(message);
+        this.name = "UnifiedExecutionError";
+    }
+}

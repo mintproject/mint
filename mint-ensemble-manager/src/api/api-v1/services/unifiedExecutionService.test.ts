@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import unifiedExecutionRouter from "@/api/api-v1/paths/unifiedExecution";
-import { createUnifiedExecutionService } from "./unifiedExecutionService";
+import { createUnifiedExecutionService, UnifiedExecutionError } from "./unifiedExecutionService";
 import {
     UnifiedExecutionRecord,
     UnifiedExecutionStep,
@@ -1089,6 +1089,123 @@ describe("unifiedExecutionService", () => {
             Authorization: "Bearer refreshed-token"
         });
         expect(legacy.tapis.buildCompositeWorkflowModelTask).toHaveBeenCalledTimes(1);
+    });
+
+    describe("composite model submission to the adapter", () => {
+        async function submitComposite() {
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    status: "deferred",
+                    plan_id: "deferred-plan-1",
+                    plan_hash: "deferred-hash-1",
+                    plan_json: { parameters: [] }
+                })
+            });
+            legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue({
+                execution_id: "model-child-1",
+                configuration_id: "config/subside",
+                required_secrets: [
+                    {
+                        name: "earthdata",
+                        env: { username: "EARTHDATA_USERNAME" },
+                        source: "owner_only"
+                    }
+                ],
+                output_uri: "tapis://ls6/mint-workflow-output/ue_parent-1/model/cbb",
+                output_name: "cbb",
+                job_definition: { appId: "model-app", appVersion: "0.0.1" }
+            });
+            const store = fakeStore();
+            const service = createUnifiedExecutionService(legacy, { store });
+            const plan = await service.createPlan({
+                executor: "ensemble_manager",
+                thread_id: "thread-1",
+                model_id: "model-1",
+                execution_engine: "tapis",
+                post_model_adapter: {
+                    model_io_id: "cbc-output",
+                    model_output_key: "cbc-output",
+                    source_contract: { standard_variable_uri: "mint:cbc", format: "cbc" },
+                    target_contract: { standard_variable_uri: "mint:springflow" }
+                }
+            });
+            return { store, service, plan };
+        }
+
+        it("sends configuration_id and required_secrets in model_task", async () => {
+            const { service, plan } = await submitComposite();
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ run_id: "post-model-run-1", status: "running" })
+            });
+            await service.submit({ plan_id: plan.plan_id }, "Bearer user-token");
+
+            const call = (global.fetch as jest.Mock).mock.calls.find(([url]) =>
+                String(url).endsWith("/workflows/submit")
+            );
+            const modelTask = JSON.parse(call[1].body).model_task;
+            expect(Object.keys(modelTask).sort()).toEqual(
+                [
+                    "configuration_id",
+                    "job_definition",
+                    "output_format",
+                    "output_name",
+                    "output_uri",
+                    "required_secrets",
+                    "stage_id"
+                ].sort()
+            );
+            expect(modelTask.configuration_id).toBe("config/subside");
+            expect(modelTask.required_secrets).toEqual([
+                { name: "earthdata", env: { username: "EARTHDATA_USERNAME" }, source: "owner_only" }
+            ]);
+        });
+
+        it.each([["SIGNALS_REQUIRED"], ["SECRETS_NOT_CONFIGURED"], ["SECRET_UNREADABLE"]])(
+            "surfaces an adapter 503 %s to the client",
+            async (code) => {
+                const { service, plan, store } = await submitComposite();
+                (global.fetch as jest.Mock).mockResolvedValueOnce({
+                    ok: false,
+                    status: 503,
+                    json: async () => ({ detail: { code, message: `adapter refused: ${code}` } })
+                });
+                await expect(
+                    service.submit({ plan_id: plan.plan_id }, "Bearer user-token")
+                ).rejects.toMatchObject({
+                    statusCode: 503,
+                    code,
+                    message: `adapter refused: ${code}`
+                });
+                await expect(store.getById("parent-1")).resolves.toMatchObject({
+                    status: "failed",
+                    failure_code: code
+                });
+            }
+        );
+
+        it("still treats an unstructured adapter 5xx as an unknown submission", async () => {
+            const { service, plan } = await submitComposite();
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: false,
+                status: 502,
+                json: async () => ({})
+            });
+            await expect(
+                service.submit({ plan_id: plan.plan_id }, "Bearer user-token")
+            ).resolves.toMatchObject({ status: "unknown" });
+        });
+
+        it("surfaces SECRET_ENV_UNDECLARED from the descriptor build as a 422", async () => {
+            const { service, plan } = await submitComposite();
+            legacy.tapis.buildCompositeWorkflowModelTask.mockRejectedValueOnce(
+                new UnifiedExecutionError(422, "env key not declared", "SECRET_ENV_UNDECLARED")
+            );
+            await expect(
+                service.submit({ plan_id: plan.plan_id }, "Bearer user-token")
+            ).rejects.toMatchObject({ statusCode: 422, code: "SECRET_ENV_UNDECLARED" });
+        });
     });
 
     it("does not retry unrelated terminal unknown executions", async () => {

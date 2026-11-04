@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import { UnifiedExecutionError } from "@/classes/common/errors";
+import { ModelSecretDeclaration } from "@/classes/mint/mint-types";
 import { getConfiguration } from "@/classes/mint/mint-functions";
 import {
     createHasuraUnifiedExecutionStore,
@@ -23,17 +25,7 @@ export interface UnifiedParameterDefinition {
     managed_source?: string;
 }
 
-export class UnifiedExecutionError extends Error {
-    constructor(
-        public statusCode: number,
-        message: string,
-        public code?: string,
-        public details?: unknown
-    ) {
-        super(message);
-        this.name = "UnifiedExecutionError";
-    }
-}
+export { UnifiedExecutionError };
 
 interface LegacyPlan {
     executor: "ensemble_manager";
@@ -252,6 +244,19 @@ async function adapterRequest(
         throw new UnifiedExecutionError(response.status, message, code, details);
     }
     return body;
+}
+
+// Adapter responses with a structured `detail.code` (including 5xx such as
+// SIGNALS_REQUIRED / SECRETS_NOT_CONFIGURED / SECRET_UNREADABLE) are
+// deterministic refusals the client must see, not unknown submissions.
+function hasStructuredAdapterCode(error: UnifiedExecutionError): boolean {
+    const details = error.details as { code?: unknown } | undefined;
+    return (
+        typeof error.code === "string" &&
+        !!details &&
+        typeof details === "object" &&
+        typeof details.code === "string"
+    );
 }
 
 function isRetryableAdapterAuthFailure(record: UnifiedExecutionRecord): boolean {
@@ -585,6 +590,8 @@ export function createUnifiedExecutionService(
                 authorization: string
             ): Promise<{
                 execution_id: string;
+                configuration_id: string;
+                required_secrets: Pick<ModelSecretDeclaration, "name" | "env" | "source">[];
                 output_uri: string;
                 output_name: string;
                 output_format?: string;
@@ -1852,6 +1859,8 @@ export function createUnifiedExecutionService(
                                 idempotency_key: `${parentRunId(parent.id)}:${adapter.adapter_plan_id}:${adapterValues.hash}`,
                                 model_task: {
                                     stage_id: "model",
+                                    configuration_id: modelTask.configuration_id,
+                                    required_secrets: modelTask.required_secrets,
                                     output_uri: modelTask.output_uri,
                                     output_name: modelTask.output_name,
                                     output_format: modelTask.output_format || "",
@@ -1920,8 +1929,8 @@ export function createUnifiedExecutionService(
                 } catch (error) {
                     const isClientError =
                         error instanceof UnifiedExecutionError &&
-                        error.statusCode >= 400 &&
-                        error.statusCode < 500;
+                        ((error.statusCode >= 400 && error.statusCode < 500) ||
+                            hasStructuredAdapterCode(error));
                     const updated = await store.update(parent.id, {
                         status: isClientError ? "failed" : "unknown",
                         failure_code: isClientError

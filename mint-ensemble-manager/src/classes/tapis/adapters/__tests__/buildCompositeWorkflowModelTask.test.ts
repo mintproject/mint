@@ -86,6 +86,8 @@ describe("buildCompositeWorkflowModelTask secrets descriptor", () => {
         ]
     ])("throws SECRET_ENV_UNDECLARED when an env key is %s", async (_label, envVariables) => {
         await expect(buildTask(appWithEnv(envVariables), [earthdata])).rejects.toMatchObject({
+            name: "UnifiedExecutionError",
+            statusCode: 422,
             code: "SECRET_ENV_UNDECLARED",
             message: expect.stringContaining("EARTHDATA_PASSWORD")
         });

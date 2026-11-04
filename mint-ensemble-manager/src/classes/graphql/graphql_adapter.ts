@@ -26,6 +26,7 @@ import {
 } from "@/classes/mint/mint-types";
 
 import * as crypto from "crypto";
+import { UnifiedExecutionError } from "@/classes/common/errors";
 import { KeycloakAdapter } from "@/config/keycloak-adapter";
 
 export const uuidv4 = () => {
@@ -483,23 +484,52 @@ export const SECRET_PARAMETER_TYPE = "secret";
 
 const isSecretParameterRow = (p: any): boolean => p?.parameter_type === SECRET_PARAMETER_TYPE;
 
+const SECRET_NAME_PATTERN = /^[a-z0-9_-]{1,64}$/;
+const SECRET_ENV_ENTRY_PATTERN = /^([a-z0-9_]{1,32})=([A-Z][A-Z0-9_]{0,63})$/;
+const SECRET_SOURCES: ModelSecretSource[] = ["owner_only", "user_then_owner", "user_only"];
+
+const invalidSecretDeclaration = (p: any, reason: string): UnifiedExecutionError => {
+    const message = `Secret parameter "${p?.label || p?.id}" is invalid: ${reason}`;
+    console.error(message);
+    return new UnifiedExecutionError(422, message, "SECRET_DECLARATION_INVALID");
+};
+
 // Maps a `secret` catalog parameter row to a declaration. has_accepted_values
 // holds "<field>=<ENV_KEY>" entries; usage_notes may carry "source=<value>".
+// Validation mirrors the adapter's, and fails at descriptor build time rather
+// than coercing a malformed declaration.
 export const modelSecretFromCatalogGQL = (p: any): ModelSecretDeclaration => {
+    const name = String(p.label || p.id || "").trim();
+    if (!SECRET_NAME_PATTERN.test(name)) {
+        throw invalidSecretDeclaration(p, `name must match ${SECRET_NAME_PATTERN}`);
+    }
     const env: Record<string, string> = {};
+    const envKeys = new Set<string>();
     (Array.isArray(p.has_accepted_values) ? p.has_accepted_values : []).forEach((entry: any) => {
-        const [field, key] = String(entry)
-            .split("=", 2)
-            .map((part) => part.trim());
-        if (field && key) {
-            env[field] = key;
+        const match = SECRET_ENV_ENTRY_PATTERN.exec(String(entry).trim());
+        if (!match) {
+            throw invalidSecretDeclaration(
+                p,
+                `entry "${entry}" must match ${SECRET_ENV_ENTRY_PATTERN}`
+            );
         }
+        const [, field, key] = match;
+        if (field in env) {
+            throw invalidSecretDeclaration(p, `duplicate field "${field}"`);
+        }
+        if (envKeys.has(key)) {
+            throw invalidSecretDeclaration(p, `env key ${key} is mapped by more than one field`);
+        }
+        env[field] = key;
+        envKeys.add(key);
     });
-    const sourceMatch = /(?:^|[\s;,])source=([a-z_]+)/.exec(p.usage_notes || "");
+    const sourceMatch = /(?:^|[\s;,])source=([^\s;,]+)/.exec(p.usage_notes || "");
     const requested = sourceMatch?.[1];
-    const source: ModelSecretSource =
-        requested === "user_then_owner" || requested === "user_only" ? requested : "owner_only";
-    const declaration: ModelSecretDeclaration = { name: p.label || p.id, env, source };
+    if (requested !== undefined && !SECRET_SOURCES.includes(requested as ModelSecretSource)) {
+        throw invalidSecretDeclaration(p, `unknown source "${requested}"`);
+    }
+    const source: ModelSecretSource = (requested as ModelSecretSource) ?? "owner_only";
+    const declaration: ModelSecretDeclaration = { name, env, source };
     if (p.description) {
         declaration.description = p.description;
     }
@@ -520,9 +550,7 @@ export const modelFromGQL = (config: any): Model => {
         software_image: config.has_software_image || "",
         code_url: config.has_component_location || "",
         input_files: (config.inputs || []).map((row: any) => modelIOFromCatalogGQL(row)),
-        output_files: (config.outputs || []).map((row: any) =>
-            modelIOFromCatalogGQL(row, "output")
-        ),
+        output_files: (config.outputs || []).map((row: any) => modelIOFromCatalogGQL(row, 'output')),
         input_parameters: parameterRows
             .filter((p: any) => !isSecretParameterRow(p))
             .map((p: any) => modelParameterFromCatalogGQL(p)),
@@ -534,7 +562,7 @@ export const modelFromGQL = (config: any): Model => {
 // junctionRow has shape { input: {...}, is_optional: boolean } for inputs,
 // or { output: {...} } for outputs (is_optional not present on output junction).
 export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): ModelIO => {
-    const key = entityKey ?? "input";
+    const key = entityKey ?? 'input';
     const io = junctionRow[key] ?? junctionRow;
     return {
         id: io.id,
@@ -544,7 +572,7 @@ export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): Mod
         value: null,
         position: io.position || 0,
         variables: [],
-        is_optional: junctionRow.is_optional ?? false
+        is_optional: junctionRow.is_optional ?? false,
     } as ModelIO;
 };
 
