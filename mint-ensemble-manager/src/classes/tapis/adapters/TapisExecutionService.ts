@@ -1,5 +1,11 @@
 import { Apps, Files, Jobs } from "@tapis/tapis-typescript";
-import { Execution, Execution_Result, Model, Region } from "@/classes/mint/mint-types";
+import {
+    Execution,
+    Execution_Result,
+    Model,
+    ModelSecretDeclaration,
+    Region
+} from "@/classes/mint/mint-types";
 import { TapisComponent, TapisComponentSeed } from "@/classes/tapis/typing";
 import { IExecutionService, ExecutionJob, SubmissionResult } from "@/interfaces/IExecutionService";
 import apiGenerator from "@/classes/tapis/utils/apiGenerator";
@@ -11,7 +17,12 @@ import {
 } from "@/classes/tapis/adapters/TapisJobService";
 import errorDecoder from "@/classes/tapis/utils/errorDecoder";
 import { TapisJobSubscriptionService } from "@/classes/tapis/adapters/TapisJobSubscriptionService";
-import { BadRequestError, NoOutputsDeclaredError, NotFoundError } from "@/classes/common/errors";
+import {
+    BadRequestError,
+    NoOutputsDeclaredError,
+    NotFoundError,
+    UnifiedExecutionError
+} from "@/classes/common/errors";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { applyExecutionInputOverrides } from "@/classes/common/execution-input-overrides";
 import { threadFromGQL } from "@/classes/graphql/graphql_adapter";
@@ -145,6 +156,8 @@ export class TapisExecutionService implements IExecutionService {
         logicalQueue?: string
     ): Promise<{
         execution_id: string;
+        configuration_id: string;
+        required_secrets: Pick<ModelSecretDeclaration, "name" | "env" | "source">[];
         output_uri: string;
         output_name: string;
         output_format?: string;
@@ -183,6 +196,8 @@ export class TapisExecutionService implements IExecutionService {
         }
 
         const app = await this.loadTapisApp(executionCreation.component);
+        const requiredSecrets = executionCreation.model.required_secrets || [];
+        this.assertSecretEnvKeysDeclared(app, requiredSecrets);
         const seed = this.seedExecutions(
             executionCreation.executionToBeRun,
             executionCreation.model,
@@ -228,11 +243,45 @@ export class TapisExecutionService implements IExecutionService {
         const outputName = output.name || output.id;
         return {
             execution_id: execution.id,
+            // Catalog configuration id (modelcatalog_configuration.id): the
+            // adapter re-reads the configuration's secret parameters by it.
+            configuration_id: executionCreation.model.id,
+            required_secrets: requiredSecrets.map(({ name, env, source }) => ({
+                name,
+                env,
+                source
+            })),
             output_name: outputName,
             output_format: output.format || "",
             output_uri: `tapis://${jobDefinition.archiveSystemId}/${archivePath}/${outputName}`,
             job_definition: jobDefinition
         };
+    }
+
+    /**
+     * The adapter must never receive a secret-to-env mapping the Tapis app
+     * cannot accept: every env key has to be a declared, non-FIXED envVariable.
+     */
+    private assertSecretEnvKeysDeclared(
+        app: Apps.TapisApp,
+        requiredSecrets: ModelSecretDeclaration[]
+    ) {
+        const settable = new Set(
+            (app.jobAttributes?.parameterSet?.envVariables || [])
+                .filter((entry) => entry.inputMode !== Apps.KeyValueInputModeEnum.Fixed)
+                .map((entry) => entry.key)
+        );
+        for (const secret of requiredSecrets) {
+            for (const key of Object.values(secret.env)) {
+                if (!settable.has(key)) {
+                    throw new UnifiedExecutionError(
+                        422,
+                        `Secret "${secret.name}" maps to env key ${key}, which Tapis app ${app.id}/${app.version} does not declare as a non-FIXED envVariable`,
+                        "SECRET_ENV_UNDECLARED"
+                    );
+                }
+            }
+        }
     }
 
     private async processExecutionSeeds(

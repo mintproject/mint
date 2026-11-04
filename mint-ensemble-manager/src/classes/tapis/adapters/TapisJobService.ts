@@ -112,13 +112,29 @@ export class TapisJobService {
         };
     }
 
+    /**
+     * Env keys owned by the adapter's secret injection. They must never be
+     * emitted by the ordinary parameter mapping, so injection cannot create a
+     * duplicate key.
+     */
+    private reservedSecretEnvKeys(model: Model): Set<string> {
+        return new Set(
+            (model.required_secrets || []).flatMap((secret) => Object.values(secret.env))
+        );
+    }
+
     public getAppArgs(
         seed: TapisComponentSeed,
         app: Apps.TapisApp,
         model: Model
     ): Jobs.JobArgSpec[] {
         const jobArgs = app.jobAttributes;
+        const reserved = this.reservedSecretEnvKeys(model);
         return jobArgs.parameterSet.appArgs.flatMap((parameterSet) => {
+            if (reserved.has(parameterSet.name)) {
+                // Secrets are injected by the adapter, never sent as app args.
+                return [];
+            }
             if (parameterSet.inputMode === Apps.ArgInputModeEnum.Fixed) {
                 // FIXED app arguments are owned by the Tapis application
                 // definition. Sending them in a job request is interpreted as
@@ -154,7 +170,11 @@ export class TapisJobService {
         model: Model
     ): Jobs.KeyValuePair[] {
         const declared = app.jobAttributes?.parameterSet?.envVariables || [];
+        const reserved = this.reservedSecretEnvKeys(model);
         return declared.flatMap((entry) => {
+            if (reserved.has(entry.key)) {
+                return [];
+            }
             if (entry.inputMode === Apps.KeyValueInputModeEnum.Fixed) {
                 // FIXED env variables are owned by the Tapis app definition.
                 return [];

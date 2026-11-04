@@ -282,6 +282,18 @@ export interface DatasetWithStatus {
 export type ModelInputDatasets = Map<string, DatasetsWithStatus[]>;
 export type ModelDatasets = Map<string, ModelInputDatasets>;
 
+export type ModelSecretSource = "owner_only" | "user_then_owner" | "user_only";
+
+// A credential a model needs at run time. Declared in the catalog as a
+// parameter row with parameter_type "secret"; never part of input_parameters.
+export interface ModelSecretDeclaration {
+    name: string;
+    // field name -> app environment variable key
+    env: Record<string, string>;
+    source: ModelSecretSource;
+    description?: string;
+}
+
 export interface Model extends IdNameObject {
     localname?: string;
     region_name: string;
@@ -289,6 +301,7 @@ export interface Model extends IdNameObject {
     category: string;
     input_files: ModelIO[];
     input_parameters: ModelParameter[];
+    required_secrets?: ModelSecretDeclaration[];
     output_files: ModelIO[];
     code_url?: string;
     model_type?: string;

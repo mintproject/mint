@@ -1,4 +1,5 @@
 import { ModelThread } from "@/classes/api";
+import { ModelSecretDeclaration } from "@/classes/mint/mint-types";
 import { TapisExecutionService } from "@/classes/tapis/adapters/TapisExecutionService";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { getConfiguration } from "@/classes/mint/mint-functions";
@@ -28,6 +29,8 @@ export interface ExecutionsTapisService {
         authorization: string
     ): Promise<{
         execution_id: string;
+        configuration_id: string;
+        required_secrets: Pick<ModelSecretDeclaration, "name" | "env" | "source">[];
         output_uri: string;
         output_name: string;
         output_format?: string;

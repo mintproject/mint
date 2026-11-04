@@ -674,3 +674,72 @@ describe("environment-variable app parameters", () => {
         expect("memoryMB" in build(withoutMemory)).toBe(false);
     });
 });
+
+describe("secret env keys", () => {
+    const newJobService = () =>
+        new TapisJobService(new Jobs.JobsApi(), new Jobs.SubscriptionsApi(), new Jobs.ShareApi());
+    const envEntry = (key: string, inputMode: string) => ({ key, value: "", inputMode, notes: {} });
+    const secretApp = {
+        ...app,
+        jobAttributes: {
+            ...app.jobAttributes,
+            parameterSet: {
+                ...app.jobAttributes.parameterSet,
+                appArgs: [],
+                envVariables: [
+                    envEntry("START_DATE", "REQUIRED"),
+                    envEntry("EARTHDATA_USERNAME", "INCLUDE_ON_DEMAND"),
+                    envEntry("EARTHDATA_PASSWORD", "INCLUDE_ON_DEMAND")
+                ]
+            }
+        }
+    } as unknown as Apps.TapisApp;
+    const secretModel = {
+        ...model,
+        input_parameters: [
+            { id: "p/start", name: "START_DATE", type: "string" },
+            // a plain parameter that happens to share a reserved env key
+            { id: "p/user", name: "EARTHDATA_USERNAME", type: "string" }
+        ],
+        required_secrets: [
+            {
+                name: "earthdata",
+                source: "owner_only",
+                env: { username: "EARTHDATA_USERNAME", password: "EARTHDATA_PASSWORD" }
+            }
+        ]
+    } as unknown as Model;
+    const seed = {
+        ...seeds[0],
+        parameters: { "p/start": "2024-01-01", "p/user": "leaked" }
+    } as unknown as (typeof seeds)[0];
+
+    test("reserved secret env keys are never emitted by getEnvVariables", () => {
+        expect(newJobService().getEnvVariables(seed, secretApp, secretModel)).toEqual([
+            { key: "START_DATE", value: "2024-01-01" }
+        ]);
+    });
+
+    test("getAppArgs does not throw for a secret-bearing model and skips reserved keys", () => {
+        const appWithReservedArg = {
+            ...secretApp,
+            jobAttributes: {
+                ...secretApp.jobAttributes,
+                parameterSet: {
+                    ...secretApp.jobAttributes.parameterSet,
+                    appArgs: [{ name: "EARTHDATA_PASSWORD", arg: undefined, inputMode: "REQUIRED" }]
+                }
+            }
+        } as unknown as Apps.TapisApp;
+        expect(newJobService().getAppArgs(seed, appWithReservedArg, secretModel)).toEqual([]);
+    });
+
+    test("models without required_secrets behave exactly as before", () => {
+        const { required_secrets, ...legacyModel } = secretModel as any;
+        expect(required_secrets).toHaveLength(1);
+        const keys = newJobService()
+            .getEnvVariables(seed, secretApp, legacyModel as Model)
+            .map((e) => e.key);
+        expect(keys).toEqual(["START_DATE", "EARTHDATA_USERNAME"]);
+    });
+});
