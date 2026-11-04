@@ -2296,7 +2296,8 @@ async def submit_workflow(
         args["signal_url"] = {"value": run_state.signal_url(run["id"])}
         args["signal_token"] = {"value": run_state.make_signal_token(run["id"], expires)}
         args["signal_expires"] = {"value": str(expires)}
-        if settings.earthdata_configured():
+        _app_id = (body.model_task.get("job_definition") or {}).get("appId")
+        if settings.earthdata_configured() and settings.earthdata_app_allowed(_app_id):
             args["credentials_url"] = {"value": run_state.credentials_url(run["id"])}
         signals_armed = True
 

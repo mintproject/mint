@@ -135,3 +135,57 @@ def test_pipeline_definition_binds_url_but_never_a_password():
     assert "credentials_url" in tapis.STANDARD_PARAMS
     dumped = json.dumps(workflow)
     assert SENTINEL not in dumped and "EARTHDATA_PASSWORD\", \"value" not in dumped
+
+
+def _composite_submit(monkeypatch, app_id: str):
+    """Real (mocked-Tapis) composite submit; dry runs return before signals are armed."""
+    captured = []
+
+    def fake_submit(pipeline, args, **kwargs):
+        captured.append(args)
+        return {"uuid": "tapis-run-1", "pipelineId": pipeline["id"], "tapisStatus": "submitted"}
+
+    monkeypatch.setattr("app.main.tapis.submit_tapis_workflow", fake_submit)
+    monkeypatch.setattr("app.main.tapis.userinfo_username", lambda token: "alice")
+    monkeypatch.setattr(settings, "internal_service_secret", "em-secret")
+    seed = client.post("/admin/seed-subside-werc").json()
+    plan_id = client.post("/plans", json={
+        "data_object_id": seed["data_object"]["id"],
+        "target_contract": seed["target_contract"]}).json()["plan_id"]
+    response = client.post("/workflows/submit",
+        headers={"Authorization": "Bearer caller.jwt.token", "X-Ensemble-Manager-Secret": "em-secret"},
+        json={"plan_id": plan_id, "execution_id": "ue-test-1",
+              "args": {"start_date": "2024-01-01", "end_date": "2025-01-01", "allocation": "A",
+                       "aoi_geojson_uri": "tapis://ls6/demo/aoi.geojson",
+                       "min_overlap_percent": "50", "num_workers": "4", "reference_mode": "auto"},
+              "model_task": {"stage_id": "model", "output_name": "o", "output_format": "tif",
+                             "output_uri": "tapis://ls6/mint-workflow-output/ue-test-1/model/o",
+                             "max_minutes": 5,
+                             "job_definition": {"name": "mint-workflow-model-x", "appId": app_id,
+                                                "appVersion": "1", "fileInputs": [],
+                                                "parameterSet": {"appArgs": []}}}})
+    assert response.status_code == 200, response.text
+    return response, captured[0]
+
+
+def test_credentials_url_only_for_allowed_apps(monkeypatch):
+    _run()
+    assert settings.earthdata_app_allowed("subside-h2i-opera-analysis")
+    assert settings.earthdata_app_allowed("subside-werc-opera-analysis")
+    assert not settings.earthdata_app_allowed("modflow6-simulation")
+    assert not settings.earthdata_app_allowed(None)
+
+    response, args = _composite_submit(monkeypatch, "subside-h2i-opera-analysis")
+    run_id = response.json()["run_id"]
+    assert args["credentials_url"]["value"] == f"https://svo.example/runs/{run_id}/credentials/earthdata"
+    assert "credentials_url" in args and "signal_url" in args
+
+    _, denied = _composite_submit(monkeypatch, "modflow6-simulation")
+    assert "credentials_url" not in denied
+    assert "signal_url" in denied  # signals still armed for MODFLOW runs
+
+
+def test_task_code_dies_when_credential_expected_but_no_signal_token():
+    code = _code()
+    assert "EARTHDATA_CREDENTIAL_UNAVAILABLE" in code
+    assert "no run signal token was issued" in code

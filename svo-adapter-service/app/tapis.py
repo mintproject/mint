@@ -415,8 +415,11 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 _definition["fileInputs"] = [
                     _i for _i in _inputs
                     if not (isinstance(_i, dict) and _i.get("name") == "earthdata-netrc")]
-            if not (_credentials_url and _signal_token):
+            if not _credentials_url:
                 return _definition
+            if not _signal_token:
+                _die("credential endpoint configured but no run signal token was issued",
+                     code="EARTHDATA_CREDENTIAL_UNAVAILABLE")
             _creds = None
             for _try in range(3):
                 try:
