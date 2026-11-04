@@ -7,6 +7,7 @@
  *
  * Legacy: ui/src/screens/modeling/thread/mint-results.ts
  */
+import { userParameters } from '@/lib/secret-parameters';
 import { Download, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -282,7 +283,7 @@ export function MintResults({
           });
 
           const adjustableInputs = model.input_files.filter((f) => !f.value);
-          const adjustableParams = model.input_parameters.filter((p) => !p.value);
+          const adjustableParams = userParameters(model).filter((p) => !p.value);
 
           return (
             <li key={mid} className="overflow-hidden rounded-md border">
@@ -528,7 +529,7 @@ export function MintResults({
                         ) : (
                           Object.values(groupedByKey).map((execution) => {
                             const paramDefaults: Record<string, string | null | undefined> = {};
-                            model.input_parameters.forEach(
+                            userParameters(model).forEach(
                               (p) => (paramDefaults[p.id ?? ''] = p.default ?? null),
                             );
                             return (

@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { SECRET_PARAMETER_TYPE } from '@/lib/secret-parameters';
 import type { ConfigurationFormSchema } from '@/schemas/configuration';
 
 const DATA_TYPES = ['string', 'integer', 'float', 'boolean', 'url', 'datetime'];
@@ -49,6 +50,25 @@ export function ParameterRow({ index, onRemove }: ParameterRowProps) {
 
   const dataType = (useWatch({ control, name: p('hasDataType') }) as string | undefined) ?? '';
   const isBounded = NUMERIC_OR_DATE_TYPES.includes(dataType);
+  const isSecret =
+    (useWatch({ control, name: p('parameterType') }) as string | undefined) ===
+    SECRET_PARAMETER_TYPE;
+
+  /** Switching to a secret drops any value: a secret row never carries one. */
+  const handleSecretChange = (next: boolean) => {
+    setValue(p('parameterType'), next ? SECRET_PARAMETER_TYPE : undefined, { shouldDirty: true });
+    if (next) {
+      for (const field of [
+        'hasDefaultValue',
+        'hasFixedValue',
+        'hasMinimumAcceptedValue',
+        'hasMaximumAcceptedValue',
+      ]) {
+        setValue(p(field), '', { shouldDirty: true });
+      }
+      setLocked(false);
+    }
+  };
 
   // A parameter starts "locked" when it already carries a fixed value (edit mode).
   const [locked, setLocked] = useState(() => Boolean(getValues(p('hasFixedValue'))));
@@ -238,8 +258,45 @@ export function ParameterRow({ index, onRemove }: ParameterRowProps) {
         )}
       />
 
-      {/* Value area — fixed (locked) or default + optional min/max (adjustable) */}
-      {locked ? (
+      {/* Parameter type — `secret` is an owner-registered credential, not a runner input */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-0.5">
+          <span className="text-sm font-medium text-foreground">Secret credential</span>
+          <p className="text-xs text-muted-foreground">
+            Secret: the label is the secret name; list one field=ENV_KEY per line.
+          </p>
+        </div>
+        <Switch
+          checked={isSecret}
+          onCheckedChange={handleSecretChange}
+          aria-label="Secret credential"
+        />
+      </div>
+
+      {/* Value area — secret map, fixed (locked), or default + optional min/max (adjustable) */}
+      {isSecret ? (
+        <FormField
+          control={control}
+          name={p('hasAcceptedValues')}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Accepted values (field=ENV_KEY)</FormLabel>
+              <FormControl>
+                <textarea
+                  className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder={'username=EARTHDATA_USERNAME\npassword=EARTHDATA_PASSWORD'}
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={((field.value as string[] | undefined) ?? []).join('\n')}
+                  onChange={(e) => field.onChange(e.target.value.split('\n'))}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      ) : locked ? (
         <FormField
           control={control}
           name={p('hasFixedValue')}
@@ -295,19 +352,21 @@ export function ParameterRow({ index, onRemove }: ParameterRowProps) {
       )}
 
       {/* Lock toggle */}
-      <div className="flex items-start justify-between gap-4 border-t pt-3">
-        <div className="space-y-0.5">
-          <span className="text-sm font-medium text-foreground">Lock to a fixed value</span>
-          <p className="text-xs text-muted-foreground">
-            Fixed parameters can&rsquo;t be changed when running the model.
-          </p>
+      {!isSecret && (
+        <div className="flex items-start justify-between gap-4 border-t pt-3">
+          <div className="space-y-0.5">
+            <span className="text-sm font-medium text-foreground">Lock to a fixed value</span>
+            <p className="text-xs text-muted-foreground">
+              Fixed parameters can&rsquo;t be changed when running the model.
+            </p>
+          </div>
+          <Switch
+            checked={locked}
+            onCheckedChange={handleLockChange}
+            aria-label="Lock to a fixed value"
+          />
         </div>
-        <Switch
-          checked={locked}
-          onCheckedChange={handleLockChange}
-          aria-label="Lock to a fixed value"
-        />
-      </div>
+      )}
     </div>
   );
 }

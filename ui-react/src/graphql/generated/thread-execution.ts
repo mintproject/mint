@@ -64,6 +64,7 @@ export type ParameterRow = {
   has_maximum_accepted_value?: string | null;
   has_accepted_values?: string[] | null;
   position?: number | null;
+  parameter_type?: string | null;
 };
 
 export type ThreadModelRow = {
@@ -244,6 +245,7 @@ export const GetThreadExecutionDocument = gql`
               has_maximum_accepted_value
               has_accepted_values
               position
+              parameter_type
             }
           }
         }

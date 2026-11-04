@@ -7,7 +7,7 @@ import { renderWithProviders } from '@/test/utils/render';
 import { storeTokens } from '@/lib/auth/token-store';
 import { MintRuns } from '../MintRuns';
 import type { ThreadExecutionData, ModelExecutionsMap } from '@/graphql/generated/execution';
-import type { UnifiedRunSnapshot } from '@/lib/ensemble-manager';
+import { EnsembleManagerError, type UnifiedRunSnapshot } from '@/lib/ensemble-manager';
 import type { ThreadAdapterPlan } from '@/lib/adapter-execution';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -197,6 +197,33 @@ describe('MintRuns', () => {
     expect(
       await screen.findByText('Ensemble manager returned 422: no transform path found'),
     ).toBeInTheDocument();
+  });
+
+  it('shows a specific message for a SECRET_REQUIRED submission error', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(
+      new EnsembleManagerError(409, 'raw', 'SECRET_REQUIRED', {
+        missing: [{ name: 'earthdata', source: 'owner', fields: ['username'] }],
+      }),
+    );
+    renderWithProviders(
+      <MintRuns
+        threadData={mockThreadData}
+        executions={emptyExecutions}
+        canWrite
+        canExecute
+        ensembleManagerApi="http://ensemble"
+        onContinue={vi.fn()}
+        onFetchRuns={vi.fn()}
+        onSubmitRuns={onSubmit}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('submit-runs-model-1'));
+
+    expect(
+      await screen.findByText(/needs a credential its owner has not registered yet/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/earthdata/)).not.toBeInTheDocument();
   });
 
   it('passes a user-selected maximum runtime when sending runs', async () => {

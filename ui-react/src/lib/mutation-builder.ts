@@ -216,8 +216,9 @@ export function buildAddOutputVariables(
  * string. Returns null for empty/missing input so the column is left unset.
  */
 export function toPgTextArray(values?: string[] | null): string | null {
-  if (!values || values.length === 0) return null;
-  const escaped = values.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+  const kept = (values ?? []).filter((v) => v.trim().length > 0);
+  if (kept.length === 0) return null;
+  const escaped = kept.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
   return `{${escaped.join(',')}}`;
 }
 

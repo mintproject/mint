@@ -339,6 +339,46 @@ describe('MintParameters', () => {
     expect(screen.getByText(/please select model/i)).toBeInTheDocument();
   });
 
+  it('shows one credentials line, without the secret name, only for a config with a secret', () => {
+    const withSecret: ThreadExecutionData = {
+      ...mockThreadDataWithModel,
+      models: {
+        'model-1': {
+          ...mockThreadDataWithModel.models['model-1']!,
+          input_parameters: [
+            ...mockThreadDataWithModel.models['model-1']!.input_parameters,
+            { id: 'sec-1', name: 'earthdata', parameter_type: 'secret' },
+          ],
+        },
+      },
+    };
+    const { unmount } = renderWithProviders(
+      <MintParameters
+        threadData={withSecret}
+        canWrite
+        canExecute
+        onSave={vi.fn()}
+        onContinue={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('secret-readiness-model-1')).toHaveTextContent(
+      'Credentials provided by the model owner',
+    );
+    expect(screen.queryByText('earthdata')).not.toBeInTheDocument();
+    unmount();
+
+    renderWithProviders(
+      <MintParameters
+        threadData={mockThreadDataWithModel}
+        canWrite
+        canExecute
+        onSave={vi.fn()}
+        onContinue={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('secret-readiness-model-1')).not.toBeInTheDocument();
+  });
+
   it('renders model name when models exist', () => {
     renderWithProviders(
       <MintParameters

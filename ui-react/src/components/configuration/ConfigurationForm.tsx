@@ -131,6 +131,7 @@ function configToFormData(config: ConfigurationFieldsFragment): ConfigurationFor
       hasFixedValue: p.has_fixed_value ?? '',
       hasAcceptedValues: (p.has_accepted_values as string[] | null) ?? [],
       position: p.position ?? i,
+      parameterType: p.parameter_type ?? undefined,
     };
   });
 
@@ -373,6 +374,7 @@ export function ConfigurationForm({ configurationId, onSaved, onCancel }: Config
             hasFixedValue: row.hasFixedValue ?? null,
             hasAcceptedValues: toPgTextArray(row.hasAcceptedValues),
             position: row.position,
+            parameterType: row.parameterType ?? null,
           },
         });
       }
