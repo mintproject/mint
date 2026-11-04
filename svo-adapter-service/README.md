@@ -226,45 +226,72 @@ submitting again, so a late start never duplicates a job.
 ### Secrets for model tasks
 
 Design: `docs/design/2026-11-04-svo-adapter-secrets-store.md` (Phase A:
-model-owner scope, admin-seeded). A configuration declares a secret as a catalog
-parameter with `parameter_type = "secret"`: `label` is the secret name
-(`[a-z0-9_-]{1,64}`), `has_accepted_values` lists `field=ENV_KEY` entries, and
-`usage_notes` may carry `source=owner_only`. The owner's values live encrypted
-in `adapter.secret` (migration `1771300000036_adapter_secret`), pinned to the
-configuration's Tapis app id and version, and are never readable back.
+model-owner scope, admin-seeded). Operations (seed, rotate, revoke, incident
+response, migration, error codes) are in the runbook
+`docs/dev/runbooks/svo-adapter-secrets.md` in the DSO-Architecture repo; the
+service reference is `docs/services/svo-adapter.md` in the same repo.
+
+A configuration declares a secret as a catalog parameter with
+`parameter_type = "secret"`: `label` is the secret name (`[a-z0-9_-]{1,64}`),
+`has_accepted_values` lists one `field=ENV_KEY` entry per field, and
+`usage_notes` may carry `source=owner_only` (the only value in Phase A, and the
+default when absent). The owner's values are stored encrypted in `adapter.secret`
+(migration `1771300000036_adapter_secret`), pinned to the configuration's Tapis
+app id and version, and never returned by any API.
 
 ```
 SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS=<comma-separated Fernet keys; first encrypts>
 ```
 
-An empty ring fails closed (503). It is independent of the run-token keeper's.
+This ring is separate from the run-token keeper's. An empty ring fails closed:
+seeding returns 503 `SECRETS_NOT_CONFIGURED`, and a composite run that declares
+secrets is refused at submit.
 
-- `PUT /admin/secrets` / `DELETE /admin/secrets` (header
-  `X-Ensemble-Manager-Secret`) store, replace and remove a secret and return
-  metadata only. Use `scripts/seed_model_owner_secret.py` (values from
-  `SECRET_FIELD_<NAME>` env vars or a prompt, never argv).
+- `PUT /admin/secrets` and `DELETE /admin/secrets` (header
+  `X-Ensemble-Manager-Secret`, checked against `SVO_ADAPTER_INTERNAL_SERVICE_SECRET`,
+  or `SVO_ADAPTER_HASURA_ADMIN_SECRET` when that is unset)
+  store, replace and remove a model-owner secret and return metadata only. A PUT
+  requires `acknowledged: true` and an `owner_username` equal to the
+  configuration's owner. Use `scripts/seed_model_owner_secret.py`: values come
+  from `SECRET_FIELD_<FIELD>` environment variables or a prompt, never argv.
 - `POST /workflows/submit` for a composite run reads `model_task.configuration_id`,
   resolves each declared secret for the configuration's owner, and checks the
-  app pin before the run row or token exists. Errors: 422 `SECRET_REQUIRED`
-  (with `missing`), 422 `SECRET_FIELDS_INCOMPLETE`, 422
-  `SECRET_DECLARATION_MISMATCH`, 403 `SECRET_APP_MISMATCH`, 503
-  `SIGNALS_REQUIRED`, 503 `SECRETS_NOT_CONFIGURED`. A dry run reports
-  `secrets: {bound, missing}` and never decrypts.
+  app pin before the run row or run token exists, so a rejected submit queues
+  nothing. The submitter's identity is not checked. A dry run reports
+  `secrets: {bound, missing}` and never decrypts. Submit-time errors: 422
+  `SECRET_REQUIRED` (with `missing`), 422 `SECRET_FIELDS_INCOMPLETE`, 422
+  `SECRET_DECLARATION_INVALID`, 422 `SECRET_DECLARATION_MISMATCH`, 403
+  `SECRET_APP_MISMATCH`, 503 `SIGNALS_REQUIRED`, 503 `SECRETS_NOT_CONFIGURED`.
+  A `model_task` without `configuration_id` skips resolution unless it carries
+  `required_secrets`, which is then 422 `SECRET_DECLARATION_MISMATCH`.
 - `GET /runs/{run_id}/credentials` returns `{"env": {ENV_KEY: value}}` with
-  `Cache-Control: no-store`, authorised by the run's signal token (own rate
-  bucket), only while the run is active and armed, at most three times per run
-  (409 `CREDENTIALS_EXHAUSTED`). 409 `SECRET_REMOVED` when a bound secret was
-  deleted; a newer version is served and recorded. Events (`adapter.secret_event`)
-  and provenance carry ids and names only.
+  `Cache-Control: no-store`. It is authorised by the run's signal token, has its
+  own rate bucket (10 per run per 10 minutes, 429 `RUN_CREDENTIALS_RATE_LIMITED`),
+  and is served only while the run is `running`/`submitting` with signals armed
+  (409 `RUN_NOT_ACTIVE`). At most three issue attempts per run: an attempt counts
+  once it passes the state checks, and the fourth returns 409
+  `CREDENTIALS_EXHAUSTED`. A bound secret that was deleted gives 409
+  `SECRET_REMOVED`; a replaced one serves the current version and the
+  `issued` event records it. Other errors: 404 `RUN_CREDENTIAL_UNAVAILABLE`
+  (no bound secrets), 401 `RUN_SIGNAL_REJECTED`, 503 `RUN_SIGNALS_DISABLED`,
+  503 `SECRET_UNREADABLE`, 403 `SECRET_APP_MISMATCH`, 409
+  `SECRET_FIELDS_INCOMPLETE`. Events (`adapter.secret_event`) and provenance
+  (`run.credential.issued`) carry ids and names only.
 - `_model_execution_code` in `app/tapis.py` fetches the env map just before
-  `POST /v3/jobs/submit` and replaces the matching `parameterSet.envVariables`
-  keys on a copy used only for the submit call. A failed fetch ends the task
-  with `SECRET_UNAVAILABLE`; it never continues without. A user-supplied
-  `earthdata-netrc` file input is still dropped.
-- `scripts/rotate_secrets.py` re-encrypts rows under the ring's first key
-  (dry-run unless `--apply`).
-- Residual exposure: the Tapis job record contains the values and is readable by
-  anyone who can read the job. Use low-privilege, revocable project accounts.
+  `POST /v3/jobs/submit`, retrying 5xx, 429 and transport errors up to three
+  times. Any other 4xx, or an empty response, ends the task with
+  `SECRET_UNAVAILABLE`; it never continues without the secrets. The fetched
+  values replace any `parameterSet.envVariables` entry with the same key, on a
+  copy used only for the submit call. A user-supplied `earthdata-netrc` file
+  input is dropped from that copy.
+- `scripts/rotate_secrets.py` re-encrypts every row under the ring's first key.
+  Dry run by default; `--apply` writes. Exits 1 when any row fails to decrypt or
+  verify.
+- Residual exposure: the Tapis job record contains the values and can be read by
+  anyone who can read the job, including the submitting user. Use low-privilege,
+  revocable project accounts.
+- Not in Phase A: the startup check that every row decrypts (the rotate dry run
+  covers it), and a retention job for `adapter.secret_event` (planned 13 months).
 
 ### How the model stage waits
 
