@@ -58,7 +58,9 @@ def test_adapter_metadata_tracks_all_tables_without_duplicate_relationship_secti
     adapter_section = metadata[metadata.index("    name: data_object\n    schema: adapter") :]
     blocks = re.split(r"(?=^- table:\n)", adapter_section, flags=re.MULTILINE)
 
-    assert {re.search(r"    name: (.+)\n    schema: adapter", block).group(1) for block in blocks if block.strip()} == set(TABLES)
+    # secret / secret_event (migration ...36) are tracked bare; see test_adapter_secret_metadata.py.
+    tracked = {re.search(r"    name: (.+)\n    schema: adapter", block).group(1) for block in blocks if block.strip()}
+    assert tracked == set(TABLES) | {"secret", "secret_event"}
     for block in blocks:
         if not block.strip():
             continue
