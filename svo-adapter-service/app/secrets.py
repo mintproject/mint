@@ -61,6 +61,46 @@ class SecretResolutionError(Exception):
 # --------------------------------------------------------------------------
 # Validation
 # --------------------------------------------------------------------------
+
+def pg_text_array(items) -> str:
+    """Postgres array literal for a text[] column.
+
+    Hasura exposes text[] as the ``_text`` scalar and rejects a JSON list
+    ("A string is expected for type: _text"); the literal form is what the UI's
+    toPgTextArray and the catalog registration scripts send too.
+    """
+    def q(x) -> str:
+        return '"' + str(x).replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return "{" + ",".join(q(x) for x in items) + "}"
+
+
+def text_array(value) -> list[str]:
+    """Normalise a text[] value: Hasura returns a JSON list, the in-memory demo
+    store (and a raw literal) may hold the ``{"a","b"}`` string."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(x) for x in value]
+    text = str(value).strip()
+    if text.startswith("{") and text.endswith("}"):
+        inner = text[1:-1]
+        out, cur, quoted, esc = [], "", False, False
+        for ch in inner:
+            if esc:
+                cur += ch; esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                quoted = not quoted
+            elif ch == "," and not quoted:
+                out.append(cur); cur = ""
+            else:
+                cur += ch
+        if cur or inner.endswith(","):
+            out.append(cur)
+        return [x for x in out if x != ""] if inner else []
+    return [text]
+
 def validate_name(name: str) -> str:
     if not isinstance(name, str) or not NAME_RE.match(name):
         raise SecretValidationError("secret name must match [a-z0-9_-]{1,64}")
@@ -133,8 +173,15 @@ def open_(row: dict[str, Any], ciphertext: str | None = None) -> dict[str, str]:
 
 
 def _metadata(row: dict[str, Any]) -> dict[str, Any]:
-    """The row without its ciphertext: all that any API ever returns."""
-    return {k: v for k, v in row.items() if k != "ciphertext"}
+    """The row without its ciphertext: all that any API ever returns.
+
+    ``fields`` is normalised to a list whether it came back from Hasura (JSON
+    list) or from the in-memory demo store (the array literal we sent).
+    """
+    out = {k: v for k, v in row.items() if k != "ciphertext"}
+    if "fields" in out:
+        out["fields"] = text_array(out.get("fields"))
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -177,7 +224,7 @@ class FernetSecretStore:
         }
         columns = {
             "pinned_app_id": pinned_app_id, "pinned_app_version": pinned_app_version,
-            "ciphertext": seal(row, fields), "fields": sorted(fields),
+            "ciphertext": seal(row, fields), "fields": pg_text_array(sorted(fields)),
             "acknowledged_at": now, "updated_at": now,
         }
         if existing:
@@ -350,7 +397,7 @@ async def resolve(store: FernetSecretStore, configuration: dict[str, Any],
             result.missing.append({"name": decl.name, "source": decl.source, "fields": decl.fields})
         elif (row.get("pinned_app_id"), str(row.get("pinned_app_version"))) != app:
             result.mismatched.append(row)
-        elif not set(decl.env) <= set(row.get("fields") or []):
+        elif not set(decl.env) <= set(text_array(row.get("fields"))):
             result.incomplete.append(decl.name)
         else:
             result.bound.append({"id": str(row["id"]), "version": int(row["version"]),
