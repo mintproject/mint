@@ -90,6 +90,29 @@ specs that were synced but have no `tapis_app_id`. These use OWE function tasks
 until an admin registers the app in Tapis and sets `tapis_app_id` on the MINT
 `ModelConfiguration`, then re-runs the sync.
 
+### ETL contract catalog marker and unit pieces
+
+The ETL contract table has no catalog column. The `catalog` marker therefore
+lives in `schema_requirement_json` under the `_svo` key, for example
+`{"_svo": {"catalog": "ckan+stac"}}` on the `stac-publish` output contract.
+`scripts/register_existing_etl_pieces.py` merges the marker into the existing
+schema JSON and never replaces it. `mint_sync.etl_process_to_spec_row` moves
+`_svo.catalog` into `metadata_json["catalog"]` and removes `_svo` before the
+schema is forwarded, so `schema_json` comparisons are unaffected. The planner
+accepts `ckan+stac:<org>` and drops the `:<org>` suffix (`_catalogs` in
+`app/planner.py`). A target with no `catalog` imposes no catalog requirement, so
+a target that must be cataloged sets `catalog` itself (`_check_catalog`). The
+`stac-publish` contract then closes the gap in the plan. This is the convention
+until MINT adds a column (revisit 2026-12).
+
+SUBSIDE displacement uses one standard variable, `land_surface__displacement`,
+with different units: H2I in metres, WERC cumulative in millimetres.
+`examples/subside_units_transforms.json` adds `ts-displacement-m-to-mm` and
+`ts-displacement-mm-to-m` (`unit_convert`, `tapis_function`) so a consumer can
+plan from either unit. Factors are in `app/task_code.py` (`_FACTORS`: 1000 and
+0.001). The loader picks up every `examples/*_transforms.json` file. Its
+`--apply` run is needed for the pieces to exist in MINT.
+
 ## Semantic SVO search
 
 The local Compose stack includes `semantic-search` on port `8091`. It uses the
