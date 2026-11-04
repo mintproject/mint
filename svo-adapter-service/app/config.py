@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # …/modflow-suite (app/ -> svo-adapter-service/ -> monorepo/ -> modflow-suite/)
@@ -122,6 +123,24 @@ class Settings(BaseSettings):
     stall_after_started_seconds: int = 300
     # Tapis usernames allowed to cancel runs they did not submit.
     cancel_admins: str = ""
+
+    # Dedicated low-privilege Earthdata account handed to composite model tasks
+    # at run time through GET /runs/{id}/credentials/earthdata. Injected from a
+    # secret, never persisted in a pipeline definition, log or provenance row.
+    earthdata_username: SecretStr | None = None
+    earthdata_password: SecretStr | None = None
+
+    # Tapis app ids whose model task may receive the Earthdata credential.
+    # Every other composite run (the MODFLOW engines) never sees it.
+    earthdata_app_ids: str = "subside-h2i-opera-analysis,subside-werc-opera-analysis"
+
+    def earthdata_app_allowed(self, app_id: str | None) -> bool:
+        allowed = {a.strip() for a in self.earthdata_app_ids.split(",") if a.strip()}
+        return bool(app_id) and str(app_id) in allowed
+
+    def earthdata_configured(self) -> bool:
+        # SecretStr is falsy when empty; the value itself is never read here.
+        return bool(self.earthdata_username and self.earthdata_password)
 
     @property
     def run_signal_secret_list(self) -> list[str]:

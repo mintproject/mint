@@ -1972,7 +1972,7 @@ def _wrap_args(args: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def _public_workflow_args(args: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Remove server-injected credentials from workflow responses."""
     return {key: value for key, value in args.items()
-            if key not in {"tapis_token", "signal_token", "token_fetch_token"}}
+            if key not in {"tapis_token", "signal_token", "token_fetch_token", "earthdata"}}
 
 
 def _composite_task_contains_secret(value: Any) -> bool:
@@ -2296,6 +2296,9 @@ async def submit_workflow(
         args["signal_url"] = {"value": run_state.signal_url(run["id"])}
         args["signal_token"] = {"value": run_state.make_signal_token(run["id"], expires)}
         args["signal_expires"] = {"value": str(expires)}
+        _app_id = (body.model_task.get("job_definition") or {}).get("appId")
+        if settings.earthdata_configured() and settings.earthdata_app_allowed(_app_id):
+            args["credentials_url"] = {"value": run_state.credentials_url(run["id"])}
         signals_armed = True
 
     # Token keeper (run_tokens.py, design rev 2): keep an encrypted copy of the
@@ -2600,6 +2603,47 @@ async def signal_run(
         "health": (update or {}).get("health", run.get("health")),
         "status": (update or {}).get("status", run.get("status")),
     }
+
+
+@app.get("/runs/{run_id}/credentials/earthdata", tags=["Core: Runs"])
+async def fetch_earthdata_credential(
+    run_id: str,
+    signal_token: str | None = Header(None, alias="X-Run-Signal-Token"),
+    signal_expires: str | None = Header(None, alias="X-Run-Signal-Expires"),
+):
+    """Hand the composite model task the shared Earthdata credential.
+
+    Authorised exactly like /signal (the run's signal token, same rate limit),
+    and only while the run is active with signals armed. The task injects the
+    values into the job's env in memory; they appear in this response only and
+    the response is marked uncacheable. The provenance event names the
+    credential and never carries a value.
+    """
+    if not settings.earthdata_configured():
+        raise HTTPException(404, detail={"code": "RUN_CREDENTIAL_UNAVAILABLE"})
+    if not run_state.signals_configured():
+        raise HTTPException(503, detail={"code": "RUN_SIGNALS_DISABLED",
+                                         "message": "run signals are not configured"})
+    if not run_state.verify_signal_token(run_id, signal_expires, signal_token):
+        raise HTTPException(401, detail={"code": "RUN_SIGNAL_REJECTED"})
+    now = datetime.now(tz=timezone.utc)
+    if not _signal_rate_ok(run_id, now.timestamp()):
+        raise HTTPException(429, detail={"code": "RUN_SIGNAL_RATE_LIMITED"})
+    h = get_client(None)
+    run = (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"]
+    if not run:
+        raise HTTPException(401, detail={"code": "RUN_SIGNAL_REJECTED"})
+    if str(run.get("status") or "") not in {"running", "submitting"} or not run.get("signals_armed"):
+        raise HTTPException(409, detail={"code": "RUN_NOT_ACTIVE"})
+    await h.execute(INSERT_PROVENANCE, {"obj": {
+        "workflow_run_id": run_id, "event_type": "run.credential.issued",
+        "payload_json": {"credential": "earthdata",
+                         "task_id": run_state.SIGNAL_TASK_ID},
+    }})
+    return JSONResponse(
+        {"username": settings.earthdata_username.get_secret_value(),
+         "password": settings.earthdata_password.get_secret_value()},
+        headers={"Cache-Control": "no-store"})
 
 
 _TOKEN_FETCH_RATE: dict[str, list[float]] = {}
