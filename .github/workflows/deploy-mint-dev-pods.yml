@@ -260,6 +260,10 @@ jobs:
           SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED: ${{ vars.SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED }}
           SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS: ${{ secrets.SVO_ADAPTER_RUN_TOKEN_ENCRYPTION_KEYS }}
           SVO_ADAPTER_RUN_TOKEN_KEEPER_SWEEP_ENABLED: ${{ vars.SVO_ADAPTER_RUN_TOKEN_KEEPER_SWEEP_ENABLED }}
+          # Secrets store (svo-adapter-service/app/secrets.py) and CKAN sync org.
+          SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS: ${{ secrets.SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS }}
+          SVO_ADAPTER_SECRETS_ADMIN_SECRET: ${{ secrets.SVO_ADAPTER_SECRETS_ADMIN_SECRET }}
+          SVO_ADAPTER_CKAN_SYNC_ORG: ${{ vars.SVO_ADAPTER_CKAN_SYNC_ORG }}
         run: |
           set -euo pipefail
           python deploy/tapis/register_mint_stack.py \
