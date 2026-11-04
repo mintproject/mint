@@ -15,6 +15,7 @@ export class TapisJobService {
     private static readonly ALLOCATION = "PT2050-DataX";
     private static readonly SYSTEM_LOGICAL_QUEUE = "development";
     private static readonly SYSTEM_ID = "ls6";
+    private static readonly DEFAULT_MAX_MINUTES = 60;
 
     constructor(
         private jobsClient: Jobs.JobsApi,
@@ -38,7 +39,7 @@ export class TapisJobService {
         model: Model,
         name: string,
         description: string,
-        maxMinutes = 60,
+        maxMinutes?: number,
         logicalQueue?: string
     ): Jobs.ReqSubmitJob => {
         const jobFileInputs = this.createJobFileInputsFromSeed(seed, app, model);
@@ -46,7 +47,7 @@ export class TapisJobService {
             appArgs: this.getAppArgs(seed, app, model),
             containerArgs: [],
             schedulerOptions: this.getSchedulerOptions(app),
-            envVariables: []
+            envVariables: this.getEnvVariables(seed, app, model)
         };
 
         const request: Jobs.ReqSubmitJob = {
@@ -57,7 +58,9 @@ export class TapisJobService {
             fileInputs: jobFileInputs,
             nodeCount: app.jobAttributes?.nodeCount || 1,
             coresPerNode: app.jobAttributes?.coresPerNode || 1,
-            maxMinutes,
+            maxMinutes:
+                maxMinutes ?? app.jobAttributes?.maxMinutes ?? TapisJobService.DEFAULT_MAX_MINUTES,
+            ...(app.jobAttributes?.memoryMB ? { memoryMB: app.jobAttributes.memoryMB } : {}),
             archiveSystemId: "ls6",
             archiveSystemDir:
                 "HOST_EVAL($WORK)/tapis-jobs-archive/${JobCreateDate}/${JobName}-${JobUUID}",
@@ -137,6 +140,36 @@ export class TapisJobService {
                 name: parameterSet.name,
                 arg: arg
             } as Jobs.JobArgSpec;
+        });
+    }
+
+    /**
+     * Map model parameters onto the app's declared environment variables
+     * (jobAttributes.parameterSet.envVariables). Entries with no matching
+     * model parameter keep the app default; blank values are never sent.
+     */
+    public getEnvVariables(
+        seed: TapisComponentSeed,
+        app: Apps.TapisApp,
+        model: Model
+    ): Jobs.KeyValuePair[] {
+        const declared = app.jobAttributes?.parameterSet?.envVariables || [];
+        return declared.flatMap((entry) => {
+            if (entry.inputMode === Apps.KeyValueInputModeEnum.Fixed) {
+                // FIXED env variables are owned by the Tapis app definition.
+                return [];
+            }
+            const modelParameter = model.input_parameters.find(
+                (parameter) => parameter.name === entry.key
+            );
+            if (!modelParameter) {
+                return [];
+            }
+            const value = seed.parameters[modelParameter.id];
+            if (value === undefined || value === null || String(value).trim() === "") {
+                return [];
+            }
+            return [{ key: entry.key, value: String(value) }];
         });
     }
 
@@ -239,9 +272,7 @@ export class TapisJobService {
 
                 if (datasets.length === 0 && modelInput.is_optional) {
                     // Skip optional input — no datasets bound, safe to omit from Tapis submission
-                    console.info(
-                        `Skipping optional input ${modelInput.name} — no datasets bound`
-                    );
+                    console.info(`Skipping optional input ${modelInput.name} — no datasets bound`);
                     return [];
                 }
 

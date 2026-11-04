@@ -118,15 +118,8 @@ test("uses a requested logical queue instead of the app's default queue", () => 
         new Jobs.ShareApi()
     );
     const withQueue = (queue?: string) =>
-        jobService.createJobRequest(
-            app,
-            seeds[0],
-            model,
-            "test-job",
-            "test description",
-            60,
-            queue
-        ).execSystemLogicalQueue;
+        jobService.createJobRequest(app, seeds[0], model, "test-job", "test description", 60, queue)
+            .execSystemLogicalQueue;
 
     expect(withQueue("vm-small")).toBe("vm-small");
     // Without a request the app's own queue (the fixture declares "development") applies.
@@ -369,8 +362,7 @@ test("semantic MODFLOW 6 model inputs map to Tapis file-input names", () => {
 });
 
 test("semantic MODFLOW 2005 inputs map to the archive-first Tapis contract", () => {
-    const archiveId =
-        "https://w3id.org/okn/i/mint/wmobley-modflow-2005-simulation-archive";
+    const archiveId = "https://w3id.org/okn/i/mint/wmobley-modflow-2005-simulation-archive";
     const wellId = "https://w3id.org/okn/i/mint/modflow_2005_Well";
     const rechargeId = "https://w3id.org/okn/i/mint/modflow_2005_Rech";
     const mf2005App = {
@@ -440,9 +432,25 @@ test("semantic MODFLOW 2005 inputs map to the archive-first Tapis contract", () 
     const semanticSeed = {
         ...seeds[0],
         datasets: {
-            [archiveId]: [{ id: "archive", name: "simulation.zip", url: "https://example.com/simulation.zip", type: "zip" }],
-            [wellId]: [{ id: "well", name: "model.wel", url: "https://example.com/model.wel", type: "wel" }],
-            [rechargeId]: [{ id: "recharge", name: "model.rch", url: "https://example.com/model.rch", type: "rch" }]
+            [archiveId]: [
+                {
+                    id: "archive",
+                    name: "simulation.zip",
+                    url: "https://example.com/simulation.zip",
+                    type: "zip"
+                }
+            ],
+            [wellId]: [
+                { id: "well", name: "model.wel", url: "https://example.com/model.wel", type: "wel" }
+            ],
+            [rechargeId]: [
+                {
+                    id: "recharge",
+                    name: "model.rch",
+                    url: "https://example.com/model.rch",
+                    type: "rch"
+                }
+            ]
         }
     };
     const jobService = new TapisJobService(
@@ -459,8 +467,7 @@ test("semantic MODFLOW 2005 inputs map to the archive-first Tapis contract", () 
 });
 
 test("semantic MODFLOW 2000 archive input maps to the archive-first Tapis contract", () => {
-    const archiveId =
-        "https://w3id.org/okn/i/mint/wmobley-modflow-2000-simulation-archive";
+    const archiveId = "https://w3id.org/okn/i/mint/wmobley-modflow-2000-simulation-archive";
     const mf2000App = {
         ...app,
         id: "modflow-2000-simulation",
@@ -515,4 +522,155 @@ test("semantic MODFLOW 2000 archive input maps to the archive-first Tapis contra
     expect(jobService.createJobFileInputsFromSeed(semanticSeed, mf2000App, mf2000Model)).toEqual([
         { name: "mf2000-simulation-archive", sourceUrl: "https://example.com/simulation.zip" }
     ]);
+});
+
+describe("environment-variable app parameters", () => {
+    const newJobService = () =>
+        new TapisJobService(new Jobs.JobsApi(), new Jobs.SubscriptionsApi(), new Jobs.ShareApi());
+
+    const envEntry = (key: string, inputMode: string, arg = "") => ({
+        key,
+        value: arg,
+        inputMode,
+        notes: {}
+    });
+
+    // SUBSIDE-shaped app: parameters are declared as env variables, no appArgs.
+    const subsideApp = {
+        ...app,
+        jobAttributes: {
+            ...app.jobAttributes,
+            maxMinutes: 240,
+            memoryMB: 16000,
+            parameterSet: {
+                ...app.jobAttributes.parameterSet,
+                appArgs: [],
+                envVariables: [
+                    envEntry("START_DATE", "REQUIRED"),
+                    envEntry("END_DATE", "REQUIRED"),
+                    envEntry("FRAME_IDS", "INCLUDE_BY_DEFAULT"),
+                    envEntry("UPDATE_CONDA_ENV", "INCLUDE_ON_DEMAND"),
+                    envEntry("LOCKED_VAR", "FIXED", "locked")
+                ]
+            }
+        }
+    } as unknown as Apps.TapisApp;
+
+    const parameter = (name: string) => ({
+        id: `param/${name}`,
+        name,
+        type: "string"
+    });
+    const subsideModel = {
+        ...model,
+        input_parameters: [
+            parameter("START_DATE"),
+            parameter("END_DATE"),
+            parameter("FRAME_IDS"),
+            parameter("LOCKED_VAR")
+        ]
+    } as unknown as Model;
+    const subsideSeed = (values: Record<string, unknown>) =>
+        ({
+            ...seeds[0],
+            parameters: Object.fromEntries(
+                Object.entries(values).map(([name, value]) => [`param/${name}`, value])
+            )
+        }) as unknown as (typeof seeds)[0];
+
+    test("model parameters populate declared env variables and omit blank or FIXED ones", () => {
+        const envVariables = newJobService().getEnvVariables(
+            subsideSeed({
+                START_DATE: "2024-01-01",
+                END_DATE: "2024-06-30",
+                FRAME_IDS: "  ",
+                LOCKED_VAR: "override"
+            }),
+            subsideApp,
+            subsideModel
+        );
+
+        expect(envVariables).toEqual([
+            { key: "START_DATE", value: "2024-01-01" },
+            { key: "END_DATE", value: "2024-06-30" }
+        ]);
+    });
+
+    test("non-string values are coerced and sent for non-blank parameters", () => {
+        const envVariables = newJobService().getEnvVariables(
+            subsideSeed({ START_DATE: "2024-01-01", END_DATE: "2024-06-30", FRAME_IDS: 1234 }),
+            subsideApp,
+            subsideModel
+        );
+
+        expect(envVariables).toContainEqual({ key: "FRAME_IDS", value: "1234" });
+    });
+
+    test("createJobRequest sends env variables in the parameter set", () => {
+        const request = newJobService().createJobRequest(
+            subsideApp,
+            subsideSeed({ START_DATE: "2024-01-01", END_DATE: "2024-06-30", FRAME_IDS: "" }),
+            subsideModel,
+            "test-job",
+            "test description"
+        );
+
+        expect(request.parameterSet?.envVariables).toEqual([
+            { key: "START_DATE", value: "2024-01-01" },
+            { key: "END_DATE", value: "2024-06-30" }
+        ]);
+    });
+
+    test("apps declaring no env variables produce an empty envVariables list", () => {
+        const request = newJobService().createJobRequest(
+            app,
+            seeds[0],
+            model,
+            "test-job",
+            "test description"
+        );
+
+        expect(request.parameterSet?.envVariables).toEqual([]);
+        expect(request.parameterSet?.appArgs).toEqual(expectedJobParameterSetNonDefault.appArgs);
+    });
+
+    test("maxMinutes prefers the caller, then the app, then 60", () => {
+        const jobService = newJobService();
+        const build = (candidate: Apps.TapisApp, maxMinutes?: number) =>
+            jobService.createJobRequest(
+                candidate,
+                subsideSeed({ START_DATE: "a", END_DATE: "b" }),
+                subsideModel,
+                "test-job",
+                "test description",
+                maxMinutes
+            ).maxMinutes;
+        const withoutAppLimit = {
+            ...subsideApp,
+            jobAttributes: { ...subsideApp.jobAttributes, maxMinutes: undefined }
+        } as Apps.TapisApp;
+
+        expect(build(subsideApp)).toBe(240);
+        expect(build(subsideApp, 90)).toBe(90);
+        expect(build(withoutAppLimit)).toBe(60);
+    });
+
+    test("memoryMB passes through from the app and is omitted when absent", () => {
+        const jobService = newJobService();
+        const build = (candidate: Apps.TapisApp) =>
+            jobService.createJobRequest(
+                candidate,
+                subsideSeed({ START_DATE: "a", END_DATE: "b" }),
+                subsideModel,
+                "test-job",
+                "test description"
+            );
+        const withoutMemory = {
+            ...subsideApp,
+            jobAttributes: { ...subsideApp.jobAttributes, memoryMB: undefined }
+        } as Apps.TapisApp;
+
+        expect(build(subsideApp).memoryMB).toBe(16000);
+        expect("memoryMB" in build(withoutMemory)).toBe(false);
+    });
 });
