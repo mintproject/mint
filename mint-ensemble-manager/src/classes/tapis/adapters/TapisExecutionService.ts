@@ -98,7 +98,7 @@ export class TapisExecutionService implements IExecutionService {
         component: TapisComponent,
         threadId: string,
         threadModelId: string,
-        maxMinutes = 60,
+        maxMinutes?: number,
         logicalQueue?: string
     ): Promise<SubmissionResult> {
         this.seeds = [];
@@ -141,7 +141,7 @@ export class TapisExecutionService implements IExecutionService {
             adapter_resource_overrides?: Parameters<typeof applyExecutionInputOverrides>[2];
         },
         workflowPath: string,
-        maxMinutes = 60,
+        maxMinutes?: number,
         logicalQueue?: string
     ): Promise<{
         execution_id: string;
@@ -240,7 +240,7 @@ export class TapisExecutionService implements IExecutionService {
         model: Model,
         threadId: string,
         threadModelId: string,
-        maxMinutes: number,
+        maxMinutes: number | undefined,
         logicalQueue?: string
     ): Promise<{
         submittedExecutions: { execution: Execution; jobId: string }[];
@@ -287,7 +287,7 @@ export class TapisExecutionService implements IExecutionService {
         seed: TapisComponentSeed,
         model: Model,
         threadId: string,
-        maxMinutes: number,
+        maxMinutes: number | undefined,
         logicalQueue?: string
     ): Promise<string> {
         const name = this.generateValidJobName(app, seed.execution.id);
