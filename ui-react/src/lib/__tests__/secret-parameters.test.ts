@@ -62,6 +62,14 @@ describe('secretErrorMessage', () => {
   it('maps SECRET_APP_MISMATCH and SIGNALS_REQUIRED', () => {
     expect(secretErrorMessage(err('SECRET_APP_MISMATCH'))).toMatch(/different version/);
     expect(secretErrorMessage(err('SIGNALS_REQUIRED'))).toMatch(/not configured/);
+    expect(secretErrorMessage(err('SECRETS_NOT_CONFIGURED'))).toMatch(/credentials yet/);
+    expect(secretErrorMessage(err('SECRET_OWNER_UNSET'))).toMatch(/no registered owner/);
+    expect(secretErrorMessage(err('SECRET_FIELDS_INCOMPLETE'))).toMatch(/re-register/);
+    expect(secretErrorMessage(err('SECRET_DECLARATION_INVALID'))).toMatch(/declaration is invalid/);
+    expect(secretErrorMessage(err('SECRET_DECLARATION_MISMATCH'))).toMatch(
+      /does not match the catalog/,
+    );
+    expect(secretErrorMessage(err('SECRET_ENV_UNDECLARED'))).toMatch(/does not declare/);
   });
 
   it('returns null for other errors so the generic fallback applies', () => {

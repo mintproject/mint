@@ -53,6 +53,18 @@ const SECRET_ERROR_MESSAGES: Record<string, string> = {
     "The model's registered credential was stored for a different version of its application. Ask the model owner to re-register it.",
   SIGNALS_REQUIRED:
     'The platform is not configured to run this model yet (run signals are required). Contact the platform administrators.',
+  SECRETS_NOT_CONFIGURED:
+    'The platform is not configured to hold model credentials yet. Contact the platform administrators.',
+  SECRET_OWNER_UNSET:
+    'This model has no registered owner, so its credential cannot be provided. Ask the platform administrators to set the model owner.',
+  SECRET_FIELDS_INCOMPLETE:
+    "The model's registered credential does not match what the model now declares. Ask the model owner to re-register it.",
+  SECRET_DECLARATION_INVALID:
+    "The model's credential declaration is invalid. Ask the model owner to fix the model configuration.",
+  SECRET_DECLARATION_MISMATCH:
+    "The model's credential declaration does not match the catalog. Ask the model owner to fix the model configuration.",
+  SECRET_ENV_UNDECLARED:
+    "The model's credential maps to an environment variable its application does not declare. Ask the model owner to fix the application or the declaration.",
 };
 
 /**
