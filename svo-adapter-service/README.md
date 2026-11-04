@@ -223,6 +223,42 @@ submitting again, so a late start never duplicates a job.
   whose baked token has expired and that cannot fetch fails with
   `RUN_TOKEN_EXPIRED_BEFORE_START`.
 
+### Earthdata credential for SUBSIDE model tasks
+
+SUBSIDE analysis apps read `EARTHDATA_USERNAME` / `EARTHDATA_PASSWORD` from
+their environment. The adapter supplies them at run time and never writes them
+into the pipeline definition, logs, or provenance.
+
+```
+SVO_ADAPTER_EARTHDATA_USERNAME=<dedicated low-privilege Earthdata account>   # SecretStr
+SVO_ADAPTER_EARTHDATA_PASSWORD=<secret>                                     # SecretStr
+```
+
+Inject both from a secret on the pod, never as literals in Helm values or git.
+Use a dedicated project account, not a personal one. The values are secret
+settings: a missing value means the endpoint below returns 404.
+
+- `GET /runs/{run_id}/credentials/earthdata` returns `{"username", "password"}`
+  with `Cache-Control: no-store`. It needs the run's signal token in
+  `X-Run-Signal-Token` and `X-Run-Signal-Expires`, and the run must be
+  `running` or `submitting` with signals armed. Errors: 404
+  `RUN_CREDENTIAL_UNAVAILABLE`, 503 `RUN_SIGNALS_DISABLED`, 401
+  `RUN_SIGNAL_REJECTED`, 429 `RUN_SIGNAL_RATE_LIMITED` (same bucket as
+  `/signal`), 409 `RUN_NOT_ACTIVE`. Each success writes a
+  `run.credential.issued` provenance event with no value.
+- `credentials_url` is added to the workflow args only when signals are armed
+  and the credential is configured (`app/main.py`).
+- `_model_execution_code` in `app/tapis.py` drops any `earthdata-netrc` entry
+  from `fileInputs`. It fetches the credential just before `POST /v3/jobs/submit`,
+  retrying 5xx, 429, and transport errors up to three times. A 404 submits
+  without the credential. Any other failure ends the task with
+  `EARTHDATA_CREDENTIAL_UNAVAILABLE`. The two values are appended to
+  `parameterSet.envVariables` on a copy used only for the submit call.
+- Not enforced here: the app's FIXED `EARTHDATA_*` env entries. Check at
+  registration.
+- Residual exposure: the Tapis job record contains the values and is readable by
+  the job owner. Follow-up dated 2026-12: Tapis Security Kernel secret injection.
+
 ### How the model stage waits
 
 Before submitting, the stage looks up a Tapis job with the same name (unique per
