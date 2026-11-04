@@ -50,6 +50,44 @@ A third template, the [Jupyter template](https://github.com/In-For-Disaster-Anal
 
 Test with a small sample first. Fixing a mistake now is far quicker than finding it after facilitators have started using the model. The screenshot shows the command template's example settings, and the layout can change between releases.
 
+## Credentials, if your model needs a login
+
+Some models need a login to download their data, such as NASA Earthdata. Never
+put a password in your cookbook, `app.json` or the form. Declare the login as a
+**secret credential** instead.
+
+1. In **Models → Register Model Configuration**, add a parameter and turn on
+   **Secret credential**. The value field then changes to a list of fields.
+2. Give the parameter a name, for example `earthdata`. Use lowercase letters,
+   numbers, `_` or `-`. The name is used to store the login.
+3. In the list, write one line per value your model reads, in the form
+   `field=ENV_KEY`:
+
+   ```
+   username=EARTHDATA_USERNAME
+   password=EARTHDATA_PASSWORD
+   ```
+
+   `ENV_KEY` is the name of an environment variable that your Tapis application
+   declares as a changeable (not fixed) variable. Use uppercase letters, numbers
+   and `_`. If the application does not declare a name, runs of the model fail
+   before they start, so check the names with the person who builds the application.
+4. Leave the value empty. Do not type the login into the form.
+
+The platform does not store the login from the form. For now, a platform
+administrator stores it for the model's owner, so tell the administrator which
+account owns the model. Until the login is stored, a run of the model stops
+before it starts, with a message that the model needs a credential its owner has
+not registered yet. Runners see the readiness line **Credentials provided by the
+model owner**, and no login is asked of them.
+
+When someone runs your model, the platform adds the login to the job when it
+starts. They do not enter it. Be aware that the login is visible in the run's job
+details to anyone who can open that job, including the person who started the
+run. Use a dedicated project account with only the access the model needs, not
+your personal login. Letting other people supply their own logins is planned,
+but not available yet.
+
 ## Finish registering the model
 
 When the application is created, DYNAMO selects it in the form and offers to fill in the inputs and settings from it. If your form already has some, it asks whether to replace them or keep yours.
