@@ -1380,6 +1380,13 @@ async def create_deferred_plan(
     for step, spec in zip(plan_json["steps"], path):
         step["publishes"] = bool(_catalogs(_spec_output_catalog(spec)))
     if any(step["publishes"] for step in plan_json["steps"]):
+        if tapis.PUBLISH_REQUIRED_CATALOG not in _catalogs(target.catalog):
+            raise HTTPException(422, detail={
+                "code": "PUBLISH_CATALOG_UNSUPPORTED",
+                "message": f"publishing needs the {tapis.PUBLISH_REQUIRED_CATALOG} catalog; "
+                           "STAC assets are CKAN resources",
+                "catalogs": sorted(_catalogs(target.catalog)),
+            })
         _reject_publish_values({
             "stac_collection": settings.publish_default_collection,
             "ckan_org": settings.publish_default_org,
@@ -1533,12 +1540,13 @@ def _cannot(reason: str) -> dict[str, Any]:
 
 
 def _can_publish(token: str | None) -> dict[str, Any]:
-    """Advisory precheck: may the caller create datasets in the default organisation?
+    """Advisory precheck: may the caller create datasets in an allowed organisation?
 
     Reads the settings CKAN only, with the caller's token, a timeout and no
     redirects (the token must never follow a redirect). STAC accepts any Tapis
     user, so this is a convenience, not the authorization. ``orgs_ok`` lists the
-    allowed organisations the caller may create datasets in.
+    allowed organisations the caller may create datasets in, in allow-list order;
+    ``ok`` is true when there is at least one.
     """
     org = settings.publish_default_org
     if not settings.publish_enabled:
@@ -1569,9 +1577,10 @@ def _can_publish(token: str | None) -> dict[str, Any]:
     names = {str(o.get("name")) for o in orgs if isinstance(o, dict)}
     names |= {str(o.get("id")) for o in orgs if isinstance(o, dict)}
     orgs_ok = [o for o in settings.publish_allowed_org_list if o in names]
-    if org in names:
+    if orgs_ok:
         return {"ok": True, "reason": None, "orgs_ok": orgs_ok}
-    return _cannot(f"you cannot create datasets in the {org} organisation")
+    allowed = ", ".join(settings.publish_allowed_org_list) or org
+    return _cannot(f"you cannot create datasets in any organisation this deployment publishes to ({allowed})")
 
 
 def _publisher_parameters(spec: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1639,7 +1648,31 @@ async def list_publishers(
         return {"configuration_id": configuration_id, "publishers": []}
     can_publish = await run_in_threadpool(_can_publish, token)
     return {"configuration_id": configuration_id,
-            "publishers": [{**item, "can_publish": can_publish} for item in found.values()]}
+            "publishers": [{**item,
+                            "parameters": _user_scoped_parameters(item["parameters"], can_publish),
+                            "catalog_options": tapis.publish_catalog_options(item["catalog_tokens"]),
+                            "can_publish": can_publish}
+                           for item in found.values()]}
+
+
+def _user_scoped_parameters(parameters: list[dict[str, Any]], can_publish: dict[str, Any]) -> list[dict[str, Any]]:
+    """The publisher's parameters with ``ckan_org`` narrowed to the organisations the
+    caller may actually publish to (``orgs_ok``): the allow-list is the deployment's
+    bound, the caller's CKAN memberships decide what the form offers. The default is
+    the configured organisation when the caller belongs to it, else the first usable
+    one. With no usable organisation the allow-list is shown unchanged; the control is
+    disabled by ``can_publish`` anyway."""
+    orgs_ok = [str(o) for o in can_publish.get("orgs_ok") or []]
+    if not orgs_ok:
+        return parameters
+    out = []
+    for parameter in parameters:
+        if parameter.get("name") == "ckan_org":
+            default = parameter.get("default")
+            parameter = {**parameter, "allowed_values": orgs_ok,
+                         "default": default if default in orgs_ok else orgs_ok[0]}
+        out.append(parameter)
+    return out
 
 
 @app.post("/readiness/check", response_model=ReadinessResult, tags=["Core: Planning"])
@@ -2372,6 +2405,18 @@ def _bind_publish_args(
     service_args["ckan_url"] = settings.publish_ckan_url
     service_args["stac_item_id"] = execution_id
     service_args["execution_id"] = execution_id
+    service_args["catalogs"] = _plan_catalogs(plan_json)
+
+
+def _plan_catalogs(plan_json: dict[str, Any]) -> str:
+    """The catalogs a publish plan's target asks for, as the task reads them
+    (``ckan+stac``). A plan from before the choice existed gets every catalog
+    the piece writes, which is what it did then."""
+    target = plan_json.get("target_contract") or {}
+    requested = _catalogs(target.get("catalog") if isinstance(target, dict) else None)
+    if not requested:
+        requested = {tapis.PUBLISH_REQUIRED_CATALOG, *tapis.PUBLISH_OPTIONAL_CATALOGS}
+    return "+".join(sorted(requested))
 
 
 def _validate_deferred_execution_id(

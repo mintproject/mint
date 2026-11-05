@@ -96,7 +96,8 @@
         "PUBLIC": "public",
         "STAC_ITEM_ID": "stac_item_id",
         "EXECUTION_ID": "execution_id",
-        "PRODUCT_PATTERN": "product_pattern"
+        "PRODUCT_PATTERN": "product_pattern",
+        "CATALOGS": "catalogs"
       },
       "parameters_schema_json": {
         "type": "object",

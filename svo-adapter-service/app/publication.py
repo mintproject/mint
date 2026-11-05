@@ -39,12 +39,13 @@ def publication_from_detail(detail: dict[str, Any]) -> dict[str, Any] | None:
         if not str(task.get("task_id") or task.get("id") or "").endswith(PUBLISH_TASK_SUFFIX):
             continue
         payload = parse_json_payload(task.get("stdout")) or {}
-        if payload.get("catalog") and payload.get("stac_item"):
+        # A CKAN-only publish has no STAC Item; either link makes it published.
+        if payload.get("catalog") and (payload.get("ckan_dataset") or payload.get("stac_item")):
             return {
                 "status": "published",
                 "catalog": str(payload["catalog"]),
                 "ckan_dataset": payload.get("ckan_dataset"),
-                "stac_item": payload.get("stac_item"),
+                "stac_item": payload.get("stac_item") or None,
                 "public": bool(payload.get("public")),
             }
         if str(payload.get("status") or "").lower() == "error":

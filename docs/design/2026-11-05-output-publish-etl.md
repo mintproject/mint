@@ -526,6 +526,32 @@ production rows stay unless the user asks.
   (hds/cbc) models cannot publish through the stac-publish piece as its
   input contracts stand; that is a piece-contract decision, not a bug.
 
+- 2026-11-05 (follow-up, per-user organisations and CKAN-only): the form's
+  `ckan_org` dropdown showed the deployment allow-list, not the caller's CKAN
+  memberships, and `can_publish` passed only members of the *default*
+  organisation. Now `GET /publishers` narrows `ckan_org.allowed_values` to
+  `orgs_ok` (the caller's `create_dataset` organisations intersected with the
+  allow-list, which stays the authorization bound at plan and submit) and
+  `can_publish.ok` is true for any such organisation; the default is the
+  configured one when the caller belongs to it, else the first usable one.
+  A user may also choose CKAN alone ("the user should be able to toggle CKAN
+  and STAC or just CKAN"): `/publishers` lists `catalog_options`
+  (`[["ckan","stac"],["ckan"]]`), the UI's Catalog select offers one entry per
+  option and sends the chosen tokens as `publish`, the EM refuses a set the
+  adapter does not offer (422 `PUBLISH_CATALOG_UNSUPPORTED`) and sorts the
+  tokens, and the adapter binds a managed `catalogs` argument from the plan's
+  target contract (a plan from before the choice binds `ckan+stac`). The
+  generator wires `CATALOGS` into the `catalog_register` task itself, so the
+  live piece needs no re-registration (the example specs declare it too).
+  CKAN is never optional: STAC assets are CKAN resource URLs, so a target of
+  `stac` alone is refused at plan time. A CKAN-only dataset carries no
+  `stac_collection` extra, because the reconcile bridge adopts datasets by that
+  extra and would otherwise publish it to STAC after all; it carries
+  `catalogs=ckan` instead. `publication` counts a result with a CKAN link but
+  no STAC Item as published. Skeptic review (revise → addressed): full no-op
+  STAC client surface, explicit default for old plans, EM-side validation of
+  token sets, spec JSON updated alongside the generator.
+
 ## User feedback / decisions
 
 - 2026-11-05: "approve" on rev 3. Open questions 1 and 3 proceed on the

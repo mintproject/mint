@@ -255,6 +255,8 @@ def run_task(fake, token=TOKEN, **overrides):
     {"CKAN_URL": "https://user:pw@ckan.example"},
     {"SOURCE_URI": "/work/archive"},
     {"STAC_ITEM_ID": "../escape"},
+    {"CATALOGS": "stac"},    # STAC assets are CKAN resources; CKAN cannot be left out
+    {"CATALOGS": "zenodo"},
 ])
 def test_malformed_input_exits_2_before_any_http_call(fake, override):
     proc, result = run_task(fake, **override)
@@ -314,6 +316,35 @@ def test_success_creates_one_dataset_uploads_products_and_upserts_one_stamped_it
     manifest = json.loads(fake.files["work/archive/ue_1-manifest.json"])
     assert manifest["execution_id"] == "ue_1"
     assert manifest["artifacts"]["cumulative_displacement_geotiff"]["path"] == "opera_disp_s1_cumulative.tif"
+
+
+@needs_stacmap
+def test_ckan_only_writes_the_dataset_and_never_calls_stac(fake):
+    proc, result = run_task(fake, CATALOGS="ckan")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert result == {"catalog": "ckan", "public": False, "stac_item": None,
+                      "ckan_dataset": fake.url + "/ckan/dataset/subsidence-rates-dev--ue_1"}
+    assert not [p for _, p in fake.requests if p.startswith("/stac")]
+    assert fake.items == {} and fake.collections == set()
+    assert counts(fake)["package_create"] == 1 and counts(fake)["resource_create"] == 3
+    # No stac_collection extra: the reconcile bridge adopts datasets by that extra
+    # and would otherwise publish this one to STAC after all.
+    create = next(f for a, f in fake.payloads if a == "package_create")
+    extras = {e["key"]: e["value"] for e in json.loads(create["extras"])} if isinstance(
+        create.get("extras"), str) else {e["key"]: e["value"] for e in create.get("extras") or []}
+    assert "stac_collection" not in extras
+    assert extras["stac_item_id"] == "ue_1" and extras["catalogs"] == "ckan"
+
+
+@needs_stacmap
+def test_an_explicit_ckan_stac_choice_matches_the_default(fake):
+    proc, result = run_task(fake, CATALOGS="stac+ckan")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert result["catalog"] == "ckan+stac" and result["stac_item"]
+    create = next(f for a, f in fake.payloads if a == "package_create")
+    extras = {e["key"]: e["value"] for e in (json.loads(create["extras"]) if isinstance(
+        create.get("extras"), str) else create.get("extras") or [])}
+    assert extras["stac_collection"] == "subsidence-rates-dev" and extras["catalogs"] == "ckan+stac"
 
 
 @needs_stacmap

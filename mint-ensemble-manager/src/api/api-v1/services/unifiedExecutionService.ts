@@ -1827,7 +1827,12 @@ export function createUnifiedExecutionService(
     };
 
     /** A publisher as GET /publishers on the adapter describes it. */
-    type OfferedPublisher = { catalog_tokens?: string[]; output_formats?: string[] };
+    type OfferedPublisher = {
+        catalog_tokens?: string[];
+        output_formats?: string[];
+        /** Token sets the user may choose, e.g. [["ckan","stac"],["ckan"]]; absent on an older adapter. */
+        catalog_options?: string[][];
+    };
 
     /**
      * Normalise the requested catalog tokens and check them against the
@@ -1848,7 +1853,11 @@ export function createUnifiedExecutionService(
                 "PUBLISH_INVALID"
             );
         }
-        const tokens = [...new Set(requested.map((token: string) => token.trim()).filter(Boolean))];
+        // Sorted so the plan's target catalog ("ckan+stac") is the same string
+        // however the client ordered the tokens.
+        const tokens = [
+            ...new Set(requested.map((token: string) => token.trim()).filter(Boolean))
+        ].sort();
         if (!tokens.length) return { tokens: [], offered: [] };
         const response = await adapterRequest(
             `/publishers?configuration_id=${encodeURIComponent(modelId)}`,
@@ -1866,6 +1875,21 @@ export function createUnifiedExecutionService(
                 "PUBLISH_CATALOG_UNKNOWN",
                 { requested: tokens, available }
             );
+        }
+        // When the adapter says which token sets a user may pick (STAC alone is not
+        // one: its assets are CKAN resources), the request must be one of them.
+        const options = offered.flatMap((publisher) => publisher.catalog_options || []);
+        if (options.length) {
+            const wanted = tokens.join("+");
+            const allowed = options.map((option) => [...option].sort().join("+"));
+            if (!allowed.includes(wanted)) {
+                throw new UnifiedExecutionError(
+                    422,
+                    `unsupported publish catalog combination; choose one of: ${allowed.join(", ")}`,
+                    "PUBLISH_CATALOG_UNSUPPORTED",
+                    { requested: tokens, allowed: options }
+                );
+            }
         }
         return { tokens, offered };
     };

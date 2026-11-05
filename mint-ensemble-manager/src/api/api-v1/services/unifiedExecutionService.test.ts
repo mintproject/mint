@@ -2037,6 +2037,28 @@ describe("unifiedExecutionService", () => {
             expect(calls("/plans/deferred")).toHaveLength(0);
         });
 
+        it("accepts a catalog combination the adapter offers and refuses one it does not", async () => {
+            const offering = {
+                ...publishers,
+                publishers: [
+                    { ...publishers.publishers[0], catalog_options: [["ckan", "stac"], ["ckan"]] }
+                ]
+            };
+            stubAdapter(undefined, offering);
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await service.createPlan({ ...baseRequest, publish: ["ckan"] }, "Bearer user-token");
+            const deferred = JSON.parse(calls("/plans/deferred")[0][1].body);
+            expect(deferred.target_contract.catalog).toBe("ckan");
+            await expect(
+                service.createPlan({ ...baseRequest, publish: ["stac"] }, "Bearer user-token")
+            ).rejects.toMatchObject({
+                statusCode: 422,
+                code: "PUBLISH_CATALOG_UNSUPPORTED",
+                details: { requested: ["stac"], allowed: [["ckan", "stac"], ["ckan"]] }
+            });
+            expect(calls("/plans/deferred")).toHaveLength(1);
+        });
+
         it("does not consult the adapter publishers when publish is empty or absent", async () => {
             stubAdapter([]);
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });

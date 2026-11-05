@@ -1185,6 +1185,15 @@ for _name, _value in (("STAC_COLLECTION", _collection), ("CKAN_ORG", _org),
     if not _id_re.match(_value):
         _fail("%s is empty or not a plain identifier" % _name)
 _public = _flag(_input("PUBLIC", "false"))
+# Which catalogs to write. Empty (a plan from before the choice existed) means both.
+# CKAN is never optional: the STAC Item's assets are CKAN resource URLs.
+_catalog_set = {t.strip().lower() for t in _input("CATALOGS", "").replace("/", "+").replace(",", "+").split("+")
+                if t.strip()} or {"ckan", "stac"}
+if "ckan" not in _catalog_set:
+    _fail("CATALOGS must include ckan (STAC assets are CKAN resources); got %s" % "+".join(sorted(_catalog_set)))
+if _catalog_set - {"ckan", "stac"}:
+    _fail("CATALOGS names an unknown catalog: %s" % "+".join(sorted(_catalog_set - {"ckan", "stac"})))
+_with_stac = "stac" in _catalog_set
 _patterns = [p.strip() for p in _input("PRODUCT_PATTERN", "*.tif").split(",") if p.strip()] or ["*.tif"]
 _system, _, _dir = _source[len("tapis://"):].partition("/")
 _dir = _dir.strip("/")
@@ -1372,6 +1381,23 @@ def _publish():
             props["execution_id"] = _execution_id
             return super().upsert_item(collection_id, item)
 
+    class _NoStac:
+        # CKAN-only publish: everything publish_item and this task ask of the STAC
+        # client is answered without a request. Keep this in step with the pinned
+        # stacmap.publish.publish_item (ensure_collection, upsert_item) and the
+        # calls below (get_item, close).
+        def get_item(self, collection_id, item_id):
+            return None
+
+        def ensure_collection(self, collection):
+            return None
+
+        def upsert_item(self, collection_id, item):
+            return None
+
+        def close(self):
+            return None
+
     class _OwnedCkan(CkanClient):
         # The library creates run datasets private to the organisation; PUBLIC opens one.
         def ensure_run_dataset(self, collection_id, item_id, *, title=None, notes=None):
@@ -1386,15 +1412,20 @@ def _publish():
                     self._action_json("package_patch", {"id": name, "private": private})
                 dataset_names.append(existing.get("name") or name)
                 return existing
+            # The STAC reconcile bridge adopts every dataset carrying the collection
+            # extra, so a CKAN-only dataset must not carry it or it would be
+            # backfilled into STAC regardless of the choice made here.
+            extras = {ITEM_ID_FIELD: item_id, "published_by": _username,
+                      "catalogs": "+".join(sorted(_catalog_set))}
+            if _with_stac:
+                extras[COLLECTION_FIELD] = collection_id
             created = self.ensure_dataset(
-                name, title=title or item_id, notes=notes,
-                extras={COLLECTION_FIELD: collection_id, ITEM_ID_FIELD: item_id,
-                        "published_by": _username},
+                name, title=title or item_id, notes=notes, extras=extras,
                 fields={"private": private})
             dataset_names.append(created.get("name") or name)
             return created
 
-    stac = _OwnedStac(url=_stac_url, token=_token)
+    stac = _OwnedStac(url=_stac_url, token=_token) if _with_stac else _NoStac()
     ckan = _OwnedCkan(url=_ckan_url, token=_token, org=_org)
     try:
         # Best-effort guard: never overwrite an Item another user published.
@@ -1455,10 +1486,10 @@ except BaseException as exc:
     _fail(_describe(exc))
 
 _emit_result({
-    "catalog": "ckan+stac",
+    "catalog": "+".join(sorted(_catalog_set)),
     # The name CKAN reported for the dataset it created or found, not one rebuilt here.
     "ckan_dataset": "%s/dataset/%s" % (_ckan_url, _up.quote(_dataset or "", safe="")),
-    "stac_item": "%s/collections/%s/items/%s" % (_stac_url, _collection, _item_id),
+    "stac_item": ("%s/collections/%s/items/%s" % (_stac_url, _collection, _item_id)) if _with_stac else None,
     "public": _public,
 })
 """

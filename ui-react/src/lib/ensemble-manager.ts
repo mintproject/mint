@@ -159,7 +159,10 @@ export interface UnifiedExecutionPlan {
 export interface UnifiedPublication {
   status: 'published' | 'failed' | 'awaiting_owner' | string;
   error?: string | null;
+  /** Catalogs written, as the task reports them (`ckan+stac` or `ckan`). */
+  catalog?: string | null;
   ckan_dataset?: string | null;
+  /** Null when the user chose CKAN only. */
   stac_item?: string | null;
   public?: boolean | null;
 }
@@ -170,12 +173,22 @@ export interface PlanPublisher {
   name: string;
   catalog_tokens: string[];
   parameters: UnifiedParameterDefinition[];
-  can_publish: { ok: boolean; reason: string | null };
+  /**
+   * Whether the caller may publish, why not, and the allow-listed CKAN
+   * organisations they belong to (`orgs_ok`, absent on an older adapter).
+   */
+  can_publish: { ok: boolean; reason: string | null; orgs_ok?: string[] };
   /**
    * Declared formats of the model outputs this publisher can take, verbatim
    * from the model catalog. Absent on an older adapter.
    */
   output_formats?: string[];
+  /**
+   * The catalog token sets a user may choose for this publisher, e.g.
+   * `[["ckan","stac"],["ckan"]]`. Absent on an older adapter, which offers
+   * only `catalog_tokens`.
+   */
+  catalog_options?: string[][];
 }
 
 export interface PlanPublishersResponse {

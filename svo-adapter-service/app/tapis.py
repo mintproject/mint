@@ -103,8 +103,26 @@ STANDARD_PARAMS: dict[str, dict[str, Any]] = {
 # the run, never from user args; the second is the user-facing configuration, with
 # allowed_values from the deployment allow-lists.
 PUBLISH_STEP_TYPE = "catalog_register"
-PUBLISH_MANAGED_ARGS = ("tapis_base_url", "stac_url", "ckan_url", "stac_item_id", "execution_id", "product_pattern")
+PUBLISH_MANAGED_ARGS = ("tapis_base_url", "stac_url", "ckan_url", "stac_item_id", "execution_id", "product_pattern",
+                        "catalogs")
 PUBLISH_USER_ARGS = ("stac_collection", "ckan_org", "public")
+# Catalogs a publish step may leave out at the user's choice. CKAN is never optional:
+# the STAC Item's assets are CKAN resource URLs, so STAC without CKAN has nothing to
+# point at, while CKAN without STAC is a complete (if undiscoverable-by-map) dataset.
+PUBLISH_REQUIRED_CATALOG = "ckan"
+PUBLISH_OPTIONAL_CATALOGS = ("stac",)
+
+
+def publish_catalog_options(tokens: list[str]) -> list[list[str]]:
+    """The catalog combinations a user may pick for a publisher: the full set first,
+    then the full set minus each optional catalog (``[["ckan", "stac"], ["ckan"]]``)."""
+    full = sorted({str(t).lower() for t in tokens if t})
+    options = [full]
+    for optional in PUBLISH_OPTIONAL_CATALOGS:
+        reduced = [t for t in full if t != optional]
+        if reduced and reduced != full and reduced not in options:
+            options.append(reduced)
+    return options
 
 
 def publish_params() -> dict[str, dict[str, Any]]:
@@ -122,6 +140,9 @@ def publish_params() -> dict[str, dict[str, Any]]:
         # No default here: the piece's own parameters_schema_json carries the model's
         # filename patterns, and the task falls back to *.tif when it is empty.
         "product_pattern": {"type": "string", "required": False},
+        # Bound from the plan's target contract; empty means every catalog the piece writes.
+        "catalogs": {"type": "string", "default": "", "required": False,
+                     "description": "Catalogs the step writes to (ckan or ckan+stac)"},
         "stac_collection": {"type": "string", "default": default_collection, "required": False,
                             "description": "STAC collection to publish into",
                             **({"allowed_values": collections} if collections else {})},
@@ -1018,6 +1039,10 @@ def generate_tapis_workflow(
             if inputs:
                 task["input"] = inputs
             if str(transform_type or "").lower() == PUBLISH_STEP_TYPE:
+                # The catalog choice postdates the registered piece's env mapping;
+                # wire it here so a live piece needs no re-registration.
+                task.setdefault("input", {}).setdefault(
+                    "CATALOGS", {"type": "string", "value_from": {"args": "catalogs"}})
                 # Downloads, uploads and upserts the whole product set; a retry
                 # would only repeat a refusal, so none.
                 task["execution_profile"] = {
