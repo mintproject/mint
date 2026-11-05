@@ -4092,6 +4092,7 @@ export enum Modelcatalog_Configuration_Constraint {
 /** columns and relationships of "modelcatalog_configuration_input" */
 export type Modelcatalog_Configuration_Input = {
   __typename?: 'modelcatalog_configuration_input';
+  app_input_name?: Maybe<Scalars['String']['output']>;
   /** An object relationship */
   configuration: Modelcatalog_Configuration;
   configuration_id: Scalars['String']['output'];

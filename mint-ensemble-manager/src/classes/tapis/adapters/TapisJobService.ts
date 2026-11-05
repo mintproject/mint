@@ -194,8 +194,14 @@ export class TapisJobService {
     }
 
     public findModelInput(fileInputName: string, model: Model) {
+        // The explicit catalog binding wins; label matching is the fallback for
+        // configurations registered before the binding existed.
+        const boundInput = model.input_files.find(
+            (input) => input.app_input_name === fileInputName
+        );
+        if (boundInput) return boundInput;
         const exactInput = model.input_files.find((input) => input.name === fileInputName);
-        const appInputName = fileInputName.toLowerCase();
+        const loweredName = fileInputName.toLowerCase();
         const semanticInputNames = new Set([
             "mf6-simulation-archive",
             "mf6-wel",
@@ -207,7 +213,7 @@ export class TapisJobService {
             "mf2005-wel",
             "mf2005-rch"
         ]);
-        if (exactInput || !semanticInputNames.has(appInputName)) {
+        if (exactInput || !semanticInputNames.has(loweredName)) {
             return exactInput;
         }
 
@@ -218,7 +224,7 @@ export class TapisJobService {
             const packageName = (value: string) =>
                 new RegExp(`(^|[^a-z])${value}([^a-z]|$)`).test(inputName);
 
-            if (appInputName.endsWith("-simulation-archive")) {
+            if (loweredName.endsWith("-simulation-archive")) {
                 return (
                     inputFormat === "zip" ||
                     inputName.includes("simulation archive") ||
@@ -227,7 +233,7 @@ export class TapisJobService {
                 );
             }
 
-            if (appInputName.endsWith("-wel")) {
+            if (loweredName.endsWith("-wel")) {
                 return (
                     inputFormat === "wel" ||
                     packageName("wel") ||
@@ -238,7 +244,7 @@ export class TapisJobService {
                 );
             }
 
-            if (appInputName.endsWith("-rch")) {
+            if (loweredName.endsWith("-rch")) {
                 return (
                     (inputFormat === "rch" &&
                         !inputName.includes("rcha") &&
@@ -253,6 +259,21 @@ export class TapisJobService {
 
             return false;
         });
+    }
+
+    /**
+     * OPTIONAL app file inputs that no model input feeds, by binding or by
+     * label. createJobFileInputsFromSeed skips them silently, so the plan
+     * reports them instead of letting a missing file surface at run time.
+     */
+    public findUnmatchedOptionalInputs(app: Apps.TapisApp, model: Model): string[] {
+        return (app.jobAttributes?.fileInputs || [])
+            .filter(
+                (fileInput) =>
+                    fileInput.inputMode === Apps.FileInputModeEnum.Optional &&
+                    !this.findModelInput(fileInput.name, model)
+            )
+            .map((fileInput) => fileInput.name);
     }
 
     public createJobFileInputsFromSeed(

@@ -7,6 +7,7 @@ fragment model_info on modelcatalog_configuration {
     model_configuration_id
     inputs {
         is_optional
+        app_input_name
         input {
             id
             label

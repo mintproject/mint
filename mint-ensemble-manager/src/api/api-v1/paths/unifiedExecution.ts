@@ -21,19 +21,31 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *               input_etl:
  *                 type: boolean
  *                 description: >
- *                   Tapis plans automatically derive input-side ETL for model inputs
- *                   typed as an area of interest (from the thread region). Set to
+ *                   Tapis plans automatically ask the SVO adapter to plan input-side
+ *                   ETL for model inputs bound to a Tapis file input (the catalog's
+ *                   app_input_name), using the thread region as the source. Set to
  *                   false to opt out; true forces the composite path. Ignored for
  *                   non-Tapis engines unless true (which is rejected).
+ *               strict_inputs:
+ *                 type: boolean
+ *                 description: >
+ *                   When true, any input warning (see `input_warnings` in the
+ *                   response) fails plan creation with 422 INPUT_WARNINGS.
  *     responses:
  *       200:
  *         description: >
- *           Unified plan created. When input ETL was derived, the plan carries
- *           `input_steps`, an array of derived steps (name, app_input_name, steps,
- *           source, params, derivation incl. method, region_id, vertices_in, bytes,
- *           area_km2). 422 codes include AOI_REGION_TOO_LARGE,
- *           AOI_MULTIPLE_INPUTS_UNSUPPORTED, AOI_REGION_UNAVAILABLE and
- *           AOI_REGION_GEOMETRY_INVALID.
+ *           Unified plan created. When the bridge planned input ETL, the plan
+ *           carries `input_steps` (a preview of the planned steps), `input_sources`
+ *           and `filled_app_inputs` (sent back on submit), and `steps_digest` (the
+ *           bridge rejects a submit whose steps differ with 409 INPUT_PLAN_CHANGED).
+ *           `input_warnings` lists inputs that could not be planned: registry
+ *           missing, unbound model inputs, optional inputs with no transform path,
+ *           optional app inputs that match no model input. 422 codes include
+ *           NO_INPUT_TRANSFORM_PATH (a required input has no path), INPUT_WARNINGS,
+ *           AOI_REGION_UNAVAILABLE and AOI_REGION_GEOMETRY_INVALID; the adapter
+ *           also returns its own 422s for oversized regions. 502
+ *           ADAPTER_CAPABILITY_MISSING means the adapter lacks
+ *           POST /plans/model-inputs.
  *         content:
  *           application/json:
  *             schema:
@@ -45,6 +57,21 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *                   items:
  *                     type: object
  *                     additionalProperties: true
+ *                 input_sources:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     additionalProperties: true
+ *                 filled_app_inputs:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 steps_digest:
+ *                   type: string
+ *                 input_warnings:
+ *                   type: array
+ *                   items:
+ *                     type: string
  *       400:
  *         description: Invalid plan request.
  *         content:

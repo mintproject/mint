@@ -2,12 +2,7 @@ import crypto from "crypto";
 import { UnifiedExecutionError } from "@/classes/common/errors";
 import { ModelSecretDeclaration, Region } from "@/classes/mint/mint-types";
 import { getConfiguration } from "@/classes/mint/mint-functions";
-import {
-    AOI_STANDARD_VARIABLE_URI,
-    deriveRegionSource,
-    InputStep,
-    RegionGeometryError
-} from "./inputStepDerivation";
+import { deriveRegionSource, InputSource, RegionGeometryError } from "./inputStepDerivation";
 import {
     createHasuraUnifiedExecutionStore,
     UnifiedExecutionRecord,
@@ -40,9 +35,33 @@ interface LegacyPlan {
     execution_engine: string;
     adapter_steps?: AdapterStep[];
     post_model_adapter?: PostModelAdapter;
-    // ETL chains that run before the model in the same composite workflow and
-    // produce one of its file inputs. Part of the plan, so the plan hash covers them.
-    input_steps?: InputStep[];
+    // Input ETL is planned by the bridge (POST /plans/model-inputs). The plan
+    // keeps the sources and the filled app inputs that submit sends back, the
+    // digest that makes a registry change between plan and submit a 409, the
+    // steps as a display preview, and the warnings the preview raised. All are
+    // part of the plan, so the plan hash covers them.
+    input_steps?: Record<string, unknown>[];
+    input_sources?: InputSource[];
+    filled_app_inputs?: string[];
+    steps_digest?: string;
+    input_warnings?: string[];
+}
+
+interface ConsideredInput {
+    app_input_name?: string;
+    standard_variable_uri?: string;
+    optional?: boolean;
+    outcome?: "planned" | "filled" | "fixed" | "unbound" | "no_path";
+    blocking?: boolean;
+}
+
+interface InputPlanResult {
+    steps: Record<string, unknown>[];
+    outputs: { id: string; name: string; format?: string }[];
+    sources: InputSource[];
+    filledAppInputs: string[];
+    stepsDigest?: string;
+    warnings: string[];
 }
 
 interface AdapterStep {
@@ -288,10 +307,6 @@ function adapterPlanId(planId: string): string {
 
 function planHash(plan: LegacyPlan): string {
     return crypto.createHash("sha256").update(JSON.stringify(plan)).digest("hex");
-}
-
-function inputStepsHash(steps: InputStep[]): string {
-    return crypto.createHash("sha256").update(JSON.stringify(steps)).digest("hex");
 }
 
 function parameterValuesHash(values: Record<string, unknown>): string {
@@ -614,14 +629,16 @@ export function createUnifiedExecutionService(
                 output_format?: string;
                 job_definition: unknown;
             }>;
-            findUnboundInputsByStandardVariable?(
+            compositeModelContext?(
                 threadmodel: { thread_id: string; model_id: string },
-                standardVariableUri: string,
                 authorization: string
             ): Promise<{
+                configuration_id: string;
                 region: Region | null;
-                inputs: { app_input_name: string; model_input_id: string }[];
+                has_bound_inputs: boolean;
+                filled_app_inputs: string[];
                 outputs: { id: string; name: string; format?: string }[];
+                unmatched_optional_inputs: string[];
             }>;
             resolveCompositeWorkflowOutput?: (
                 executionId: string,
@@ -1476,85 +1493,139 @@ export function createUnifiedExecutionService(
     };
 
     /**
-     * Derive the input-ETL steps a composite model needs. Today that is one
-     * kind: an app file input that no bound dataset fills and whose model input
-     * is typed as an area of interest gets a chain built from the thread
-     * region. Returns the model's outputs too, for an input-only plan.
+     * Ask the bridge which input-ETL steps a composite model needs. The EM
+     * supplies only what it alone knows: the catalog configuration, the app
+     * inputs the job already fills, and the thread region shaped as a source.
+     * The bridge pairs sources with bound inputs through the registry. Returns
+     * the model's outputs too, for an input-only plan.
      */
     const deriveInputSteps = async (
         plan: LegacyPlan,
+        strictInputs: boolean,
         authorization?: string
-    ): Promise<{
-        steps: InputStep[];
-        outputs: { id: string; name: string; format?: string }[];
-    }> => {
-        const find = legacyServices.tapis.findUnboundInputsByStandardVariable;
-        if (!find) return { steps: [], outputs: [] };
-        const found = await find.call(
+    ): Promise<InputPlanResult> => {
+        const empty: InputPlanResult = {
+            steps: [],
+            outputs: [],
+            sources: [],
+            filledAppInputs: [],
+            warnings: []
+        };
+        const contextOf = legacyServices.tapis.compositeModelContext;
+        if (!contextOf) return empty;
+        const context = await contextOf.call(
             legacyServices.tapis,
             { thread_id: plan.thread_id, model_id: plan.model_id },
-            AOI_STANDARD_VARIABLE_URI,
             authorization || ""
         );
-        if (found.inputs.length === 0) return { steps: [], outputs: found.outputs };
-        if (found.inputs.length > 1) {
-            throw new UnifiedExecutionError(
-                422,
-                `${found.inputs.length} unbound inputs are typed ${AOI_STANDARD_VARIABLE_URI} ` +
-                    `(${found.inputs.map((input) => input.app_input_name).join(", ")}); ` +
-                    "only one area-of-interest input is supported",
-                "AOI_MULTIPLE_INPUTS_UNSUPPORTED"
-            );
+        if (!context.has_bound_inputs) {
+            // The Waco miss of 2026-11-05 was exactly this state: nothing bound,
+            // so nothing planned and nothing said. Say it, so a model registered
+            // without bindings is never a silent label-only run.
+            return {
+                ...empty,
+                outputs: context.outputs,
+                warnings: [
+                    `model ${plan.model_id} records no app-input bindings; its app file inputs are matched by label only`
+                ]
+            };
         }
-        if (!found.region) {
+        if (!context.region) {
             throw new UnifiedExecutionError(
                 422,
-                "the thread region is required to derive an area-of-interest input",
+                "the thread region is required to derive model inputs",
                 "AOI_REGION_UNAVAILABLE"
             );
         }
-        const input = found.inputs[0];
-        let derived: ReturnType<typeof deriveRegionSource>;
+        let source: InputSource;
         try {
-            derived = deriveRegionSource(found.region);
+            source = deriveRegionSource(context.region);
         } catch (error) {
             if (error instanceof RegionGeometryError) {
                 throw new UnifiedExecutionError(422, error.message, "AOI_REGION_GEOMETRY_INVALID");
             }
             throw error;
         }
-        const planned = await adapterRequest(
-            "/plans/input",
-            {
-                method: "POST",
-                body: {
-                    source_kind: derived.source.kind,
-                    target_standard_variable_uri: AOI_STANDARD_VARIABLE_URI,
-                    app_input_name: input.app_input_name
-                }
-            },
-            authorization
-        );
-        if (!Array.isArray(planned?.steps) || planned.steps.length === 0) {
+        let planned: any;
+        try {
+            planned = await adapterRequest(
+                "/plans/model-inputs",
+                {
+                    method: "POST",
+                    body: {
+                        configuration_id: context.configuration_id,
+                        sources: [source],
+                        filled_app_inputs: context.filled_app_inputs
+                    }
+                },
+                authorization
+            );
+        } catch (error) {
+            // An adapter without the endpoint must not look like "no steps needed".
+            if (error instanceof UnifiedExecutionError && error.statusCode === 404) {
+                throw new UnifiedExecutionError(
+                    502,
+                    "SVO adapter does not support POST /plans/model-inputs; deploy a matching adapter",
+                    "ADAPTER_CAPABILITY_MISSING"
+                );
+            }
+            throw error;
+        }
+        const considered: ConsideredInput[] = Array.isArray(planned?.considered)
+            ? planned.considered
+            : [];
+        const blocked = considered.find((row) => row.blocking);
+        if (blocked) {
             throw new UnifiedExecutionError(
-                502,
-                "SVO adapter returned an incomplete input plan",
-                "INPUT_PLAN_INVALID"
+                422,
+                `no input transform path to required app input ${blocked.app_input_name ?? "(unnamed)"}` +
+                    (blocked.standard_variable_uri ? ` (${blocked.standard_variable_uri})` : ""),
+                "NO_INPUT_TRANSFORM_PATH"
+            );
+        }
+        const warnings: string[] = [];
+        if (planned?.registry === "missing") {
+            warnings.push(
+                `the bridge has no registry entry for configuration ${context.configuration_id}; input steps could not be planned (run sync-from-mint)`
+            );
+        }
+        for (const row of considered) {
+            const name = row.app_input_name ?? row.standard_variable_uri ?? "(unnamed)";
+            if (row.outcome === "unbound") {
+                warnings.push(`model input ${name} is not bound to a Tapis file input`);
+            } else if (row.outcome === "no_path") {
+                warnings.push(`no input transform path to optional app input ${name}`);
+            }
+        }
+        for (const name of context.unmatched_optional_inputs) {
+            warnings.push(`optional app input ${name} matched no model input and will be skipped`);
+        }
+        if (strictInputs && warnings.length) {
+            throw new UnifiedExecutionError(
+                422,
+                `input warnings: ${warnings.join("; ")}`,
+                "INPUT_WARNINGS"
             );
         }
         return {
-            steps: [
-                {
-                    name: input.app_input_name,
-                    app_input_name: input.app_input_name,
-                    steps: planned.steps,
-                    source: derived.source,
-                    params: {},
-                    derivation: derived.derivation
-                }
-            ],
-            outputs: found.outputs
+            steps: Array.isArray(planned?.input_steps) ? planned.input_steps : [],
+            outputs: context.outputs,
+            sources: [source],
+            filledAppInputs: context.filled_app_inputs,
+            stepsDigest: planned?.steps_digest,
+            warnings
         };
+    };
+
+    // Warnings are recorded even when no step is needed; the rest only makes
+    // sense (and is only sent on submit) when there are steps.
+    const applyInputPlan = (plan: LegacyPlan, derived: InputPlanResult) => {
+        if (derived.warnings.length) plan.input_warnings = derived.warnings;
+        if (!derived.steps.length) return;
+        plan.input_steps = derived.steps;
+        plan.input_sources = derived.sources;
+        plan.filled_app_inputs = derived.filledAppInputs;
+        plan.steps_digest = derived.stepsDigest;
     };
 
     return {
@@ -1640,8 +1711,8 @@ export function createUnifiedExecutionService(
                     body.execution_engine || getConfiguration().execution_engine || "localex"
             };
             // Composite path: an explicit post-model adapter, or input-only ETL.
-            // Input ETL is automatic for Tapis plans (the finder returns early
-            // when no model input is AOI-typed); `input_etl: false` opts out.
+            // Input ETL is automatic for Tapis plans (the bridge is not called
+            // when no model input is bound to an app input); `input_etl: false` opts out.
             let adapter = body.post_model_adapter;
             let identityPostModel = false;
             // Automatic derivation steps aside for pre-model adapter_steps plans
@@ -1680,8 +1751,10 @@ export function createUnifiedExecutionService(
                     );
                 }
                 if (body.input_etl !== false) {
-                    const derived = await deriveInputSteps(plan, authorization);
-                    if (derived.steps.length) plan.input_steps = derived.steps;
+                    applyInputPlan(
+                        plan,
+                        await deriveInputSteps(plan, body.strict_inputs === true, authorization)
+                    );
                 }
             } else if (inputEtl) {
                 // Input-only composite. Everything downstream of the model (the
@@ -1691,7 +1764,12 @@ export function createUnifiedExecutionService(
                 // contract are the model output's own, which the adapter plans as
                 // zero steps. If nothing needs deriving the plan stays an ordinary
                 // non-composite plan.
-                const derived = await deriveInputSteps(plan, authorization);
+                const derived = await deriveInputSteps(
+                    plan,
+                    body.strict_inputs === true,
+                    authorization
+                );
+                applyInputPlan(plan, derived);
                 if (derived.steps.length) {
                     const requested =
                         typeof body.model_output_key === "string"
@@ -1712,7 +1790,6 @@ export function createUnifiedExecutionService(
                         );
                     }
                     const contract = output.format ? { format: output.format } : {};
-                    plan.input_steps = derived.steps;
                     adapter = {
                         model_io_id: output.id,
                         model_output_key: output.name,
@@ -1797,7 +1874,15 @@ export function createUnifiedExecutionService(
                       : "ready",
                 adapter_steps: plan.adapter_steps || [],
                 post_model_adapter: plan.post_model_adapter || null,
-                ...(plan.input_steps?.length ? { input_steps: plan.input_steps } : {})
+                ...(plan.input_steps?.length
+                    ? {
+                          input_steps: plan.input_steps,
+                          input_sources: plan.input_sources,
+                          filled_app_inputs: plan.filled_app_inputs,
+                          steps_digest: plan.steps_digest
+                      }
+                    : {}),
+                ...(plan.input_warnings?.length ? { input_warnings: plan.input_warnings } : {})
             };
         },
 
@@ -2017,25 +2102,12 @@ export function createUnifiedExecutionService(
                         parentRunId(parent.id),
                         authorization || ""
                     );
-                    // Bound datasets win: a derived input must not collide with a
-                    // file input the job definition already carries.
-                    const inputSteps = plan.input_steps || [];
-                    const jobFileInputs =
-                        (modelTask.job_definition as { fileInputs?: { name?: string }[] })
-                            ?.fileInputs || [];
-                    const conflict = inputSteps.find((step) =>
-                        jobFileInputs.some((input) => input.name === step.app_input_name)
-                    );
-                    if (conflict) {
-                        throw new UnifiedExecutionError(
-                            422,
-                            `file input ${conflict.app_input_name} is already supplied by a bound dataset and cannot also be derived`,
-                            "INPUT_CONFLICT"
-                        );
-                    }
+                    // The bridge derives the steps from the registry, excluding
+                    // inputs already filled, so there is no conflict to check here.
+                    const hasInputSteps = !!plan.input_steps?.length;
                     const submitKey =
                         `${parentRunId(parent.id)}:${adapter.adapter_plan_id}:${adapterValues.hash}` +
-                        (inputSteps.length ? `:in-${inputStepsHash(inputSteps)}` : "");
+                        (hasInputSteps ? `:in-${plan.steps_digest}` : "");
                     const submitted = await adapterRequest(
                         "/workflows/submit",
                         {
@@ -2057,7 +2129,13 @@ export function createUnifiedExecutionService(
                                     output_format: modelTask.output_format || "",
                                     max_minutes: requestedMaxMinutes,
                                     job_definition: modelTask.job_definition,
-                                    ...(inputSteps.length ? { input_steps: inputSteps } : {})
+                                    ...(hasInputSteps
+                                        ? {
+                                              input_sources: plan.input_sources,
+                                              filled_app_inputs: plan.filled_app_inputs,
+                                              expected_steps_digest: plan.steps_digest
+                                          }
+                                        : {})
                                 }
                             },
                             idempotencyKey: submitKey
