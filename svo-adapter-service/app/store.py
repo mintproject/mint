@@ -201,6 +201,12 @@ class InMemoryHasura:
         row = _insert(STORE.plan, v["obj"])
         return {"insert_adapter_workflow_plan_one": row}
 
+    def _op_BindDeferredPlan(self, v):
+        row = STORE.plan.get(v["id"])
+        if row:
+            row.update(source_data_object_id=v["source_id"], plan_json=v["plan_json"], status="ready")
+        return {"update_adapter_workflow_plan_by_pk": row}
+
     def _op_SetWorkflowDef(self, v):
         row = STORE.plan.get(v["id"])
         if row:

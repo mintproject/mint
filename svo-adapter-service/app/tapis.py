@@ -119,7 +119,9 @@ def publish_params() -> dict[str, dict[str, Any]]:
         "stac_item_id": {"type": "string", "default": "", "required": False},
         "execution_id": {"type": "string", "required": False,
                          "description": "Ensemble Manager logical workflow execution"},
-        "product_pattern": {"type": "string", "default": "*.tif", "required": False},
+        # No default here: the piece's own parameters_schema_json carries the model's
+        # filename patterns, and the task falls back to *.tif when it is empty.
+        "product_pattern": {"type": "string", "required": False},
         "stac_collection": {"type": "string", "default": default_collection, "required": False,
                             "description": "STAC collection to publish into",
                             **({"allowed_values": collections} if collections else {})},
