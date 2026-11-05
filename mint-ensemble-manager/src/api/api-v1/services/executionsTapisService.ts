@@ -36,14 +36,16 @@ export interface ExecutionsTapisService {
         output_format?: string;
         job_definition: unknown;
     }>;
-    findUnboundInputsByStandardVariable(
+    compositeModelContext(
         threadmodel: { thread_id: string; model_id: string },
-        standardVariableUri: string,
         authorization: string
     ): Promise<{
+        configuration_id: string;
         region: Region | null;
-        inputs: { app_input_name: string; model_input_id: string }[];
+        has_bound_inputs: boolean;
+        filled_app_inputs: string[];
         outputs: { id: string; name: string; format?: string }[];
+        unmatched_optional_inputs: string[];
     }>;
     resolveCompositeWorkflowOutput(
         executionId: string,
@@ -171,7 +173,8 @@ const executionsTapisService = {
             await executionCreation.prepareExecutions();
             // Find the thread model id for the given model id
             const threadModelId = threadResponse.thread_models.find(
-                (thread_model) => thread_model.modelcatalog_configuration_id === threadmodel.model_id
+                (thread_model) =>
+                    thread_model.modelcatalog_configuration_id === threadmodel.model_id
             )?.id;
             if (!threadModelId) {
                 throw new NotFoundError("Thread model not found");
@@ -207,9 +210,8 @@ const executionsTapisService = {
             throw new NotFoundError("Thread not found");
         }
     },
-    async findUnboundInputsByStandardVariable(
+    async compositeModelContext(
         threadmodel: { thread_id: string; model_id: string },
-        standardVariableUri: string,
         authorization: string
     ) {
         const token = getTokenFromAuthorizationHeader(authorization);
@@ -218,10 +220,7 @@ const executionsTapisService = {
         }
         const prefs = getConfiguration();
         const tapisExecution = new TapisExecutionService(token, prefs.tapis.basePath);
-        return tapisExecution.findUnboundInputsByStandardVariable(
-            threadmodel,
-            standardVariableUri
-        );
+        return tapisExecution.compositeModelContext(threadmodel);
     },
     async buildCompositeWorkflowModelTask(
         threadmodel: AdapterAwareModelThread,

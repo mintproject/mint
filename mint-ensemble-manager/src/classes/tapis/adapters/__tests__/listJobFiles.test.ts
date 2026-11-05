@@ -137,8 +137,7 @@ describe("TapisExecutionService.listCompositeWorkflowFiles", () => {
         });
         const getJob = jest.fn().mockResolvedValue({
             result: {
-                archiveSystemDir:
-                    "/work/06659/wmobley/ls6/mint-workflow-output/run-1/model"
+                archiveSystemDir: "/work/06659/wmobley/ls6/mint-workflow-output/run-1/model"
             }
         });
         const listJobFiles = jest.fn().mockResolvedValue([{ name: "mfsim.lst" }]);
@@ -163,9 +162,11 @@ describe("TapisExecutionService.listCompositeWorkflowFiles", () => {
 
     it("resolves semantic cbb output keys to an unambiguous cbc archive file", async () => {
         const service = new TapisExecutionService("test-token", "http://tapis.test");
-        service.listCompositeWorkflowFiles = jest.fn().mockResolvedValue([
-            { name: "BARTON_SPRINGS.cbc", url: "tapis://ls6/archive/BARTON_SPRINGS.cbc" }
-        ] as any);
+        service.listCompositeWorkflowFiles = jest
+            .fn()
+            .mockResolvedValue([
+                { name: "BARTON_SPRINGS.cbc", url: "tapis://ls6/archive/BARTON_SPRINGS.cbc" }
+            ] as any);
 
         await expect(
             service.resolveCompositeWorkflowOutput(

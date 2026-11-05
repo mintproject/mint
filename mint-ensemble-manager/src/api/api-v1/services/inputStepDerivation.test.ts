@@ -25,7 +25,10 @@ const region = (geometries: any[]): Region =>
 describe("inputStepDerivation", () => {
     test("unions Polygon and MultiPolygon geometries into one MultiPolygon", () => {
         const union = unionRegionGeometry(
-            region([square(0, 0), { type: "MultiPolygon", coordinates: [square(5, 5).coordinates] }])
+            region([
+                square(0, 0),
+                { type: "MultiPolygon", coordinates: [square(5, 5).coordinates] }
+            ])
         );
         expect(union.geometry.type).toBe("MultiPolygon");
         expect(union.geometry.coordinates).toHaveLength(2);
@@ -34,15 +37,16 @@ describe("inputStepDerivation", () => {
     });
 
     test("rejects non-polygon and empty regions", () => {
-        expect(() =>
-            unionRegionGeometry(region([{ type: "Point", coordinates: [0, 0] }]))
-        ).toThrow(RegionGeometryError);
+        expect(() => unionRegionGeometry(region([{ type: "Point", coordinates: [0, 0] }]))).toThrow(
+            RegionGeometryError
+        );
         expect(() => unionRegionGeometry(region([]))).toThrow(RegionGeometryError);
     });
 
     test("a small region is sent as geometry with its derivation recorded", () => {
-        const { source, derivation } = deriveRegionSource(region([square(0, 0)]));
+        const source = deriveRegionSource(region([square(0, 0)]));
         expect(source.kind).toBe("geojson");
+        const { derivation } = source;
         expect(derivation).toMatchObject({
             method: "region_geometry",
             region_id: "region-1",
@@ -57,9 +61,8 @@ describe("inputStepDerivation", () => {
             Math.sin(i / 3000) * 0.5 + 30
         ]);
         ring.push(ring[0]);
-        const { source, derivation } = deriveRegionSource(
-            region([{ type: "Polygon", coordinates: [ring] }])
-        );
+        const source = deriveRegionSource(region([{ type: "Polygon", coordinates: [ring] }]));
+        const { derivation } = source;
         expect(source.kind).toBe("bbox");
         expect(derivation).toMatchObject({
             method: "region_bbox",
@@ -69,13 +72,19 @@ describe("inputStepDerivation", () => {
         expect(derivation.bytes).toBeLessThan(MAX_INLINE_GEOMETRY_BYTES);
     });
 
-    test("records the approximate bbox area and rejects regions over the cap", () => {
-        const { derivation } = deriveRegionSource(region([square(0, 0)]));
-        expect(derivation.area_km2).toBeGreaterThan(12000);
-        expect(derivation.area_km2).toBeLessThan(12500);
-        const big = { type: "Polygon", coordinates: [[[0, 0], [20, 0], [20, 20], [0, 20], [0, 0]]] };
-        expect(() => deriveRegionSource(region([big]))).toThrow(
-            expect.objectContaining({ statusCode: 422, code: "AOI_REGION_TOO_LARGE" })
-        );
+    test("a large region is not capped here; the bridge enforces area limits", () => {
+        const big = {
+            type: "Polygon",
+            coordinates: [
+                [
+                    [0, 0],
+                    [20, 0],
+                    [20, 20],
+                    [0, 20],
+                    [0, 0]
+                ]
+            ]
+        };
+        expect(deriveRegionSource(region([big])).kind).toBe("geojson");
     });
 });

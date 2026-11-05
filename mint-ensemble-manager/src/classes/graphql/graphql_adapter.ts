@@ -581,6 +581,8 @@ export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): Mod
         position: io.position || 0,
         variables: [],
         is_optional: junctionRow.is_optional ?? false,
+        // Name of the Tapis app file input this input feeds; null before the binding was recorded.
+        app_input_name: junctionRow.app_input_name ?? undefined,
         standard_variables: standardVariablesFromPresentations(io.presentations)
     } as ModelIO;
 };

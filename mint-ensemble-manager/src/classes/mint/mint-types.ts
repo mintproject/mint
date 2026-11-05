@@ -353,6 +353,8 @@ export interface ModelIO extends IdNameObject {
     position?: number;
     format?: string;
     is_optional?: boolean;
+    // Tapis app file input this input feeds (catalog junction binding).
+    app_input_name?: string;
     // Standard variable IRIs from the catalog presentations of this input's
     // dataset specification (has_standard_variable). Empty when untyped.
     standard_variables?: string[];

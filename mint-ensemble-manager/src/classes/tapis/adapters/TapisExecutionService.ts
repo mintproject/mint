@@ -172,8 +172,7 @@ export class TapisExecutionService implements IExecutionService {
         // Tapis Jobs accepts these fields when omitted, but Tapis Workflows
         // validates the embedded job definition strictly and rejects null
         // execution directories.
-        jobDefinition.execSystemInputDir =
-            jobDefinition.execSystemInputDir || "${JobWorkingDir}";
+        jobDefinition.execSystemInputDir = jobDefinition.execSystemInputDir || "${JobWorkingDir}";
         jobDefinition.execSystemOutputDir =
             jobDefinition.execSystemOutputDir || "${JobWorkingDir}/output";
         const archivePath = `mint-workflow-output/${workflowPath}/model`;
@@ -292,25 +291,36 @@ export class TapisExecutionService implements IExecutionService {
     }
 
     /**
-     * Find the app file inputs of a composite model that the job definition
-     * leaves unfilled and whose model input is typed with `standardVariableUri`.
-     * Builds the job in memory (no database writes) so the answer matches what
-     * submit would build. Returns without touching Tapis when the model has no
-     * input of that type.
+     * What the bridge needs to plan input ETL for a composite model: the
+     * catalog configuration, the thread region, and the app file inputs the
+     * job already fills (bound datasets in the in-memory job definition, plus
+     * FIXED inputs that Tapis injects). Builds the job in memory with no
+     * database writes so the answer matches what submit builds. A model with
+     * no bound input returns early without touching Tapis.
      */
-    async findUnboundInputsByStandardVariable(
-        threadmodel: { thread_id: string; model_id?: string },
-        standardVariableUri: string
-    ): Promise<{
+    async compositeModelContext(threadmodel: { thread_id: string; model_id?: string }): Promise<{
+        configuration_id: string;
         region: Region | null;
-        inputs: { app_input_name: string; model_input_id: string }[];
+        // Whether any model input carries an app_input_name; when false the
+        // bridge has nothing to plan and the caller skips it.
+        has_bound_inputs: boolean;
+        filled_app_inputs: string[];
         outputs: { id: string; name: string; format?: string }[];
+        unmatched_optional_inputs: string[];
     }> {
         const thread = await this.loadCompositeThread(threadmodel);
-        const typed = thread.models[threadmodel.model_id]?.input_files?.some((input) =>
-            input.standard_variables?.includes(standardVariableUri)
-        );
-        if (!typed) return { region: null, inputs: [], outputs: [] };
+        const model = thread.models[threadmodel.model_id];
+        const hasBoundInputs = !!model?.input_files?.some((input) => input.app_input_name);
+        if (!hasBoundInputs) {
+            return {
+                configuration_id: threadmodel.model_id,
+                region: null,
+                has_bound_inputs: false,
+                filled_app_inputs: [],
+                outputs: [],
+                unmatched_optional_inputs: []
+            };
+        }
 
         const { executionCreation, app, jobDefinition } = await this.buildCompositeJob(
             thread,
@@ -318,23 +328,25 @@ export class TapisExecutionService implements IExecutionService {
             false
         );
         const filled = new Set((jobDefinition.fileInputs || []).map((input) => input.name));
-        const inputs = (app.jobAttributes?.fileInputs || []).flatMap((fileInput) => {
-            if (fileInput.inputMode === Apps.FileInputModeEnum.Fixed || filled.has(fileInput.name)) {
-                return [];
-            }
-            const modelInput = this.jobService.findModelInput(
-                fileInput.name,
-                executionCreation.model
-            );
-            if (!modelInput?.standard_variables?.includes(standardVariableUri)) return [];
-            return [{ app_input_name: fileInput.name, model_input_id: modelInput.id }];
-        });
+        for (const fileInput of app.jobAttributes?.fileInputs || []) {
+            if (fileInput.inputMode === Apps.FileInputModeEnum.Fixed) filled.add(fileInput.name);
+        }
         const outputs = executionCreation.model.output_files.map((output) => ({
             id: output.id,
             name: output.name || output.id,
             format: output.format
         }));
-        return { region: executionCreation.threadRegion, inputs, outputs };
+        return {
+            configuration_id: executionCreation.model.id,
+            region: executionCreation.threadRegion,
+            has_bound_inputs: true,
+            filled_app_inputs: Array.from(filled),
+            outputs,
+            unmatched_optional_inputs: this.jobService.findUnmatchedOptionalInputs(
+                app,
+                executionCreation.model
+            )
+        };
     }
 
     /**
@@ -390,7 +402,10 @@ export class TapisExecutionService implements IExecutionService {
                 );
                 submittedExecutions.push({ execution: seed.execution, jobId });
             } catch (error) {
-                console.error("Error submitting single execution:", error instanceof Error ? error.message : String(error));
+                console.error(
+                    "Error submitting single execution:",
+                    error instanceof Error ? error.message : String(error)
+                );
                 console.error("Full error details:", error);
                 await this.handleSingleExecutionFailure(seed, error, threadModelId);
 
@@ -483,7 +498,12 @@ export class TapisExecutionService implements IExecutionService {
                 failedExecutions.forEach((fe) => {
                     const errorMsg = `Execution ${fe.execution.id} failed: ${fe.error.message}`;
                     console.error(errorMsg);
-                    console.error("Full error details for execution", fe.execution.id, ":", fe.error);
+                    console.error(
+                        "Full error details for execution",
+                        fe.execution.id,
+                        ":",
+                        fe.error
+                    );
                     errorMessages.push(fe.error.message);
                 });
                 const contractFailure = failedExecutions.find(
@@ -499,7 +519,12 @@ export class TapisExecutionService implements IExecutionService {
                 console.warn("Some jobs failed to submit:");
                 failedExecutions.forEach((fe) => {
                     console.warn(`Execution ${fe.execution.id} failed: ${fe.error.message}`);
-                    console.warn("Full error details for execution", fe.execution.id, ":", fe.error);
+                    console.warn(
+                        "Full error details for execution",
+                        fe.execution.id,
+                        ":",
+                        fe.error
+                    );
                 });
             }
         }
@@ -818,9 +843,7 @@ export class TapisExecutionService implements IExecutionService {
         const response = await errorDecoder<Files.FileListingResponse>(() =>
             this.filesClient.listFiles({ systemId, path, recurse: false })
         );
-        return (response.result ?? []).filter(
-            (file) => file.type !== Files.FileTypeEnum.Dir
-        );
+        return (response.result ?? []).filter((file) => file.type !== Files.FileTypeEnum.Dir);
     }
 
     /**

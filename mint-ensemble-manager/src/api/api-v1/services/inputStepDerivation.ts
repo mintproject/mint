@@ -1,42 +1,24 @@
 import { Region } from "@/classes/mint/mint-types";
-import { UnifiedExecutionError } from "@/classes/common/errors";
-
-/**
- * Catalog standard variable for "the polygon a model restricts its work to".
- * A model input typed with it gets an input-ETL step derived from the thread
- * region (see docs/design/2026-11-05-aoi-etl-piece.md).
- */
-export const AOI_STANDARD_VARIABLE_URI = "https://w3id.org/okn/i/mint/area_of_interest__boundary";
 
 /** Largest region geometry sent inline in a plan; above it the bounding box is used. */
 export const MAX_INLINE_GEOMETRY_BYTES = 32 * 1024;
 
 /**
- * Largest region (approximate bbox area, km2) accepted for an automatic area of
- * interest. Must match the SVO adapter AOI piece's `max_area_km2` default.
+ * A source the bridge plans input steps from (POST /plans/model-inputs). The
+ * adapter validates it and completes `derivation`; the EM only shapes the
+ * thread region to fit the request-size budget.
  */
-export const MAX_AOI_AREA_KM2 = 160000;
-
-export type InputStepSource =
+export type InputSource = (
     | { kind: "geojson"; geometry: { type: "MultiPolygon"; coordinates: number[][][][] } }
-    | { kind: "bbox"; bbox: [number, number, number, number] };
-
-export interface InputStepDerivation {
-    method: "region_geometry" | "region_bbox";
-    region_id: string;
-    vertices_in: number;
-    bytes: number;
-    area_km2: number;
-}
-
-export interface InputStep {
-    name: string;
-    app_input_name: string;
-    steps: unknown[];
-    source: InputStepSource;
-    params: Record<string, unknown>;
-    derivation: InputStepDerivation;
-}
+    | { kind: "bbox"; bbox: [number, number, number, number] }
+) & {
+    derivation: {
+        method: "region_geometry" | "region_bbox";
+        region_id: string;
+        vertices_in: number;
+        bytes: number;
+    };
+};
 
 export class RegionGeometryError extends Error {
     constructor(message: string) {
@@ -98,52 +80,34 @@ export function unionRegionGeometry(region: Region): {
     };
 }
 
-/** Equirectangular bounding-box area in km2; adequate for a size cap. */
-function approximateBboxAreaKm2(bbox: [number, number, number, number]): number {
-    const [minx, miny, maxx, maxy] = bbox;
-    const meanLat = ((miny + maxy) / 2) * (Math.PI / 180);
-    return (maxx - minx) * Math.cos(meanLat) * 111.32 * ((maxy - miny) * 110.57);
-}
-
 /**
- * The AOI source for a thread region: its geometry, or its bounding box when
- * the serialized geometry exceeds the inline budget. `derivation` records which.
+ * The source for a thread region: its geometry, or its bounding box when the
+ * serialized geometry exceeds the inline budget. Size and area limits are the
+ * bridge's to enforce; this only keeps the request small.
  */
-export function deriveRegionSource(region: Region): {
-    source: InputStepSource;
-    derivation: InputStepDerivation;
-} {
+export function deriveRegionSource(region: Region): InputSource {
     const { geometry, vertices, bbox } = unionRegionGeometry(region);
-    const areaKm2 = approximateBboxAreaKm2(bbox);
-    if (areaKm2 > MAX_AOI_AREA_KM2) {
-        throw new UnifiedExecutionError(
-            422,
-            `region too large for an automatic area of interest (${Math.round(areaKm2)} km² > ${MAX_AOI_AREA_KM2} km²); bind an AOI dataset or choose a smaller region`,
-            "AOI_REGION_TOO_LARGE"
-        );
-    }
     const geometryBytes = Buffer.byteLength(JSON.stringify(geometry), "utf8");
     if (geometryBytes <= MAX_INLINE_GEOMETRY_BYTES) {
         return {
-            source: { kind: "geojson", geometry },
+            kind: "geojson",
+            geometry,
             derivation: {
                 method: "region_geometry",
                 region_id: region.id,
                 vertices_in: vertices,
-                bytes: geometryBytes,
-                area_km2: areaKm2
+                bytes: geometryBytes
             }
         };
     }
-    const source: InputStepSource = { kind: "bbox", bbox };
+    const bboxShape = { kind: "bbox" as const, bbox };
     return {
-        source,
+        ...bboxShape,
         derivation: {
             method: "region_bbox",
             region_id: region.id,
             vertices_in: vertices,
-            bytes: Buffer.byteLength(JSON.stringify(source), "utf8"),
-            area_km2: areaKm2
+            bytes: Buffer.byteLength(JSON.stringify(bboxShape), "utf8")
         }
     };
 }
