@@ -134,7 +134,7 @@ def validate_keeper_config() -> None:
     if not settings.run_signal_secret_list:
         problems.append("SVO_ADAPTER_RUN_SIGNAL_SECRETS is empty (the fetch credential needs it)")
     if not settings.public_base_url:
-        problems.append("SVO_ADAPTER_PUBLIC_URL is empty")
+        problems.append("SVO_ADAPTER_PUBLIC_URL (or SVO_ADAPTER_PUBLIC_BASE_URL) is empty")
     elif not settings.public_base_url.lower().startswith("https://"):
         problems.append("SVO_ADAPTER_PUBLIC_URL must be https:// (tokens travel over it)")
     if not problems:
