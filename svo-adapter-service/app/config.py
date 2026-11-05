@@ -130,9 +130,39 @@ class Settings(BaseSettings):
     # encrypts, every key decrypts. Empty makes the feature fail closed (503).
     secrets_encryption_keys: str = ""
 
+    # Output-side publication (design 2026-11-05-output-publish-etl.md): a run may
+    # publish its outputs to CKAN + STAC through a registered catalog_register
+    # piece. Off until enabled; when off the piece fails closed. The collection and
+    # organisation allow-lists are comma-separated and checked at plan time and again
+    # at submit (plans are immutable, args are not). Dev defaults only; production
+    # sets subsidence-rates and stac-datasets explicitly.
+    publish_enabled: bool = False
+    publish_allowed_collections: str = "subsidence-rates-dev"
+    # Production allows "stac-datasets" (where the existing subsidence-rates datasets live).
+    publish_allowed_orgs: str = "dso-internal"
+    publish_default_org: str = "dso-internal"
+    publish_default_collection: str = "subsidence-rates-dev"
+    # CKAN the publish task writes to and the can_publish precheck reads. Kept apart
+    # from ckan_url (the NTGAM sampling CKAN, a localhost default). The STAC API is
+    # stac_api_url.
+    publish_ckan_url: str = "https://ckan.tacc.utexas.edu"
+    # Ceiling on the publish task's max_exec_time; it downloads, uploads and
+    # upserts the whole product set.
+    publish_max_exec_seconds: int = 1800
+    # stac-platform is installed by the task at this exact commit; never a branch.
+    stac_platform_ref: str = "9e61fce6e534c84062cc0e742310a30d83cab4d7"
+
     @property
     def run_signal_secret_list(self) -> list[str]:
         return [s.strip() for s in self.run_signal_secrets.split(",") if s.strip()]
+
+    @property
+    def publish_allowed_collection_list(self) -> list[str]:
+        return [s.strip() for s in self.publish_allowed_collections.split(",") if s.strip()]
+
+    @property
+    def publish_allowed_org_list(self) -> list[str]:
+        return [s.strip() for s in self.publish_allowed_orgs.split(",") if s.strip()]
 
     @property
     def cancel_admin_list(self) -> list[str]:

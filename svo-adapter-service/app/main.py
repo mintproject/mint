@@ -94,9 +94,11 @@ from .result_contract import task_result
 
 def _plan_with_parameters(plan_json: dict[str, Any]) -> dict[str, Any]:
     """Attach the public, plan-scoped parameter contract to a generated DAG."""
-    plan_json["parameters"] = parameter_definitions(
-        plan_json.get("steps") or [], tapis.STANDARD_PARAMS
-    )
+    steps = plan_json.get("steps") or []
+    standard = tapis.STANDARD_PARAMS
+    if tapis.plan_publishes(steps):
+        standard = {**standard, **tapis.publish_params()}
+    plan_json["parameters"] = parameter_definitions(steps, standard)
     # Use the backend-owned catalog as the final geometry default. Explicit
     # caller values and workflow-specific recommendations still take priority.
     transform_names = " ".join(
