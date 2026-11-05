@@ -319,18 +319,27 @@ def etl_process_to_spec_row(
         if metadata_json:
             normalized["metadata_json"] = metadata_json
         normalized_contracts.append(normalized)
-    return {
+    # A hosted adapter piece (registered by scripts/register_existing_etl_pieces)
+    # records its adapter transform_type and job-shaping hints in runtime_json,
+    # so the round trip through the catalog keeps it runnable. Catalog-authored
+    # processes carry none of these and stay generic "etl_process" rows.
+    schema = runtime.get("parameters_schema_json")
+    row = {
         "id": process_id,
         "name": process.get("label") or process_id,
         "version": process.get("version"),
         "description": process.get("description") or "",
-        "transform_type": "etl_process",
+        "transform_type": runtime.get("adapter_transform_type") or "etl_process",
         "method": "tapis_job" if app_id else "tapis_function",
         "tapis_app_id": app_id,
         "app_version": app_version,
-        "parameters_schema_json": {"metadata": metadata},
+        "parameters_schema_json": {**(schema if isinstance(schema, dict) else {}), "metadata": metadata},
         "contracts": {"data": normalized_contracts},
     }
+    for key in ("stage", "env_from_args", "file_inputs"):
+        if runtime.get(key) is not None:
+            row[key] = runtime[key]
+    return row
 
 
 def _infer_transform_type(config: dict[str, Any]) -> str:
@@ -371,6 +380,7 @@ async def sync_mint_to_adapter(
         UPSERT_ETL_TRANSFORM_SPEC_MUTATION,
         DELETE_OBSOLETE_MINT_SPECS_MUTATION,
         GET_MINT_SPEC_IDS_QUERY,
+        DELETE_SPEC_CONTRACTS_MUTATION,
     )
 
     if mint_client is None:
@@ -416,11 +426,22 @@ async def sync_mint_to_adapter(
 
     # Get existing mint-synced spec IDs to distinguish create vs update
     existing_data = await hasura_client.execute(GET_MINT_SPEC_IDS_QUERY)
-    existing_ids = {
-        r["mint_model_config_id"]
+    spec_id_by_config = {
+        r["mint_model_config_id"]: r.get("id")
         for r in (existing_data.get("adapter_transform_spec") or [])
         if r.get("mint_model_config_id")
     }
+    existing_ids = set(spec_id_by_config)
+
+    # Replace, don't append: clear the contracts of every spec this sync is
+    # about to re-insert them for.
+    replace_ids = sorted({
+        str(row["id"]) if "mint_model_config_id" not in row
+        else str(spec_id_by_config.get(row["mint_model_config_id"]) or "")
+        for row in rows_to_upsert if row.get("contracts")
+    } - {""})
+    if replace_ids:
+        await hasura_client.execute(DELETE_SPEC_CONTRACTS_MUTATION, {"ids": replace_ids})
 
     for row in rows_to_upsert:
         contracts = row.pop("contracts", None)

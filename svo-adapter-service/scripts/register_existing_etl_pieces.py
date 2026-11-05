@@ -61,6 +61,11 @@ def to_object(spec):
             "container_image": spec.get("container_image"),
             "source_code_url": spec.get("source_code_url"),
             "parameters_schema_json": spec.get("parameters_schema_json"),
+            # Round-tripped by app.mint_sync so the adapter row stays runnable.
+            "adapter_transform_type": spec.get("transform_type"),
+            "stage": spec.get("stage"),
+            "env_from_args": spec.get("env_from_args"),
+            "file_inputs": spec.get("file_inputs"),
         },
         "contracts": {"data": [
             {"role": c.get("role"), "position": sum(1 for prior in spec.get("contracts", [])[:i] if prior.get("role") == c.get("role")), "standard_variable_uri": c.get("standard_variable_uri"),

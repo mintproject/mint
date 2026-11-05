@@ -156,7 +156,7 @@ mutation UpsertMintETLSpec($obj: adapter_transform_spec_insert_input!) {
       constraint: transform_spec_pkey
       update_columns: [
         name description transform_type method tapis_app_id app_version
-        parameters_schema_json env_from_args mint_synced_at
+        stage parameters_schema_json env_from_args file_inputs mint_synced_at
       ]
     }
   ) { id }
@@ -183,7 +183,19 @@ mutation DeleteObsoleteMintSpecs($live_ids: [String!]!) {
 GET_MINT_SPEC_IDS_QUERY = """
 query GetMintSpecIds {
   adapter_transform_spec(where: { mint_model_config_id: { _is_null: false } }) {
+    id
     mint_model_config_id
+  }
+}
+"""
+
+# The sync re-inserts a spec's contracts on every run (nested insert under an
+# upserted spec appends), so it clears them first. Edges cascade and are
+# recomputed after the sync.
+DELETE_SPEC_CONTRACTS_MUTATION = """
+mutation DeleteSpecContracts($ids: [String!]!) {
+  delete_adapter_transform_contract(where: { transform_spec_id: { _in: $ids } }) {
+    affected_rows
   }
 }
 """
