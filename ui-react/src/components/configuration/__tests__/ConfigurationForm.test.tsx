@@ -57,6 +57,8 @@ const mockConfigWithInput = {
       configuration_id: 'cfg1',
       input_id: 'ds1',
       is_optional: false,
+      // The binding the registration wrote; a junction rewrite must carry it along.
+      app_input_name: 'aoi-geojson',
       input: {
         __typename: 'modelcatalog_dataset_specification' as const,
         id: 'ds1',
@@ -397,6 +399,7 @@ describe('ConfigurationForm (toUpdate path — edit mode with existing rows)', (
           configuration_id: 'cfg1',
           input_id: 'ds1',
           is_optional: false,
+          app_input_name: 'aoi-geojson',
         },
       },
     });
@@ -404,7 +407,12 @@ describe('ConfigurationForm (toUpdate path — edit mode with existing rows)', (
     const junctionMock = {
       request: {
         query: SetConfigurationInputOptionalDocument,
-        variables: { configurationId: 'cfg1', inputId: 'ds1', isOptional: false },
+        variables: {
+          configurationId: 'cfg1',
+          inputId: 'ds1',
+          isOptional: false,
+          appInputName: 'aoi-geojson',
+        },
       },
       result: junctionSpy,
     };
@@ -536,6 +544,7 @@ describe('ConfigurationForm (toUpdate path — edit mode with existing rows)', (
           configuration_id: 'cfg1',
           input_id: 'ds1',
           is_optional: true,
+          app_input_name: 'aoi-geojson',
         },
       },
     });
@@ -543,7 +552,12 @@ describe('ConfigurationForm (toUpdate path — edit mode with existing rows)', (
     const junctionMock = {
       request: {
         query: SetConfigurationInputOptionalDocument,
-        variables: { configurationId: 'cfg1', inputId: 'ds1', isOptional: true },
+        variables: {
+          configurationId: 'cfg1',
+          inputId: 'ds1',
+          isOptional: true,
+          appInputName: 'aoi-geojson',
+        },
       },
       result: junctionSpy,
     };

@@ -34,6 +34,7 @@ fragment InputFields on modelcatalog_configuration_input {
   configuration_id
   input_id
   is_optional
+  app_input_name
   input {
     ...DatasetSpecificationFields
   }

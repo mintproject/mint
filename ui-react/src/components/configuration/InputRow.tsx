@@ -40,11 +40,12 @@ export function InputRow({
   onRemove,
   allowMultipleVariables = false,
 }: InputRowProps) {
-  const { control, register } = useFormContext<ConfigurationFormSchema>();
+  const { control, register, watch } = useFormContext<ConfigurationFormSchema>();
 
   // Cast to Path<ConfigurationFormSchema> — RHF's generic is too strict for
   // dynamic template literals, but the paths are always valid at runtime.
   const p = (field: string) => `${prefix}.${index}.${field}` as Path<ConfigurationFormSchema>;
+  const appInputName = watch(p('appInputName')) as string | null | undefined;
 
   const presentationsName = `${prefix}.${index}.presentations`;
   const {
@@ -147,6 +148,13 @@ export function InputRow({
           Optional (not required for model execution)
         </label>
       </div>
+
+      {/* appInputName: set by registration from the Tapis app definition; not editable here */}
+      {appInputName ? (
+        <p className="text-xs text-muted-foreground">
+          Tapis file input: <code>{appInputName}</code>
+        </p>
+      ) : null}
 
       {/* Variables (presentations) */}
       <div className="space-y-2">

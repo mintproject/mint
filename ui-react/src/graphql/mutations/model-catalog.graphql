@@ -425,10 +425,13 @@ mutation CreateConfiguration(
 #
 # Both root fields run in one Hasura transaction, in the order written, so the row is
 # never left missing. Requires an existing DatasetSpecification — does NOT create one.
+# The row is replaced, so every junction column must be carried along: app_input_name
+# (the Tapis file input this input feeds) would otherwise be nulled by an optional toggle.
 mutation SetConfigurationInputOptional(
   $configurationId: String!
   $inputId: String!
   $isOptional: Boolean!
+  $appInputName: String
 ) {
   delete_modelcatalog_configuration_input_by_pk(
     configuration_id: $configurationId
@@ -438,11 +441,17 @@ mutation SetConfigurationInputOptional(
     input_id
   }
   insert_modelcatalog_configuration_input_one(
-    object: { configuration_id: $configurationId, input_id: $inputId, is_optional: $isOptional }
+    object: {
+      configuration_id: $configurationId
+      input_id: $inputId
+      is_optional: $isOptional
+      app_input_name: $appInputName
+    }
   ) {
     configuration_id
     input_id
     is_optional
+    app_input_name
   }
 }
 

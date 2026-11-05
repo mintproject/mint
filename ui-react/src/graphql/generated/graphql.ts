@@ -20,12 +20,14 @@ export type Scalars = {
   float8: { input: any; output: any; }
   geography: { input: any; output: any; }
   geometry: { input: any; output: any; }
+  jsonb: { input: unknown; output: unknown; }
   problem_statement_events: { input: any; output: any; }
   task_events: { input: any; output: any; }
   thread_events: { input: any; output: any; }
   timestamp: { input: any; output: any; }
   timestamptz: { input: string; output: string; }
   uuid: { input: string; output: string; }
+  vector: { input: any; output: any; }
 };
 
 /** Boolean expression to compare columns of type "Boolean". All fields are combined with logical 'AND'. */
@@ -98,6 +100,3813 @@ export type _Text_Comparison_Exp = {
   _lte?: InputMaybe<Scalars['_text']['input']>;
   _neq?: InputMaybe<Scalars['_text']['input']>;
   _nin?: InputMaybe<Array<Scalars['_text']['input']>>;
+};
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_Object = {
+  __typename?: 'adapter_data_object';
+  checksum?: Maybe<Scalars['String']['output']>;
+  created_at: Scalars['timestamptz']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  extension?: Maybe<Scalars['String']['output']>;
+  filename?: Maybe<Scalars['String']['output']>;
+  format?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  label: Scalars['String']['output'];
+  mime_type?: Maybe<Scalars['String']['output']>;
+  owner_execution_id?: Maybe<Scalars['String']['output']>;
+  owner_model_child_id?: Maybe<Scalars['String']['output']>;
+  owner_tenant?: Maybe<Scalars['String']['output']>;
+  /** An array relationship */
+  provenance_events: Array<Adapter_Provenance_Event>;
+  /** An aggregate relationship */
+  provenance_events_aggregate: Adapter_Provenance_Event_Aggregate;
+  /** An array relationship */
+  readiness_assessments: Array<Adapter_Readiness_Assessment>;
+  /** An aggregate relationship */
+  readiness_assessments_aggregate: Adapter_Readiness_Assessment_Aggregate;
+  resource_uri: Scalars['String']['output'];
+  source_catalog?: Maybe<Scalars['String']['output']>;
+  updated_at: Scalars['timestamptz']['output'];
+  /** An array relationship */
+  variables: Array<Adapter_Data_Object_Variable>;
+  /** An aggregate relationship */
+  variables_aggregate: Adapter_Data_Object_Variable_Aggregate;
+  /** An array relationship */
+  workflow_plans: Array<Adapter_Workflow_Plan>;
+  /** An aggregate relationship */
+  workflow_plans_aggregate: Adapter_Workflow_Plan_Aggregate;
+  /** An array relationship */
+  workflow_runs: Array<Adapter_Workflow_Run>;
+  /** An aggregate relationship */
+  workflow_runs_aggregate: Adapter_Workflow_Run_Aggregate;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectProvenance_EventsArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Provenance_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Provenance_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectProvenance_Events_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Provenance_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Provenance_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectReadiness_AssessmentsArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Readiness_Assessment_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Readiness_Assessment_Order_By>>;
+  where?: InputMaybe<Adapter_Readiness_Assessment_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectReadiness_Assessments_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Readiness_Assessment_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Readiness_Assessment_Order_By>>;
+  where?: InputMaybe<Adapter_Readiness_Assessment_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectVariablesArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Variable_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Variable_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Variable_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectVariables_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Variable_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Variable_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Variable_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectWorkflow_PlansArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Plan_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectWorkflow_Plans_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Plan_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectWorkflow_RunsArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Run_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Run_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.data_object" */
+export type Adapter_Data_ObjectWorkflow_Runs_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Run_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Run_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+/** aggregated selection of "adapter.data_object" */
+export type Adapter_Data_Object_Aggregate = {
+  __typename?: 'adapter_data_object_aggregate';
+  aggregate?: Maybe<Adapter_Data_Object_Aggregate_Fields>;
+  nodes: Array<Adapter_Data_Object>;
+};
+
+/** aggregate fields of "adapter.data_object" */
+export type Adapter_Data_Object_Aggregate_Fields = {
+  __typename?: 'adapter_data_object_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Data_Object_Max_Fields>;
+  min?: Maybe<Adapter_Data_Object_Min_Fields>;
+};
+
+
+/** aggregate fields of "adapter.data_object" */
+export type Adapter_Data_Object_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Data_Object_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.data_object". All fields are combined with a logical 'AND'. */
+export type Adapter_Data_Object_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Data_Object_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Data_Object_Bool_Exp>>;
+  checksum?: InputMaybe<String_Comparison_Exp>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  description?: InputMaybe<String_Comparison_Exp>;
+  extension?: InputMaybe<String_Comparison_Exp>;
+  filename?: InputMaybe<String_Comparison_Exp>;
+  format?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  label?: InputMaybe<String_Comparison_Exp>;
+  mime_type?: InputMaybe<String_Comparison_Exp>;
+  owner_execution_id?: InputMaybe<String_Comparison_Exp>;
+  owner_model_child_id?: InputMaybe<String_Comparison_Exp>;
+  owner_tenant?: InputMaybe<String_Comparison_Exp>;
+  provenance_events?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+  readiness_assessments?: InputMaybe<Adapter_Readiness_Assessment_Bool_Exp>;
+  resource_uri?: InputMaybe<String_Comparison_Exp>;
+  source_catalog?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  variables?: InputMaybe<Adapter_Data_Object_Variable_Bool_Exp>;
+  workflow_plans?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+  workflow_runs?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.data_object" */
+export enum Adapter_Data_Object_Constraint {
+  /** unique or primary key constraint on columns "id" */
+  DataObjectPkey = 'data_object_pkey'
+}
+
+/** input type for inserting data into table "adapter.data_object" */
+export type Adapter_Data_Object_Insert_Input = {
+  checksum?: InputMaybe<Scalars['String']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  extension?: InputMaybe<Scalars['String']['input']>;
+  filename?: InputMaybe<Scalars['String']['input']>;
+  format?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  label?: InputMaybe<Scalars['String']['input']>;
+  mime_type?: InputMaybe<Scalars['String']['input']>;
+  owner_execution_id?: InputMaybe<Scalars['String']['input']>;
+  owner_model_child_id?: InputMaybe<Scalars['String']['input']>;
+  owner_tenant?: InputMaybe<Scalars['String']['input']>;
+  provenance_events?: InputMaybe<Adapter_Provenance_Event_Arr_Rel_Insert_Input>;
+  readiness_assessments?: InputMaybe<Adapter_Readiness_Assessment_Arr_Rel_Insert_Input>;
+  resource_uri?: InputMaybe<Scalars['String']['input']>;
+  source_catalog?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  variables?: InputMaybe<Adapter_Data_Object_Variable_Arr_Rel_Insert_Input>;
+  workflow_plans?: InputMaybe<Adapter_Workflow_Plan_Arr_Rel_Insert_Input>;
+  workflow_runs?: InputMaybe<Adapter_Workflow_Run_Arr_Rel_Insert_Input>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Data_Object_Max_Fields = {
+  __typename?: 'adapter_data_object_max_fields';
+  checksum?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  extension?: Maybe<Scalars['String']['output']>;
+  filename?: Maybe<Scalars['String']['output']>;
+  format?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  label?: Maybe<Scalars['String']['output']>;
+  mime_type?: Maybe<Scalars['String']['output']>;
+  owner_execution_id?: Maybe<Scalars['String']['output']>;
+  owner_model_child_id?: Maybe<Scalars['String']['output']>;
+  owner_tenant?: Maybe<Scalars['String']['output']>;
+  resource_uri?: Maybe<Scalars['String']['output']>;
+  source_catalog?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Data_Object_Min_Fields = {
+  __typename?: 'adapter_data_object_min_fields';
+  checksum?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  extension?: Maybe<Scalars['String']['output']>;
+  filename?: Maybe<Scalars['String']['output']>;
+  format?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  label?: Maybe<Scalars['String']['output']>;
+  mime_type?: Maybe<Scalars['String']['output']>;
+  owner_execution_id?: Maybe<Scalars['String']['output']>;
+  owner_model_child_id?: Maybe<Scalars['String']['output']>;
+  owner_tenant?: Maybe<Scalars['String']['output']>;
+  resource_uri?: Maybe<Scalars['String']['output']>;
+  source_catalog?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** response of any mutation on the table "adapter.data_object" */
+export type Adapter_Data_Object_Mutation_Response = {
+  __typename?: 'adapter_data_object_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Data_Object>;
+};
+
+/** input type for inserting object relation for remote table "adapter.data_object" */
+export type Adapter_Data_Object_Obj_Rel_Insert_Input = {
+  data: Adapter_Data_Object_Insert_Input;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Data_Object_On_Conflict>;
+};
+
+/** on_conflict condition type for table "adapter.data_object" */
+export type Adapter_Data_Object_On_Conflict = {
+  constraint: Adapter_Data_Object_Constraint;
+  update_columns?: Array<Adapter_Data_Object_Update_Column>;
+  where?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.data_object". */
+export type Adapter_Data_Object_Order_By = {
+  checksum?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  description?: InputMaybe<Order_By>;
+  extension?: InputMaybe<Order_By>;
+  filename?: InputMaybe<Order_By>;
+  format?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  label?: InputMaybe<Order_By>;
+  mime_type?: InputMaybe<Order_By>;
+  owner_execution_id?: InputMaybe<Order_By>;
+  owner_model_child_id?: InputMaybe<Order_By>;
+  owner_tenant?: InputMaybe<Order_By>;
+  provenance_events_aggregate?: InputMaybe<Adapter_Provenance_Event_Aggregate_Order_By>;
+  readiness_assessments_aggregate?: InputMaybe<Adapter_Readiness_Assessment_Aggregate_Order_By>;
+  resource_uri?: InputMaybe<Order_By>;
+  source_catalog?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+  variables_aggregate?: InputMaybe<Adapter_Data_Object_Variable_Aggregate_Order_By>;
+  workflow_plans_aggregate?: InputMaybe<Adapter_Workflow_Plan_Aggregate_Order_By>;
+  workflow_runs_aggregate?: InputMaybe<Adapter_Workflow_Run_Aggregate_Order_By>;
+};
+
+/** primary key columns input for table: adapter_data_object */
+export type Adapter_Data_Object_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** select columns of table "adapter.data_object" */
+export enum Adapter_Data_Object_Select_Column {
+  /** column name */
+  Checksum = 'checksum',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Description = 'description',
+  /** column name */
+  Extension = 'extension',
+  /** column name */
+  Filename = 'filename',
+  /** column name */
+  Format = 'format',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  Label = 'label',
+  /** column name */
+  MimeType = 'mime_type',
+  /** column name */
+  OwnerExecutionId = 'owner_execution_id',
+  /** column name */
+  OwnerModelChildId = 'owner_model_child_id',
+  /** column name */
+  OwnerTenant = 'owner_tenant',
+  /** column name */
+  ResourceUri = 'resource_uri',
+  /** column name */
+  SourceCatalog = 'source_catalog',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+/** input type for updating data in table "adapter.data_object" */
+export type Adapter_Data_Object_Set_Input = {
+  checksum?: InputMaybe<Scalars['String']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  extension?: InputMaybe<Scalars['String']['input']>;
+  filename?: InputMaybe<Scalars['String']['input']>;
+  format?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  label?: InputMaybe<Scalars['String']['input']>;
+  mime_type?: InputMaybe<Scalars['String']['input']>;
+  owner_execution_id?: InputMaybe<Scalars['String']['input']>;
+  owner_model_child_id?: InputMaybe<Scalars['String']['input']>;
+  owner_tenant?: InputMaybe<Scalars['String']['input']>;
+  resource_uri?: InputMaybe<Scalars['String']['input']>;
+  source_catalog?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+};
+
+/** update columns of table "adapter.data_object" */
+export enum Adapter_Data_Object_Update_Column {
+  /** column name */
+  Checksum = 'checksum',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Description = 'description',
+  /** column name */
+  Extension = 'extension',
+  /** column name */
+  Filename = 'filename',
+  /** column name */
+  Format = 'format',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  Label = 'label',
+  /** column name */
+  MimeType = 'mime_type',
+  /** column name */
+  OwnerExecutionId = 'owner_execution_id',
+  /** column name */
+  OwnerModelChildId = 'owner_model_child_id',
+  /** column name */
+  OwnerTenant = 'owner_tenant',
+  /** column name */
+  ResourceUri = 'resource_uri',
+  /** column name */
+  SourceCatalog = 'source_catalog',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+export type Adapter_Data_Object_Updates = {
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Data_Object_Set_Input>;
+  where: Adapter_Data_Object_Bool_Exp;
+};
+
+/** columns and relationships of "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable = {
+  __typename?: 'adapter_data_object_variable';
+  crs?: Maybe<Scalars['String']['output']>;
+  /** An object relationship */
+  data_object: Adapter_Data_Object;
+  data_object_id: Scalars['String']['output'];
+  dimensionality?: Maybe<Scalars['String']['output']>;
+  grid_description?: Maybe<Scalars['String']['output']>;
+  grid_id?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  local_name?: Maybe<Scalars['String']['output']>;
+  metadata_json?: Maybe<Scalars['jsonb']['output']>;
+  schema_json?: Maybe<Scalars['jsonb']['output']>;
+  spatial_type?: Maybe<Scalars['String']['output']>;
+  standard_variable_uri?: Maybe<Scalars['String']['output']>;
+  temporal_resolution?: Maybe<Scalars['String']['output']>;
+  unit?: Maybe<Scalars['String']['output']>;
+};
+
+
+/** columns and relationships of "adapter.data_object_variable" */
+export type Adapter_Data_Object_VariableMetadata_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "adapter.data_object_variable" */
+export type Adapter_Data_Object_VariableSchema_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Aggregate = {
+  __typename?: 'adapter_data_object_variable_aggregate';
+  aggregate?: Maybe<Adapter_Data_Object_Variable_Aggregate_Fields>;
+  nodes: Array<Adapter_Data_Object_Variable>;
+};
+
+/** aggregate fields of "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Aggregate_Fields = {
+  __typename?: 'adapter_data_object_variable_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Data_Object_Variable_Max_Fields>;
+  min?: Maybe<Adapter_Data_Object_Variable_Min_Fields>;
+};
+
+
+/** aggregate fields of "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Data_Object_Variable_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** order by aggregate values of table "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Aggregate_Order_By = {
+  count?: InputMaybe<Order_By>;
+  max?: InputMaybe<Adapter_Data_Object_Variable_Max_Order_By>;
+  min?: InputMaybe<Adapter_Data_Object_Variable_Min_Order_By>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Data_Object_Variable_Append_Input = {
+  metadata_json?: InputMaybe<Scalars['jsonb']['input']>;
+  schema_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** input type for inserting array relation for remote table "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Arr_Rel_Insert_Input = {
+  data: Array<Adapter_Data_Object_Variable_Insert_Input>;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Data_Object_Variable_On_Conflict>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.data_object_variable". All fields are combined with a logical 'AND'. */
+export type Adapter_Data_Object_Variable_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Data_Object_Variable_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Data_Object_Variable_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Data_Object_Variable_Bool_Exp>>;
+  crs?: InputMaybe<String_Comparison_Exp>;
+  data_object?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+  data_object_id?: InputMaybe<String_Comparison_Exp>;
+  dimensionality?: InputMaybe<String_Comparison_Exp>;
+  grid_description?: InputMaybe<String_Comparison_Exp>;
+  grid_id?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  local_name?: InputMaybe<String_Comparison_Exp>;
+  metadata_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  schema_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  spatial_type?: InputMaybe<String_Comparison_Exp>;
+  standard_variable_uri?: InputMaybe<String_Comparison_Exp>;
+  temporal_resolution?: InputMaybe<String_Comparison_Exp>;
+  unit?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.data_object_variable" */
+export enum Adapter_Data_Object_Variable_Constraint {
+  /** unique or primary key constraint on columns "id" */
+  DataObjectVariablePkey = 'data_object_variable_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Adapter_Data_Object_Variable_Delete_At_Path_Input = {
+  metadata_json?: InputMaybe<Array<Scalars['String']['input']>>;
+  schema_json?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Adapter_Data_Object_Variable_Delete_Elem_Input = {
+  metadata_json?: InputMaybe<Scalars['Int']['input']>;
+  schema_json?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Adapter_Data_Object_Variable_Delete_Key_Input = {
+  metadata_json?: InputMaybe<Scalars['String']['input']>;
+  schema_json?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for inserting data into table "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Insert_Input = {
+  crs?: InputMaybe<Scalars['String']['input']>;
+  data_object?: InputMaybe<Adapter_Data_Object_Obj_Rel_Insert_Input>;
+  data_object_id?: InputMaybe<Scalars['String']['input']>;
+  dimensionality?: InputMaybe<Scalars['String']['input']>;
+  grid_description?: InputMaybe<Scalars['String']['input']>;
+  grid_id?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  local_name?: InputMaybe<Scalars['String']['input']>;
+  metadata_json?: InputMaybe<Scalars['jsonb']['input']>;
+  schema_json?: InputMaybe<Scalars['jsonb']['input']>;
+  spatial_type?: InputMaybe<Scalars['String']['input']>;
+  standard_variable_uri?: InputMaybe<Scalars['String']['input']>;
+  temporal_resolution?: InputMaybe<Scalars['String']['input']>;
+  unit?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Data_Object_Variable_Max_Fields = {
+  __typename?: 'adapter_data_object_variable_max_fields';
+  crs?: Maybe<Scalars['String']['output']>;
+  data_object_id?: Maybe<Scalars['String']['output']>;
+  dimensionality?: Maybe<Scalars['String']['output']>;
+  grid_description?: Maybe<Scalars['String']['output']>;
+  grid_id?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  local_name?: Maybe<Scalars['String']['output']>;
+  spatial_type?: Maybe<Scalars['String']['output']>;
+  standard_variable_uri?: Maybe<Scalars['String']['output']>;
+  temporal_resolution?: Maybe<Scalars['String']['output']>;
+  unit?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by max() on columns of table "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Max_Order_By = {
+  crs?: InputMaybe<Order_By>;
+  data_object_id?: InputMaybe<Order_By>;
+  dimensionality?: InputMaybe<Order_By>;
+  grid_description?: InputMaybe<Order_By>;
+  grid_id?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  local_name?: InputMaybe<Order_By>;
+  spatial_type?: InputMaybe<Order_By>;
+  standard_variable_uri?: InputMaybe<Order_By>;
+  temporal_resolution?: InputMaybe<Order_By>;
+  unit?: InputMaybe<Order_By>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Data_Object_Variable_Min_Fields = {
+  __typename?: 'adapter_data_object_variable_min_fields';
+  crs?: Maybe<Scalars['String']['output']>;
+  data_object_id?: Maybe<Scalars['String']['output']>;
+  dimensionality?: Maybe<Scalars['String']['output']>;
+  grid_description?: Maybe<Scalars['String']['output']>;
+  grid_id?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  local_name?: Maybe<Scalars['String']['output']>;
+  spatial_type?: Maybe<Scalars['String']['output']>;
+  standard_variable_uri?: Maybe<Scalars['String']['output']>;
+  temporal_resolution?: Maybe<Scalars['String']['output']>;
+  unit?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by min() on columns of table "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Min_Order_By = {
+  crs?: InputMaybe<Order_By>;
+  data_object_id?: InputMaybe<Order_By>;
+  dimensionality?: InputMaybe<Order_By>;
+  grid_description?: InputMaybe<Order_By>;
+  grid_id?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  local_name?: InputMaybe<Order_By>;
+  spatial_type?: InputMaybe<Order_By>;
+  standard_variable_uri?: InputMaybe<Order_By>;
+  temporal_resolution?: InputMaybe<Order_By>;
+  unit?: InputMaybe<Order_By>;
+};
+
+/** response of any mutation on the table "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Mutation_Response = {
+  __typename?: 'adapter_data_object_variable_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Data_Object_Variable>;
+};
+
+/** on_conflict condition type for table "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_On_Conflict = {
+  constraint: Adapter_Data_Object_Variable_Constraint;
+  update_columns?: Array<Adapter_Data_Object_Variable_Update_Column>;
+  where?: InputMaybe<Adapter_Data_Object_Variable_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.data_object_variable". */
+export type Adapter_Data_Object_Variable_Order_By = {
+  crs?: InputMaybe<Order_By>;
+  data_object?: InputMaybe<Adapter_Data_Object_Order_By>;
+  data_object_id?: InputMaybe<Order_By>;
+  dimensionality?: InputMaybe<Order_By>;
+  grid_description?: InputMaybe<Order_By>;
+  grid_id?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  local_name?: InputMaybe<Order_By>;
+  metadata_json?: InputMaybe<Order_By>;
+  schema_json?: InputMaybe<Order_By>;
+  spatial_type?: InputMaybe<Order_By>;
+  standard_variable_uri?: InputMaybe<Order_By>;
+  temporal_resolution?: InputMaybe<Order_By>;
+  unit?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: adapter_data_object_variable */
+export type Adapter_Data_Object_Variable_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Data_Object_Variable_Prepend_Input = {
+  metadata_json?: InputMaybe<Scalars['jsonb']['input']>;
+  schema_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "adapter.data_object_variable" */
+export enum Adapter_Data_Object_Variable_Select_Column {
+  /** column name */
+  Crs = 'crs',
+  /** column name */
+  DataObjectId = 'data_object_id',
+  /** column name */
+  Dimensionality = 'dimensionality',
+  /** column name */
+  GridDescription = 'grid_description',
+  /** column name */
+  GridId = 'grid_id',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  LocalName = 'local_name',
+  /** column name */
+  MetadataJson = 'metadata_json',
+  /** column name */
+  SchemaJson = 'schema_json',
+  /** column name */
+  SpatialType = 'spatial_type',
+  /** column name */
+  StandardVariableUri = 'standard_variable_uri',
+  /** column name */
+  TemporalResolution = 'temporal_resolution',
+  /** column name */
+  Unit = 'unit'
+}
+
+/** input type for updating data in table "adapter.data_object_variable" */
+export type Adapter_Data_Object_Variable_Set_Input = {
+  crs?: InputMaybe<Scalars['String']['input']>;
+  data_object_id?: InputMaybe<Scalars['String']['input']>;
+  dimensionality?: InputMaybe<Scalars['String']['input']>;
+  grid_description?: InputMaybe<Scalars['String']['input']>;
+  grid_id?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  local_name?: InputMaybe<Scalars['String']['input']>;
+  metadata_json?: InputMaybe<Scalars['jsonb']['input']>;
+  schema_json?: InputMaybe<Scalars['jsonb']['input']>;
+  spatial_type?: InputMaybe<Scalars['String']['input']>;
+  standard_variable_uri?: InputMaybe<Scalars['String']['input']>;
+  temporal_resolution?: InputMaybe<Scalars['String']['input']>;
+  unit?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** update columns of table "adapter.data_object_variable" */
+export enum Adapter_Data_Object_Variable_Update_Column {
+  /** column name */
+  Crs = 'crs',
+  /** column name */
+  DataObjectId = 'data_object_id',
+  /** column name */
+  Dimensionality = 'dimensionality',
+  /** column name */
+  GridDescription = 'grid_description',
+  /** column name */
+  GridId = 'grid_id',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  LocalName = 'local_name',
+  /** column name */
+  MetadataJson = 'metadata_json',
+  /** column name */
+  SchemaJson = 'schema_json',
+  /** column name */
+  SpatialType = 'spatial_type',
+  /** column name */
+  StandardVariableUri = 'standard_variable_uri',
+  /** column name */
+  TemporalResolution = 'temporal_resolution',
+  /** column name */
+  Unit = 'unit'
+}
+
+export type Adapter_Data_Object_Variable_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Adapter_Data_Object_Variable_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Adapter_Data_Object_Variable_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Adapter_Data_Object_Variable_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Adapter_Data_Object_Variable_Delete_Key_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Adapter_Data_Object_Variable_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Data_Object_Variable_Set_Input>;
+  where: Adapter_Data_Object_Variable_Bool_Exp;
+};
+
+/** columns and relationships of "adapter.provenance_event" */
+export type Adapter_Provenance_Event = {
+  __typename?: 'adapter_provenance_event';
+  created_at: Scalars['timestamptz']['output'];
+  /** An object relationship */
+  data_object?: Maybe<Adapter_Data_Object>;
+  data_object_id?: Maybe<Scalars['String']['output']>;
+  event_type: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  payload_json: Scalars['jsonb']['output'];
+  /** An object relationship */
+  workflow_run?: Maybe<Adapter_Workflow_Run>;
+  workflow_run_id?: Maybe<Scalars['String']['output']>;
+};
+
+
+/** columns and relationships of "adapter.provenance_event" */
+export type Adapter_Provenance_EventPayload_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Aggregate = {
+  __typename?: 'adapter_provenance_event_aggregate';
+  aggregate?: Maybe<Adapter_Provenance_Event_Aggregate_Fields>;
+  nodes: Array<Adapter_Provenance_Event>;
+};
+
+/** aggregate fields of "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Aggregate_Fields = {
+  __typename?: 'adapter_provenance_event_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Provenance_Event_Max_Fields>;
+  min?: Maybe<Adapter_Provenance_Event_Min_Fields>;
+};
+
+
+/** aggregate fields of "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Provenance_Event_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** order by aggregate values of table "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Aggregate_Order_By = {
+  count?: InputMaybe<Order_By>;
+  max?: InputMaybe<Adapter_Provenance_Event_Max_Order_By>;
+  min?: InputMaybe<Adapter_Provenance_Event_Min_Order_By>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Provenance_Event_Append_Input = {
+  payload_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** input type for inserting array relation for remote table "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Arr_Rel_Insert_Input = {
+  data: Array<Adapter_Provenance_Event_Insert_Input>;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Provenance_Event_On_Conflict>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.provenance_event". All fields are combined with a logical 'AND'. */
+export type Adapter_Provenance_Event_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Provenance_Event_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Provenance_Event_Bool_Exp>>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  data_object?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+  data_object_id?: InputMaybe<String_Comparison_Exp>;
+  event_type?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  payload_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  workflow_run?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+  workflow_run_id?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.provenance_event" */
+export enum Adapter_Provenance_Event_Constraint {
+  /** unique or primary key constraint on columns "id" */
+  ProvenanceEventPkey = 'provenance_event_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Adapter_Provenance_Event_Delete_At_Path_Input = {
+  payload_json?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Adapter_Provenance_Event_Delete_Elem_Input = {
+  payload_json?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Adapter_Provenance_Event_Delete_Key_Input = {
+  payload_json?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for inserting data into table "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Insert_Input = {
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  data_object?: InputMaybe<Adapter_Data_Object_Obj_Rel_Insert_Input>;
+  data_object_id?: InputMaybe<Scalars['String']['input']>;
+  event_type?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  payload_json?: InputMaybe<Scalars['jsonb']['input']>;
+  workflow_run?: InputMaybe<Adapter_Workflow_Run_Obj_Rel_Insert_Input>;
+  workflow_run_id?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Provenance_Event_Max_Fields = {
+  __typename?: 'adapter_provenance_event_max_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  data_object_id?: Maybe<Scalars['String']['output']>;
+  event_type?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  workflow_run_id?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by max() on columns of table "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Max_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  data_object_id?: InputMaybe<Order_By>;
+  event_type?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  workflow_run_id?: InputMaybe<Order_By>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Provenance_Event_Min_Fields = {
+  __typename?: 'adapter_provenance_event_min_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  data_object_id?: Maybe<Scalars['String']['output']>;
+  event_type?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  workflow_run_id?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by min() on columns of table "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Min_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  data_object_id?: InputMaybe<Order_By>;
+  event_type?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  workflow_run_id?: InputMaybe<Order_By>;
+};
+
+/** response of any mutation on the table "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Mutation_Response = {
+  __typename?: 'adapter_provenance_event_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Provenance_Event>;
+};
+
+/** on_conflict condition type for table "adapter.provenance_event" */
+export type Adapter_Provenance_Event_On_Conflict = {
+  constraint: Adapter_Provenance_Event_Constraint;
+  update_columns?: Array<Adapter_Provenance_Event_Update_Column>;
+  where?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.provenance_event". */
+export type Adapter_Provenance_Event_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  data_object?: InputMaybe<Adapter_Data_Object_Order_By>;
+  data_object_id?: InputMaybe<Order_By>;
+  event_type?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  payload_json?: InputMaybe<Order_By>;
+  workflow_run?: InputMaybe<Adapter_Workflow_Run_Order_By>;
+  workflow_run_id?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: adapter_provenance_event */
+export type Adapter_Provenance_Event_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Provenance_Event_Prepend_Input = {
+  payload_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "adapter.provenance_event" */
+export enum Adapter_Provenance_Event_Select_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  DataObjectId = 'data_object_id',
+  /** column name */
+  EventType = 'event_type',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  PayloadJson = 'payload_json',
+  /** column name */
+  WorkflowRunId = 'workflow_run_id'
+}
+
+/** input type for updating data in table "adapter.provenance_event" */
+export type Adapter_Provenance_Event_Set_Input = {
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  data_object_id?: InputMaybe<Scalars['String']['input']>;
+  event_type?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  payload_json?: InputMaybe<Scalars['jsonb']['input']>;
+  workflow_run_id?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** update columns of table "adapter.provenance_event" */
+export enum Adapter_Provenance_Event_Update_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  DataObjectId = 'data_object_id',
+  /** column name */
+  EventType = 'event_type',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  PayloadJson = 'payload_json',
+  /** column name */
+  WorkflowRunId = 'workflow_run_id'
+}
+
+export type Adapter_Provenance_Event_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Adapter_Provenance_Event_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Adapter_Provenance_Event_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Adapter_Provenance_Event_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Adapter_Provenance_Event_Delete_Key_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Adapter_Provenance_Event_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Provenance_Event_Set_Input>;
+  where: Adapter_Provenance_Event_Bool_Exp;
+};
+
+/** columns and relationships of "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment = {
+  __typename?: 'adapter_readiness_assessment';
+  created_at: Scalars['timestamptz']['output'];
+  /** An object relationship */
+  data_object: Adapter_Data_Object;
+  data_object_id: Scalars['String']['output'];
+  dataset_specification_id?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  missing_requirements_json: Scalars['jsonb']['output'];
+  model_configuration_id?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+};
+
+
+/** columns and relationships of "adapter.readiness_assessment" */
+export type Adapter_Readiness_AssessmentMissing_Requirements_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Aggregate = {
+  __typename?: 'adapter_readiness_assessment_aggregate';
+  aggregate?: Maybe<Adapter_Readiness_Assessment_Aggregate_Fields>;
+  nodes: Array<Adapter_Readiness_Assessment>;
+};
+
+/** aggregate fields of "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Aggregate_Fields = {
+  __typename?: 'adapter_readiness_assessment_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Readiness_Assessment_Max_Fields>;
+  min?: Maybe<Adapter_Readiness_Assessment_Min_Fields>;
+};
+
+
+/** aggregate fields of "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Readiness_Assessment_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** order by aggregate values of table "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Aggregate_Order_By = {
+  count?: InputMaybe<Order_By>;
+  max?: InputMaybe<Adapter_Readiness_Assessment_Max_Order_By>;
+  min?: InputMaybe<Adapter_Readiness_Assessment_Min_Order_By>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Readiness_Assessment_Append_Input = {
+  missing_requirements_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** input type for inserting array relation for remote table "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Arr_Rel_Insert_Input = {
+  data: Array<Adapter_Readiness_Assessment_Insert_Input>;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Readiness_Assessment_On_Conflict>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.readiness_assessment". All fields are combined with a logical 'AND'. */
+export type Adapter_Readiness_Assessment_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Readiness_Assessment_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Readiness_Assessment_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Readiness_Assessment_Bool_Exp>>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  data_object?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+  data_object_id?: InputMaybe<String_Comparison_Exp>;
+  dataset_specification_id?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  missing_requirements_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  model_configuration_id?: InputMaybe<String_Comparison_Exp>;
+  status?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.readiness_assessment" */
+export enum Adapter_Readiness_Assessment_Constraint {
+  /** unique or primary key constraint on columns "id" */
+  ReadinessAssessmentPkey = 'readiness_assessment_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Adapter_Readiness_Assessment_Delete_At_Path_Input = {
+  missing_requirements_json?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Adapter_Readiness_Assessment_Delete_Elem_Input = {
+  missing_requirements_json?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Adapter_Readiness_Assessment_Delete_Key_Input = {
+  missing_requirements_json?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for inserting data into table "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Insert_Input = {
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  data_object?: InputMaybe<Adapter_Data_Object_Obj_Rel_Insert_Input>;
+  data_object_id?: InputMaybe<Scalars['String']['input']>;
+  dataset_specification_id?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  missing_requirements_json?: InputMaybe<Scalars['jsonb']['input']>;
+  model_configuration_id?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Readiness_Assessment_Max_Fields = {
+  __typename?: 'adapter_readiness_assessment_max_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  data_object_id?: Maybe<Scalars['String']['output']>;
+  dataset_specification_id?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  model_configuration_id?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by max() on columns of table "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Max_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  data_object_id?: InputMaybe<Order_By>;
+  dataset_specification_id?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  model_configuration_id?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Readiness_Assessment_Min_Fields = {
+  __typename?: 'adapter_readiness_assessment_min_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  data_object_id?: Maybe<Scalars['String']['output']>;
+  dataset_specification_id?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  model_configuration_id?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by min() on columns of table "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Min_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  data_object_id?: InputMaybe<Order_By>;
+  dataset_specification_id?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  model_configuration_id?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+};
+
+/** response of any mutation on the table "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Mutation_Response = {
+  __typename?: 'adapter_readiness_assessment_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Readiness_Assessment>;
+};
+
+/** on_conflict condition type for table "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_On_Conflict = {
+  constraint: Adapter_Readiness_Assessment_Constraint;
+  update_columns?: Array<Adapter_Readiness_Assessment_Update_Column>;
+  where?: InputMaybe<Adapter_Readiness_Assessment_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.readiness_assessment". */
+export type Adapter_Readiness_Assessment_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  data_object?: InputMaybe<Adapter_Data_Object_Order_By>;
+  data_object_id?: InputMaybe<Order_By>;
+  dataset_specification_id?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  missing_requirements_json?: InputMaybe<Order_By>;
+  model_configuration_id?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: adapter_readiness_assessment */
+export type Adapter_Readiness_Assessment_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Readiness_Assessment_Prepend_Input = {
+  missing_requirements_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "adapter.readiness_assessment" */
+export enum Adapter_Readiness_Assessment_Select_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  DataObjectId = 'data_object_id',
+  /** column name */
+  DatasetSpecificationId = 'dataset_specification_id',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  MissingRequirementsJson = 'missing_requirements_json',
+  /** column name */
+  ModelConfigurationId = 'model_configuration_id',
+  /** column name */
+  Status = 'status'
+}
+
+/** input type for updating data in table "adapter.readiness_assessment" */
+export type Adapter_Readiness_Assessment_Set_Input = {
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  data_object_id?: InputMaybe<Scalars['String']['input']>;
+  dataset_specification_id?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  missing_requirements_json?: InputMaybe<Scalars['jsonb']['input']>;
+  model_configuration_id?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** update columns of table "adapter.readiness_assessment" */
+export enum Adapter_Readiness_Assessment_Update_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  DataObjectId = 'data_object_id',
+  /** column name */
+  DatasetSpecificationId = 'dataset_specification_id',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  MissingRequirementsJson = 'missing_requirements_json',
+  /** column name */
+  ModelConfigurationId = 'model_configuration_id',
+  /** column name */
+  Status = 'status'
+}
+
+export type Adapter_Readiness_Assessment_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Adapter_Readiness_Assessment_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Adapter_Readiness_Assessment_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Adapter_Readiness_Assessment_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Adapter_Readiness_Assessment_Delete_Key_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Adapter_Readiness_Assessment_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Readiness_Assessment_Set_Input>;
+  where: Adapter_Readiness_Assessment_Bool_Exp;
+};
+
+/** columns and relationships of "adapter.secret" */
+export type Adapter_Secret = {
+  __typename?: 'adapter_secret';
+  acknowledged_at?: Maybe<Scalars['timestamptz']['output']>;
+  ciphertext: Scalars['String']['output'];
+  configuration_id: Scalars['String']['output'];
+  configuration_ref?: Maybe<Scalars['String']['output']>;
+  created_at: Scalars['timestamptz']['output'];
+  fields: Scalars['_text']['output'];
+  id: Scalars['uuid']['output'];
+  last_used_at?: Maybe<Scalars['timestamptz']['output']>;
+  name: Scalars['String']['output'];
+  owner_username: Scalars['String']['output'];
+  pinned_app_id: Scalars['String']['output'];
+  pinned_app_version: Scalars['String']['output'];
+  scope: Scalars['String']['output'];
+  updated_at: Scalars['timestamptz']['output'];
+  version: Scalars['Int']['output'];
+};
+
+/** aggregated selection of "adapter.secret" */
+export type Adapter_Secret_Aggregate = {
+  __typename?: 'adapter_secret_aggregate';
+  aggregate?: Maybe<Adapter_Secret_Aggregate_Fields>;
+  nodes: Array<Adapter_Secret>;
+};
+
+/** aggregate fields of "adapter.secret" */
+export type Adapter_Secret_Aggregate_Fields = {
+  __typename?: 'adapter_secret_aggregate_fields';
+  avg?: Maybe<Adapter_Secret_Avg_Fields>;
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Secret_Max_Fields>;
+  min?: Maybe<Adapter_Secret_Min_Fields>;
+  stddev?: Maybe<Adapter_Secret_Stddev_Fields>;
+  stddev_pop?: Maybe<Adapter_Secret_Stddev_Pop_Fields>;
+  stddev_samp?: Maybe<Adapter_Secret_Stddev_Samp_Fields>;
+  sum?: Maybe<Adapter_Secret_Sum_Fields>;
+  var_pop?: Maybe<Adapter_Secret_Var_Pop_Fields>;
+  var_samp?: Maybe<Adapter_Secret_Var_Samp_Fields>;
+  variance?: Maybe<Adapter_Secret_Variance_Fields>;
+};
+
+
+/** aggregate fields of "adapter.secret" */
+export type Adapter_Secret_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Secret_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** aggregate avg on columns */
+export type Adapter_Secret_Avg_Fields = {
+  __typename?: 'adapter_secret_avg_fields';
+  version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.secret". All fields are combined with a logical 'AND'. */
+export type Adapter_Secret_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Secret_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Secret_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Secret_Bool_Exp>>;
+  acknowledged_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  ciphertext?: InputMaybe<String_Comparison_Exp>;
+  configuration_id?: InputMaybe<String_Comparison_Exp>;
+  configuration_ref?: InputMaybe<String_Comparison_Exp>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  fields?: InputMaybe<_Text_Comparison_Exp>;
+  id?: InputMaybe<Uuid_Comparison_Exp>;
+  last_used_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  name?: InputMaybe<String_Comparison_Exp>;
+  owner_username?: InputMaybe<String_Comparison_Exp>;
+  pinned_app_id?: InputMaybe<String_Comparison_Exp>;
+  pinned_app_version?: InputMaybe<String_Comparison_Exp>;
+  scope?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  version?: InputMaybe<Int_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.secret" */
+export enum Adapter_Secret_Constraint {
+  /** unique or primary key constraint on columns "name", "configuration_id", "owner_username" */
+  SecretModelOwnerKey = 'secret_model_owner_key',
+  /** unique or primary key constraint on columns "id" */
+  SecretPkey = 'secret_pkey',
+  /** unique or primary key constraint on columns "name", "owner_username" */
+  SecretUserKey = 'secret_user_key'
+}
+
+/** columns and relationships of "adapter.secret_event" */
+export type Adapter_Secret_Event = {
+  __typename?: 'adapter_secret_event';
+  actor?: Maybe<Scalars['String']['output']>;
+  actor_token_kind?: Maybe<Scalars['String']['output']>;
+  at: Scalars['timestamptz']['output'];
+  configuration_id?: Maybe<Scalars['String']['output']>;
+  event: Scalars['String']['output'];
+  id: Scalars['uuid']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+  owner_username?: Maybe<Scalars['String']['output']>;
+  run_id?: Maybe<Scalars['String']['output']>;
+  scope?: Maybe<Scalars['String']['output']>;
+  secret_id?: Maybe<Scalars['uuid']['output']>;
+  secret_version?: Maybe<Scalars['Int']['output']>;
+};
+
+/** aggregated selection of "adapter.secret_event" */
+export type Adapter_Secret_Event_Aggregate = {
+  __typename?: 'adapter_secret_event_aggregate';
+  aggregate?: Maybe<Adapter_Secret_Event_Aggregate_Fields>;
+  nodes: Array<Adapter_Secret_Event>;
+};
+
+/** aggregate fields of "adapter.secret_event" */
+export type Adapter_Secret_Event_Aggregate_Fields = {
+  __typename?: 'adapter_secret_event_aggregate_fields';
+  avg?: Maybe<Adapter_Secret_Event_Avg_Fields>;
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Secret_Event_Max_Fields>;
+  min?: Maybe<Adapter_Secret_Event_Min_Fields>;
+  stddev?: Maybe<Adapter_Secret_Event_Stddev_Fields>;
+  stddev_pop?: Maybe<Adapter_Secret_Event_Stddev_Pop_Fields>;
+  stddev_samp?: Maybe<Adapter_Secret_Event_Stddev_Samp_Fields>;
+  sum?: Maybe<Adapter_Secret_Event_Sum_Fields>;
+  var_pop?: Maybe<Adapter_Secret_Event_Var_Pop_Fields>;
+  var_samp?: Maybe<Adapter_Secret_Event_Var_Samp_Fields>;
+  variance?: Maybe<Adapter_Secret_Event_Variance_Fields>;
+};
+
+
+/** aggregate fields of "adapter.secret_event" */
+export type Adapter_Secret_Event_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Secret_Event_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** aggregate avg on columns */
+export type Adapter_Secret_Event_Avg_Fields = {
+  __typename?: 'adapter_secret_event_avg_fields';
+  secret_version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.secret_event". All fields are combined with a logical 'AND'. */
+export type Adapter_Secret_Event_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Secret_Event_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Secret_Event_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Secret_Event_Bool_Exp>>;
+  actor?: InputMaybe<String_Comparison_Exp>;
+  actor_token_kind?: InputMaybe<String_Comparison_Exp>;
+  at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  configuration_id?: InputMaybe<String_Comparison_Exp>;
+  event?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<Uuid_Comparison_Exp>;
+  name?: InputMaybe<String_Comparison_Exp>;
+  owner_username?: InputMaybe<String_Comparison_Exp>;
+  run_id?: InputMaybe<String_Comparison_Exp>;
+  scope?: InputMaybe<String_Comparison_Exp>;
+  secret_id?: InputMaybe<Uuid_Comparison_Exp>;
+  secret_version?: InputMaybe<Int_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.secret_event" */
+export enum Adapter_Secret_Event_Constraint {
+  /** unique or primary key constraint on columns "id" */
+  SecretEventPkey = 'secret_event_pkey'
+}
+
+/** input type for incrementing numeric columns in table "adapter.secret_event" */
+export type Adapter_Secret_Event_Inc_Input = {
+  secret_version?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** input type for inserting data into table "adapter.secret_event" */
+export type Adapter_Secret_Event_Insert_Input = {
+  actor?: InputMaybe<Scalars['String']['input']>;
+  actor_token_kind?: InputMaybe<Scalars['String']['input']>;
+  at?: InputMaybe<Scalars['timestamptz']['input']>;
+  configuration_id?: InputMaybe<Scalars['String']['input']>;
+  event?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  owner_username?: InputMaybe<Scalars['String']['input']>;
+  run_id?: InputMaybe<Scalars['String']['input']>;
+  scope?: InputMaybe<Scalars['String']['input']>;
+  secret_id?: InputMaybe<Scalars['uuid']['input']>;
+  secret_version?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Secret_Event_Max_Fields = {
+  __typename?: 'adapter_secret_event_max_fields';
+  actor?: Maybe<Scalars['String']['output']>;
+  actor_token_kind?: Maybe<Scalars['String']['output']>;
+  at?: Maybe<Scalars['timestamptz']['output']>;
+  configuration_id?: Maybe<Scalars['String']['output']>;
+  event?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  owner_username?: Maybe<Scalars['String']['output']>;
+  run_id?: Maybe<Scalars['String']['output']>;
+  scope?: Maybe<Scalars['String']['output']>;
+  secret_id?: Maybe<Scalars['uuid']['output']>;
+  secret_version?: Maybe<Scalars['Int']['output']>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Secret_Event_Min_Fields = {
+  __typename?: 'adapter_secret_event_min_fields';
+  actor?: Maybe<Scalars['String']['output']>;
+  actor_token_kind?: Maybe<Scalars['String']['output']>;
+  at?: Maybe<Scalars['timestamptz']['output']>;
+  configuration_id?: Maybe<Scalars['String']['output']>;
+  event?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  owner_username?: Maybe<Scalars['String']['output']>;
+  run_id?: Maybe<Scalars['String']['output']>;
+  scope?: Maybe<Scalars['String']['output']>;
+  secret_id?: Maybe<Scalars['uuid']['output']>;
+  secret_version?: Maybe<Scalars['Int']['output']>;
+};
+
+/** response of any mutation on the table "adapter.secret_event" */
+export type Adapter_Secret_Event_Mutation_Response = {
+  __typename?: 'adapter_secret_event_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Secret_Event>;
+};
+
+/** on_conflict condition type for table "adapter.secret_event" */
+export type Adapter_Secret_Event_On_Conflict = {
+  constraint: Adapter_Secret_Event_Constraint;
+  update_columns?: Array<Adapter_Secret_Event_Update_Column>;
+  where?: InputMaybe<Adapter_Secret_Event_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.secret_event". */
+export type Adapter_Secret_Event_Order_By = {
+  actor?: InputMaybe<Order_By>;
+  actor_token_kind?: InputMaybe<Order_By>;
+  at?: InputMaybe<Order_By>;
+  configuration_id?: InputMaybe<Order_By>;
+  event?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  name?: InputMaybe<Order_By>;
+  owner_username?: InputMaybe<Order_By>;
+  run_id?: InputMaybe<Order_By>;
+  scope?: InputMaybe<Order_By>;
+  secret_id?: InputMaybe<Order_By>;
+  secret_version?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: adapter_secret_event */
+export type Adapter_Secret_Event_Pk_Columns_Input = {
+  id: Scalars['uuid']['input'];
+};
+
+/** select columns of table "adapter.secret_event" */
+export enum Adapter_Secret_Event_Select_Column {
+  /** column name */
+  Actor = 'actor',
+  /** column name */
+  ActorTokenKind = 'actor_token_kind',
+  /** column name */
+  At = 'at',
+  /** column name */
+  ConfigurationId = 'configuration_id',
+  /** column name */
+  Event = 'event',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  Name = 'name',
+  /** column name */
+  OwnerUsername = 'owner_username',
+  /** column name */
+  RunId = 'run_id',
+  /** column name */
+  Scope = 'scope',
+  /** column name */
+  SecretId = 'secret_id',
+  /** column name */
+  SecretVersion = 'secret_version'
+}
+
+/** input type for updating data in table "adapter.secret_event" */
+export type Adapter_Secret_Event_Set_Input = {
+  actor?: InputMaybe<Scalars['String']['input']>;
+  actor_token_kind?: InputMaybe<Scalars['String']['input']>;
+  at?: InputMaybe<Scalars['timestamptz']['input']>;
+  configuration_id?: InputMaybe<Scalars['String']['input']>;
+  event?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  owner_username?: InputMaybe<Scalars['String']['input']>;
+  run_id?: InputMaybe<Scalars['String']['input']>;
+  scope?: InputMaybe<Scalars['String']['input']>;
+  secret_id?: InputMaybe<Scalars['uuid']['input']>;
+  secret_version?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** aggregate stddev on columns */
+export type Adapter_Secret_Event_Stddev_Fields = {
+  __typename?: 'adapter_secret_event_stddev_fields';
+  secret_version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_pop on columns */
+export type Adapter_Secret_Event_Stddev_Pop_Fields = {
+  __typename?: 'adapter_secret_event_stddev_pop_fields';
+  secret_version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_samp on columns */
+export type Adapter_Secret_Event_Stddev_Samp_Fields = {
+  __typename?: 'adapter_secret_event_stddev_samp_fields';
+  secret_version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate sum on columns */
+export type Adapter_Secret_Event_Sum_Fields = {
+  __typename?: 'adapter_secret_event_sum_fields';
+  secret_version?: Maybe<Scalars['Int']['output']>;
+};
+
+/** update columns of table "adapter.secret_event" */
+export enum Adapter_Secret_Event_Update_Column {
+  /** column name */
+  Actor = 'actor',
+  /** column name */
+  ActorTokenKind = 'actor_token_kind',
+  /** column name */
+  At = 'at',
+  /** column name */
+  ConfigurationId = 'configuration_id',
+  /** column name */
+  Event = 'event',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  Name = 'name',
+  /** column name */
+  OwnerUsername = 'owner_username',
+  /** column name */
+  RunId = 'run_id',
+  /** column name */
+  Scope = 'scope',
+  /** column name */
+  SecretId = 'secret_id',
+  /** column name */
+  SecretVersion = 'secret_version'
+}
+
+export type Adapter_Secret_Event_Updates = {
+  /** increments the numeric columns with given value of the filtered values */
+  _inc?: InputMaybe<Adapter_Secret_Event_Inc_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Secret_Event_Set_Input>;
+  where: Adapter_Secret_Event_Bool_Exp;
+};
+
+/** aggregate var_pop on columns */
+export type Adapter_Secret_Event_Var_Pop_Fields = {
+  __typename?: 'adapter_secret_event_var_pop_fields';
+  secret_version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate var_samp on columns */
+export type Adapter_Secret_Event_Var_Samp_Fields = {
+  __typename?: 'adapter_secret_event_var_samp_fields';
+  secret_version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate variance on columns */
+export type Adapter_Secret_Event_Variance_Fields = {
+  __typename?: 'adapter_secret_event_variance_fields';
+  secret_version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** input type for incrementing numeric columns in table "adapter.secret" */
+export type Adapter_Secret_Inc_Input = {
+  version?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** input type for inserting data into table "adapter.secret" */
+export type Adapter_Secret_Insert_Input = {
+  acknowledged_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  ciphertext?: InputMaybe<Scalars['String']['input']>;
+  configuration_id?: InputMaybe<Scalars['String']['input']>;
+  configuration_ref?: InputMaybe<Scalars['String']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  fields?: InputMaybe<Scalars['_text']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  last_used_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  owner_username?: InputMaybe<Scalars['String']['input']>;
+  pinned_app_id?: InputMaybe<Scalars['String']['input']>;
+  pinned_app_version?: InputMaybe<Scalars['String']['input']>;
+  scope?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  version?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Secret_Max_Fields = {
+  __typename?: 'adapter_secret_max_fields';
+  acknowledged_at?: Maybe<Scalars['timestamptz']['output']>;
+  ciphertext?: Maybe<Scalars['String']['output']>;
+  configuration_id?: Maybe<Scalars['String']['output']>;
+  configuration_ref?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  last_used_at?: Maybe<Scalars['timestamptz']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  owner_username?: Maybe<Scalars['String']['output']>;
+  pinned_app_id?: Maybe<Scalars['String']['output']>;
+  pinned_app_version?: Maybe<Scalars['String']['output']>;
+  scope?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+  version?: Maybe<Scalars['Int']['output']>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Secret_Min_Fields = {
+  __typename?: 'adapter_secret_min_fields';
+  acknowledged_at?: Maybe<Scalars['timestamptz']['output']>;
+  ciphertext?: Maybe<Scalars['String']['output']>;
+  configuration_id?: Maybe<Scalars['String']['output']>;
+  configuration_ref?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  last_used_at?: Maybe<Scalars['timestamptz']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  owner_username?: Maybe<Scalars['String']['output']>;
+  pinned_app_id?: Maybe<Scalars['String']['output']>;
+  pinned_app_version?: Maybe<Scalars['String']['output']>;
+  scope?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+  version?: Maybe<Scalars['Int']['output']>;
+};
+
+/** response of any mutation on the table "adapter.secret" */
+export type Adapter_Secret_Mutation_Response = {
+  __typename?: 'adapter_secret_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Secret>;
+};
+
+/** on_conflict condition type for table "adapter.secret" */
+export type Adapter_Secret_On_Conflict = {
+  constraint: Adapter_Secret_Constraint;
+  update_columns?: Array<Adapter_Secret_Update_Column>;
+  where?: InputMaybe<Adapter_Secret_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.secret". */
+export type Adapter_Secret_Order_By = {
+  acknowledged_at?: InputMaybe<Order_By>;
+  ciphertext?: InputMaybe<Order_By>;
+  configuration_id?: InputMaybe<Order_By>;
+  configuration_ref?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  fields?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  last_used_at?: InputMaybe<Order_By>;
+  name?: InputMaybe<Order_By>;
+  owner_username?: InputMaybe<Order_By>;
+  pinned_app_id?: InputMaybe<Order_By>;
+  pinned_app_version?: InputMaybe<Order_By>;
+  scope?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+  version?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: adapter_secret */
+export type Adapter_Secret_Pk_Columns_Input = {
+  id: Scalars['uuid']['input'];
+};
+
+/** select columns of table "adapter.secret" */
+export enum Adapter_Secret_Select_Column {
+  /** column name */
+  AcknowledgedAt = 'acknowledged_at',
+  /** column name */
+  Ciphertext = 'ciphertext',
+  /** column name */
+  ConfigurationId = 'configuration_id',
+  /** column name */
+  ConfigurationRef = 'configuration_ref',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Fields = 'fields',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  LastUsedAt = 'last_used_at',
+  /** column name */
+  Name = 'name',
+  /** column name */
+  OwnerUsername = 'owner_username',
+  /** column name */
+  PinnedAppId = 'pinned_app_id',
+  /** column name */
+  PinnedAppVersion = 'pinned_app_version',
+  /** column name */
+  Scope = 'scope',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  Version = 'version'
+}
+
+/** input type for updating data in table "adapter.secret" */
+export type Adapter_Secret_Set_Input = {
+  acknowledged_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  ciphertext?: InputMaybe<Scalars['String']['input']>;
+  configuration_id?: InputMaybe<Scalars['String']['input']>;
+  configuration_ref?: InputMaybe<Scalars['String']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  fields?: InputMaybe<Scalars['_text']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  last_used_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  owner_username?: InputMaybe<Scalars['String']['input']>;
+  pinned_app_id?: InputMaybe<Scalars['String']['input']>;
+  pinned_app_version?: InputMaybe<Scalars['String']['input']>;
+  scope?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  version?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** aggregate stddev on columns */
+export type Adapter_Secret_Stddev_Fields = {
+  __typename?: 'adapter_secret_stddev_fields';
+  version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_pop on columns */
+export type Adapter_Secret_Stddev_Pop_Fields = {
+  __typename?: 'adapter_secret_stddev_pop_fields';
+  version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_samp on columns */
+export type Adapter_Secret_Stddev_Samp_Fields = {
+  __typename?: 'adapter_secret_stddev_samp_fields';
+  version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate sum on columns */
+export type Adapter_Secret_Sum_Fields = {
+  __typename?: 'adapter_secret_sum_fields';
+  version?: Maybe<Scalars['Int']['output']>;
+};
+
+/** update columns of table "adapter.secret" */
+export enum Adapter_Secret_Update_Column {
+  /** column name */
+  AcknowledgedAt = 'acknowledged_at',
+  /** column name */
+  Ciphertext = 'ciphertext',
+  /** column name */
+  ConfigurationId = 'configuration_id',
+  /** column name */
+  ConfigurationRef = 'configuration_ref',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Fields = 'fields',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  LastUsedAt = 'last_used_at',
+  /** column name */
+  Name = 'name',
+  /** column name */
+  OwnerUsername = 'owner_username',
+  /** column name */
+  PinnedAppId = 'pinned_app_id',
+  /** column name */
+  PinnedAppVersion = 'pinned_app_version',
+  /** column name */
+  Scope = 'scope',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  Version = 'version'
+}
+
+export type Adapter_Secret_Updates = {
+  /** increments the numeric columns with given value of the filtered values */
+  _inc?: InputMaybe<Adapter_Secret_Inc_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Secret_Set_Input>;
+  where: Adapter_Secret_Bool_Exp;
+};
+
+/** aggregate var_pop on columns */
+export type Adapter_Secret_Var_Pop_Fields = {
+  __typename?: 'adapter_secret_var_pop_fields';
+  version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate var_samp on columns */
+export type Adapter_Secret_Var_Samp_Fields = {
+  __typename?: 'adapter_secret_var_samp_fields';
+  version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate variance on columns */
+export type Adapter_Secret_Variance_Fields = {
+  __typename?: 'adapter_secret_variance_fields';
+  version?: Maybe<Scalars['Float']['output']>;
+};
+
+/** columns and relationships of "adapter.transform_contract" */
+export type Adapter_Transform_Contract = {
+  __typename?: 'adapter_transform_contract';
+  crs_requirement?: Maybe<Scalars['String']['output']>;
+  dimensionality?: Maybe<Scalars['String']['output']>;
+  format?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  metadata_json?: Maybe<Scalars['jsonb']['output']>;
+  role: Scalars['String']['output'];
+  schema_requirement_json?: Maybe<Scalars['jsonb']['output']>;
+  /** An object relationship */
+  source_edges?: Maybe<Adapter_Transform_Edge>;
+  spatial_type?: Maybe<Scalars['String']['output']>;
+  standard_variable_uri?: Maybe<Scalars['String']['output']>;
+  /** An object relationship */
+  target_edges?: Maybe<Adapter_Transform_Edge>;
+  temporal_resolution?: Maybe<Scalars['String']['output']>;
+  /** An object relationship */
+  transform_spec: Adapter_Transform_Spec;
+  transform_spec_id: Scalars['String']['output'];
+  unit?: Maybe<Scalars['String']['output']>;
+};
+
+
+/** columns and relationships of "adapter.transform_contract" */
+export type Adapter_Transform_ContractMetadata_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "adapter.transform_contract" */
+export type Adapter_Transform_ContractSchema_Requirement_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Aggregate = {
+  __typename?: 'adapter_transform_contract_aggregate';
+  aggregate?: Maybe<Adapter_Transform_Contract_Aggregate_Fields>;
+  nodes: Array<Adapter_Transform_Contract>;
+};
+
+/** aggregate fields of "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Aggregate_Fields = {
+  __typename?: 'adapter_transform_contract_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Transform_Contract_Max_Fields>;
+  min?: Maybe<Adapter_Transform_Contract_Min_Fields>;
+};
+
+
+/** aggregate fields of "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Transform_Contract_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** order by aggregate values of table "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Aggregate_Order_By = {
+  count?: InputMaybe<Order_By>;
+  max?: InputMaybe<Adapter_Transform_Contract_Max_Order_By>;
+  min?: InputMaybe<Adapter_Transform_Contract_Min_Order_By>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Transform_Contract_Append_Input = {
+  metadata_json?: InputMaybe<Scalars['jsonb']['input']>;
+  schema_requirement_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** input type for inserting array relation for remote table "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Arr_Rel_Insert_Input = {
+  data: Array<Adapter_Transform_Contract_Insert_Input>;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Transform_Contract_On_Conflict>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.transform_contract". All fields are combined with a logical 'AND'. */
+export type Adapter_Transform_Contract_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Transform_Contract_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Transform_Contract_Bool_Exp>>;
+  crs_requirement?: InputMaybe<String_Comparison_Exp>;
+  dimensionality?: InputMaybe<String_Comparison_Exp>;
+  format?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  metadata_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  role?: InputMaybe<String_Comparison_Exp>;
+  schema_requirement_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  source_edges?: InputMaybe<Adapter_Transform_Edge_Bool_Exp>;
+  spatial_type?: InputMaybe<String_Comparison_Exp>;
+  standard_variable_uri?: InputMaybe<String_Comparison_Exp>;
+  target_edges?: InputMaybe<Adapter_Transform_Edge_Bool_Exp>;
+  temporal_resolution?: InputMaybe<String_Comparison_Exp>;
+  transform_spec?: InputMaybe<Adapter_Transform_Spec_Bool_Exp>;
+  transform_spec_id?: InputMaybe<String_Comparison_Exp>;
+  unit?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.transform_contract" */
+export enum Adapter_Transform_Contract_Constraint {
+  /** unique or primary key constraint on columns "id" */
+  TransformContractPkey = 'transform_contract_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Adapter_Transform_Contract_Delete_At_Path_Input = {
+  metadata_json?: InputMaybe<Array<Scalars['String']['input']>>;
+  schema_requirement_json?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Adapter_Transform_Contract_Delete_Elem_Input = {
+  metadata_json?: InputMaybe<Scalars['Int']['input']>;
+  schema_requirement_json?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Adapter_Transform_Contract_Delete_Key_Input = {
+  metadata_json?: InputMaybe<Scalars['String']['input']>;
+  schema_requirement_json?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for inserting data into table "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Insert_Input = {
+  crs_requirement?: InputMaybe<Scalars['String']['input']>;
+  dimensionality?: InputMaybe<Scalars['String']['input']>;
+  format?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  metadata_json?: InputMaybe<Scalars['jsonb']['input']>;
+  role?: InputMaybe<Scalars['String']['input']>;
+  schema_requirement_json?: InputMaybe<Scalars['jsonb']['input']>;
+  source_edges?: InputMaybe<Adapter_Transform_Edge_Obj_Rel_Insert_Input>;
+  spatial_type?: InputMaybe<Scalars['String']['input']>;
+  standard_variable_uri?: InputMaybe<Scalars['String']['input']>;
+  target_edges?: InputMaybe<Adapter_Transform_Edge_Obj_Rel_Insert_Input>;
+  temporal_resolution?: InputMaybe<Scalars['String']['input']>;
+  transform_spec?: InputMaybe<Adapter_Transform_Spec_Obj_Rel_Insert_Input>;
+  transform_spec_id?: InputMaybe<Scalars['String']['input']>;
+  unit?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Transform_Contract_Max_Fields = {
+  __typename?: 'adapter_transform_contract_max_fields';
+  crs_requirement?: Maybe<Scalars['String']['output']>;
+  dimensionality?: Maybe<Scalars['String']['output']>;
+  format?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  role?: Maybe<Scalars['String']['output']>;
+  spatial_type?: Maybe<Scalars['String']['output']>;
+  standard_variable_uri?: Maybe<Scalars['String']['output']>;
+  temporal_resolution?: Maybe<Scalars['String']['output']>;
+  transform_spec_id?: Maybe<Scalars['String']['output']>;
+  unit?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by max() on columns of table "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Max_Order_By = {
+  crs_requirement?: InputMaybe<Order_By>;
+  dimensionality?: InputMaybe<Order_By>;
+  format?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  role?: InputMaybe<Order_By>;
+  spatial_type?: InputMaybe<Order_By>;
+  standard_variable_uri?: InputMaybe<Order_By>;
+  temporal_resolution?: InputMaybe<Order_By>;
+  transform_spec_id?: InputMaybe<Order_By>;
+  unit?: InputMaybe<Order_By>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Transform_Contract_Min_Fields = {
+  __typename?: 'adapter_transform_contract_min_fields';
+  crs_requirement?: Maybe<Scalars['String']['output']>;
+  dimensionality?: Maybe<Scalars['String']['output']>;
+  format?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  role?: Maybe<Scalars['String']['output']>;
+  spatial_type?: Maybe<Scalars['String']['output']>;
+  standard_variable_uri?: Maybe<Scalars['String']['output']>;
+  temporal_resolution?: Maybe<Scalars['String']['output']>;
+  transform_spec_id?: Maybe<Scalars['String']['output']>;
+  unit?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by min() on columns of table "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Min_Order_By = {
+  crs_requirement?: InputMaybe<Order_By>;
+  dimensionality?: InputMaybe<Order_By>;
+  format?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  role?: InputMaybe<Order_By>;
+  spatial_type?: InputMaybe<Order_By>;
+  standard_variable_uri?: InputMaybe<Order_By>;
+  temporal_resolution?: InputMaybe<Order_By>;
+  transform_spec_id?: InputMaybe<Order_By>;
+  unit?: InputMaybe<Order_By>;
+};
+
+/** response of any mutation on the table "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Mutation_Response = {
+  __typename?: 'adapter_transform_contract_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Transform_Contract>;
+};
+
+/** input type for inserting object relation for remote table "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Obj_Rel_Insert_Input = {
+  data: Adapter_Transform_Contract_Insert_Input;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Transform_Contract_On_Conflict>;
+};
+
+/** on_conflict condition type for table "adapter.transform_contract" */
+export type Adapter_Transform_Contract_On_Conflict = {
+  constraint: Adapter_Transform_Contract_Constraint;
+  update_columns?: Array<Adapter_Transform_Contract_Update_Column>;
+  where?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.transform_contract". */
+export type Adapter_Transform_Contract_Order_By = {
+  crs_requirement?: InputMaybe<Order_By>;
+  dimensionality?: InputMaybe<Order_By>;
+  format?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  metadata_json?: InputMaybe<Order_By>;
+  role?: InputMaybe<Order_By>;
+  schema_requirement_json?: InputMaybe<Order_By>;
+  source_edges?: InputMaybe<Adapter_Transform_Edge_Order_By>;
+  spatial_type?: InputMaybe<Order_By>;
+  standard_variable_uri?: InputMaybe<Order_By>;
+  target_edges?: InputMaybe<Adapter_Transform_Edge_Order_By>;
+  temporal_resolution?: InputMaybe<Order_By>;
+  transform_spec?: InputMaybe<Adapter_Transform_Spec_Order_By>;
+  transform_spec_id?: InputMaybe<Order_By>;
+  unit?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: adapter_transform_contract */
+export type Adapter_Transform_Contract_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Transform_Contract_Prepend_Input = {
+  metadata_json?: InputMaybe<Scalars['jsonb']['input']>;
+  schema_requirement_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "adapter.transform_contract" */
+export enum Adapter_Transform_Contract_Select_Column {
+  /** column name */
+  CrsRequirement = 'crs_requirement',
+  /** column name */
+  Dimensionality = 'dimensionality',
+  /** column name */
+  Format = 'format',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  MetadataJson = 'metadata_json',
+  /** column name */
+  Role = 'role',
+  /** column name */
+  SchemaRequirementJson = 'schema_requirement_json',
+  /** column name */
+  SpatialType = 'spatial_type',
+  /** column name */
+  StandardVariableUri = 'standard_variable_uri',
+  /** column name */
+  TemporalResolution = 'temporal_resolution',
+  /** column name */
+  TransformSpecId = 'transform_spec_id',
+  /** column name */
+  Unit = 'unit'
+}
+
+/** input type for updating data in table "adapter.transform_contract" */
+export type Adapter_Transform_Contract_Set_Input = {
+  crs_requirement?: InputMaybe<Scalars['String']['input']>;
+  dimensionality?: InputMaybe<Scalars['String']['input']>;
+  format?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  metadata_json?: InputMaybe<Scalars['jsonb']['input']>;
+  role?: InputMaybe<Scalars['String']['input']>;
+  schema_requirement_json?: InputMaybe<Scalars['jsonb']['input']>;
+  spatial_type?: InputMaybe<Scalars['String']['input']>;
+  standard_variable_uri?: InputMaybe<Scalars['String']['input']>;
+  temporal_resolution?: InputMaybe<Scalars['String']['input']>;
+  transform_spec_id?: InputMaybe<Scalars['String']['input']>;
+  unit?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** update columns of table "adapter.transform_contract" */
+export enum Adapter_Transform_Contract_Update_Column {
+  /** column name */
+  CrsRequirement = 'crs_requirement',
+  /** column name */
+  Dimensionality = 'dimensionality',
+  /** column name */
+  Format = 'format',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  MetadataJson = 'metadata_json',
+  /** column name */
+  Role = 'role',
+  /** column name */
+  SchemaRequirementJson = 'schema_requirement_json',
+  /** column name */
+  SpatialType = 'spatial_type',
+  /** column name */
+  StandardVariableUri = 'standard_variable_uri',
+  /** column name */
+  TemporalResolution = 'temporal_resolution',
+  /** column name */
+  TransformSpecId = 'transform_spec_id',
+  /** column name */
+  Unit = 'unit'
+}
+
+export type Adapter_Transform_Contract_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Adapter_Transform_Contract_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Adapter_Transform_Contract_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Adapter_Transform_Contract_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Adapter_Transform_Contract_Delete_Key_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Adapter_Transform_Contract_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Transform_Contract_Set_Input>;
+  where: Adapter_Transform_Contract_Bool_Exp;
+};
+
+/** columns and relationships of "adapter.transform_edge" */
+export type Adapter_Transform_Edge = {
+  __typename?: 'adapter_transform_edge';
+  compatibility_json?: Maybe<Scalars['jsonb']['output']>;
+  id: Scalars['String']['output'];
+  is_lossy: Scalars['Boolean']['output'];
+  /** An object relationship */
+  source_contract: Adapter_Transform_Contract;
+  source_contract_id: Scalars['String']['output'];
+  /** An object relationship */
+  target_contract: Adapter_Transform_Contract;
+  target_contract_id: Scalars['String']['output'];
+};
+
+
+/** columns and relationships of "adapter.transform_edge" */
+export type Adapter_Transform_EdgeCompatibility_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "adapter.transform_edge" */
+export type Adapter_Transform_Edge_Aggregate = {
+  __typename?: 'adapter_transform_edge_aggregate';
+  aggregate?: Maybe<Adapter_Transform_Edge_Aggregate_Fields>;
+  nodes: Array<Adapter_Transform_Edge>;
+};
+
+/** aggregate fields of "adapter.transform_edge" */
+export type Adapter_Transform_Edge_Aggregate_Fields = {
+  __typename?: 'adapter_transform_edge_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Transform_Edge_Max_Fields>;
+  min?: Maybe<Adapter_Transform_Edge_Min_Fields>;
+};
+
+
+/** aggregate fields of "adapter.transform_edge" */
+export type Adapter_Transform_Edge_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Transform_Edge_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Transform_Edge_Append_Input = {
+  compatibility_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.transform_edge". All fields are combined with a logical 'AND'. */
+export type Adapter_Transform_Edge_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Transform_Edge_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Transform_Edge_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Transform_Edge_Bool_Exp>>;
+  compatibility_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  is_lossy?: InputMaybe<Boolean_Comparison_Exp>;
+  source_contract?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+  source_contract_id?: InputMaybe<String_Comparison_Exp>;
+  target_contract?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+  target_contract_id?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.transform_edge" */
+export enum Adapter_Transform_Edge_Constraint {
+  /** unique or primary key constraint on columns "target_contract_id", "source_contract_id" */
+  TransformEdgePairKey = 'transform_edge_pair_key',
+  /** unique or primary key constraint on columns "id" */
+  TransformEdgePkey = 'transform_edge_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Adapter_Transform_Edge_Delete_At_Path_Input = {
+  compatibility_json?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Adapter_Transform_Edge_Delete_Elem_Input = {
+  compatibility_json?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Adapter_Transform_Edge_Delete_Key_Input = {
+  compatibility_json?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for inserting data into table "adapter.transform_edge" */
+export type Adapter_Transform_Edge_Insert_Input = {
+  compatibility_json?: InputMaybe<Scalars['jsonb']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  is_lossy?: InputMaybe<Scalars['Boolean']['input']>;
+  source_contract?: InputMaybe<Adapter_Transform_Contract_Obj_Rel_Insert_Input>;
+  source_contract_id?: InputMaybe<Scalars['String']['input']>;
+  target_contract?: InputMaybe<Adapter_Transform_Contract_Obj_Rel_Insert_Input>;
+  target_contract_id?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Transform_Edge_Max_Fields = {
+  __typename?: 'adapter_transform_edge_max_fields';
+  id?: Maybe<Scalars['String']['output']>;
+  source_contract_id?: Maybe<Scalars['String']['output']>;
+  target_contract_id?: Maybe<Scalars['String']['output']>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Transform_Edge_Min_Fields = {
+  __typename?: 'adapter_transform_edge_min_fields';
+  id?: Maybe<Scalars['String']['output']>;
+  source_contract_id?: Maybe<Scalars['String']['output']>;
+  target_contract_id?: Maybe<Scalars['String']['output']>;
+};
+
+/** response of any mutation on the table "adapter.transform_edge" */
+export type Adapter_Transform_Edge_Mutation_Response = {
+  __typename?: 'adapter_transform_edge_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Transform_Edge>;
+};
+
+/** input type for inserting object relation for remote table "adapter.transform_edge" */
+export type Adapter_Transform_Edge_Obj_Rel_Insert_Input = {
+  data: Adapter_Transform_Edge_Insert_Input;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Transform_Edge_On_Conflict>;
+};
+
+/** on_conflict condition type for table "adapter.transform_edge" */
+export type Adapter_Transform_Edge_On_Conflict = {
+  constraint: Adapter_Transform_Edge_Constraint;
+  update_columns?: Array<Adapter_Transform_Edge_Update_Column>;
+  where?: InputMaybe<Adapter_Transform_Edge_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.transform_edge". */
+export type Adapter_Transform_Edge_Order_By = {
+  compatibility_json?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  is_lossy?: InputMaybe<Order_By>;
+  source_contract?: InputMaybe<Adapter_Transform_Contract_Order_By>;
+  source_contract_id?: InputMaybe<Order_By>;
+  target_contract?: InputMaybe<Adapter_Transform_Contract_Order_By>;
+  target_contract_id?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: adapter_transform_edge */
+export type Adapter_Transform_Edge_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Transform_Edge_Prepend_Input = {
+  compatibility_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "adapter.transform_edge" */
+export enum Adapter_Transform_Edge_Select_Column {
+  /** column name */
+  CompatibilityJson = 'compatibility_json',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IsLossy = 'is_lossy',
+  /** column name */
+  SourceContractId = 'source_contract_id',
+  /** column name */
+  TargetContractId = 'target_contract_id'
+}
+
+/** input type for updating data in table "adapter.transform_edge" */
+export type Adapter_Transform_Edge_Set_Input = {
+  compatibility_json?: InputMaybe<Scalars['jsonb']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  is_lossy?: InputMaybe<Scalars['Boolean']['input']>;
+  source_contract_id?: InputMaybe<Scalars['String']['input']>;
+  target_contract_id?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** update columns of table "adapter.transform_edge" */
+export enum Adapter_Transform_Edge_Update_Column {
+  /** column name */
+  CompatibilityJson = 'compatibility_json',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IsLossy = 'is_lossy',
+  /** column name */
+  SourceContractId = 'source_contract_id',
+  /** column name */
+  TargetContractId = 'target_contract_id'
+}
+
+export type Adapter_Transform_Edge_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Adapter_Transform_Edge_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Adapter_Transform_Edge_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Adapter_Transform_Edge_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Adapter_Transform_Edge_Delete_Key_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Adapter_Transform_Edge_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Transform_Edge_Set_Input>;
+  where: Adapter_Transform_Edge_Bool_Exp;
+};
+
+/** columns and relationships of "adapter.transform_spec" */
+export type Adapter_Transform_Spec = {
+  __typename?: 'adapter_transform_spec';
+  app_version?: Maybe<Scalars['String']['output']>;
+  container_image?: Maybe<Scalars['String']['output']>;
+  /** An array relationship */
+  contracts: Array<Adapter_Transform_Contract>;
+  /** An aggregate relationship */
+  contracts_aggregate: Adapter_Transform_Contract_Aggregate;
+  created_at: Scalars['timestamptz']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  env_from_args?: Maybe<Scalars['jsonb']['output']>;
+  file_inputs?: Maybe<Scalars['jsonb']['output']>;
+  id: Scalars['String']['output'];
+  is_lossy: Scalars['Boolean']['output'];
+  method?: Maybe<Scalars['String']['output']>;
+  mint_model_config_id?: Maybe<Scalars['String']['output']>;
+  mint_synced_at?: Maybe<Scalars['timestamptz']['output']>;
+  name: Scalars['String']['output'];
+  parameters_schema_json?: Maybe<Scalars['jsonb']['output']>;
+  source_code_url?: Maybe<Scalars['String']['output']>;
+  stage?: Maybe<Scalars['String']['output']>;
+  tapis_app_id?: Maybe<Scalars['String']['output']>;
+  transform_type?: Maybe<Scalars['String']['output']>;
+  updated_at: Scalars['timestamptz']['output'];
+  version?: Maybe<Scalars['String']['output']>;
+};
+
+
+/** columns and relationships of "adapter.transform_spec" */
+export type Adapter_Transform_SpecContractsArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Contract_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.transform_spec" */
+export type Adapter_Transform_SpecContracts_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Contract_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.transform_spec" */
+export type Adapter_Transform_SpecEnv_From_ArgsArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "adapter.transform_spec" */
+export type Adapter_Transform_SpecFile_InputsArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "adapter.transform_spec" */
+export type Adapter_Transform_SpecParameters_Schema_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "adapter.transform_spec" */
+export type Adapter_Transform_Spec_Aggregate = {
+  __typename?: 'adapter_transform_spec_aggregate';
+  aggregate?: Maybe<Adapter_Transform_Spec_Aggregate_Fields>;
+  nodes: Array<Adapter_Transform_Spec>;
+};
+
+/** aggregate fields of "adapter.transform_spec" */
+export type Adapter_Transform_Spec_Aggregate_Fields = {
+  __typename?: 'adapter_transform_spec_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Transform_Spec_Max_Fields>;
+  min?: Maybe<Adapter_Transform_Spec_Min_Fields>;
+};
+
+
+/** aggregate fields of "adapter.transform_spec" */
+export type Adapter_Transform_Spec_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Transform_Spec_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Transform_Spec_Append_Input = {
+  env_from_args?: InputMaybe<Scalars['jsonb']['input']>;
+  file_inputs?: InputMaybe<Scalars['jsonb']['input']>;
+  parameters_schema_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.transform_spec". All fields are combined with a logical 'AND'. */
+export type Adapter_Transform_Spec_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Transform_Spec_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Transform_Spec_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Transform_Spec_Bool_Exp>>;
+  app_version?: InputMaybe<String_Comparison_Exp>;
+  container_image?: InputMaybe<String_Comparison_Exp>;
+  contracts?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  description?: InputMaybe<String_Comparison_Exp>;
+  env_from_args?: InputMaybe<Jsonb_Comparison_Exp>;
+  file_inputs?: InputMaybe<Jsonb_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  is_lossy?: InputMaybe<Boolean_Comparison_Exp>;
+  method?: InputMaybe<String_Comparison_Exp>;
+  mint_model_config_id?: InputMaybe<String_Comparison_Exp>;
+  mint_synced_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  name?: InputMaybe<String_Comparison_Exp>;
+  parameters_schema_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  source_code_url?: InputMaybe<String_Comparison_Exp>;
+  stage?: InputMaybe<String_Comparison_Exp>;
+  tapis_app_id?: InputMaybe<String_Comparison_Exp>;
+  transform_type?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  version?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.transform_spec" */
+export enum Adapter_Transform_Spec_Constraint {
+  /** unique or primary key constraint on columns "mint_model_config_id" */
+  TransformSpecMintModelConfigIdKey = 'transform_spec_mint_model_config_id_key',
+  /** unique or primary key constraint on columns "id" */
+  TransformSpecPkey = 'transform_spec_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Adapter_Transform_Spec_Delete_At_Path_Input = {
+  env_from_args?: InputMaybe<Array<Scalars['String']['input']>>;
+  file_inputs?: InputMaybe<Array<Scalars['String']['input']>>;
+  parameters_schema_json?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Adapter_Transform_Spec_Delete_Elem_Input = {
+  env_from_args?: InputMaybe<Scalars['Int']['input']>;
+  file_inputs?: InputMaybe<Scalars['Int']['input']>;
+  parameters_schema_json?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Adapter_Transform_Spec_Delete_Key_Input = {
+  env_from_args?: InputMaybe<Scalars['String']['input']>;
+  file_inputs?: InputMaybe<Scalars['String']['input']>;
+  parameters_schema_json?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for inserting data into table "adapter.transform_spec" */
+export type Adapter_Transform_Spec_Insert_Input = {
+  app_version?: InputMaybe<Scalars['String']['input']>;
+  container_image?: InputMaybe<Scalars['String']['input']>;
+  contracts?: InputMaybe<Adapter_Transform_Contract_Arr_Rel_Insert_Input>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  env_from_args?: InputMaybe<Scalars['jsonb']['input']>;
+  file_inputs?: InputMaybe<Scalars['jsonb']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  is_lossy?: InputMaybe<Scalars['Boolean']['input']>;
+  method?: InputMaybe<Scalars['String']['input']>;
+  mint_model_config_id?: InputMaybe<Scalars['String']['input']>;
+  mint_synced_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  parameters_schema_json?: InputMaybe<Scalars['jsonb']['input']>;
+  source_code_url?: InputMaybe<Scalars['String']['input']>;
+  stage?: InputMaybe<Scalars['String']['input']>;
+  tapis_app_id?: InputMaybe<Scalars['String']['input']>;
+  transform_type?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  version?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Transform_Spec_Max_Fields = {
+  __typename?: 'adapter_transform_spec_max_fields';
+  app_version?: Maybe<Scalars['String']['output']>;
+  container_image?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  method?: Maybe<Scalars['String']['output']>;
+  mint_model_config_id?: Maybe<Scalars['String']['output']>;
+  mint_synced_at?: Maybe<Scalars['timestamptz']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  source_code_url?: Maybe<Scalars['String']['output']>;
+  stage?: Maybe<Scalars['String']['output']>;
+  tapis_app_id?: Maybe<Scalars['String']['output']>;
+  transform_type?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+  version?: Maybe<Scalars['String']['output']>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Transform_Spec_Min_Fields = {
+  __typename?: 'adapter_transform_spec_min_fields';
+  app_version?: Maybe<Scalars['String']['output']>;
+  container_image?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  method?: Maybe<Scalars['String']['output']>;
+  mint_model_config_id?: Maybe<Scalars['String']['output']>;
+  mint_synced_at?: Maybe<Scalars['timestamptz']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  source_code_url?: Maybe<Scalars['String']['output']>;
+  stage?: Maybe<Scalars['String']['output']>;
+  tapis_app_id?: Maybe<Scalars['String']['output']>;
+  transform_type?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+  version?: Maybe<Scalars['String']['output']>;
+};
+
+/** response of any mutation on the table "adapter.transform_spec" */
+export type Adapter_Transform_Spec_Mutation_Response = {
+  __typename?: 'adapter_transform_spec_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Transform_Spec>;
+};
+
+/** input type for inserting object relation for remote table "adapter.transform_spec" */
+export type Adapter_Transform_Spec_Obj_Rel_Insert_Input = {
+  data: Adapter_Transform_Spec_Insert_Input;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Transform_Spec_On_Conflict>;
+};
+
+/** on_conflict condition type for table "adapter.transform_spec" */
+export type Adapter_Transform_Spec_On_Conflict = {
+  constraint: Adapter_Transform_Spec_Constraint;
+  update_columns?: Array<Adapter_Transform_Spec_Update_Column>;
+  where?: InputMaybe<Adapter_Transform_Spec_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.transform_spec". */
+export type Adapter_Transform_Spec_Order_By = {
+  app_version?: InputMaybe<Order_By>;
+  container_image?: InputMaybe<Order_By>;
+  contracts_aggregate?: InputMaybe<Adapter_Transform_Contract_Aggregate_Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  description?: InputMaybe<Order_By>;
+  env_from_args?: InputMaybe<Order_By>;
+  file_inputs?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  is_lossy?: InputMaybe<Order_By>;
+  method?: InputMaybe<Order_By>;
+  mint_model_config_id?: InputMaybe<Order_By>;
+  mint_synced_at?: InputMaybe<Order_By>;
+  name?: InputMaybe<Order_By>;
+  parameters_schema_json?: InputMaybe<Order_By>;
+  source_code_url?: InputMaybe<Order_By>;
+  stage?: InputMaybe<Order_By>;
+  tapis_app_id?: InputMaybe<Order_By>;
+  transform_type?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+  version?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: adapter_transform_spec */
+export type Adapter_Transform_Spec_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Transform_Spec_Prepend_Input = {
+  env_from_args?: InputMaybe<Scalars['jsonb']['input']>;
+  file_inputs?: InputMaybe<Scalars['jsonb']['input']>;
+  parameters_schema_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "adapter.transform_spec" */
+export enum Adapter_Transform_Spec_Select_Column {
+  /** column name */
+  AppVersion = 'app_version',
+  /** column name */
+  ContainerImage = 'container_image',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Description = 'description',
+  /** column name */
+  EnvFromArgs = 'env_from_args',
+  /** column name */
+  FileInputs = 'file_inputs',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IsLossy = 'is_lossy',
+  /** column name */
+  Method = 'method',
+  /** column name */
+  MintModelConfigId = 'mint_model_config_id',
+  /** column name */
+  MintSyncedAt = 'mint_synced_at',
+  /** column name */
+  Name = 'name',
+  /** column name */
+  ParametersSchemaJson = 'parameters_schema_json',
+  /** column name */
+  SourceCodeUrl = 'source_code_url',
+  /** column name */
+  Stage = 'stage',
+  /** column name */
+  TapisAppId = 'tapis_app_id',
+  /** column name */
+  TransformType = 'transform_type',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  Version = 'version'
+}
+
+/** input type for updating data in table "adapter.transform_spec" */
+export type Adapter_Transform_Spec_Set_Input = {
+  app_version?: InputMaybe<Scalars['String']['input']>;
+  container_image?: InputMaybe<Scalars['String']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  env_from_args?: InputMaybe<Scalars['jsonb']['input']>;
+  file_inputs?: InputMaybe<Scalars['jsonb']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  is_lossy?: InputMaybe<Scalars['Boolean']['input']>;
+  method?: InputMaybe<Scalars['String']['input']>;
+  mint_model_config_id?: InputMaybe<Scalars['String']['input']>;
+  mint_synced_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  parameters_schema_json?: InputMaybe<Scalars['jsonb']['input']>;
+  source_code_url?: InputMaybe<Scalars['String']['input']>;
+  stage?: InputMaybe<Scalars['String']['input']>;
+  tapis_app_id?: InputMaybe<Scalars['String']['input']>;
+  transform_type?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  version?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** update columns of table "adapter.transform_spec" */
+export enum Adapter_Transform_Spec_Update_Column {
+  /** column name */
+  AppVersion = 'app_version',
+  /** column name */
+  ContainerImage = 'container_image',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Description = 'description',
+  /** column name */
+  EnvFromArgs = 'env_from_args',
+  /** column name */
+  FileInputs = 'file_inputs',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IsLossy = 'is_lossy',
+  /** column name */
+  Method = 'method',
+  /** column name */
+  MintModelConfigId = 'mint_model_config_id',
+  /** column name */
+  MintSyncedAt = 'mint_synced_at',
+  /** column name */
+  Name = 'name',
+  /** column name */
+  ParametersSchemaJson = 'parameters_schema_json',
+  /** column name */
+  SourceCodeUrl = 'source_code_url',
+  /** column name */
+  Stage = 'stage',
+  /** column name */
+  TapisAppId = 'tapis_app_id',
+  /** column name */
+  TransformType = 'transform_type',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  Version = 'version'
+}
+
+export type Adapter_Transform_Spec_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Adapter_Transform_Spec_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Adapter_Transform_Spec_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Adapter_Transform_Spec_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Adapter_Transform_Spec_Delete_Key_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Adapter_Transform_Spec_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Transform_Spec_Set_Input>;
+  where: Adapter_Transform_Spec_Bool_Exp;
+};
+
+/** columns and relationships of "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan = {
+  __typename?: 'adapter_workflow_plan';
+  created_at: Scalars['timestamptz']['output'];
+  id: Scalars['String']['output'];
+  orchestration_mode: Scalars['String']['output'];
+  plan_json: Scalars['jsonb']['output'];
+  /** An object relationship */
+  source_data_object?: Maybe<Adapter_Data_Object>;
+  source_data_object_id?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  tapis_workflow_definition_json?: Maybe<Scalars['jsonb']['output']>;
+  target_dataset_specification_id?: Maybe<Scalars['String']['output']>;
+  target_model_configuration_id?: Maybe<Scalars['String']['output']>;
+  updated_at: Scalars['timestamptz']['output'];
+  /** An array relationship */
+  workflow_runs: Array<Adapter_Workflow_Run>;
+  /** An aggregate relationship */
+  workflow_runs_aggregate: Adapter_Workflow_Run_Aggregate;
+};
+
+
+/** columns and relationships of "adapter.workflow_plan" */
+export type Adapter_Workflow_PlanPlan_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "adapter.workflow_plan" */
+export type Adapter_Workflow_PlanTapis_Workflow_Definition_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "adapter.workflow_plan" */
+export type Adapter_Workflow_PlanWorkflow_RunsArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Run_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Run_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.workflow_plan" */
+export type Adapter_Workflow_PlanWorkflow_Runs_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Run_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Run_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+/** aggregated selection of "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Aggregate = {
+  __typename?: 'adapter_workflow_plan_aggregate';
+  aggregate?: Maybe<Adapter_Workflow_Plan_Aggregate_Fields>;
+  nodes: Array<Adapter_Workflow_Plan>;
+};
+
+/** aggregate fields of "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Aggregate_Fields = {
+  __typename?: 'adapter_workflow_plan_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Workflow_Plan_Max_Fields>;
+  min?: Maybe<Adapter_Workflow_Plan_Min_Fields>;
+};
+
+
+/** aggregate fields of "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Workflow_Plan_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** order by aggregate values of table "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Aggregate_Order_By = {
+  count?: InputMaybe<Order_By>;
+  max?: InputMaybe<Adapter_Workflow_Plan_Max_Order_By>;
+  min?: InputMaybe<Adapter_Workflow_Plan_Min_Order_By>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Workflow_Plan_Append_Input = {
+  plan_json?: InputMaybe<Scalars['jsonb']['input']>;
+  tapis_workflow_definition_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** input type for inserting array relation for remote table "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Arr_Rel_Insert_Input = {
+  data: Array<Adapter_Workflow_Plan_Insert_Input>;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Workflow_Plan_On_Conflict>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.workflow_plan". All fields are combined with a logical 'AND'. */
+export type Adapter_Workflow_Plan_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Workflow_Plan_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Workflow_Plan_Bool_Exp>>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  orchestration_mode?: InputMaybe<String_Comparison_Exp>;
+  plan_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  source_data_object?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+  source_data_object_id?: InputMaybe<String_Comparison_Exp>;
+  status?: InputMaybe<String_Comparison_Exp>;
+  tapis_workflow_definition_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  target_dataset_specification_id?: InputMaybe<String_Comparison_Exp>;
+  target_model_configuration_id?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  workflow_runs?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.workflow_plan" */
+export enum Adapter_Workflow_Plan_Constraint {
+  /** unique or primary key constraint on columns "id" */
+  WorkflowPlanPkey = 'workflow_plan_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Adapter_Workflow_Plan_Delete_At_Path_Input = {
+  plan_json?: InputMaybe<Array<Scalars['String']['input']>>;
+  tapis_workflow_definition_json?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Adapter_Workflow_Plan_Delete_Elem_Input = {
+  plan_json?: InputMaybe<Scalars['Int']['input']>;
+  tapis_workflow_definition_json?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Adapter_Workflow_Plan_Delete_Key_Input = {
+  plan_json?: InputMaybe<Scalars['String']['input']>;
+  tapis_workflow_definition_json?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for inserting data into table "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Insert_Input = {
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  orchestration_mode?: InputMaybe<Scalars['String']['input']>;
+  plan_json?: InputMaybe<Scalars['jsonb']['input']>;
+  source_data_object?: InputMaybe<Adapter_Data_Object_Obj_Rel_Insert_Input>;
+  source_data_object_id?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tapis_workflow_definition_json?: InputMaybe<Scalars['jsonb']['input']>;
+  target_dataset_specification_id?: InputMaybe<Scalars['String']['input']>;
+  target_model_configuration_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  workflow_runs?: InputMaybe<Adapter_Workflow_Run_Arr_Rel_Insert_Input>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Workflow_Plan_Max_Fields = {
+  __typename?: 'adapter_workflow_plan_max_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  orchestration_mode?: Maybe<Scalars['String']['output']>;
+  source_data_object_id?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  target_dataset_specification_id?: Maybe<Scalars['String']['output']>;
+  target_model_configuration_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** order by max() on columns of table "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Max_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  orchestration_mode?: InputMaybe<Order_By>;
+  source_data_object_id?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  target_dataset_specification_id?: InputMaybe<Order_By>;
+  target_model_configuration_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Workflow_Plan_Min_Fields = {
+  __typename?: 'adapter_workflow_plan_min_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  orchestration_mode?: Maybe<Scalars['String']['output']>;
+  source_data_object_id?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  target_dataset_specification_id?: Maybe<Scalars['String']['output']>;
+  target_model_configuration_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** order by min() on columns of table "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Min_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  orchestration_mode?: InputMaybe<Order_By>;
+  source_data_object_id?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  target_dataset_specification_id?: InputMaybe<Order_By>;
+  target_model_configuration_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** response of any mutation on the table "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Mutation_Response = {
+  __typename?: 'adapter_workflow_plan_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Workflow_Plan>;
+};
+
+/** input type for inserting object relation for remote table "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Obj_Rel_Insert_Input = {
+  data: Adapter_Workflow_Plan_Insert_Input;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Workflow_Plan_On_Conflict>;
+};
+
+/** on_conflict condition type for table "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_On_Conflict = {
+  constraint: Adapter_Workflow_Plan_Constraint;
+  update_columns?: Array<Adapter_Workflow_Plan_Update_Column>;
+  where?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.workflow_plan". */
+export type Adapter_Workflow_Plan_Order_By = {
+  created_at?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  orchestration_mode?: InputMaybe<Order_By>;
+  plan_json?: InputMaybe<Order_By>;
+  source_data_object?: InputMaybe<Adapter_Data_Object_Order_By>;
+  source_data_object_id?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  tapis_workflow_definition_json?: InputMaybe<Order_By>;
+  target_dataset_specification_id?: InputMaybe<Order_By>;
+  target_model_configuration_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+  workflow_runs_aggregate?: InputMaybe<Adapter_Workflow_Run_Aggregate_Order_By>;
+};
+
+/** primary key columns input for table: adapter_workflow_plan */
+export type Adapter_Workflow_Plan_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Workflow_Plan_Prepend_Input = {
+  plan_json?: InputMaybe<Scalars['jsonb']['input']>;
+  tapis_workflow_definition_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "adapter.workflow_plan" */
+export enum Adapter_Workflow_Plan_Select_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  OrchestrationMode = 'orchestration_mode',
+  /** column name */
+  PlanJson = 'plan_json',
+  /** column name */
+  SourceDataObjectId = 'source_data_object_id',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  TapisWorkflowDefinitionJson = 'tapis_workflow_definition_json',
+  /** column name */
+  TargetDatasetSpecificationId = 'target_dataset_specification_id',
+  /** column name */
+  TargetModelConfigurationId = 'target_model_configuration_id',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+/** input type for updating data in table "adapter.workflow_plan" */
+export type Adapter_Workflow_Plan_Set_Input = {
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  orchestration_mode?: InputMaybe<Scalars['String']['input']>;
+  plan_json?: InputMaybe<Scalars['jsonb']['input']>;
+  source_data_object_id?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tapis_workflow_definition_json?: InputMaybe<Scalars['jsonb']['input']>;
+  target_dataset_specification_id?: InputMaybe<Scalars['String']['input']>;
+  target_model_configuration_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+};
+
+/** update columns of table "adapter.workflow_plan" */
+export enum Adapter_Workflow_Plan_Update_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  OrchestrationMode = 'orchestration_mode',
+  /** column name */
+  PlanJson = 'plan_json',
+  /** column name */
+  SourceDataObjectId = 'source_data_object_id',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  TapisWorkflowDefinitionJson = 'tapis_workflow_definition_json',
+  /** column name */
+  TargetDatasetSpecificationId = 'target_dataset_specification_id',
+  /** column name */
+  TargetModelConfigurationId = 'target_model_configuration_id',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+export type Adapter_Workflow_Plan_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Adapter_Workflow_Plan_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Adapter_Workflow_Plan_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Adapter_Workflow_Plan_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Adapter_Workflow_Plan_Delete_Key_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Adapter_Workflow_Plan_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Workflow_Plan_Set_Input>;
+  where: Adapter_Workflow_Plan_Bool_Exp;
+};
+
+/** columns and relationships of "adapter.workflow_run" */
+export type Adapter_Workflow_Run = {
+  __typename?: 'adapter_workflow_run';
+  bound_secrets?: Maybe<Scalars['jsonb']['output']>;
+  completed_at?: Maybe<Scalars['timestamptz']['output']>;
+  created_at: Scalars['timestamptz']['output'];
+  credentials_issued: Scalars['Int']['output'];
+  dispatched_at?: Maybe<Scalars['timestamptz']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  execution_id?: Maybe<Scalars['String']['output']>;
+  health?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  idempotency_key?: Maybe<Scalars['String']['output']>;
+  last_signal_at?: Maybe<Scalars['timestamptz']['output']>;
+  logs_uri?: Maybe<Scalars['String']['output']>;
+  model_job_name?: Maybe<Scalars['String']['output']>;
+  model_job_uuid?: Maybe<Scalars['String']['output']>;
+  model_job_verified: Scalars['Boolean']['output'];
+  /** An object relationship */
+  output_data_object?: Maybe<Adapter_Data_Object>;
+  output_data_object_id?: Maybe<Scalars['String']['output']>;
+  /** An array relationship */
+  provenance_events: Array<Adapter_Provenance_Event>;
+  /** An aggregate relationship */
+  provenance_events_aggregate: Adapter_Provenance_Event_Aggregate;
+  run_token_deadline_at?: Maybe<Scalars['timestamptz']['output']>;
+  run_token_enc?: Maybe<Scalars['String']['output']>;
+  run_token_expires_at?: Maybe<Scalars['timestamptz']['output']>;
+  run_token_renewals: Scalars['Int']['output'];
+  signals_armed: Scalars['Boolean']['output'];
+  started_at?: Maybe<Scalars['timestamptz']['output']>;
+  status: Scalars['String']['output'];
+  submitted_by?: Maybe<Scalars['String']['output']>;
+  tapis_run_id?: Maybe<Scalars['String']['output']>;
+  tapis_workflow_id?: Maybe<Scalars['String']['output']>;
+  /** An object relationship */
+  workflow_plan?: Maybe<Adapter_Workflow_Plan>;
+  workflow_plan_id?: Maybe<Scalars['String']['output']>;
+};
+
+
+/** columns and relationships of "adapter.workflow_run" */
+export type Adapter_Workflow_RunBound_SecretsArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "adapter.workflow_run" */
+export type Adapter_Workflow_RunProvenance_EventsArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Provenance_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Provenance_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+};
+
+
+/** columns and relationships of "adapter.workflow_run" */
+export type Adapter_Workflow_RunProvenance_Events_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Provenance_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Provenance_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+};
+
+/** aggregated selection of "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Aggregate = {
+  __typename?: 'adapter_workflow_run_aggregate';
+  aggregate?: Maybe<Adapter_Workflow_Run_Aggregate_Fields>;
+  nodes: Array<Adapter_Workflow_Run>;
+};
+
+/** aggregate fields of "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Aggregate_Fields = {
+  __typename?: 'adapter_workflow_run_aggregate_fields';
+  avg?: Maybe<Adapter_Workflow_Run_Avg_Fields>;
+  count: Scalars['Int']['output'];
+  max?: Maybe<Adapter_Workflow_Run_Max_Fields>;
+  min?: Maybe<Adapter_Workflow_Run_Min_Fields>;
+  stddev?: Maybe<Adapter_Workflow_Run_Stddev_Fields>;
+  stddev_pop?: Maybe<Adapter_Workflow_Run_Stddev_Pop_Fields>;
+  stddev_samp?: Maybe<Adapter_Workflow_Run_Stddev_Samp_Fields>;
+  sum?: Maybe<Adapter_Workflow_Run_Sum_Fields>;
+  var_pop?: Maybe<Adapter_Workflow_Run_Var_Pop_Fields>;
+  var_samp?: Maybe<Adapter_Workflow_Run_Var_Samp_Fields>;
+  variance?: Maybe<Adapter_Workflow_Run_Variance_Fields>;
+};
+
+
+/** aggregate fields of "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Adapter_Workflow_Run_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** order by aggregate values of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Aggregate_Order_By = {
+  avg?: InputMaybe<Adapter_Workflow_Run_Avg_Order_By>;
+  count?: InputMaybe<Order_By>;
+  max?: InputMaybe<Adapter_Workflow_Run_Max_Order_By>;
+  min?: InputMaybe<Adapter_Workflow_Run_Min_Order_By>;
+  stddev?: InputMaybe<Adapter_Workflow_Run_Stddev_Order_By>;
+  stddev_pop?: InputMaybe<Adapter_Workflow_Run_Stddev_Pop_Order_By>;
+  stddev_samp?: InputMaybe<Adapter_Workflow_Run_Stddev_Samp_Order_By>;
+  sum?: InputMaybe<Adapter_Workflow_Run_Sum_Order_By>;
+  var_pop?: InputMaybe<Adapter_Workflow_Run_Var_Pop_Order_By>;
+  var_samp?: InputMaybe<Adapter_Workflow_Run_Var_Samp_Order_By>;
+  variance?: InputMaybe<Adapter_Workflow_Run_Variance_Order_By>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Workflow_Run_Append_Input = {
+  bound_secrets?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** input type for inserting array relation for remote table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Arr_Rel_Insert_Input = {
+  data: Array<Adapter_Workflow_Run_Insert_Input>;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Workflow_Run_On_Conflict>;
+};
+
+/** aggregate avg on columns */
+export type Adapter_Workflow_Run_Avg_Fields = {
+  __typename?: 'adapter_workflow_run_avg_fields';
+  credentials_issued?: Maybe<Scalars['Float']['output']>;
+  run_token_renewals?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by avg() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Avg_Order_By = {
+  credentials_issued?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+};
+
+/** Boolean expression to filter rows from the table "adapter.workflow_run". All fields are combined with a logical 'AND'. */
+export type Adapter_Workflow_Run_Bool_Exp = {
+  _and?: InputMaybe<Array<Adapter_Workflow_Run_Bool_Exp>>;
+  _not?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+  _or?: InputMaybe<Array<Adapter_Workflow_Run_Bool_Exp>>;
+  bound_secrets?: InputMaybe<Jsonb_Comparison_Exp>;
+  completed_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  credentials_issued?: InputMaybe<Int_Comparison_Exp>;
+  dispatched_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  error_message?: InputMaybe<String_Comparison_Exp>;
+  execution_id?: InputMaybe<String_Comparison_Exp>;
+  health?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  idempotency_key?: InputMaybe<String_Comparison_Exp>;
+  last_signal_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  logs_uri?: InputMaybe<String_Comparison_Exp>;
+  model_job_name?: InputMaybe<String_Comparison_Exp>;
+  model_job_uuid?: InputMaybe<String_Comparison_Exp>;
+  model_job_verified?: InputMaybe<Boolean_Comparison_Exp>;
+  output_data_object?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+  output_data_object_id?: InputMaybe<String_Comparison_Exp>;
+  provenance_events?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+  run_token_deadline_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  run_token_enc?: InputMaybe<String_Comparison_Exp>;
+  run_token_expires_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  run_token_renewals?: InputMaybe<Int_Comparison_Exp>;
+  signals_armed?: InputMaybe<Boolean_Comparison_Exp>;
+  started_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  status?: InputMaybe<String_Comparison_Exp>;
+  submitted_by?: InputMaybe<String_Comparison_Exp>;
+  tapis_run_id?: InputMaybe<String_Comparison_Exp>;
+  tapis_workflow_id?: InputMaybe<String_Comparison_Exp>;
+  workflow_plan?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+  workflow_plan_id?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "adapter.workflow_run" */
+export enum Adapter_Workflow_Run_Constraint {
+  /** unique or primary key constraint on columns "idempotency_key" */
+  WorkflowRunIdempotencyKeyKey = 'workflow_run_idempotency_key_key',
+  /** unique or primary key constraint on columns "id" */
+  WorkflowRunPkey = 'workflow_run_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Adapter_Workflow_Run_Delete_At_Path_Input = {
+  bound_secrets?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Adapter_Workflow_Run_Delete_Elem_Input = {
+  bound_secrets?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Adapter_Workflow_Run_Delete_Key_Input = {
+  bound_secrets?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for incrementing numeric columns in table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Inc_Input = {
+  credentials_issued?: InputMaybe<Scalars['Int']['input']>;
+  run_token_renewals?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** input type for inserting data into table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Insert_Input = {
+  bound_secrets?: InputMaybe<Scalars['jsonb']['input']>;
+  completed_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  credentials_issued?: InputMaybe<Scalars['Int']['input']>;
+  dispatched_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  error_message?: InputMaybe<Scalars['String']['input']>;
+  execution_id?: InputMaybe<Scalars['String']['input']>;
+  health?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  idempotency_key?: InputMaybe<Scalars['String']['input']>;
+  last_signal_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  logs_uri?: InputMaybe<Scalars['String']['input']>;
+  model_job_name?: InputMaybe<Scalars['String']['input']>;
+  model_job_uuid?: InputMaybe<Scalars['String']['input']>;
+  model_job_verified?: InputMaybe<Scalars['Boolean']['input']>;
+  output_data_object?: InputMaybe<Adapter_Data_Object_Obj_Rel_Insert_Input>;
+  output_data_object_id?: InputMaybe<Scalars['String']['input']>;
+  provenance_events?: InputMaybe<Adapter_Provenance_Event_Arr_Rel_Insert_Input>;
+  run_token_deadline_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  run_token_enc?: InputMaybe<Scalars['String']['input']>;
+  run_token_expires_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  run_token_renewals?: InputMaybe<Scalars['Int']['input']>;
+  signals_armed?: InputMaybe<Scalars['Boolean']['input']>;
+  started_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  submitted_by?: InputMaybe<Scalars['String']['input']>;
+  tapis_run_id?: InputMaybe<Scalars['String']['input']>;
+  tapis_workflow_id?: InputMaybe<Scalars['String']['input']>;
+  workflow_plan?: InputMaybe<Adapter_Workflow_Plan_Obj_Rel_Insert_Input>;
+  workflow_plan_id?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Adapter_Workflow_Run_Max_Fields = {
+  __typename?: 'adapter_workflow_run_max_fields';
+  completed_at?: Maybe<Scalars['timestamptz']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  credentials_issued?: Maybe<Scalars['Int']['output']>;
+  dispatched_at?: Maybe<Scalars['timestamptz']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  execution_id?: Maybe<Scalars['String']['output']>;
+  health?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  idempotency_key?: Maybe<Scalars['String']['output']>;
+  last_signal_at?: Maybe<Scalars['timestamptz']['output']>;
+  logs_uri?: Maybe<Scalars['String']['output']>;
+  model_job_name?: Maybe<Scalars['String']['output']>;
+  model_job_uuid?: Maybe<Scalars['String']['output']>;
+  output_data_object_id?: Maybe<Scalars['String']['output']>;
+  run_token_deadline_at?: Maybe<Scalars['timestamptz']['output']>;
+  run_token_enc?: Maybe<Scalars['String']['output']>;
+  run_token_expires_at?: Maybe<Scalars['timestamptz']['output']>;
+  run_token_renewals?: Maybe<Scalars['Int']['output']>;
+  started_at?: Maybe<Scalars['timestamptz']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  submitted_by?: Maybe<Scalars['String']['output']>;
+  tapis_run_id?: Maybe<Scalars['String']['output']>;
+  tapis_workflow_id?: Maybe<Scalars['String']['output']>;
+  workflow_plan_id?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by max() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Max_Order_By = {
+  completed_at?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  credentials_issued?: InputMaybe<Order_By>;
+  dispatched_at?: InputMaybe<Order_By>;
+  error_message?: InputMaybe<Order_By>;
+  execution_id?: InputMaybe<Order_By>;
+  health?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  idempotency_key?: InputMaybe<Order_By>;
+  last_signal_at?: InputMaybe<Order_By>;
+  logs_uri?: InputMaybe<Order_By>;
+  model_job_name?: InputMaybe<Order_By>;
+  model_job_uuid?: InputMaybe<Order_By>;
+  output_data_object_id?: InputMaybe<Order_By>;
+  run_token_deadline_at?: InputMaybe<Order_By>;
+  run_token_enc?: InputMaybe<Order_By>;
+  run_token_expires_at?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+  started_at?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  submitted_by?: InputMaybe<Order_By>;
+  tapis_run_id?: InputMaybe<Order_By>;
+  tapis_workflow_id?: InputMaybe<Order_By>;
+  workflow_plan_id?: InputMaybe<Order_By>;
+};
+
+/** aggregate min on columns */
+export type Adapter_Workflow_Run_Min_Fields = {
+  __typename?: 'adapter_workflow_run_min_fields';
+  completed_at?: Maybe<Scalars['timestamptz']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  credentials_issued?: Maybe<Scalars['Int']['output']>;
+  dispatched_at?: Maybe<Scalars['timestamptz']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  execution_id?: Maybe<Scalars['String']['output']>;
+  health?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  idempotency_key?: Maybe<Scalars['String']['output']>;
+  last_signal_at?: Maybe<Scalars['timestamptz']['output']>;
+  logs_uri?: Maybe<Scalars['String']['output']>;
+  model_job_name?: Maybe<Scalars['String']['output']>;
+  model_job_uuid?: Maybe<Scalars['String']['output']>;
+  output_data_object_id?: Maybe<Scalars['String']['output']>;
+  run_token_deadline_at?: Maybe<Scalars['timestamptz']['output']>;
+  run_token_enc?: Maybe<Scalars['String']['output']>;
+  run_token_expires_at?: Maybe<Scalars['timestamptz']['output']>;
+  run_token_renewals?: Maybe<Scalars['Int']['output']>;
+  started_at?: Maybe<Scalars['timestamptz']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  submitted_by?: Maybe<Scalars['String']['output']>;
+  tapis_run_id?: Maybe<Scalars['String']['output']>;
+  tapis_workflow_id?: Maybe<Scalars['String']['output']>;
+  workflow_plan_id?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by min() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Min_Order_By = {
+  completed_at?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  credentials_issued?: InputMaybe<Order_By>;
+  dispatched_at?: InputMaybe<Order_By>;
+  error_message?: InputMaybe<Order_By>;
+  execution_id?: InputMaybe<Order_By>;
+  health?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  idempotency_key?: InputMaybe<Order_By>;
+  last_signal_at?: InputMaybe<Order_By>;
+  logs_uri?: InputMaybe<Order_By>;
+  model_job_name?: InputMaybe<Order_By>;
+  model_job_uuid?: InputMaybe<Order_By>;
+  output_data_object_id?: InputMaybe<Order_By>;
+  run_token_deadline_at?: InputMaybe<Order_By>;
+  run_token_enc?: InputMaybe<Order_By>;
+  run_token_expires_at?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+  started_at?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  submitted_by?: InputMaybe<Order_By>;
+  tapis_run_id?: InputMaybe<Order_By>;
+  tapis_workflow_id?: InputMaybe<Order_By>;
+  workflow_plan_id?: InputMaybe<Order_By>;
+};
+
+/** response of any mutation on the table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Mutation_Response = {
+  __typename?: 'adapter_workflow_run_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Adapter_Workflow_Run>;
+};
+
+/** input type for inserting object relation for remote table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Obj_Rel_Insert_Input = {
+  data: Adapter_Workflow_Run_Insert_Input;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Adapter_Workflow_Run_On_Conflict>;
+};
+
+/** on_conflict condition type for table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_On_Conflict = {
+  constraint: Adapter_Workflow_Run_Constraint;
+  update_columns?: Array<Adapter_Workflow_Run_Update_Column>;
+  where?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "adapter.workflow_run". */
+export type Adapter_Workflow_Run_Order_By = {
+  bound_secrets?: InputMaybe<Order_By>;
+  completed_at?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  credentials_issued?: InputMaybe<Order_By>;
+  dispatched_at?: InputMaybe<Order_By>;
+  error_message?: InputMaybe<Order_By>;
+  execution_id?: InputMaybe<Order_By>;
+  health?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  idempotency_key?: InputMaybe<Order_By>;
+  last_signal_at?: InputMaybe<Order_By>;
+  logs_uri?: InputMaybe<Order_By>;
+  model_job_name?: InputMaybe<Order_By>;
+  model_job_uuid?: InputMaybe<Order_By>;
+  model_job_verified?: InputMaybe<Order_By>;
+  output_data_object?: InputMaybe<Adapter_Data_Object_Order_By>;
+  output_data_object_id?: InputMaybe<Order_By>;
+  provenance_events_aggregate?: InputMaybe<Adapter_Provenance_Event_Aggregate_Order_By>;
+  run_token_deadline_at?: InputMaybe<Order_By>;
+  run_token_enc?: InputMaybe<Order_By>;
+  run_token_expires_at?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+  signals_armed?: InputMaybe<Order_By>;
+  started_at?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  submitted_by?: InputMaybe<Order_By>;
+  tapis_run_id?: InputMaybe<Order_By>;
+  tapis_workflow_id?: InputMaybe<Order_By>;
+  workflow_plan?: InputMaybe<Adapter_Workflow_Plan_Order_By>;
+  workflow_plan_id?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: adapter_workflow_run */
+export type Adapter_Workflow_Run_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Adapter_Workflow_Run_Prepend_Input = {
+  bound_secrets?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "adapter.workflow_run" */
+export enum Adapter_Workflow_Run_Select_Column {
+  /** column name */
+  BoundSecrets = 'bound_secrets',
+  /** column name */
+  CompletedAt = 'completed_at',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  CredentialsIssued = 'credentials_issued',
+  /** column name */
+  DispatchedAt = 'dispatched_at',
+  /** column name */
+  ErrorMessage = 'error_message',
+  /** column name */
+  ExecutionId = 'execution_id',
+  /** column name */
+  Health = 'health',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IdempotencyKey = 'idempotency_key',
+  /** column name */
+  LastSignalAt = 'last_signal_at',
+  /** column name */
+  LogsUri = 'logs_uri',
+  /** column name */
+  ModelJobName = 'model_job_name',
+  /** column name */
+  ModelJobUuid = 'model_job_uuid',
+  /** column name */
+  ModelJobVerified = 'model_job_verified',
+  /** column name */
+  OutputDataObjectId = 'output_data_object_id',
+  /** column name */
+  RunTokenDeadlineAt = 'run_token_deadline_at',
+  /** column name */
+  RunTokenEnc = 'run_token_enc',
+  /** column name */
+  RunTokenExpiresAt = 'run_token_expires_at',
+  /** column name */
+  RunTokenRenewals = 'run_token_renewals',
+  /** column name */
+  SignalsArmed = 'signals_armed',
+  /** column name */
+  StartedAt = 'started_at',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  SubmittedBy = 'submitted_by',
+  /** column name */
+  TapisRunId = 'tapis_run_id',
+  /** column name */
+  TapisWorkflowId = 'tapis_workflow_id',
+  /** column name */
+  WorkflowPlanId = 'workflow_plan_id'
+}
+
+/** input type for updating data in table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Set_Input = {
+  bound_secrets?: InputMaybe<Scalars['jsonb']['input']>;
+  completed_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  credentials_issued?: InputMaybe<Scalars['Int']['input']>;
+  dispatched_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  error_message?: InputMaybe<Scalars['String']['input']>;
+  execution_id?: InputMaybe<Scalars['String']['input']>;
+  health?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  idempotency_key?: InputMaybe<Scalars['String']['input']>;
+  last_signal_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  logs_uri?: InputMaybe<Scalars['String']['input']>;
+  model_job_name?: InputMaybe<Scalars['String']['input']>;
+  model_job_uuid?: InputMaybe<Scalars['String']['input']>;
+  model_job_verified?: InputMaybe<Scalars['Boolean']['input']>;
+  output_data_object_id?: InputMaybe<Scalars['String']['input']>;
+  run_token_deadline_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  run_token_enc?: InputMaybe<Scalars['String']['input']>;
+  run_token_expires_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  run_token_renewals?: InputMaybe<Scalars['Int']['input']>;
+  signals_armed?: InputMaybe<Scalars['Boolean']['input']>;
+  started_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  submitted_by?: InputMaybe<Scalars['String']['input']>;
+  tapis_run_id?: InputMaybe<Scalars['String']['input']>;
+  tapis_workflow_id?: InputMaybe<Scalars['String']['input']>;
+  workflow_plan_id?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate stddev on columns */
+export type Adapter_Workflow_Run_Stddev_Fields = {
+  __typename?: 'adapter_workflow_run_stddev_fields';
+  credentials_issued?: Maybe<Scalars['Float']['output']>;
+  run_token_renewals?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by stddev() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Stddev_Order_By = {
+  credentials_issued?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+};
+
+/** aggregate stddev_pop on columns */
+export type Adapter_Workflow_Run_Stddev_Pop_Fields = {
+  __typename?: 'adapter_workflow_run_stddev_pop_fields';
+  credentials_issued?: Maybe<Scalars['Float']['output']>;
+  run_token_renewals?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by stddev_pop() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Stddev_Pop_Order_By = {
+  credentials_issued?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+};
+
+/** aggregate stddev_samp on columns */
+export type Adapter_Workflow_Run_Stddev_Samp_Fields = {
+  __typename?: 'adapter_workflow_run_stddev_samp_fields';
+  credentials_issued?: Maybe<Scalars['Float']['output']>;
+  run_token_renewals?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by stddev_samp() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Stddev_Samp_Order_By = {
+  credentials_issued?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+};
+
+/** aggregate sum on columns */
+export type Adapter_Workflow_Run_Sum_Fields = {
+  __typename?: 'adapter_workflow_run_sum_fields';
+  credentials_issued?: Maybe<Scalars['Int']['output']>;
+  run_token_renewals?: Maybe<Scalars['Int']['output']>;
+};
+
+/** order by sum() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Sum_Order_By = {
+  credentials_issued?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+};
+
+/** update columns of table "adapter.workflow_run" */
+export enum Adapter_Workflow_Run_Update_Column {
+  /** column name */
+  BoundSecrets = 'bound_secrets',
+  /** column name */
+  CompletedAt = 'completed_at',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  CredentialsIssued = 'credentials_issued',
+  /** column name */
+  DispatchedAt = 'dispatched_at',
+  /** column name */
+  ErrorMessage = 'error_message',
+  /** column name */
+  ExecutionId = 'execution_id',
+  /** column name */
+  Health = 'health',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IdempotencyKey = 'idempotency_key',
+  /** column name */
+  LastSignalAt = 'last_signal_at',
+  /** column name */
+  LogsUri = 'logs_uri',
+  /** column name */
+  ModelJobName = 'model_job_name',
+  /** column name */
+  ModelJobUuid = 'model_job_uuid',
+  /** column name */
+  ModelJobVerified = 'model_job_verified',
+  /** column name */
+  OutputDataObjectId = 'output_data_object_id',
+  /** column name */
+  RunTokenDeadlineAt = 'run_token_deadline_at',
+  /** column name */
+  RunTokenEnc = 'run_token_enc',
+  /** column name */
+  RunTokenExpiresAt = 'run_token_expires_at',
+  /** column name */
+  RunTokenRenewals = 'run_token_renewals',
+  /** column name */
+  SignalsArmed = 'signals_armed',
+  /** column name */
+  StartedAt = 'started_at',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  SubmittedBy = 'submitted_by',
+  /** column name */
+  TapisRunId = 'tapis_run_id',
+  /** column name */
+  TapisWorkflowId = 'tapis_workflow_id',
+  /** column name */
+  WorkflowPlanId = 'workflow_plan_id'
+}
+
+export type Adapter_Workflow_Run_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Adapter_Workflow_Run_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Adapter_Workflow_Run_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Adapter_Workflow_Run_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Adapter_Workflow_Run_Delete_Key_Input>;
+  /** increments the numeric columns with given value of the filtered values */
+  _inc?: InputMaybe<Adapter_Workflow_Run_Inc_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Adapter_Workflow_Run_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Adapter_Workflow_Run_Set_Input>;
+  where: Adapter_Workflow_Run_Bool_Exp;
+};
+
+/** aggregate var_pop on columns */
+export type Adapter_Workflow_Run_Var_Pop_Fields = {
+  __typename?: 'adapter_workflow_run_var_pop_fields';
+  credentials_issued?: Maybe<Scalars['Float']['output']>;
+  run_token_renewals?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by var_pop() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Var_Pop_Order_By = {
+  credentials_issued?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+};
+
+/** aggregate var_samp on columns */
+export type Adapter_Workflow_Run_Var_Samp_Fields = {
+  __typename?: 'adapter_workflow_run_var_samp_fields';
+  credentials_issued?: Maybe<Scalars['Float']['output']>;
+  run_token_renewals?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by var_samp() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Var_Samp_Order_By = {
+  credentials_issued?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
+};
+
+/** aggregate variance on columns */
+export type Adapter_Workflow_Run_Variance_Fields = {
+  __typename?: 'adapter_workflow_run_variance_fields';
+  credentials_issued?: Maybe<Scalars['Float']['output']>;
+  run_token_renewals?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by variance() on columns of table "adapter.workflow_run" */
+export type Adapter_Workflow_Run_Variance_Order_By = {
+  credentials_issued?: InputMaybe<Order_By>;
+  run_token_renewals?: InputMaybe<Order_By>;
 };
 
 /** columns and relationships of "dataset" */
@@ -2134,6 +5943,34 @@ export type Intervention_Updates = {
   where: Intervention_Bool_Exp;
 };
 
+export type Jsonb_Cast_Exp = {
+  String?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** Boolean expression to compare columns of type "jsonb". All fields are combined with logical 'AND'. */
+export type Jsonb_Comparison_Exp = {
+  _cast?: InputMaybe<Jsonb_Cast_Exp>;
+  /** is the column contained in the given json value */
+  _contained_in?: InputMaybe<Scalars['jsonb']['input']>;
+  /** does the column contain the given json value at the top level */
+  _contains?: InputMaybe<Scalars['jsonb']['input']>;
+  _eq?: InputMaybe<Scalars['jsonb']['input']>;
+  _gt?: InputMaybe<Scalars['jsonb']['input']>;
+  _gte?: InputMaybe<Scalars['jsonb']['input']>;
+  /** does the string exist as a top-level key in the column */
+  _has_key?: InputMaybe<Scalars['String']['input']>;
+  /** do all of these strings exist as top-level keys in the column */
+  _has_keys_all?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** do any of these strings exist as top-level keys in the column */
+  _has_keys_any?: InputMaybe<Array<Scalars['String']['input']>>;
+  _in?: InputMaybe<Array<Scalars['jsonb']['input']>>;
+  _is_null?: InputMaybe<Scalars['Boolean']['input']>;
+  _lt?: InputMaybe<Scalars['jsonb']['input']>;
+  _lte?: InputMaybe<Scalars['jsonb']['input']>;
+  _neq?: InputMaybe<Scalars['jsonb']['input']>;
+  _nin?: InputMaybe<Array<Scalars['jsonb']['input']>>;
+};
+
 /** columns and relationships of "model_input_fixed_binding" */
 export type Model_Input_Fixed_Binding = {
   __typename?: 'model_input_fixed_binding';
@@ -2922,6 +6759,7 @@ export type Modelcatalog_Configuration = {
   /** An aggregate relationship */
   child_configurations_aggregate: Modelcatalog_Configuration_Aggregate;
   description?: Maybe<Scalars['String']['output']>;
+  embedding?: Maybe<Scalars['vector']['output']>;
   /** An array relationship */
   executions: Array<Execution>;
   /** An aggregate relationship */
@@ -2943,6 +6781,7 @@ export type Modelcatalog_Configuration = {
   outputs: Array<Modelcatalog_Configuration_Output>;
   /** An aggregate relationship */
   outputs_aggregate: Modelcatalog_Configuration_Output_Aggregate;
+  owner_username?: Maybe<Scalars['String']['output']>;
   parameter_assignment_method?: Maybe<Scalars['String']['output']>;
   /** An array relationship */
   parameters: Array<Modelcatalog_Configuration_Parameter>;
@@ -2954,9 +6793,12 @@ export type Modelcatalog_Configuration = {
   regions: Array<Modelcatalog_Configuration_Region>;
   /** An aggregate relationship */
   regions_aggregate: Modelcatalog_Configuration_Region_Aggregate;
+  semantic_text?: Maybe<Scalars['String']['output']>;
   /** An object relationship */
   software_version?: Maybe<Modelcatalog_Software_Version>;
   software_version_id?: Maybe<Scalars['String']['output']>;
+  tapis_app_id?: Maybe<Scalars['String']['output']>;
+  tapis_app_version?: Maybe<Scalars['String']['output']>;
   /** An array relationship */
   thread_models: Array<Thread_Model>;
   /** An aggregate relationship */
@@ -3437,6 +7279,7 @@ export type Modelcatalog_Configuration_Bool_Exp = {
   causal_diagrams?: InputMaybe<Modelcatalog_Configuration_Causal_Diagram_Bool_Exp>;
   child_configurations?: InputMaybe<Modelcatalog_Configuration_Bool_Exp>;
   description?: InputMaybe<String_Comparison_Exp>;
+  embedding?: InputMaybe<Vector_Comparison_Exp>;
   executions?: InputMaybe<Execution_Bool_Exp>;
   has_component_location?: InputMaybe<String_Comparison_Exp>;
   has_implementation_script_location?: InputMaybe<String_Comparison_Exp>;
@@ -3449,12 +7292,16 @@ export type Modelcatalog_Configuration_Bool_Exp = {
   label?: InputMaybe<String_Comparison_Exp>;
   model_configuration_id?: InputMaybe<String_Comparison_Exp>;
   outputs?: InputMaybe<Modelcatalog_Configuration_Output_Bool_Exp>;
+  owner_username?: InputMaybe<String_Comparison_Exp>;
   parameter_assignment_method?: InputMaybe<String_Comparison_Exp>;
   parameters?: InputMaybe<Modelcatalog_Configuration_Parameter_Bool_Exp>;
   parent_configuration?: InputMaybe<Modelcatalog_Configuration_Bool_Exp>;
   regions?: InputMaybe<Modelcatalog_Configuration_Region_Bool_Exp>;
+  semantic_text?: InputMaybe<String_Comparison_Exp>;
   software_version?: InputMaybe<Modelcatalog_Software_Version_Bool_Exp>;
   software_version_id?: InputMaybe<String_Comparison_Exp>;
+  tapis_app_id?: InputMaybe<String_Comparison_Exp>;
+  tapis_app_version?: InputMaybe<String_Comparison_Exp>;
   thread_models?: InputMaybe<Thread_Model_Bool_Exp>;
   time_intervals?: InputMaybe<Modelcatalog_Configuration_Time_Interval_Bool_Exp>;
   usage_notes?: InputMaybe<String_Comparison_Exp>;
@@ -4094,6 +7941,8 @@ export enum Modelcatalog_Configuration_Constraint {
 /** columns and relationships of "modelcatalog_configuration_input" */
 export type Modelcatalog_Configuration_Input = {
   __typename?: 'modelcatalog_configuration_input';
+  /** Name of the Tapis app file input that this dataset specification feeds in this configuration. NULL when the input is not bound to an app file input. */
+  app_input_name?: Maybe<Scalars['String']['output']>;
   /** An object relationship */
   configuration: Modelcatalog_Configuration;
   configuration_id: Scalars['String']['output'];
@@ -4144,6 +7993,7 @@ export type Modelcatalog_Configuration_Input_Bool_Exp = {
   _and?: InputMaybe<Array<Modelcatalog_Configuration_Input_Bool_Exp>>;
   _not?: InputMaybe<Modelcatalog_Configuration_Input_Bool_Exp>;
   _or?: InputMaybe<Array<Modelcatalog_Configuration_Input_Bool_Exp>>;
+  app_input_name?: InputMaybe<String_Comparison_Exp>;
   configuration?: InputMaybe<Modelcatalog_Configuration_Bool_Exp>;
   configuration_id?: InputMaybe<String_Comparison_Exp>;
   input?: InputMaybe<Modelcatalog_Dataset_Specification_Bool_Exp>;
@@ -4159,6 +8009,8 @@ export enum Modelcatalog_Configuration_Input_Constraint {
 
 /** input type for inserting data into table "modelcatalog_configuration_input" */
 export type Modelcatalog_Configuration_Input_Insert_Input = {
+  /** Name of the Tapis app file input that this dataset specification feeds in this configuration. NULL when the input is not bound to an app file input. */
+  app_input_name?: InputMaybe<Scalars['String']['input']>;
   configuration?: InputMaybe<Modelcatalog_Configuration_Obj_Rel_Insert_Input>;
   configuration_id?: InputMaybe<Scalars['String']['input']>;
   input?: InputMaybe<Modelcatalog_Dataset_Specification_Obj_Rel_Insert_Input>;
@@ -4169,12 +8021,16 @@ export type Modelcatalog_Configuration_Input_Insert_Input = {
 /** aggregate max on columns */
 export type Modelcatalog_Configuration_Input_Max_Fields = {
   __typename?: 'modelcatalog_configuration_input_max_fields';
+  /** Name of the Tapis app file input that this dataset specification feeds in this configuration. NULL when the input is not bound to an app file input. */
+  app_input_name?: Maybe<Scalars['String']['output']>;
   configuration_id?: Maybe<Scalars['String']['output']>;
   input_id?: Maybe<Scalars['String']['output']>;
 };
 
 /** order by max() on columns of table "modelcatalog_configuration_input" */
 export type Modelcatalog_Configuration_Input_Max_Order_By = {
+  /** Name of the Tapis app file input that this dataset specification feeds in this configuration. NULL when the input is not bound to an app file input. */
+  app_input_name?: InputMaybe<Order_By>;
   configuration_id?: InputMaybe<Order_By>;
   input_id?: InputMaybe<Order_By>;
 };
@@ -4182,12 +8038,16 @@ export type Modelcatalog_Configuration_Input_Max_Order_By = {
 /** aggregate min on columns */
 export type Modelcatalog_Configuration_Input_Min_Fields = {
   __typename?: 'modelcatalog_configuration_input_min_fields';
+  /** Name of the Tapis app file input that this dataset specification feeds in this configuration. NULL when the input is not bound to an app file input. */
+  app_input_name?: Maybe<Scalars['String']['output']>;
   configuration_id?: Maybe<Scalars['String']['output']>;
   input_id?: Maybe<Scalars['String']['output']>;
 };
 
 /** order by min() on columns of table "modelcatalog_configuration_input" */
 export type Modelcatalog_Configuration_Input_Min_Order_By = {
+  /** Name of the Tapis app file input that this dataset specification feeds in this configuration. NULL when the input is not bound to an app file input. */
+  app_input_name?: InputMaybe<Order_By>;
   configuration_id?: InputMaybe<Order_By>;
   input_id?: InputMaybe<Order_By>;
 };
@@ -4210,6 +8070,7 @@ export type Modelcatalog_Configuration_Input_On_Conflict = {
 
 /** Ordering options when selecting data from "modelcatalog_configuration_input". */
 export type Modelcatalog_Configuration_Input_Order_By = {
+  app_input_name?: InputMaybe<Order_By>;
   configuration?: InputMaybe<Modelcatalog_Configuration_Order_By>;
   configuration_id?: InputMaybe<Order_By>;
   input?: InputMaybe<Modelcatalog_Dataset_Specification_Order_By>;
@@ -4226,6 +8087,8 @@ export type Modelcatalog_Configuration_Input_Pk_Columns_Input = {
 /** select columns of table "modelcatalog_configuration_input" */
 export enum Modelcatalog_Configuration_Input_Select_Column {
   /** column name */
+  AppInputName = 'app_input_name',
+  /** column name */
   ConfigurationId = 'configuration_id',
   /** column name */
   InputId = 'input_id',
@@ -4235,6 +8098,8 @@ export enum Modelcatalog_Configuration_Input_Select_Column {
 
 /** input type for updating data in table "modelcatalog_configuration_input" */
 export type Modelcatalog_Configuration_Input_Set_Input = {
+  /** Name of the Tapis app file input that this dataset specification feeds in this configuration. NULL when the input is not bound to an app file input. */
+  app_input_name?: InputMaybe<Scalars['String']['input']>;
   configuration_id?: InputMaybe<Scalars['String']['input']>;
   input_id?: InputMaybe<Scalars['String']['input']>;
   is_optional?: InputMaybe<Scalars['Boolean']['input']>;
@@ -4242,6 +8107,8 @@ export type Modelcatalog_Configuration_Input_Set_Input = {
 
 /** update columns of table "modelcatalog_configuration_input" */
 export enum Modelcatalog_Configuration_Input_Update_Column {
+  /** column name */
+  AppInputName = 'app_input_name',
   /** column name */
   ConfigurationId = 'configuration_id',
   /** column name */
@@ -4269,6 +8136,7 @@ export type Modelcatalog_Configuration_Insert_Input = {
   causal_diagrams?: InputMaybe<Modelcatalog_Configuration_Causal_Diagram_Arr_Rel_Insert_Input>;
   child_configurations?: InputMaybe<Modelcatalog_Configuration_Arr_Rel_Insert_Input>;
   description?: InputMaybe<Scalars['String']['input']>;
+  embedding?: InputMaybe<Scalars['vector']['input']>;
   executions?: InputMaybe<Execution_Arr_Rel_Insert_Input>;
   has_component_location?: InputMaybe<Scalars['String']['input']>;
   has_implementation_script_location?: InputMaybe<Scalars['String']['input']>;
@@ -4281,12 +8149,16 @@ export type Modelcatalog_Configuration_Insert_Input = {
   label?: InputMaybe<Scalars['String']['input']>;
   model_configuration_id?: InputMaybe<Scalars['String']['input']>;
   outputs?: InputMaybe<Modelcatalog_Configuration_Output_Arr_Rel_Insert_Input>;
+  owner_username?: InputMaybe<Scalars['String']['input']>;
   parameter_assignment_method?: InputMaybe<Scalars['String']['input']>;
   parameters?: InputMaybe<Modelcatalog_Configuration_Parameter_Arr_Rel_Insert_Input>;
   parent_configuration?: InputMaybe<Modelcatalog_Configuration_Obj_Rel_Insert_Input>;
   regions?: InputMaybe<Modelcatalog_Configuration_Region_Arr_Rel_Insert_Input>;
+  semantic_text?: InputMaybe<Scalars['String']['input']>;
   software_version?: InputMaybe<Modelcatalog_Software_Version_Obj_Rel_Insert_Input>;
   software_version_id?: InputMaybe<Scalars['String']['input']>;
+  tapis_app_id?: InputMaybe<Scalars['String']['input']>;
+  tapis_app_version?: InputMaybe<Scalars['String']['input']>;
   thread_models?: InputMaybe<Thread_Model_Arr_Rel_Insert_Input>;
   time_intervals?: InputMaybe<Modelcatalog_Configuration_Time_Interval_Arr_Rel_Insert_Input>;
   usage_notes?: InputMaybe<Scalars['String']['input']>;
@@ -4309,8 +8181,12 @@ export type Modelcatalog_Configuration_Max_Fields = {
   keywords?: Maybe<Scalars['String']['output']>;
   label?: Maybe<Scalars['String']['output']>;
   model_configuration_id?: Maybe<Scalars['String']['output']>;
+  owner_username?: Maybe<Scalars['String']['output']>;
   parameter_assignment_method?: Maybe<Scalars['String']['output']>;
+  semantic_text?: Maybe<Scalars['String']['output']>;
   software_version_id?: Maybe<Scalars['String']['output']>;
+  tapis_app_id?: Maybe<Scalars['String']['output']>;
+  tapis_app_version?: Maybe<Scalars['String']['output']>;
   usage_notes?: Maybe<Scalars['String']['output']>;
   valid_until?: Maybe<Scalars['String']['output']>;
 };
@@ -4330,8 +8206,12 @@ export type Modelcatalog_Configuration_Max_Order_By = {
   keywords?: InputMaybe<Order_By>;
   label?: InputMaybe<Order_By>;
   model_configuration_id?: InputMaybe<Order_By>;
+  owner_username?: InputMaybe<Order_By>;
   parameter_assignment_method?: InputMaybe<Order_By>;
+  semantic_text?: InputMaybe<Order_By>;
   software_version_id?: InputMaybe<Order_By>;
+  tapis_app_id?: InputMaybe<Order_By>;
+  tapis_app_version?: InputMaybe<Order_By>;
   usage_notes?: InputMaybe<Order_By>;
   valid_until?: InputMaybe<Order_By>;
 };
@@ -4352,8 +8232,12 @@ export type Modelcatalog_Configuration_Min_Fields = {
   keywords?: Maybe<Scalars['String']['output']>;
   label?: Maybe<Scalars['String']['output']>;
   model_configuration_id?: Maybe<Scalars['String']['output']>;
+  owner_username?: Maybe<Scalars['String']['output']>;
   parameter_assignment_method?: Maybe<Scalars['String']['output']>;
+  semantic_text?: Maybe<Scalars['String']['output']>;
   software_version_id?: Maybe<Scalars['String']['output']>;
+  tapis_app_id?: Maybe<Scalars['String']['output']>;
+  tapis_app_version?: Maybe<Scalars['String']['output']>;
   usage_notes?: Maybe<Scalars['String']['output']>;
   valid_until?: Maybe<Scalars['String']['output']>;
 };
@@ -4373,8 +8257,12 @@ export type Modelcatalog_Configuration_Min_Order_By = {
   keywords?: InputMaybe<Order_By>;
   label?: InputMaybe<Order_By>;
   model_configuration_id?: InputMaybe<Order_By>;
+  owner_username?: InputMaybe<Order_By>;
   parameter_assignment_method?: InputMaybe<Order_By>;
+  semantic_text?: InputMaybe<Order_By>;
   software_version_id?: InputMaybe<Order_By>;
+  tapis_app_id?: InputMaybe<Order_By>;
+  tapis_app_version?: InputMaybe<Order_By>;
   usage_notes?: InputMaybe<Order_By>;
   valid_until?: InputMaybe<Order_By>;
 };
@@ -4415,6 +8303,7 @@ export type Modelcatalog_Configuration_Order_By = {
   causal_diagrams_aggregate?: InputMaybe<Modelcatalog_Configuration_Causal_Diagram_Aggregate_Order_By>;
   child_configurations_aggregate?: InputMaybe<Modelcatalog_Configuration_Aggregate_Order_By>;
   description?: InputMaybe<Order_By>;
+  embedding?: InputMaybe<Order_By>;
   executions_aggregate?: InputMaybe<Execution_Aggregate_Order_By>;
   has_component_location?: InputMaybe<Order_By>;
   has_implementation_script_location?: InputMaybe<Order_By>;
@@ -4427,12 +8316,16 @@ export type Modelcatalog_Configuration_Order_By = {
   label?: InputMaybe<Order_By>;
   model_configuration_id?: InputMaybe<Order_By>;
   outputs_aggregate?: InputMaybe<Modelcatalog_Configuration_Output_Aggregate_Order_By>;
+  owner_username?: InputMaybe<Order_By>;
   parameter_assignment_method?: InputMaybe<Order_By>;
   parameters_aggregate?: InputMaybe<Modelcatalog_Configuration_Parameter_Aggregate_Order_By>;
   parent_configuration?: InputMaybe<Modelcatalog_Configuration_Order_By>;
   regions_aggregate?: InputMaybe<Modelcatalog_Configuration_Region_Aggregate_Order_By>;
+  semantic_text?: InputMaybe<Order_By>;
   software_version?: InputMaybe<Modelcatalog_Software_Version_Order_By>;
   software_version_id?: InputMaybe<Order_By>;
+  tapis_app_id?: InputMaybe<Order_By>;
+  tapis_app_version?: InputMaybe<Order_By>;
   thread_models_aggregate?: InputMaybe<Thread_Model_Aggregate_Order_By>;
   time_intervals_aggregate?: InputMaybe<Modelcatalog_Configuration_Time_Interval_Aggregate_Order_By>;
   usage_notes?: InputMaybe<Order_By>;
@@ -4923,6 +8816,8 @@ export enum Modelcatalog_Configuration_Select_Column {
   /** column name */
   Description = 'description',
   /** column name */
+  Embedding = 'embedding',
+  /** column name */
   HasComponentLocation = 'has_component_location',
   /** column name */
   HasImplementationScriptLocation = 'has_implementation_script_location',
@@ -4941,9 +8836,17 @@ export enum Modelcatalog_Configuration_Select_Column {
   /** column name */
   ModelConfigurationId = 'model_configuration_id',
   /** column name */
+  OwnerUsername = 'owner_username',
+  /** column name */
   ParameterAssignmentMethod = 'parameter_assignment_method',
   /** column name */
+  SemanticText = 'semantic_text',
+  /** column name */
   SoftwareVersionId = 'software_version_id',
+  /** column name */
+  TapisAppId = 'tapis_app_id',
+  /** column name */
+  TapisAppVersion = 'tapis_app_version',
   /** column name */
   UsageNotes = 'usage_notes',
   /** column name */
@@ -4956,6 +8859,7 @@ export type Modelcatalog_Configuration_Set_Input = {
   calibration_interval?: InputMaybe<Scalars['String']['input']>;
   calibration_method?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
+  embedding?: InputMaybe<Scalars['vector']['input']>;
   has_component_location?: InputMaybe<Scalars['String']['input']>;
   has_implementation_script_location?: InputMaybe<Scalars['String']['input']>;
   has_model_result_table?: InputMaybe<Scalars['String']['input']>;
@@ -4965,8 +8869,12 @@ export type Modelcatalog_Configuration_Set_Input = {
   keywords?: InputMaybe<Scalars['String']['input']>;
   label?: InputMaybe<Scalars['String']['input']>;
   model_configuration_id?: InputMaybe<Scalars['String']['input']>;
+  owner_username?: InputMaybe<Scalars['String']['input']>;
   parameter_assignment_method?: InputMaybe<Scalars['String']['input']>;
+  semantic_text?: InputMaybe<Scalars['String']['input']>;
   software_version_id?: InputMaybe<Scalars['String']['input']>;
+  tapis_app_id?: InputMaybe<Scalars['String']['input']>;
+  tapis_app_version?: InputMaybe<Scalars['String']['input']>;
   usage_notes?: InputMaybe<Scalars['String']['input']>;
   valid_until?: InputMaybe<Scalars['String']['input']>;
 };
@@ -5138,6 +9046,8 @@ export enum Modelcatalog_Configuration_Update_Column {
   /** column name */
   Description = 'description',
   /** column name */
+  Embedding = 'embedding',
+  /** column name */
   HasComponentLocation = 'has_component_location',
   /** column name */
   HasImplementationScriptLocation = 'has_implementation_script_location',
@@ -5156,9 +9066,17 @@ export enum Modelcatalog_Configuration_Update_Column {
   /** column name */
   ModelConfigurationId = 'model_configuration_id',
   /** column name */
+  OwnerUsername = 'owner_username',
+  /** column name */
   ParameterAssignmentMethod = 'parameter_assignment_method',
   /** column name */
+  SemanticText = 'semantic_text',
+  /** column name */
   SoftwareVersionId = 'software_version_id',
+  /** column name */
+  TapisAppId = 'tapis_app_id',
+  /** column name */
+  TapisAppVersion = 'tapis_app_version',
   /** column name */
   UsageNotes = 'usage_notes',
   /** column name */
@@ -5866,6 +9784,703 @@ export type Modelcatalog_Diagram_Part_Updates = {
   /** sets the columns of the filtered rows to the given values */
   _set?: InputMaybe<Modelcatalog_Diagram_Part_Set_Input>;
   where: Modelcatalog_Diagram_Part_Bool_Exp;
+};
+
+/** columns and relationships of "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_Process = {
+  __typename?: 'modelcatalog_etl_process';
+  /** An array relationship */
+  contracts: Array<Modelcatalog_Etl_Process_Contract>;
+  /** An aggregate relationship */
+  contracts_aggregate: Modelcatalog_Etl_Process_Contract_Aggregate;
+  created_at: Scalars['timestamptz']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  label: Scalars['String']['output'];
+  owner_username?: Maybe<Scalars['String']['output']>;
+  runtime_json: Scalars['jsonb']['output'];
+  runtime_kind: Scalars['String']['output'];
+  updated_at: Scalars['timestamptz']['output'];
+  version?: Maybe<Scalars['String']['output']>;
+  visibility: Scalars['String']['output'];
+};
+
+
+/** columns and relationships of "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_ProcessContractsArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Contract_Bool_Exp>;
+};
+
+
+/** columns and relationships of "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_ProcessContracts_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Contract_Bool_Exp>;
+};
+
+
+/** columns and relationships of "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_ProcessRuntime_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_Process_Aggregate = {
+  __typename?: 'modelcatalog_etl_process_aggregate';
+  aggregate?: Maybe<Modelcatalog_Etl_Process_Aggregate_Fields>;
+  nodes: Array<Modelcatalog_Etl_Process>;
+};
+
+/** aggregate fields of "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_Process_Aggregate_Fields = {
+  __typename?: 'modelcatalog_etl_process_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Modelcatalog_Etl_Process_Max_Fields>;
+  min?: Maybe<Modelcatalog_Etl_Process_Min_Fields>;
+};
+
+
+/** aggregate fields of "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_Process_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Modelcatalog_Etl_Process_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Modelcatalog_Etl_Process_Append_Input = {
+  runtime_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** Boolean expression to filter rows from the table "modelcatalog_etl_process". All fields are combined with a logical 'AND'. */
+export type Modelcatalog_Etl_Process_Bool_Exp = {
+  _and?: InputMaybe<Array<Modelcatalog_Etl_Process_Bool_Exp>>;
+  _not?: InputMaybe<Modelcatalog_Etl_Process_Bool_Exp>;
+  _or?: InputMaybe<Array<Modelcatalog_Etl_Process_Bool_Exp>>;
+  contracts?: InputMaybe<Modelcatalog_Etl_Process_Contract_Bool_Exp>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  description?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<String_Comparison_Exp>;
+  label?: InputMaybe<String_Comparison_Exp>;
+  owner_username?: InputMaybe<String_Comparison_Exp>;
+  runtime_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  runtime_kind?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  version?: InputMaybe<String_Comparison_Exp>;
+  visibility?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "modelcatalog_etl_process" */
+export enum Modelcatalog_Etl_Process_Constraint {
+  /** unique or primary key constraint on columns "id" */
+  ModelcatalogEtlProcessPkey = 'modelcatalog_etl_process_pkey'
+}
+
+/** columns and relationships of "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract = {
+  __typename?: 'modelcatalog_etl_process_contract';
+  crs_requirement?: Maybe<Scalars['String']['output']>;
+  dimensionality?: Maybe<Scalars['String']['output']>;
+  /** An object relationship */
+  etl_process: Modelcatalog_Etl_Process;
+  etl_process_id: Scalars['String']['output'];
+  format?: Maybe<Scalars['String']['output']>;
+  position: Scalars['Int']['output'];
+  role: Scalars['String']['output'];
+  schema_requirement_json?: Maybe<Scalars['jsonb']['output']>;
+  spatial_type?: Maybe<Scalars['String']['output']>;
+  standard_variable_uri?: Maybe<Scalars['String']['output']>;
+  temporal_resolution?: Maybe<Scalars['String']['output']>;
+  unit?: Maybe<Scalars['String']['output']>;
+};
+
+
+/** columns and relationships of "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_ContractSchema_Requirement_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Aggregate = {
+  __typename?: 'modelcatalog_etl_process_contract_aggregate';
+  aggregate?: Maybe<Modelcatalog_Etl_Process_Contract_Aggregate_Fields>;
+  nodes: Array<Modelcatalog_Etl_Process_Contract>;
+};
+
+/** aggregate fields of "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Aggregate_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_aggregate_fields';
+  avg?: Maybe<Modelcatalog_Etl_Process_Contract_Avg_Fields>;
+  count: Scalars['Int']['output'];
+  max?: Maybe<Modelcatalog_Etl_Process_Contract_Max_Fields>;
+  min?: Maybe<Modelcatalog_Etl_Process_Contract_Min_Fields>;
+  stddev?: Maybe<Modelcatalog_Etl_Process_Contract_Stddev_Fields>;
+  stddev_pop?: Maybe<Modelcatalog_Etl_Process_Contract_Stddev_Pop_Fields>;
+  stddev_samp?: Maybe<Modelcatalog_Etl_Process_Contract_Stddev_Samp_Fields>;
+  sum?: Maybe<Modelcatalog_Etl_Process_Contract_Sum_Fields>;
+  var_pop?: Maybe<Modelcatalog_Etl_Process_Contract_Var_Pop_Fields>;
+  var_samp?: Maybe<Modelcatalog_Etl_Process_Contract_Var_Samp_Fields>;
+  variance?: Maybe<Modelcatalog_Etl_Process_Contract_Variance_Fields>;
+};
+
+
+/** aggregate fields of "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** order by aggregate values of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Aggregate_Order_By = {
+  avg?: InputMaybe<Modelcatalog_Etl_Process_Contract_Avg_Order_By>;
+  count?: InputMaybe<Order_By>;
+  max?: InputMaybe<Modelcatalog_Etl_Process_Contract_Max_Order_By>;
+  min?: InputMaybe<Modelcatalog_Etl_Process_Contract_Min_Order_By>;
+  stddev?: InputMaybe<Modelcatalog_Etl_Process_Contract_Stddev_Order_By>;
+  stddev_pop?: InputMaybe<Modelcatalog_Etl_Process_Contract_Stddev_Pop_Order_By>;
+  stddev_samp?: InputMaybe<Modelcatalog_Etl_Process_Contract_Stddev_Samp_Order_By>;
+  sum?: InputMaybe<Modelcatalog_Etl_Process_Contract_Sum_Order_By>;
+  var_pop?: InputMaybe<Modelcatalog_Etl_Process_Contract_Var_Pop_Order_By>;
+  var_samp?: InputMaybe<Modelcatalog_Etl_Process_Contract_Var_Samp_Order_By>;
+  variance?: InputMaybe<Modelcatalog_Etl_Process_Contract_Variance_Order_By>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Modelcatalog_Etl_Process_Contract_Append_Input = {
+  schema_requirement_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** input type for inserting array relation for remote table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Arr_Rel_Insert_Input = {
+  data: Array<Modelcatalog_Etl_Process_Contract_Insert_Input>;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Modelcatalog_Etl_Process_Contract_On_Conflict>;
+};
+
+/** aggregate avg on columns */
+export type Modelcatalog_Etl_Process_Contract_Avg_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_avg_fields';
+  position?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by avg() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Avg_Order_By = {
+  position?: InputMaybe<Order_By>;
+};
+
+/** Boolean expression to filter rows from the table "modelcatalog_etl_process_contract". All fields are combined with a logical 'AND'. */
+export type Modelcatalog_Etl_Process_Contract_Bool_Exp = {
+  _and?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Bool_Exp>>;
+  _not?: InputMaybe<Modelcatalog_Etl_Process_Contract_Bool_Exp>;
+  _or?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Bool_Exp>>;
+  crs_requirement?: InputMaybe<String_Comparison_Exp>;
+  dimensionality?: InputMaybe<String_Comparison_Exp>;
+  etl_process?: InputMaybe<Modelcatalog_Etl_Process_Bool_Exp>;
+  etl_process_id?: InputMaybe<String_Comparison_Exp>;
+  format?: InputMaybe<String_Comparison_Exp>;
+  position?: InputMaybe<Int_Comparison_Exp>;
+  role?: InputMaybe<String_Comparison_Exp>;
+  schema_requirement_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  spatial_type?: InputMaybe<String_Comparison_Exp>;
+  standard_variable_uri?: InputMaybe<String_Comparison_Exp>;
+  temporal_resolution?: InputMaybe<String_Comparison_Exp>;
+  unit?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "modelcatalog_etl_process_contract" */
+export enum Modelcatalog_Etl_Process_Contract_Constraint {
+  /** unique or primary key constraint on columns "etl_process_id", "role", "position" */
+  ModelcatalogEtlProcessContractPkey = 'modelcatalog_etl_process_contract_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Modelcatalog_Etl_Process_Contract_Delete_At_Path_Input = {
+  schema_requirement_json?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Modelcatalog_Etl_Process_Contract_Delete_Elem_Input = {
+  schema_requirement_json?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Modelcatalog_Etl_Process_Contract_Delete_Key_Input = {
+  schema_requirement_json?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for incrementing numeric columns in table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Inc_Input = {
+  position?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** input type for inserting data into table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Insert_Input = {
+  crs_requirement?: InputMaybe<Scalars['String']['input']>;
+  dimensionality?: InputMaybe<Scalars['String']['input']>;
+  etl_process?: InputMaybe<Modelcatalog_Etl_Process_Obj_Rel_Insert_Input>;
+  etl_process_id?: InputMaybe<Scalars['String']['input']>;
+  format?: InputMaybe<Scalars['String']['input']>;
+  position?: InputMaybe<Scalars['Int']['input']>;
+  role?: InputMaybe<Scalars['String']['input']>;
+  schema_requirement_json?: InputMaybe<Scalars['jsonb']['input']>;
+  spatial_type?: InputMaybe<Scalars['String']['input']>;
+  standard_variable_uri?: InputMaybe<Scalars['String']['input']>;
+  temporal_resolution?: InputMaybe<Scalars['String']['input']>;
+  unit?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Modelcatalog_Etl_Process_Contract_Max_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_max_fields';
+  crs_requirement?: Maybe<Scalars['String']['output']>;
+  dimensionality?: Maybe<Scalars['String']['output']>;
+  etl_process_id?: Maybe<Scalars['String']['output']>;
+  format?: Maybe<Scalars['String']['output']>;
+  position?: Maybe<Scalars['Int']['output']>;
+  role?: Maybe<Scalars['String']['output']>;
+  spatial_type?: Maybe<Scalars['String']['output']>;
+  standard_variable_uri?: Maybe<Scalars['String']['output']>;
+  temporal_resolution?: Maybe<Scalars['String']['output']>;
+  unit?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by max() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Max_Order_By = {
+  crs_requirement?: InputMaybe<Order_By>;
+  dimensionality?: InputMaybe<Order_By>;
+  etl_process_id?: InputMaybe<Order_By>;
+  format?: InputMaybe<Order_By>;
+  position?: InputMaybe<Order_By>;
+  role?: InputMaybe<Order_By>;
+  spatial_type?: InputMaybe<Order_By>;
+  standard_variable_uri?: InputMaybe<Order_By>;
+  temporal_resolution?: InputMaybe<Order_By>;
+  unit?: InputMaybe<Order_By>;
+};
+
+/** aggregate min on columns */
+export type Modelcatalog_Etl_Process_Contract_Min_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_min_fields';
+  crs_requirement?: Maybe<Scalars['String']['output']>;
+  dimensionality?: Maybe<Scalars['String']['output']>;
+  etl_process_id?: Maybe<Scalars['String']['output']>;
+  format?: Maybe<Scalars['String']['output']>;
+  position?: Maybe<Scalars['Int']['output']>;
+  role?: Maybe<Scalars['String']['output']>;
+  spatial_type?: Maybe<Scalars['String']['output']>;
+  standard_variable_uri?: Maybe<Scalars['String']['output']>;
+  temporal_resolution?: Maybe<Scalars['String']['output']>;
+  unit?: Maybe<Scalars['String']['output']>;
+};
+
+/** order by min() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Min_Order_By = {
+  crs_requirement?: InputMaybe<Order_By>;
+  dimensionality?: InputMaybe<Order_By>;
+  etl_process_id?: InputMaybe<Order_By>;
+  format?: InputMaybe<Order_By>;
+  position?: InputMaybe<Order_By>;
+  role?: InputMaybe<Order_By>;
+  spatial_type?: InputMaybe<Order_By>;
+  standard_variable_uri?: InputMaybe<Order_By>;
+  temporal_resolution?: InputMaybe<Order_By>;
+  unit?: InputMaybe<Order_By>;
+};
+
+/** response of any mutation on the table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Mutation_Response = {
+  __typename?: 'modelcatalog_etl_process_contract_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Modelcatalog_Etl_Process_Contract>;
+};
+
+/** on_conflict condition type for table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_On_Conflict = {
+  constraint: Modelcatalog_Etl_Process_Contract_Constraint;
+  update_columns?: Array<Modelcatalog_Etl_Process_Contract_Update_Column>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Contract_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "modelcatalog_etl_process_contract". */
+export type Modelcatalog_Etl_Process_Contract_Order_By = {
+  crs_requirement?: InputMaybe<Order_By>;
+  dimensionality?: InputMaybe<Order_By>;
+  etl_process?: InputMaybe<Modelcatalog_Etl_Process_Order_By>;
+  etl_process_id?: InputMaybe<Order_By>;
+  format?: InputMaybe<Order_By>;
+  position?: InputMaybe<Order_By>;
+  role?: InputMaybe<Order_By>;
+  schema_requirement_json?: InputMaybe<Order_By>;
+  spatial_type?: InputMaybe<Order_By>;
+  standard_variable_uri?: InputMaybe<Order_By>;
+  temporal_resolution?: InputMaybe<Order_By>;
+  unit?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: modelcatalog_etl_process_contract */
+export type Modelcatalog_Etl_Process_Contract_Pk_Columns_Input = {
+  etl_process_id: Scalars['String']['input'];
+  position: Scalars['Int']['input'];
+  role: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Modelcatalog_Etl_Process_Contract_Prepend_Input = {
+  schema_requirement_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "modelcatalog_etl_process_contract" */
+export enum Modelcatalog_Etl_Process_Contract_Select_Column {
+  /** column name */
+  CrsRequirement = 'crs_requirement',
+  /** column name */
+  Dimensionality = 'dimensionality',
+  /** column name */
+  EtlProcessId = 'etl_process_id',
+  /** column name */
+  Format = 'format',
+  /** column name */
+  Position = 'position',
+  /** column name */
+  Role = 'role',
+  /** column name */
+  SchemaRequirementJson = 'schema_requirement_json',
+  /** column name */
+  SpatialType = 'spatial_type',
+  /** column name */
+  StandardVariableUri = 'standard_variable_uri',
+  /** column name */
+  TemporalResolution = 'temporal_resolution',
+  /** column name */
+  Unit = 'unit'
+}
+
+/** input type for updating data in table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Set_Input = {
+  crs_requirement?: InputMaybe<Scalars['String']['input']>;
+  dimensionality?: InputMaybe<Scalars['String']['input']>;
+  etl_process_id?: InputMaybe<Scalars['String']['input']>;
+  format?: InputMaybe<Scalars['String']['input']>;
+  position?: InputMaybe<Scalars['Int']['input']>;
+  role?: InputMaybe<Scalars['String']['input']>;
+  schema_requirement_json?: InputMaybe<Scalars['jsonb']['input']>;
+  spatial_type?: InputMaybe<Scalars['String']['input']>;
+  standard_variable_uri?: InputMaybe<Scalars['String']['input']>;
+  temporal_resolution?: InputMaybe<Scalars['String']['input']>;
+  unit?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate stddev on columns */
+export type Modelcatalog_Etl_Process_Contract_Stddev_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_stddev_fields';
+  position?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by stddev() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Stddev_Order_By = {
+  position?: InputMaybe<Order_By>;
+};
+
+/** aggregate stddev_pop on columns */
+export type Modelcatalog_Etl_Process_Contract_Stddev_Pop_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_stddev_pop_fields';
+  position?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by stddev_pop() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Stddev_Pop_Order_By = {
+  position?: InputMaybe<Order_By>;
+};
+
+/** aggregate stddev_samp on columns */
+export type Modelcatalog_Etl_Process_Contract_Stddev_Samp_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_stddev_samp_fields';
+  position?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by stddev_samp() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Stddev_Samp_Order_By = {
+  position?: InputMaybe<Order_By>;
+};
+
+/** aggregate sum on columns */
+export type Modelcatalog_Etl_Process_Contract_Sum_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_sum_fields';
+  position?: Maybe<Scalars['Int']['output']>;
+};
+
+/** order by sum() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Sum_Order_By = {
+  position?: InputMaybe<Order_By>;
+};
+
+/** update columns of table "modelcatalog_etl_process_contract" */
+export enum Modelcatalog_Etl_Process_Contract_Update_Column {
+  /** column name */
+  CrsRequirement = 'crs_requirement',
+  /** column name */
+  Dimensionality = 'dimensionality',
+  /** column name */
+  EtlProcessId = 'etl_process_id',
+  /** column name */
+  Format = 'format',
+  /** column name */
+  Position = 'position',
+  /** column name */
+  Role = 'role',
+  /** column name */
+  SchemaRequirementJson = 'schema_requirement_json',
+  /** column name */
+  SpatialType = 'spatial_type',
+  /** column name */
+  StandardVariableUri = 'standard_variable_uri',
+  /** column name */
+  TemporalResolution = 'temporal_resolution',
+  /** column name */
+  Unit = 'unit'
+}
+
+export type Modelcatalog_Etl_Process_Contract_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Modelcatalog_Etl_Process_Contract_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Modelcatalog_Etl_Process_Contract_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Modelcatalog_Etl_Process_Contract_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Modelcatalog_Etl_Process_Contract_Delete_Key_Input>;
+  /** increments the numeric columns with given value of the filtered values */
+  _inc?: InputMaybe<Modelcatalog_Etl_Process_Contract_Inc_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Modelcatalog_Etl_Process_Contract_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Modelcatalog_Etl_Process_Contract_Set_Input>;
+  where: Modelcatalog_Etl_Process_Contract_Bool_Exp;
+};
+
+/** aggregate var_pop on columns */
+export type Modelcatalog_Etl_Process_Contract_Var_Pop_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_var_pop_fields';
+  position?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by var_pop() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Var_Pop_Order_By = {
+  position?: InputMaybe<Order_By>;
+};
+
+/** aggregate var_samp on columns */
+export type Modelcatalog_Etl_Process_Contract_Var_Samp_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_var_samp_fields';
+  position?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by var_samp() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Var_Samp_Order_By = {
+  position?: InputMaybe<Order_By>;
+};
+
+/** aggregate variance on columns */
+export type Modelcatalog_Etl_Process_Contract_Variance_Fields = {
+  __typename?: 'modelcatalog_etl_process_contract_variance_fields';
+  position?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by variance() on columns of table "modelcatalog_etl_process_contract" */
+export type Modelcatalog_Etl_Process_Contract_Variance_Order_By = {
+  position?: InputMaybe<Order_By>;
+};
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Modelcatalog_Etl_Process_Delete_At_Path_Input = {
+  runtime_json?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Modelcatalog_Etl_Process_Delete_Elem_Input = {
+  runtime_json?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Modelcatalog_Etl_Process_Delete_Key_Input = {
+  runtime_json?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for inserting data into table "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_Process_Insert_Input = {
+  contracts?: InputMaybe<Modelcatalog_Etl_Process_Contract_Arr_Rel_Insert_Input>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  label?: InputMaybe<Scalars['String']['input']>;
+  owner_username?: InputMaybe<Scalars['String']['input']>;
+  runtime_json?: InputMaybe<Scalars['jsonb']['input']>;
+  runtime_kind?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  version?: InputMaybe<Scalars['String']['input']>;
+  visibility?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Modelcatalog_Etl_Process_Max_Fields = {
+  __typename?: 'modelcatalog_etl_process_max_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  label?: Maybe<Scalars['String']['output']>;
+  owner_username?: Maybe<Scalars['String']['output']>;
+  runtime_kind?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+  version?: Maybe<Scalars['String']['output']>;
+  visibility?: Maybe<Scalars['String']['output']>;
+};
+
+/** aggregate min on columns */
+export type Modelcatalog_Etl_Process_Min_Fields = {
+  __typename?: 'modelcatalog_etl_process_min_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['String']['output']>;
+  label?: Maybe<Scalars['String']['output']>;
+  owner_username?: Maybe<Scalars['String']['output']>;
+  runtime_kind?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+  version?: Maybe<Scalars['String']['output']>;
+  visibility?: Maybe<Scalars['String']['output']>;
+};
+
+/** response of any mutation on the table "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_Process_Mutation_Response = {
+  __typename?: 'modelcatalog_etl_process_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Modelcatalog_Etl_Process>;
+};
+
+/** input type for inserting object relation for remote table "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_Process_Obj_Rel_Insert_Input = {
+  data: Modelcatalog_Etl_Process_Insert_Input;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Modelcatalog_Etl_Process_On_Conflict>;
+};
+
+/** on_conflict condition type for table "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_Process_On_Conflict = {
+  constraint: Modelcatalog_Etl_Process_Constraint;
+  update_columns?: Array<Modelcatalog_Etl_Process_Update_Column>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "modelcatalog_etl_process". */
+export type Modelcatalog_Etl_Process_Order_By = {
+  contracts_aggregate?: InputMaybe<Modelcatalog_Etl_Process_Contract_Aggregate_Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  description?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  label?: InputMaybe<Order_By>;
+  owner_username?: InputMaybe<Order_By>;
+  runtime_json?: InputMaybe<Order_By>;
+  runtime_kind?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+  version?: InputMaybe<Order_By>;
+  visibility?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: modelcatalog_etl_process */
+export type Modelcatalog_Etl_Process_Pk_Columns_Input = {
+  id: Scalars['String']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Modelcatalog_Etl_Process_Prepend_Input = {
+  runtime_json?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "modelcatalog_etl_process" */
+export enum Modelcatalog_Etl_Process_Select_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Description = 'description',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  Label = 'label',
+  /** column name */
+  OwnerUsername = 'owner_username',
+  /** column name */
+  RuntimeJson = 'runtime_json',
+  /** column name */
+  RuntimeKind = 'runtime_kind',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  Version = 'version',
+  /** column name */
+  Visibility = 'visibility'
+}
+
+/** input type for updating data in table "modelcatalog_etl_process" */
+export type Modelcatalog_Etl_Process_Set_Input = {
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['String']['input']>;
+  label?: InputMaybe<Scalars['String']['input']>;
+  owner_username?: InputMaybe<Scalars['String']['input']>;
+  runtime_json?: InputMaybe<Scalars['jsonb']['input']>;
+  runtime_kind?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  version?: InputMaybe<Scalars['String']['input']>;
+  visibility?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** update columns of table "modelcatalog_etl_process" */
+export enum Modelcatalog_Etl_Process_Update_Column {
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Description = 'description',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  Label = 'label',
+  /** column name */
+  OwnerUsername = 'owner_username',
+  /** column name */
+  RuntimeJson = 'runtime_json',
+  /** column name */
+  RuntimeKind = 'runtime_kind',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  Version = 'version',
+  /** column name */
+  Visibility = 'visibility'
+}
+
+export type Modelcatalog_Etl_Process_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Modelcatalog_Etl_Process_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Modelcatalog_Etl_Process_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Modelcatalog_Etl_Process_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Modelcatalog_Etl_Process_Delete_Key_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Modelcatalog_Etl_Process_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Modelcatalog_Etl_Process_Set_Input>;
+  where: Modelcatalog_Etl_Process_Bool_Exp;
 };
 
 /** columns and relationships of "modelcatalog_grid" */
@@ -10295,9 +14910,11 @@ export type Modelcatalog_Software_Version_Updates = {
 export type Modelcatalog_Standard_Variable = {
   __typename?: 'modelcatalog_standard_variable';
   description?: Maybe<Scalars['String']['output']>;
+  embedding?: Maybe<Scalars['vector']['output']>;
   id: Scalars['String']['output'];
   label: Scalars['String']['output'];
   same_as?: Maybe<Scalars['_text']['output']>;
+  semantic_text?: Maybe<Scalars['String']['output']>;
   /** An array relationship */
   tasksByDrivingVariable: Array<Task>;
   /** An aggregate relationship */
@@ -10448,9 +15065,11 @@ export type Modelcatalog_Standard_Variable_Bool_Exp = {
   _not?: InputMaybe<Modelcatalog_Standard_Variable_Bool_Exp>;
   _or?: InputMaybe<Array<Modelcatalog_Standard_Variable_Bool_Exp>>;
   description?: InputMaybe<String_Comparison_Exp>;
+  embedding?: InputMaybe<Vector_Comparison_Exp>;
   id?: InputMaybe<String_Comparison_Exp>;
   label?: InputMaybe<String_Comparison_Exp>;
   same_as?: InputMaybe<_Text_Comparison_Exp>;
+  semantic_text?: InputMaybe<String_Comparison_Exp>;
   tasksByDrivingVariable?: InputMaybe<Task_Bool_Exp>;
   tasksByResponseVariable?: InputMaybe<Task_Bool_Exp>;
   threadsByDrivingVariable?: InputMaybe<Thread_Bool_Exp>;
@@ -10467,9 +15086,11 @@ export enum Modelcatalog_Standard_Variable_Constraint {
 /** input type for inserting data into table "modelcatalog_standard_variable" */
 export type Modelcatalog_Standard_Variable_Insert_Input = {
   description?: InputMaybe<Scalars['String']['input']>;
+  embedding?: InputMaybe<Scalars['vector']['input']>;
   id?: InputMaybe<Scalars['String']['input']>;
   label?: InputMaybe<Scalars['String']['input']>;
   same_as?: InputMaybe<Scalars['_text']['input']>;
+  semantic_text?: InputMaybe<Scalars['String']['input']>;
   tasksByDrivingVariable?: InputMaybe<Task_Arr_Rel_Insert_Input>;
   tasksByResponseVariable?: InputMaybe<Task_Arr_Rel_Insert_Input>;
   threadsByDrivingVariable?: InputMaybe<Thread_Arr_Rel_Insert_Input>;
@@ -10483,6 +15104,7 @@ export type Modelcatalog_Standard_Variable_Max_Fields = {
   description?: Maybe<Scalars['String']['output']>;
   id?: Maybe<Scalars['String']['output']>;
   label?: Maybe<Scalars['String']['output']>;
+  semantic_text?: Maybe<Scalars['String']['output']>;
 };
 
 /** aggregate min on columns */
@@ -10491,6 +15113,7 @@ export type Modelcatalog_Standard_Variable_Min_Fields = {
   description?: Maybe<Scalars['String']['output']>;
   id?: Maybe<Scalars['String']['output']>;
   label?: Maybe<Scalars['String']['output']>;
+  semantic_text?: Maybe<Scalars['String']['output']>;
 };
 
 /** response of any mutation on the table "modelcatalog_standard_variable" */
@@ -10519,9 +15142,11 @@ export type Modelcatalog_Standard_Variable_On_Conflict = {
 /** Ordering options when selecting data from "modelcatalog_standard_variable". */
 export type Modelcatalog_Standard_Variable_Order_By = {
   description?: InputMaybe<Order_By>;
+  embedding?: InputMaybe<Order_By>;
   id?: InputMaybe<Order_By>;
   label?: InputMaybe<Order_By>;
   same_as?: InputMaybe<Order_By>;
+  semantic_text?: InputMaybe<Order_By>;
   tasksByDrivingVariable_aggregate?: InputMaybe<Task_Aggregate_Order_By>;
   tasksByResponseVariable_aggregate?: InputMaybe<Task_Aggregate_Order_By>;
   threadsByDrivingVariable_aggregate?: InputMaybe<Thread_Aggregate_Order_By>;
@@ -10539,19 +15164,25 @@ export enum Modelcatalog_Standard_Variable_Select_Column {
   /** column name */
   Description = 'description',
   /** column name */
+  Embedding = 'embedding',
+  /** column name */
   Id = 'id',
   /** column name */
   Label = 'label',
   /** column name */
-  SameAs = 'same_as'
+  SameAs = 'same_as',
+  /** column name */
+  SemanticText = 'semantic_text'
 }
 
 /** input type for updating data in table "modelcatalog_standard_variable" */
 export type Modelcatalog_Standard_Variable_Set_Input = {
   description?: InputMaybe<Scalars['String']['input']>;
+  embedding?: InputMaybe<Scalars['vector']['input']>;
   id?: InputMaybe<Scalars['String']['input']>;
   label?: InputMaybe<Scalars['String']['input']>;
   same_as?: InputMaybe<Scalars['_text']['input']>;
+  semantic_text?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** update columns of table "modelcatalog_standard_variable" */
@@ -10559,11 +15190,15 @@ export enum Modelcatalog_Standard_Variable_Update_Column {
   /** column name */
   Description = 'description',
   /** column name */
+  Embedding = 'embedding',
+  /** column name */
   Id = 'id',
   /** column name */
   Label = 'label',
   /** column name */
-  SameAs = 'same_as'
+  SameAs = 'same_as',
+  /** column name */
+  SemanticText = 'semantic_text'
 }
 
 export type Modelcatalog_Standard_Variable_Updates = {
@@ -11405,6 +16040,50 @@ export type Modelcatalog_Version_Author_Updates = {
 /** mutation root */
 export type Mutation_Root = {
   __typename?: 'mutation_root';
+  /** delete data from the table: "adapter.data_object" */
+  delete_adapter_data_object?: Maybe<Adapter_Data_Object_Mutation_Response>;
+  /** delete single row from the table: "adapter.data_object" */
+  delete_adapter_data_object_by_pk?: Maybe<Adapter_Data_Object>;
+  /** delete data from the table: "adapter.data_object_variable" */
+  delete_adapter_data_object_variable?: Maybe<Adapter_Data_Object_Variable_Mutation_Response>;
+  /** delete single row from the table: "adapter.data_object_variable" */
+  delete_adapter_data_object_variable_by_pk?: Maybe<Adapter_Data_Object_Variable>;
+  /** delete data from the table: "adapter.provenance_event" */
+  delete_adapter_provenance_event?: Maybe<Adapter_Provenance_Event_Mutation_Response>;
+  /** delete single row from the table: "adapter.provenance_event" */
+  delete_adapter_provenance_event_by_pk?: Maybe<Adapter_Provenance_Event>;
+  /** delete data from the table: "adapter.readiness_assessment" */
+  delete_adapter_readiness_assessment?: Maybe<Adapter_Readiness_Assessment_Mutation_Response>;
+  /** delete single row from the table: "adapter.readiness_assessment" */
+  delete_adapter_readiness_assessment_by_pk?: Maybe<Adapter_Readiness_Assessment>;
+  /** delete data from the table: "adapter.secret" */
+  delete_adapter_secret?: Maybe<Adapter_Secret_Mutation_Response>;
+  /** delete single row from the table: "adapter.secret" */
+  delete_adapter_secret_by_pk?: Maybe<Adapter_Secret>;
+  /** delete data from the table: "adapter.secret_event" */
+  delete_adapter_secret_event?: Maybe<Adapter_Secret_Event_Mutation_Response>;
+  /** delete single row from the table: "adapter.secret_event" */
+  delete_adapter_secret_event_by_pk?: Maybe<Adapter_Secret_Event>;
+  /** delete data from the table: "adapter.transform_contract" */
+  delete_adapter_transform_contract?: Maybe<Adapter_Transform_Contract_Mutation_Response>;
+  /** delete single row from the table: "adapter.transform_contract" */
+  delete_adapter_transform_contract_by_pk?: Maybe<Adapter_Transform_Contract>;
+  /** delete data from the table: "adapter.transform_edge" */
+  delete_adapter_transform_edge?: Maybe<Adapter_Transform_Edge_Mutation_Response>;
+  /** delete single row from the table: "adapter.transform_edge" */
+  delete_adapter_transform_edge_by_pk?: Maybe<Adapter_Transform_Edge>;
+  /** delete data from the table: "adapter.transform_spec" */
+  delete_adapter_transform_spec?: Maybe<Adapter_Transform_Spec_Mutation_Response>;
+  /** delete single row from the table: "adapter.transform_spec" */
+  delete_adapter_transform_spec_by_pk?: Maybe<Adapter_Transform_Spec>;
+  /** delete data from the table: "adapter.workflow_plan" */
+  delete_adapter_workflow_plan?: Maybe<Adapter_Workflow_Plan_Mutation_Response>;
+  /** delete single row from the table: "adapter.workflow_plan" */
+  delete_adapter_workflow_plan_by_pk?: Maybe<Adapter_Workflow_Plan>;
+  /** delete data from the table: "adapter.workflow_run" */
+  delete_adapter_workflow_run?: Maybe<Adapter_Workflow_Run_Mutation_Response>;
+  /** delete single row from the table: "adapter.workflow_run" */
+  delete_adapter_workflow_run_by_pk?: Maybe<Adapter_Workflow_Run>;
   /** delete data from the table: "dataset" */
   delete_dataset?: Maybe<Dataset_Mutation_Response>;
   /** delete single row from the table: "dataset" */
@@ -11509,6 +16188,14 @@ export type Mutation_Root = {
   delete_modelcatalog_diagram_part?: Maybe<Modelcatalog_Diagram_Part_Mutation_Response>;
   /** delete single row from the table: "modelcatalog_diagram_part" */
   delete_modelcatalog_diagram_part_by_pk?: Maybe<Modelcatalog_Diagram_Part>;
+  /** delete data from the table: "modelcatalog_etl_process" */
+  delete_modelcatalog_etl_process?: Maybe<Modelcatalog_Etl_Process_Mutation_Response>;
+  /** delete single row from the table: "modelcatalog_etl_process" */
+  delete_modelcatalog_etl_process_by_pk?: Maybe<Modelcatalog_Etl_Process>;
+  /** delete data from the table: "modelcatalog_etl_process_contract" */
+  delete_modelcatalog_etl_process_contract?: Maybe<Modelcatalog_Etl_Process_Contract_Mutation_Response>;
+  /** delete single row from the table: "modelcatalog_etl_process_contract" */
+  delete_modelcatalog_etl_process_contract_by_pk?: Maybe<Modelcatalog_Etl_Process_Contract>;
   /** delete data from the table: "modelcatalog_grid" */
   delete_modelcatalog_grid?: Maybe<Modelcatalog_Grid_Mutation_Response>;
   /** delete single row from the table: "modelcatalog_grid" */
@@ -11637,6 +16324,10 @@ export type Mutation_Root = {
   delete_region_category_tree?: Maybe<Region_Category_Tree_Mutation_Response>;
   /** delete single row from the table: "region_category_tree" */
   delete_region_category_tree_by_pk?: Maybe<Region_Category_Tree>;
+  /** delete data from the table: "region_curator" */
+  delete_region_curator?: Maybe<Region_Curator_Mutation_Response>;
+  /** delete single row from the table: "region_curator" */
+  delete_region_curator_by_pk?: Maybe<Region_Curator>;
   /** delete data from the table: "region_geometry" */
   delete_region_geometry?: Maybe<Region_Geometry_Mutation_Response>;
   /** delete single row from the table: "region_geometry" */
@@ -11661,6 +16352,10 @@ export type Mutation_Root = {
   delete_task_provenance_by_pk?: Maybe<Task_Provenance>;
   /** delete data from the table: "thread" */
   delete_thread?: Maybe<Thread_Mutation_Response>;
+  /** delete data from the table: "thread_adapter_plan" */
+  delete_thread_adapter_plan?: Maybe<Thread_Adapter_Plan_Mutation_Response>;
+  /** delete single row from the table: "thread_adapter_plan" */
+  delete_thread_adapter_plan_by_pk?: Maybe<Thread_Adapter_Plan>;
   /** delete single row from the table: "thread" */
   delete_thread_by_pk?: Maybe<Thread>;
   /** delete data from the table: "thread_data" */
@@ -11695,6 +16390,14 @@ export type Mutation_Root = {
   delete_thread_provenance?: Maybe<Thread_Provenance_Mutation_Response>;
   /** delete single row from the table: "thread_provenance" */
   delete_thread_provenance_by_pk?: Maybe<Thread_Provenance>;
+  /** delete data from the table: "unified_execution" */
+  delete_unified_execution?: Maybe<Unified_Execution_Mutation_Response>;
+  /** delete single row from the table: "unified_execution" */
+  delete_unified_execution_by_pk?: Maybe<Unified_Execution>;
+  /** delete data from the table: "unified_execution_step" */
+  delete_unified_execution_step?: Maybe<Unified_Execution_Step_Mutation_Response>;
+  /** delete single row from the table: "unified_execution_step" */
+  delete_unified_execution_step_by_pk?: Maybe<Unified_Execution_Step>;
   /** delete data from the table: "variable" */
   delete_variable?: Maybe<Variable_Mutation_Response>;
   /** delete single row from the table: "variable" */
@@ -11703,6 +16406,50 @@ export type Mutation_Root = {
   delete_variable_category?: Maybe<Variable_Category_Mutation_Response>;
   /** delete single row from the table: "variable_category" */
   delete_variable_category_by_pk?: Maybe<Variable_Category>;
+  /** insert data into the table: "adapter.data_object" */
+  insert_adapter_data_object?: Maybe<Adapter_Data_Object_Mutation_Response>;
+  /** insert a single row into the table: "adapter.data_object" */
+  insert_adapter_data_object_one?: Maybe<Adapter_Data_Object>;
+  /** insert data into the table: "adapter.data_object_variable" */
+  insert_adapter_data_object_variable?: Maybe<Adapter_Data_Object_Variable_Mutation_Response>;
+  /** insert a single row into the table: "adapter.data_object_variable" */
+  insert_adapter_data_object_variable_one?: Maybe<Adapter_Data_Object_Variable>;
+  /** insert data into the table: "adapter.provenance_event" */
+  insert_adapter_provenance_event?: Maybe<Adapter_Provenance_Event_Mutation_Response>;
+  /** insert a single row into the table: "adapter.provenance_event" */
+  insert_adapter_provenance_event_one?: Maybe<Adapter_Provenance_Event>;
+  /** insert data into the table: "adapter.readiness_assessment" */
+  insert_adapter_readiness_assessment?: Maybe<Adapter_Readiness_Assessment_Mutation_Response>;
+  /** insert a single row into the table: "adapter.readiness_assessment" */
+  insert_adapter_readiness_assessment_one?: Maybe<Adapter_Readiness_Assessment>;
+  /** insert data into the table: "adapter.secret" */
+  insert_adapter_secret?: Maybe<Adapter_Secret_Mutation_Response>;
+  /** insert data into the table: "adapter.secret_event" */
+  insert_adapter_secret_event?: Maybe<Adapter_Secret_Event_Mutation_Response>;
+  /** insert a single row into the table: "adapter.secret_event" */
+  insert_adapter_secret_event_one?: Maybe<Adapter_Secret_Event>;
+  /** insert a single row into the table: "adapter.secret" */
+  insert_adapter_secret_one?: Maybe<Adapter_Secret>;
+  /** insert data into the table: "adapter.transform_contract" */
+  insert_adapter_transform_contract?: Maybe<Adapter_Transform_Contract_Mutation_Response>;
+  /** insert a single row into the table: "adapter.transform_contract" */
+  insert_adapter_transform_contract_one?: Maybe<Adapter_Transform_Contract>;
+  /** insert data into the table: "adapter.transform_edge" */
+  insert_adapter_transform_edge?: Maybe<Adapter_Transform_Edge_Mutation_Response>;
+  /** insert a single row into the table: "adapter.transform_edge" */
+  insert_adapter_transform_edge_one?: Maybe<Adapter_Transform_Edge>;
+  /** insert data into the table: "adapter.transform_spec" */
+  insert_adapter_transform_spec?: Maybe<Adapter_Transform_Spec_Mutation_Response>;
+  /** insert a single row into the table: "adapter.transform_spec" */
+  insert_adapter_transform_spec_one?: Maybe<Adapter_Transform_Spec>;
+  /** insert data into the table: "adapter.workflow_plan" */
+  insert_adapter_workflow_plan?: Maybe<Adapter_Workflow_Plan_Mutation_Response>;
+  /** insert a single row into the table: "adapter.workflow_plan" */
+  insert_adapter_workflow_plan_one?: Maybe<Adapter_Workflow_Plan>;
+  /** insert data into the table: "adapter.workflow_run" */
+  insert_adapter_workflow_run?: Maybe<Adapter_Workflow_Run_Mutation_Response>;
+  /** insert a single row into the table: "adapter.workflow_run" */
+  insert_adapter_workflow_run_one?: Maybe<Adapter_Workflow_Run>;
   /** insert data into the table: "dataset" */
   insert_dataset?: Maybe<Dataset_Mutation_Response>;
   /** insert a single row into the table: "dataset" */
@@ -11807,6 +16554,14 @@ export type Mutation_Root = {
   insert_modelcatalog_diagram_part?: Maybe<Modelcatalog_Diagram_Part_Mutation_Response>;
   /** insert a single row into the table: "modelcatalog_diagram_part" */
   insert_modelcatalog_diagram_part_one?: Maybe<Modelcatalog_Diagram_Part>;
+  /** insert data into the table: "modelcatalog_etl_process" */
+  insert_modelcatalog_etl_process?: Maybe<Modelcatalog_Etl_Process_Mutation_Response>;
+  /** insert data into the table: "modelcatalog_etl_process_contract" */
+  insert_modelcatalog_etl_process_contract?: Maybe<Modelcatalog_Etl_Process_Contract_Mutation_Response>;
+  /** insert a single row into the table: "modelcatalog_etl_process_contract" */
+  insert_modelcatalog_etl_process_contract_one?: Maybe<Modelcatalog_Etl_Process_Contract>;
+  /** insert a single row into the table: "modelcatalog_etl_process" */
+  insert_modelcatalog_etl_process_one?: Maybe<Modelcatalog_Etl_Process>;
   /** insert data into the table: "modelcatalog_grid" */
   insert_modelcatalog_grid?: Maybe<Modelcatalog_Grid_Mutation_Response>;
   /** insert a single row into the table: "modelcatalog_grid" */
@@ -11933,6 +16688,10 @@ export type Mutation_Root = {
   insert_region_category_tree?: Maybe<Region_Category_Tree_Mutation_Response>;
   /** insert a single row into the table: "region_category_tree" */
   insert_region_category_tree_one?: Maybe<Region_Category_Tree>;
+  /** insert data into the table: "region_curator" */
+  insert_region_curator?: Maybe<Region_Curator_Mutation_Response>;
+  /** insert a single row into the table: "region_curator" */
+  insert_region_curator_one?: Maybe<Region_Curator>;
   /** insert data into the table: "region_geometry" */
   insert_region_geometry?: Maybe<Region_Geometry_Mutation_Response>;
   /** insert a single row into the table: "region_geometry" */
@@ -11961,6 +16720,10 @@ export type Mutation_Root = {
   insert_task_provenance_one?: Maybe<Task_Provenance>;
   /** insert data into the table: "thread" */
   insert_thread?: Maybe<Thread_Mutation_Response>;
+  /** insert data into the table: "thread_adapter_plan" */
+  insert_thread_adapter_plan?: Maybe<Thread_Adapter_Plan_Mutation_Response>;
+  /** insert a single row into the table: "thread_adapter_plan" */
+  insert_thread_adapter_plan_one?: Maybe<Thread_Adapter_Plan>;
   /** insert data into the table: "thread_data" */
   insert_thread_data?: Maybe<Thread_Data_Mutation_Response>;
   /** insert a single row into the table: "thread_data" */
@@ -11995,6 +16758,14 @@ export type Mutation_Root = {
   insert_thread_provenance?: Maybe<Thread_Provenance_Mutation_Response>;
   /** insert a single row into the table: "thread_provenance" */
   insert_thread_provenance_one?: Maybe<Thread_Provenance>;
+  /** insert data into the table: "unified_execution" */
+  insert_unified_execution?: Maybe<Unified_Execution_Mutation_Response>;
+  /** insert a single row into the table: "unified_execution" */
+  insert_unified_execution_one?: Maybe<Unified_Execution>;
+  /** insert data into the table: "unified_execution_step" */
+  insert_unified_execution_step?: Maybe<Unified_Execution_Step_Mutation_Response>;
+  /** insert a single row into the table: "unified_execution_step" */
+  insert_unified_execution_step_one?: Maybe<Unified_Execution_Step>;
   /** insert data into the table: "variable" */
   insert_variable?: Maybe<Variable_Mutation_Response>;
   /** insert data into the table: "variable_category" */
@@ -12003,6 +16774,72 @@ export type Mutation_Root = {
   insert_variable_category_one?: Maybe<Variable_Category>;
   /** insert a single row into the table: "variable" */
   insert_variable_one?: Maybe<Variable>;
+  /** update data of the table: "adapter.data_object" */
+  update_adapter_data_object?: Maybe<Adapter_Data_Object_Mutation_Response>;
+  /** update single row of the table: "adapter.data_object" */
+  update_adapter_data_object_by_pk?: Maybe<Adapter_Data_Object>;
+  /** update multiples rows of table: "adapter.data_object" */
+  update_adapter_data_object_many?: Maybe<Array<Maybe<Adapter_Data_Object_Mutation_Response>>>;
+  /** update data of the table: "adapter.data_object_variable" */
+  update_adapter_data_object_variable?: Maybe<Adapter_Data_Object_Variable_Mutation_Response>;
+  /** update single row of the table: "adapter.data_object_variable" */
+  update_adapter_data_object_variable_by_pk?: Maybe<Adapter_Data_Object_Variable>;
+  /** update multiples rows of table: "adapter.data_object_variable" */
+  update_adapter_data_object_variable_many?: Maybe<Array<Maybe<Adapter_Data_Object_Variable_Mutation_Response>>>;
+  /** update data of the table: "adapter.provenance_event" */
+  update_adapter_provenance_event?: Maybe<Adapter_Provenance_Event_Mutation_Response>;
+  /** update single row of the table: "adapter.provenance_event" */
+  update_adapter_provenance_event_by_pk?: Maybe<Adapter_Provenance_Event>;
+  /** update multiples rows of table: "adapter.provenance_event" */
+  update_adapter_provenance_event_many?: Maybe<Array<Maybe<Adapter_Provenance_Event_Mutation_Response>>>;
+  /** update data of the table: "adapter.readiness_assessment" */
+  update_adapter_readiness_assessment?: Maybe<Adapter_Readiness_Assessment_Mutation_Response>;
+  /** update single row of the table: "adapter.readiness_assessment" */
+  update_adapter_readiness_assessment_by_pk?: Maybe<Adapter_Readiness_Assessment>;
+  /** update multiples rows of table: "adapter.readiness_assessment" */
+  update_adapter_readiness_assessment_many?: Maybe<Array<Maybe<Adapter_Readiness_Assessment_Mutation_Response>>>;
+  /** update data of the table: "adapter.secret" */
+  update_adapter_secret?: Maybe<Adapter_Secret_Mutation_Response>;
+  /** update single row of the table: "adapter.secret" */
+  update_adapter_secret_by_pk?: Maybe<Adapter_Secret>;
+  /** update data of the table: "adapter.secret_event" */
+  update_adapter_secret_event?: Maybe<Adapter_Secret_Event_Mutation_Response>;
+  /** update single row of the table: "adapter.secret_event" */
+  update_adapter_secret_event_by_pk?: Maybe<Adapter_Secret_Event>;
+  /** update multiples rows of table: "adapter.secret_event" */
+  update_adapter_secret_event_many?: Maybe<Array<Maybe<Adapter_Secret_Event_Mutation_Response>>>;
+  /** update multiples rows of table: "adapter.secret" */
+  update_adapter_secret_many?: Maybe<Array<Maybe<Adapter_Secret_Mutation_Response>>>;
+  /** update data of the table: "adapter.transform_contract" */
+  update_adapter_transform_contract?: Maybe<Adapter_Transform_Contract_Mutation_Response>;
+  /** update single row of the table: "adapter.transform_contract" */
+  update_adapter_transform_contract_by_pk?: Maybe<Adapter_Transform_Contract>;
+  /** update multiples rows of table: "adapter.transform_contract" */
+  update_adapter_transform_contract_many?: Maybe<Array<Maybe<Adapter_Transform_Contract_Mutation_Response>>>;
+  /** update data of the table: "adapter.transform_edge" */
+  update_adapter_transform_edge?: Maybe<Adapter_Transform_Edge_Mutation_Response>;
+  /** update single row of the table: "adapter.transform_edge" */
+  update_adapter_transform_edge_by_pk?: Maybe<Adapter_Transform_Edge>;
+  /** update multiples rows of table: "adapter.transform_edge" */
+  update_adapter_transform_edge_many?: Maybe<Array<Maybe<Adapter_Transform_Edge_Mutation_Response>>>;
+  /** update data of the table: "adapter.transform_spec" */
+  update_adapter_transform_spec?: Maybe<Adapter_Transform_Spec_Mutation_Response>;
+  /** update single row of the table: "adapter.transform_spec" */
+  update_adapter_transform_spec_by_pk?: Maybe<Adapter_Transform_Spec>;
+  /** update multiples rows of table: "adapter.transform_spec" */
+  update_adapter_transform_spec_many?: Maybe<Array<Maybe<Adapter_Transform_Spec_Mutation_Response>>>;
+  /** update data of the table: "adapter.workflow_plan" */
+  update_adapter_workflow_plan?: Maybe<Adapter_Workflow_Plan_Mutation_Response>;
+  /** update single row of the table: "adapter.workflow_plan" */
+  update_adapter_workflow_plan_by_pk?: Maybe<Adapter_Workflow_Plan>;
+  /** update multiples rows of table: "adapter.workflow_plan" */
+  update_adapter_workflow_plan_many?: Maybe<Array<Maybe<Adapter_Workflow_Plan_Mutation_Response>>>;
+  /** update data of the table: "adapter.workflow_run" */
+  update_adapter_workflow_run?: Maybe<Adapter_Workflow_Run_Mutation_Response>;
+  /** update single row of the table: "adapter.workflow_run" */
+  update_adapter_workflow_run_by_pk?: Maybe<Adapter_Workflow_Run>;
+  /** update multiples rows of table: "adapter.workflow_run" */
+  update_adapter_workflow_run_many?: Maybe<Array<Maybe<Adapter_Workflow_Run_Mutation_Response>>>;
   /** update data of the table: "dataset" */
   update_dataset?: Maybe<Dataset_Mutation_Response>;
   /** update single row of the table: "dataset" */
@@ -12159,6 +16996,18 @@ export type Mutation_Root = {
   update_modelcatalog_diagram_part_by_pk?: Maybe<Modelcatalog_Diagram_Part>;
   /** update multiples rows of table: "modelcatalog_diagram_part" */
   update_modelcatalog_diagram_part_many?: Maybe<Array<Maybe<Modelcatalog_Diagram_Part_Mutation_Response>>>;
+  /** update data of the table: "modelcatalog_etl_process" */
+  update_modelcatalog_etl_process?: Maybe<Modelcatalog_Etl_Process_Mutation_Response>;
+  /** update single row of the table: "modelcatalog_etl_process" */
+  update_modelcatalog_etl_process_by_pk?: Maybe<Modelcatalog_Etl_Process>;
+  /** update data of the table: "modelcatalog_etl_process_contract" */
+  update_modelcatalog_etl_process_contract?: Maybe<Modelcatalog_Etl_Process_Contract_Mutation_Response>;
+  /** update single row of the table: "modelcatalog_etl_process_contract" */
+  update_modelcatalog_etl_process_contract_by_pk?: Maybe<Modelcatalog_Etl_Process_Contract>;
+  /** update multiples rows of table: "modelcatalog_etl_process_contract" */
+  update_modelcatalog_etl_process_contract_many?: Maybe<Array<Maybe<Modelcatalog_Etl_Process_Contract_Mutation_Response>>>;
+  /** update multiples rows of table: "modelcatalog_etl_process" */
+  update_modelcatalog_etl_process_many?: Maybe<Array<Maybe<Modelcatalog_Etl_Process_Mutation_Response>>>;
   /** update data of the table: "modelcatalog_grid" */
   update_modelcatalog_grid?: Maybe<Modelcatalog_Grid_Mutation_Response>;
   /** update single row of the table: "modelcatalog_grid" */
@@ -12349,6 +17198,12 @@ export type Mutation_Root = {
   update_region_category_tree_by_pk?: Maybe<Region_Category_Tree>;
   /** update multiples rows of table: "region_category_tree" */
   update_region_category_tree_many?: Maybe<Array<Maybe<Region_Category_Tree_Mutation_Response>>>;
+  /** update data of the table: "region_curator" */
+  update_region_curator?: Maybe<Region_Curator_Mutation_Response>;
+  /** update single row of the table: "region_curator" */
+  update_region_curator_by_pk?: Maybe<Region_Curator>;
+  /** update multiples rows of table: "region_curator" */
+  update_region_curator_many?: Maybe<Array<Maybe<Region_Curator_Mutation_Response>>>;
   /** update data of the table: "region_geometry" */
   update_region_geometry?: Maybe<Region_Geometry_Mutation_Response>;
   /** update single row of the table: "region_geometry" */
@@ -12387,6 +17242,12 @@ export type Mutation_Root = {
   update_task_provenance_many?: Maybe<Array<Maybe<Task_Provenance_Mutation_Response>>>;
   /** update data of the table: "thread" */
   update_thread?: Maybe<Thread_Mutation_Response>;
+  /** update data of the table: "thread_adapter_plan" */
+  update_thread_adapter_plan?: Maybe<Thread_Adapter_Plan_Mutation_Response>;
+  /** update single row of the table: "thread_adapter_plan" */
+  update_thread_adapter_plan_by_pk?: Maybe<Thread_Adapter_Plan>;
+  /** update multiples rows of table: "thread_adapter_plan" */
+  update_thread_adapter_plan_many?: Maybe<Array<Maybe<Thread_Adapter_Plan_Mutation_Response>>>;
   /** update single row of the table: "thread" */
   update_thread_by_pk?: Maybe<Thread>;
   /** update data of the table: "thread_data" */
@@ -12439,6 +17300,18 @@ export type Mutation_Root = {
   update_thread_provenance_by_pk?: Maybe<Thread_Provenance>;
   /** update multiples rows of table: "thread_provenance" */
   update_thread_provenance_many?: Maybe<Array<Maybe<Thread_Provenance_Mutation_Response>>>;
+  /** update data of the table: "unified_execution" */
+  update_unified_execution?: Maybe<Unified_Execution_Mutation_Response>;
+  /** update single row of the table: "unified_execution" */
+  update_unified_execution_by_pk?: Maybe<Unified_Execution>;
+  /** update multiples rows of table: "unified_execution" */
+  update_unified_execution_many?: Maybe<Array<Maybe<Unified_Execution_Mutation_Response>>>;
+  /** update data of the table: "unified_execution_step" */
+  update_unified_execution_step?: Maybe<Unified_Execution_Step_Mutation_Response>;
+  /** update single row of the table: "unified_execution_step" */
+  update_unified_execution_step_by_pk?: Maybe<Unified_Execution_Step>;
+  /** update multiples rows of table: "unified_execution_step" */
+  update_unified_execution_step_many?: Maybe<Array<Maybe<Unified_Execution_Step_Mutation_Response>>>;
   /** update data of the table: "variable" */
   update_variable?: Maybe<Variable_Mutation_Response>;
   /** update single row of the table: "variable" */
@@ -12451,6 +17324,138 @@ export type Mutation_Root = {
   update_variable_category_many?: Maybe<Array<Maybe<Variable_Category_Mutation_Response>>>;
   /** update multiples rows of table: "variable" */
   update_variable_many?: Maybe<Array<Maybe<Variable_Mutation_Response>>>;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Data_ObjectArgs = {
+  where: Adapter_Data_Object_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Data_Object_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Data_Object_VariableArgs = {
+  where: Adapter_Data_Object_Variable_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Data_Object_Variable_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Provenance_EventArgs = {
+  where: Adapter_Provenance_Event_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Provenance_Event_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Readiness_AssessmentArgs = {
+  where: Adapter_Readiness_Assessment_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Readiness_Assessment_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_SecretArgs = {
+  where: Adapter_Secret_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Secret_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Secret_EventArgs = {
+  where: Adapter_Secret_Event_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Secret_Event_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Transform_ContractArgs = {
+  where: Adapter_Transform_Contract_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Transform_Contract_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Transform_EdgeArgs = {
+  where: Adapter_Transform_Edge_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Transform_Edge_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Transform_SpecArgs = {
+  where: Adapter_Transform_Spec_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Transform_Spec_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Workflow_PlanArgs = {
+  where: Adapter_Workflow_Plan_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Workflow_Plan_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Workflow_RunArgs = {
+  where: Adapter_Workflow_Run_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Adapter_Workflow_Run_By_PkArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -12783,6 +17788,32 @@ export type Mutation_RootDelete_Modelcatalog_Diagram_PartArgs = {
 export type Mutation_RootDelete_Modelcatalog_Diagram_Part_By_PkArgs = {
   causal_diagram_id: Scalars['String']['input'];
   part_id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Modelcatalog_Etl_ProcessArgs = {
+  where: Modelcatalog_Etl_Process_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Modelcatalog_Etl_Process_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Modelcatalog_Etl_Process_ContractArgs = {
+  where: Modelcatalog_Etl_Process_Contract_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Modelcatalog_Etl_Process_Contract_By_PkArgs = {
+  etl_process_id: Scalars['String']['input'];
+  position: Scalars['Int']['input'];
+  role: Scalars['String']['input'];
 };
 
 
@@ -13186,6 +18217,19 @@ export type Mutation_RootDelete_Region_Category_Tree_By_PkArgs = {
 
 
 /** mutation root */
+export type Mutation_RootDelete_Region_CuratorArgs = {
+  where: Region_Curator_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Region_Curator_By_PkArgs = {
+  tenant_id: Scalars['String']['input'];
+  username: Scalars['String']['input'];
+};
+
+
+/** mutation root */
 export type Mutation_RootDelete_Region_GeometryArgs = {
   where: Region_Geometry_Bool_Exp;
 };
@@ -13257,6 +18301,18 @@ export type Mutation_RootDelete_Task_Provenance_By_PkArgs = {
 /** mutation root */
 export type Mutation_RootDelete_ThreadArgs = {
   where: Thread_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Thread_Adapter_PlanArgs = {
+  where: Thread_Adapter_Plan_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Thread_Adapter_Plan_By_PkArgs = {
+  id: Scalars['uuid']['input'];
 };
 
 
@@ -13372,6 +18428,30 @@ export type Mutation_RootDelete_Thread_Provenance_By_PkArgs = {
 
 
 /** mutation root */
+export type Mutation_RootDelete_Unified_ExecutionArgs = {
+  where: Unified_Execution_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Unified_Execution_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Unified_Execution_StepArgs = {
+  where: Unified_Execution_Step_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootDelete_Unified_Execution_Step_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+/** mutation root */
 export type Mutation_RootDelete_VariableArgs = {
   where: Variable_Bool_Exp;
 };
@@ -13393,6 +18473,160 @@ export type Mutation_RootDelete_Variable_CategoryArgs = {
 export type Mutation_RootDelete_Variable_Category_By_PkArgs = {
   category: Scalars['String']['input'];
   variable_id: Scalars['String']['input'];
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Data_ObjectArgs = {
+  objects: Array<Adapter_Data_Object_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Data_Object_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Data_Object_OneArgs = {
+  object: Adapter_Data_Object_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Data_Object_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Data_Object_VariableArgs = {
+  objects: Array<Adapter_Data_Object_Variable_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Data_Object_Variable_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Data_Object_Variable_OneArgs = {
+  object: Adapter_Data_Object_Variable_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Data_Object_Variable_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Provenance_EventArgs = {
+  objects: Array<Adapter_Provenance_Event_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Provenance_Event_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Provenance_Event_OneArgs = {
+  object: Adapter_Provenance_Event_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Provenance_Event_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Readiness_AssessmentArgs = {
+  objects: Array<Adapter_Readiness_Assessment_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Readiness_Assessment_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Readiness_Assessment_OneArgs = {
+  object: Adapter_Readiness_Assessment_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Readiness_Assessment_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_SecretArgs = {
+  objects: Array<Adapter_Secret_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Secret_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Secret_EventArgs = {
+  objects: Array<Adapter_Secret_Event_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Secret_Event_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Secret_Event_OneArgs = {
+  object: Adapter_Secret_Event_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Secret_Event_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Secret_OneArgs = {
+  object: Adapter_Secret_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Secret_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Transform_ContractArgs = {
+  objects: Array<Adapter_Transform_Contract_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Transform_Contract_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Transform_Contract_OneArgs = {
+  object: Adapter_Transform_Contract_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Transform_Contract_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Transform_EdgeArgs = {
+  objects: Array<Adapter_Transform_Edge_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Transform_Edge_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Transform_Edge_OneArgs = {
+  object: Adapter_Transform_Edge_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Transform_Edge_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Transform_SpecArgs = {
+  objects: Array<Adapter_Transform_Spec_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Transform_Spec_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Transform_Spec_OneArgs = {
+  object: Adapter_Transform_Spec_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Transform_Spec_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Workflow_PlanArgs = {
+  objects: Array<Adapter_Workflow_Plan_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Workflow_Plan_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Workflow_Plan_OneArgs = {
+  object: Adapter_Workflow_Plan_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Workflow_Plan_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Workflow_RunArgs = {
+  objects: Array<Adapter_Workflow_Run_Insert_Input>;
+  on_conflict?: InputMaybe<Adapter_Workflow_Run_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Adapter_Workflow_Run_OneArgs = {
+  object: Adapter_Workflow_Run_Insert_Input;
+  on_conflict?: InputMaybe<Adapter_Workflow_Run_On_Conflict>;
 };
 
 
@@ -13757,6 +18991,34 @@ export type Mutation_RootInsert_Modelcatalog_Diagram_PartArgs = {
 export type Mutation_RootInsert_Modelcatalog_Diagram_Part_OneArgs = {
   object: Modelcatalog_Diagram_Part_Insert_Input;
   on_conflict?: InputMaybe<Modelcatalog_Diagram_Part_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Modelcatalog_Etl_ProcessArgs = {
+  objects: Array<Modelcatalog_Etl_Process_Insert_Input>;
+  on_conflict?: InputMaybe<Modelcatalog_Etl_Process_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Modelcatalog_Etl_Process_ContractArgs = {
+  objects: Array<Modelcatalog_Etl_Process_Contract_Insert_Input>;
+  on_conflict?: InputMaybe<Modelcatalog_Etl_Process_Contract_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Modelcatalog_Etl_Process_Contract_OneArgs = {
+  object: Modelcatalog_Etl_Process_Contract_Insert_Input;
+  on_conflict?: InputMaybe<Modelcatalog_Etl_Process_Contract_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Modelcatalog_Etl_Process_OneArgs = {
+  object: Modelcatalog_Etl_Process_Insert_Input;
+  on_conflict?: InputMaybe<Modelcatalog_Etl_Process_On_Conflict>;
 };
 
 
@@ -14202,6 +19464,20 @@ export type Mutation_RootInsert_Region_Category_Tree_OneArgs = {
 
 
 /** mutation root */
+export type Mutation_RootInsert_Region_CuratorArgs = {
+  objects: Array<Region_Curator_Insert_Input>;
+  on_conflict?: InputMaybe<Region_Curator_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Region_Curator_OneArgs = {
+  object: Region_Curator_Insert_Input;
+  on_conflict?: InputMaybe<Region_Curator_On_Conflict>;
+};
+
+
+/** mutation root */
 export type Mutation_RootInsert_Region_GeometryArgs = {
   objects: Array<Region_Geometry_Insert_Input>;
   on_conflict?: InputMaybe<Region_Geometry_On_Conflict>;
@@ -14294,6 +19570,20 @@ export type Mutation_RootInsert_Task_Provenance_OneArgs = {
 export type Mutation_RootInsert_ThreadArgs = {
   objects: Array<Thread_Insert_Input>;
   on_conflict?: InputMaybe<Thread_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Thread_Adapter_PlanArgs = {
+  objects: Array<Thread_Adapter_Plan_Insert_Input>;
+  on_conflict?: InputMaybe<Thread_Adapter_Plan_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Thread_Adapter_Plan_OneArgs = {
+  object: Thread_Adapter_Plan_Insert_Input;
+  on_conflict?: InputMaybe<Thread_Adapter_Plan_On_Conflict>;
 };
 
 
@@ -14417,6 +19707,34 @@ export type Mutation_RootInsert_Thread_Provenance_OneArgs = {
 
 
 /** mutation root */
+export type Mutation_RootInsert_Unified_ExecutionArgs = {
+  objects: Array<Unified_Execution_Insert_Input>;
+  on_conflict?: InputMaybe<Unified_Execution_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Unified_Execution_OneArgs = {
+  object: Unified_Execution_Insert_Input;
+  on_conflict?: InputMaybe<Unified_Execution_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Unified_Execution_StepArgs = {
+  objects: Array<Unified_Execution_Step_Insert_Input>;
+  on_conflict?: InputMaybe<Unified_Execution_Step_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootInsert_Unified_Execution_Step_OneArgs = {
+  object: Unified_Execution_Step_Insert_Input;
+  on_conflict?: InputMaybe<Unified_Execution_Step_On_Conflict>;
+};
+
+
+/** mutation root */
 export type Mutation_RootInsert_VariableArgs = {
   objects: Array<Variable_Insert_Input>;
   on_conflict?: InputMaybe<Variable_On_Conflict>;
@@ -14441,6 +19759,312 @@ export type Mutation_RootInsert_Variable_Category_OneArgs = {
 export type Mutation_RootInsert_Variable_OneArgs = {
   object: Variable_Insert_Input;
   on_conflict?: InputMaybe<Variable_On_Conflict>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Data_ObjectArgs = {
+  _set?: InputMaybe<Adapter_Data_Object_Set_Input>;
+  where: Adapter_Data_Object_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Data_Object_By_PkArgs = {
+  _set?: InputMaybe<Adapter_Data_Object_Set_Input>;
+  pk_columns: Adapter_Data_Object_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Data_Object_ManyArgs = {
+  updates: Array<Adapter_Data_Object_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Data_Object_VariableArgs = {
+  _append?: InputMaybe<Adapter_Data_Object_Variable_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Data_Object_Variable_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Data_Object_Variable_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Data_Object_Variable_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Data_Object_Variable_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Data_Object_Variable_Set_Input>;
+  where: Adapter_Data_Object_Variable_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Data_Object_Variable_By_PkArgs = {
+  _append?: InputMaybe<Adapter_Data_Object_Variable_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Data_Object_Variable_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Data_Object_Variable_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Data_Object_Variable_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Data_Object_Variable_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Data_Object_Variable_Set_Input>;
+  pk_columns: Adapter_Data_Object_Variable_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Data_Object_Variable_ManyArgs = {
+  updates: Array<Adapter_Data_Object_Variable_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Provenance_EventArgs = {
+  _append?: InputMaybe<Adapter_Provenance_Event_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Provenance_Event_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Provenance_Event_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Provenance_Event_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Provenance_Event_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Provenance_Event_Set_Input>;
+  where: Adapter_Provenance_Event_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Provenance_Event_By_PkArgs = {
+  _append?: InputMaybe<Adapter_Provenance_Event_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Provenance_Event_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Provenance_Event_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Provenance_Event_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Provenance_Event_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Provenance_Event_Set_Input>;
+  pk_columns: Adapter_Provenance_Event_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Provenance_Event_ManyArgs = {
+  updates: Array<Adapter_Provenance_Event_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Readiness_AssessmentArgs = {
+  _append?: InputMaybe<Adapter_Readiness_Assessment_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Readiness_Assessment_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Readiness_Assessment_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Readiness_Assessment_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Readiness_Assessment_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Readiness_Assessment_Set_Input>;
+  where: Adapter_Readiness_Assessment_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Readiness_Assessment_By_PkArgs = {
+  _append?: InputMaybe<Adapter_Readiness_Assessment_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Readiness_Assessment_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Readiness_Assessment_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Readiness_Assessment_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Readiness_Assessment_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Readiness_Assessment_Set_Input>;
+  pk_columns: Adapter_Readiness_Assessment_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Readiness_Assessment_ManyArgs = {
+  updates: Array<Adapter_Readiness_Assessment_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_SecretArgs = {
+  _inc?: InputMaybe<Adapter_Secret_Inc_Input>;
+  _set?: InputMaybe<Adapter_Secret_Set_Input>;
+  where: Adapter_Secret_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Secret_By_PkArgs = {
+  _inc?: InputMaybe<Adapter_Secret_Inc_Input>;
+  _set?: InputMaybe<Adapter_Secret_Set_Input>;
+  pk_columns: Adapter_Secret_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Secret_EventArgs = {
+  _inc?: InputMaybe<Adapter_Secret_Event_Inc_Input>;
+  _set?: InputMaybe<Adapter_Secret_Event_Set_Input>;
+  where: Adapter_Secret_Event_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Secret_Event_By_PkArgs = {
+  _inc?: InputMaybe<Adapter_Secret_Event_Inc_Input>;
+  _set?: InputMaybe<Adapter_Secret_Event_Set_Input>;
+  pk_columns: Adapter_Secret_Event_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Secret_Event_ManyArgs = {
+  updates: Array<Adapter_Secret_Event_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Secret_ManyArgs = {
+  updates: Array<Adapter_Secret_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Transform_ContractArgs = {
+  _append?: InputMaybe<Adapter_Transform_Contract_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Transform_Contract_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Transform_Contract_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Transform_Contract_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Transform_Contract_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Transform_Contract_Set_Input>;
+  where: Adapter_Transform_Contract_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Transform_Contract_By_PkArgs = {
+  _append?: InputMaybe<Adapter_Transform_Contract_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Transform_Contract_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Transform_Contract_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Transform_Contract_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Transform_Contract_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Transform_Contract_Set_Input>;
+  pk_columns: Adapter_Transform_Contract_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Transform_Contract_ManyArgs = {
+  updates: Array<Adapter_Transform_Contract_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Transform_EdgeArgs = {
+  _append?: InputMaybe<Adapter_Transform_Edge_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Transform_Edge_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Transform_Edge_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Transform_Edge_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Transform_Edge_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Transform_Edge_Set_Input>;
+  where: Adapter_Transform_Edge_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Transform_Edge_By_PkArgs = {
+  _append?: InputMaybe<Adapter_Transform_Edge_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Transform_Edge_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Transform_Edge_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Transform_Edge_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Transform_Edge_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Transform_Edge_Set_Input>;
+  pk_columns: Adapter_Transform_Edge_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Transform_Edge_ManyArgs = {
+  updates: Array<Adapter_Transform_Edge_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Transform_SpecArgs = {
+  _append?: InputMaybe<Adapter_Transform_Spec_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Transform_Spec_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Transform_Spec_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Transform_Spec_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Transform_Spec_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Transform_Spec_Set_Input>;
+  where: Adapter_Transform_Spec_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Transform_Spec_By_PkArgs = {
+  _append?: InputMaybe<Adapter_Transform_Spec_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Transform_Spec_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Transform_Spec_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Transform_Spec_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Transform_Spec_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Transform_Spec_Set_Input>;
+  pk_columns: Adapter_Transform_Spec_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Transform_Spec_ManyArgs = {
+  updates: Array<Adapter_Transform_Spec_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Workflow_PlanArgs = {
+  _append?: InputMaybe<Adapter_Workflow_Plan_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Workflow_Plan_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Workflow_Plan_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Workflow_Plan_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Workflow_Plan_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Workflow_Plan_Set_Input>;
+  where: Adapter_Workflow_Plan_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Workflow_Plan_By_PkArgs = {
+  _append?: InputMaybe<Adapter_Workflow_Plan_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Workflow_Plan_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Workflow_Plan_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Workflow_Plan_Delete_Key_Input>;
+  _prepend?: InputMaybe<Adapter_Workflow_Plan_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Workflow_Plan_Set_Input>;
+  pk_columns: Adapter_Workflow_Plan_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Workflow_Plan_ManyArgs = {
+  updates: Array<Adapter_Workflow_Plan_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Workflow_RunArgs = {
+  _append?: InputMaybe<Adapter_Workflow_Run_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Workflow_Run_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Workflow_Run_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Workflow_Run_Delete_Key_Input>;
+  _inc?: InputMaybe<Adapter_Workflow_Run_Inc_Input>;
+  _prepend?: InputMaybe<Adapter_Workflow_Run_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Workflow_Run_Set_Input>;
+  where: Adapter_Workflow_Run_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Workflow_Run_By_PkArgs = {
+  _append?: InputMaybe<Adapter_Workflow_Run_Append_Input>;
+  _delete_at_path?: InputMaybe<Adapter_Workflow_Run_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Adapter_Workflow_Run_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Adapter_Workflow_Run_Delete_Key_Input>;
+  _inc?: InputMaybe<Adapter_Workflow_Run_Inc_Input>;
+  _prepend?: InputMaybe<Adapter_Workflow_Run_Prepend_Input>;
+  _set?: InputMaybe<Adapter_Workflow_Run_Set_Input>;
+  pk_columns: Adapter_Workflow_Run_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Adapter_Workflow_Run_ManyArgs = {
+  updates: Array<Adapter_Workflow_Run_Updates>;
 };
 
 
@@ -14967,6 +20591,68 @@ export type Mutation_RootUpdate_Modelcatalog_Diagram_Part_By_PkArgs = {
 /** mutation root */
 export type Mutation_RootUpdate_Modelcatalog_Diagram_Part_ManyArgs = {
   updates: Array<Modelcatalog_Diagram_Part_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Modelcatalog_Etl_ProcessArgs = {
+  _append?: InputMaybe<Modelcatalog_Etl_Process_Append_Input>;
+  _delete_at_path?: InputMaybe<Modelcatalog_Etl_Process_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Modelcatalog_Etl_Process_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Modelcatalog_Etl_Process_Delete_Key_Input>;
+  _prepend?: InputMaybe<Modelcatalog_Etl_Process_Prepend_Input>;
+  _set?: InputMaybe<Modelcatalog_Etl_Process_Set_Input>;
+  where: Modelcatalog_Etl_Process_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Modelcatalog_Etl_Process_By_PkArgs = {
+  _append?: InputMaybe<Modelcatalog_Etl_Process_Append_Input>;
+  _delete_at_path?: InputMaybe<Modelcatalog_Etl_Process_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Modelcatalog_Etl_Process_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Modelcatalog_Etl_Process_Delete_Key_Input>;
+  _prepend?: InputMaybe<Modelcatalog_Etl_Process_Prepend_Input>;
+  _set?: InputMaybe<Modelcatalog_Etl_Process_Set_Input>;
+  pk_columns: Modelcatalog_Etl_Process_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Modelcatalog_Etl_Process_ContractArgs = {
+  _append?: InputMaybe<Modelcatalog_Etl_Process_Contract_Append_Input>;
+  _delete_at_path?: InputMaybe<Modelcatalog_Etl_Process_Contract_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Modelcatalog_Etl_Process_Contract_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Modelcatalog_Etl_Process_Contract_Delete_Key_Input>;
+  _inc?: InputMaybe<Modelcatalog_Etl_Process_Contract_Inc_Input>;
+  _prepend?: InputMaybe<Modelcatalog_Etl_Process_Contract_Prepend_Input>;
+  _set?: InputMaybe<Modelcatalog_Etl_Process_Contract_Set_Input>;
+  where: Modelcatalog_Etl_Process_Contract_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Modelcatalog_Etl_Process_Contract_By_PkArgs = {
+  _append?: InputMaybe<Modelcatalog_Etl_Process_Contract_Append_Input>;
+  _delete_at_path?: InputMaybe<Modelcatalog_Etl_Process_Contract_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Modelcatalog_Etl_Process_Contract_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Modelcatalog_Etl_Process_Contract_Delete_Key_Input>;
+  _inc?: InputMaybe<Modelcatalog_Etl_Process_Contract_Inc_Input>;
+  _prepend?: InputMaybe<Modelcatalog_Etl_Process_Contract_Prepend_Input>;
+  _set?: InputMaybe<Modelcatalog_Etl_Process_Contract_Set_Input>;
+  pk_columns: Modelcatalog_Etl_Process_Contract_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Modelcatalog_Etl_Process_Contract_ManyArgs = {
+  updates: Array<Modelcatalog_Etl_Process_Contract_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Modelcatalog_Etl_Process_ManyArgs = {
+  updates: Array<Modelcatalog_Etl_Process_Updates>;
 };
 
 
@@ -15609,6 +21295,26 @@ export type Mutation_RootUpdate_Region_Category_Tree_ManyArgs = {
 
 
 /** mutation root */
+export type Mutation_RootUpdate_Region_CuratorArgs = {
+  _set?: InputMaybe<Region_Curator_Set_Input>;
+  where: Region_Curator_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Region_Curator_By_PkArgs = {
+  _set?: InputMaybe<Region_Curator_Set_Input>;
+  pk_columns: Region_Curator_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Region_Curator_ManyArgs = {
+  updates: Array<Region_Curator_Updates>;
+};
+
+
+/** mutation root */
 export type Mutation_RootUpdate_Region_GeometryArgs = {
   _inc?: InputMaybe<Region_Geometry_Inc_Input>;
   _set?: InputMaybe<Region_Geometry_Set_Input>;
@@ -15733,6 +21439,38 @@ export type Mutation_RootUpdate_Task_Provenance_ManyArgs = {
 export type Mutation_RootUpdate_ThreadArgs = {
   _set?: InputMaybe<Thread_Set_Input>;
   where: Thread_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Thread_Adapter_PlanArgs = {
+  _append?: InputMaybe<Thread_Adapter_Plan_Append_Input>;
+  _delete_at_path?: InputMaybe<Thread_Adapter_Plan_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Thread_Adapter_Plan_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Thread_Adapter_Plan_Delete_Key_Input>;
+  _inc?: InputMaybe<Thread_Adapter_Plan_Inc_Input>;
+  _prepend?: InputMaybe<Thread_Adapter_Plan_Prepend_Input>;
+  _set?: InputMaybe<Thread_Adapter_Plan_Set_Input>;
+  where: Thread_Adapter_Plan_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Thread_Adapter_Plan_By_PkArgs = {
+  _append?: InputMaybe<Thread_Adapter_Plan_Append_Input>;
+  _delete_at_path?: InputMaybe<Thread_Adapter_Plan_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Thread_Adapter_Plan_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Thread_Adapter_Plan_Delete_Key_Input>;
+  _inc?: InputMaybe<Thread_Adapter_Plan_Inc_Input>;
+  _prepend?: InputMaybe<Thread_Adapter_Plan_Prepend_Input>;
+  _set?: InputMaybe<Thread_Adapter_Plan_Set_Input>;
+  pk_columns: Thread_Adapter_Plan_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Thread_Adapter_Plan_ManyArgs = {
+  updates: Array<Thread_Adapter_Plan_Updates>;
 };
 
 
@@ -15908,6 +21646,70 @@ export type Mutation_RootUpdate_Thread_Provenance_By_PkArgs = {
 /** mutation root */
 export type Mutation_RootUpdate_Thread_Provenance_ManyArgs = {
   updates: Array<Thread_Provenance_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Unified_ExecutionArgs = {
+  _append?: InputMaybe<Unified_Execution_Append_Input>;
+  _delete_at_path?: InputMaybe<Unified_Execution_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Unified_Execution_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Unified_Execution_Delete_Key_Input>;
+  _inc?: InputMaybe<Unified_Execution_Inc_Input>;
+  _prepend?: InputMaybe<Unified_Execution_Prepend_Input>;
+  _set?: InputMaybe<Unified_Execution_Set_Input>;
+  where: Unified_Execution_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Unified_Execution_By_PkArgs = {
+  _append?: InputMaybe<Unified_Execution_Append_Input>;
+  _delete_at_path?: InputMaybe<Unified_Execution_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Unified_Execution_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Unified_Execution_Delete_Key_Input>;
+  _inc?: InputMaybe<Unified_Execution_Inc_Input>;
+  _prepend?: InputMaybe<Unified_Execution_Prepend_Input>;
+  _set?: InputMaybe<Unified_Execution_Set_Input>;
+  pk_columns: Unified_Execution_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Unified_Execution_ManyArgs = {
+  updates: Array<Unified_Execution_Updates>;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Unified_Execution_StepArgs = {
+  _append?: InputMaybe<Unified_Execution_Step_Append_Input>;
+  _delete_at_path?: InputMaybe<Unified_Execution_Step_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Unified_Execution_Step_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Unified_Execution_Step_Delete_Key_Input>;
+  _inc?: InputMaybe<Unified_Execution_Step_Inc_Input>;
+  _prepend?: InputMaybe<Unified_Execution_Step_Prepend_Input>;
+  _set?: InputMaybe<Unified_Execution_Step_Set_Input>;
+  where: Unified_Execution_Step_Bool_Exp;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Unified_Execution_Step_By_PkArgs = {
+  _append?: InputMaybe<Unified_Execution_Step_Append_Input>;
+  _delete_at_path?: InputMaybe<Unified_Execution_Step_Delete_At_Path_Input>;
+  _delete_elem?: InputMaybe<Unified_Execution_Step_Delete_Elem_Input>;
+  _delete_key?: InputMaybe<Unified_Execution_Step_Delete_Key_Input>;
+  _inc?: InputMaybe<Unified_Execution_Step_Inc_Input>;
+  _prepend?: InputMaybe<Unified_Execution_Step_Prepend_Input>;
+  _set?: InputMaybe<Unified_Execution_Step_Set_Input>;
+  pk_columns: Unified_Execution_Step_Pk_Columns_Input;
+};
+
+
+/** mutation root */
+export type Mutation_RootUpdate_Unified_Execution_Step_ManyArgs = {
+  updates: Array<Unified_Execution_Step_Updates>;
 };
 
 
@@ -16800,6 +22602,72 @@ export type Profile_Variance_Fields = {
 
 export type Query_Root = {
   __typename?: 'query_root';
+  /** fetch data from the table: "adapter.data_object" */
+  adapter_data_object: Array<Adapter_Data_Object>;
+  /** fetch aggregated fields from the table: "adapter.data_object" */
+  adapter_data_object_aggregate: Adapter_Data_Object_Aggregate;
+  /** fetch data from the table: "adapter.data_object" using primary key columns */
+  adapter_data_object_by_pk?: Maybe<Adapter_Data_Object>;
+  /** fetch data from the table: "adapter.data_object_variable" */
+  adapter_data_object_variable: Array<Adapter_Data_Object_Variable>;
+  /** fetch aggregated fields from the table: "adapter.data_object_variable" */
+  adapter_data_object_variable_aggregate: Adapter_Data_Object_Variable_Aggregate;
+  /** fetch data from the table: "adapter.data_object_variable" using primary key columns */
+  adapter_data_object_variable_by_pk?: Maybe<Adapter_Data_Object_Variable>;
+  /** fetch data from the table: "adapter.provenance_event" */
+  adapter_provenance_event: Array<Adapter_Provenance_Event>;
+  /** fetch aggregated fields from the table: "adapter.provenance_event" */
+  adapter_provenance_event_aggregate: Adapter_Provenance_Event_Aggregate;
+  /** fetch data from the table: "adapter.provenance_event" using primary key columns */
+  adapter_provenance_event_by_pk?: Maybe<Adapter_Provenance_Event>;
+  /** fetch data from the table: "adapter.readiness_assessment" */
+  adapter_readiness_assessment: Array<Adapter_Readiness_Assessment>;
+  /** fetch aggregated fields from the table: "adapter.readiness_assessment" */
+  adapter_readiness_assessment_aggregate: Adapter_Readiness_Assessment_Aggregate;
+  /** fetch data from the table: "adapter.readiness_assessment" using primary key columns */
+  adapter_readiness_assessment_by_pk?: Maybe<Adapter_Readiness_Assessment>;
+  /** fetch data from the table: "adapter.secret" */
+  adapter_secret: Array<Adapter_Secret>;
+  /** fetch aggregated fields from the table: "adapter.secret" */
+  adapter_secret_aggregate: Adapter_Secret_Aggregate;
+  /** fetch data from the table: "adapter.secret" using primary key columns */
+  adapter_secret_by_pk?: Maybe<Adapter_Secret>;
+  /** fetch data from the table: "adapter.secret_event" */
+  adapter_secret_event: Array<Adapter_Secret_Event>;
+  /** fetch aggregated fields from the table: "adapter.secret_event" */
+  adapter_secret_event_aggregate: Adapter_Secret_Event_Aggregate;
+  /** fetch data from the table: "adapter.secret_event" using primary key columns */
+  adapter_secret_event_by_pk?: Maybe<Adapter_Secret_Event>;
+  /** fetch data from the table: "adapter.transform_contract" */
+  adapter_transform_contract: Array<Adapter_Transform_Contract>;
+  /** fetch aggregated fields from the table: "adapter.transform_contract" */
+  adapter_transform_contract_aggregate: Adapter_Transform_Contract_Aggregate;
+  /** fetch data from the table: "adapter.transform_contract" using primary key columns */
+  adapter_transform_contract_by_pk?: Maybe<Adapter_Transform_Contract>;
+  /** fetch data from the table: "adapter.transform_edge" */
+  adapter_transform_edge: Array<Adapter_Transform_Edge>;
+  /** fetch aggregated fields from the table: "adapter.transform_edge" */
+  adapter_transform_edge_aggregate: Adapter_Transform_Edge_Aggregate;
+  /** fetch data from the table: "adapter.transform_edge" using primary key columns */
+  adapter_transform_edge_by_pk?: Maybe<Adapter_Transform_Edge>;
+  /** fetch data from the table: "adapter.transform_spec" */
+  adapter_transform_spec: Array<Adapter_Transform_Spec>;
+  /** fetch aggregated fields from the table: "adapter.transform_spec" */
+  adapter_transform_spec_aggregate: Adapter_Transform_Spec_Aggregate;
+  /** fetch data from the table: "adapter.transform_spec" using primary key columns */
+  adapter_transform_spec_by_pk?: Maybe<Adapter_Transform_Spec>;
+  /** fetch data from the table: "adapter.workflow_plan" */
+  adapter_workflow_plan: Array<Adapter_Workflow_Plan>;
+  /** fetch aggregated fields from the table: "adapter.workflow_plan" */
+  adapter_workflow_plan_aggregate: Adapter_Workflow_Plan_Aggregate;
+  /** fetch data from the table: "adapter.workflow_plan" using primary key columns */
+  adapter_workflow_plan_by_pk?: Maybe<Adapter_Workflow_Plan>;
+  /** fetch data from the table: "adapter.workflow_run" */
+  adapter_workflow_run: Array<Adapter_Workflow_Run>;
+  /** fetch aggregated fields from the table: "adapter.workflow_run" */
+  adapter_workflow_run_aggregate: Adapter_Workflow_Run_Aggregate;
+  /** fetch data from the table: "adapter.workflow_run" using primary key columns */
+  adapter_workflow_run_by_pk?: Maybe<Adapter_Workflow_Run>;
   /** fetch data from the table: "dataset" */
   dataset: Array<Dataset>;
   /** fetch aggregated fields from the table: "dataset" */
@@ -16964,6 +22832,18 @@ export type Query_Root = {
   modelcatalog_diagram_part_aggregate: Modelcatalog_Diagram_Part_Aggregate;
   /** fetch data from the table: "modelcatalog_diagram_part" using primary key columns */
   modelcatalog_diagram_part_by_pk?: Maybe<Modelcatalog_Diagram_Part>;
+  /** fetch data from the table: "modelcatalog_etl_process" */
+  modelcatalog_etl_process: Array<Modelcatalog_Etl_Process>;
+  /** fetch aggregated fields from the table: "modelcatalog_etl_process" */
+  modelcatalog_etl_process_aggregate: Modelcatalog_Etl_Process_Aggregate;
+  /** fetch data from the table: "modelcatalog_etl_process" using primary key columns */
+  modelcatalog_etl_process_by_pk?: Maybe<Modelcatalog_Etl_Process>;
+  /** fetch data from the table: "modelcatalog_etl_process_contract" */
+  modelcatalog_etl_process_contract: Array<Modelcatalog_Etl_Process_Contract>;
+  /** fetch aggregated fields from the table: "modelcatalog_etl_process_contract" */
+  modelcatalog_etl_process_contract_aggregate: Modelcatalog_Etl_Process_Contract_Aggregate;
+  /** fetch data from the table: "modelcatalog_etl_process_contract" using primary key columns */
+  modelcatalog_etl_process_contract_by_pk?: Maybe<Modelcatalog_Etl_Process_Contract>;
   /** fetch data from the table: "modelcatalog_grid" */
   modelcatalog_grid: Array<Modelcatalog_Grid>;
   /** fetch aggregated fields from the table: "modelcatalog_grid" */
@@ -17156,6 +23036,12 @@ export type Query_Root = {
   region_category_tree_aggregate: Region_Category_Tree_Aggregate;
   /** fetch data from the table: "region_category_tree" using primary key columns */
   region_category_tree_by_pk?: Maybe<Region_Category_Tree>;
+  /** fetch data from the table: "region_curator" */
+  region_curator: Array<Region_Curator>;
+  /** fetch aggregated fields from the table: "region_curator" */
+  region_curator_aggregate: Region_Curator_Aggregate;
+  /** fetch data from the table: "region_curator" using primary key columns */
+  region_curator_by_pk?: Maybe<Region_Curator>;
   /** fetch data from the table: "region_geometry" */
   region_geometry: Array<Region_Geometry>;
   /** fetch aggregated fields from the table: "region_geometry" */
@@ -17192,6 +23078,12 @@ export type Query_Root = {
   task_provenance_by_pk?: Maybe<Task_Provenance>;
   /** fetch data from the table: "thread" */
   thread: Array<Thread>;
+  /** fetch data from the table: "thread_adapter_plan" */
+  thread_adapter_plan: Array<Thread_Adapter_Plan>;
+  /** fetch aggregated fields from the table: "thread_adapter_plan" */
+  thread_adapter_plan_aggregate: Thread_Adapter_Plan_Aggregate;
+  /** fetch data from the table: "thread_adapter_plan" using primary key columns */
+  thread_adapter_plan_by_pk?: Maybe<Thread_Adapter_Plan>;
   /** fetch aggregated fields from the table: "thread" */
   thread_aggregate: Thread_Aggregate;
   /** fetch data from the table: "thread" using primary key columns */
@@ -17244,6 +23136,18 @@ export type Query_Root = {
   thread_provenance_aggregate: Thread_Provenance_Aggregate;
   /** fetch data from the table: "thread_provenance" using primary key columns */
   thread_provenance_by_pk?: Maybe<Thread_Provenance>;
+  /** fetch data from the table: "unified_execution" */
+  unified_execution: Array<Unified_Execution>;
+  /** fetch aggregated fields from the table: "unified_execution" */
+  unified_execution_aggregate: Unified_Execution_Aggregate;
+  /** fetch data from the table: "unified_execution" using primary key columns */
+  unified_execution_by_pk?: Maybe<Unified_Execution>;
+  /** fetch data from the table: "unified_execution_step" */
+  unified_execution_step: Array<Unified_Execution_Step>;
+  /** fetch aggregated fields from the table: "unified_execution_step" */
+  unified_execution_step_aggregate: Unified_Execution_Step_Aggregate;
+  /** fetch data from the table: "unified_execution_step" using primary key columns */
+  unified_execution_step_by_pk?: Maybe<Unified_Execution_Step>;
   /** fetch data from the table: "variable" */
   variable: Array<Variable>;
   /** fetch aggregated fields from the table: "variable" */
@@ -17256,6 +23160,259 @@ export type Query_Root = {
   variable_category_aggregate: Variable_Category_Aggregate;
   /** fetch data from the table: "variable_category" using primary key columns */
   variable_category_by_pk?: Maybe<Variable_Category>;
+};
+
+
+export type Query_RootAdapter_Data_ObjectArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Data_Object_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Data_Object_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootAdapter_Data_Object_VariableArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Variable_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Variable_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Variable_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Data_Object_Variable_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Variable_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Variable_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Variable_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Data_Object_Variable_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootAdapter_Provenance_EventArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Provenance_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Provenance_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Provenance_Event_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Provenance_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Provenance_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Provenance_Event_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootAdapter_Readiness_AssessmentArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Readiness_Assessment_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Readiness_Assessment_Order_By>>;
+  where?: InputMaybe<Adapter_Readiness_Assessment_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Readiness_Assessment_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Readiness_Assessment_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Readiness_Assessment_Order_By>>;
+  where?: InputMaybe<Adapter_Readiness_Assessment_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Readiness_Assessment_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootAdapter_SecretArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Secret_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Secret_Order_By>>;
+  where?: InputMaybe<Adapter_Secret_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Secret_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Secret_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Secret_Order_By>>;
+  where?: InputMaybe<Adapter_Secret_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Secret_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+export type Query_RootAdapter_Secret_EventArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Secret_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Secret_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Secret_Event_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Secret_Event_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Secret_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Secret_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Secret_Event_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Secret_Event_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+export type Query_RootAdapter_Transform_ContractArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Contract_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Transform_Contract_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Contract_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Transform_Contract_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootAdapter_Transform_EdgeArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Edge_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Edge_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Edge_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Transform_Edge_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Edge_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Edge_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Edge_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Transform_Edge_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootAdapter_Transform_SpecArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Spec_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Spec_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Spec_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Transform_Spec_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Spec_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Spec_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Spec_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Transform_Spec_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootAdapter_Workflow_PlanArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Plan_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Workflow_Plan_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Plan_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Workflow_Plan_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootAdapter_Workflow_RunArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Run_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Run_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Workflow_Run_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Run_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Run_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+
+export type Query_RootAdapter_Workflow_Run_By_PkArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -17914,6 +24071,54 @@ export type Query_RootModelcatalog_Diagram_Part_AggregateArgs = {
 export type Query_RootModelcatalog_Diagram_Part_By_PkArgs = {
   causal_diagram_id: Scalars['String']['input'];
   part_id: Scalars['String']['input'];
+};
+
+
+export type Query_RootModelcatalog_Etl_ProcessArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Bool_Exp>;
+};
+
+
+export type Query_RootModelcatalog_Etl_Process_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Bool_Exp>;
+};
+
+
+export type Query_RootModelcatalog_Etl_Process_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Query_RootModelcatalog_Etl_Process_ContractArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Contract_Bool_Exp>;
+};
+
+
+export type Query_RootModelcatalog_Etl_Process_Contract_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Contract_Bool_Exp>;
+};
+
+
+export type Query_RootModelcatalog_Etl_Process_Contract_By_PkArgs = {
+  etl_process_id: Scalars['String']['input'];
+  position: Scalars['Int']['input'];
+  role: Scalars['String']['input'];
 };
 
 
@@ -18668,6 +24873,30 @@ export type Query_RootRegion_Category_Tree_By_PkArgs = {
 };
 
 
+export type Query_RootRegion_CuratorArgs = {
+  distinct_on?: InputMaybe<Array<Region_Curator_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Region_Curator_Order_By>>;
+  where?: InputMaybe<Region_Curator_Bool_Exp>;
+};
+
+
+export type Query_RootRegion_Curator_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Region_Curator_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Region_Curator_Order_By>>;
+  where?: InputMaybe<Region_Curator_Bool_Exp>;
+};
+
+
+export type Query_RootRegion_Curator_By_PkArgs = {
+  tenant_id: Scalars['String']['input'];
+  username: Scalars['String']['input'];
+};
+
+
 export type Query_RootRegion_GeometryArgs = {
   distinct_on?: InputMaybe<Array<Region_Geometry_Select_Column>>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -18810,6 +25039,29 @@ export type Query_RootThreadArgs = {
   offset?: InputMaybe<Scalars['Int']['input']>;
   order_by?: InputMaybe<Array<Thread_Order_By>>;
   where?: InputMaybe<Thread_Bool_Exp>;
+};
+
+
+export type Query_RootThread_Adapter_PlanArgs = {
+  distinct_on?: InputMaybe<Array<Thread_Adapter_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Thread_Adapter_Plan_Order_By>>;
+  where?: InputMaybe<Thread_Adapter_Plan_Bool_Exp>;
+};
+
+
+export type Query_RootThread_Adapter_Plan_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Thread_Adapter_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Thread_Adapter_Plan_Order_By>>;
+  where?: InputMaybe<Thread_Adapter_Plan_Bool_Exp>;
+};
+
+
+export type Query_RootThread_Adapter_Plan_By_PkArgs = {
+  id: Scalars['uuid']['input'];
 };
 
 
@@ -19017,6 +25269,52 @@ export type Query_RootThread_Provenance_By_PkArgs = {
   event: Scalars['thread_events']['input'];
   thread_id: Scalars['String']['input'];
   timestamp: Scalars['timestamptz']['input'];
+};
+
+
+export type Query_RootUnified_ExecutionArgs = {
+  distinct_on?: InputMaybe<Array<Unified_Execution_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Unified_Execution_Order_By>>;
+  where?: InputMaybe<Unified_Execution_Bool_Exp>;
+};
+
+
+export type Query_RootUnified_Execution_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Unified_Execution_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Unified_Execution_Order_By>>;
+  where?: InputMaybe<Unified_Execution_Bool_Exp>;
+};
+
+
+export type Query_RootUnified_Execution_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+export type Query_RootUnified_Execution_StepArgs = {
+  distinct_on?: InputMaybe<Array<Unified_Execution_Step_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Unified_Execution_Step_Order_By>>;
+  where?: InputMaybe<Unified_Execution_Step_Bool_Exp>;
+};
+
+
+export type Query_RootUnified_Execution_Step_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Unified_Execution_Step_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Unified_Execution_Step_Order_By>>;
+  where?: InputMaybe<Unified_Execution_Step_Bool_Exp>;
+};
+
+
+export type Query_RootUnified_Execution_Step_By_PkArgs = {
+  id: Scalars['uuid']['input'];
 };
 
 
@@ -19659,6 +25957,157 @@ export enum Region_Constraint {
   /** unique or primary key constraint on columns "id" */
   RegionPkey = 'region_pkey'
 }
+
+/** columns and relationships of "region_curator" */
+export type Region_Curator = {
+  __typename?: 'region_curator';
+  active: Scalars['Boolean']['output'];
+  created_at: Scalars['timestamptz']['output'];
+  tenant_id: Scalars['String']['output'];
+  updated_at: Scalars['timestamptz']['output'];
+  username: Scalars['String']['output'];
+};
+
+/** aggregated selection of "region_curator" */
+export type Region_Curator_Aggregate = {
+  __typename?: 'region_curator_aggregate';
+  aggregate?: Maybe<Region_Curator_Aggregate_Fields>;
+  nodes: Array<Region_Curator>;
+};
+
+/** aggregate fields of "region_curator" */
+export type Region_Curator_Aggregate_Fields = {
+  __typename?: 'region_curator_aggregate_fields';
+  count: Scalars['Int']['output'];
+  max?: Maybe<Region_Curator_Max_Fields>;
+  min?: Maybe<Region_Curator_Min_Fields>;
+};
+
+
+/** aggregate fields of "region_curator" */
+export type Region_Curator_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Region_Curator_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** Boolean expression to filter rows from the table "region_curator". All fields are combined with a logical 'AND'. */
+export type Region_Curator_Bool_Exp = {
+  _and?: InputMaybe<Array<Region_Curator_Bool_Exp>>;
+  _not?: InputMaybe<Region_Curator_Bool_Exp>;
+  _or?: InputMaybe<Array<Region_Curator_Bool_Exp>>;
+  active?: InputMaybe<Boolean_Comparison_Exp>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  tenant_id?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  username?: InputMaybe<String_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "region_curator" */
+export enum Region_Curator_Constraint {
+  /** unique or primary key constraint on columns "tenant_id", "username" */
+  RegionCuratorPkey = 'region_curator_pkey'
+}
+
+/** input type for inserting data into table "region_curator" */
+export type Region_Curator_Insert_Input = {
+  active?: InputMaybe<Scalars['Boolean']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  tenant_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  username?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregate max on columns */
+export type Region_Curator_Max_Fields = {
+  __typename?: 'region_curator_max_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  tenant_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+  username?: Maybe<Scalars['String']['output']>;
+};
+
+/** aggregate min on columns */
+export type Region_Curator_Min_Fields = {
+  __typename?: 'region_curator_min_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  tenant_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+  username?: Maybe<Scalars['String']['output']>;
+};
+
+/** response of any mutation on the table "region_curator" */
+export type Region_Curator_Mutation_Response = {
+  __typename?: 'region_curator_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Region_Curator>;
+};
+
+/** on_conflict condition type for table "region_curator" */
+export type Region_Curator_On_Conflict = {
+  constraint: Region_Curator_Constraint;
+  update_columns?: Array<Region_Curator_Update_Column>;
+  where?: InputMaybe<Region_Curator_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "region_curator". */
+export type Region_Curator_Order_By = {
+  active?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  tenant_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+  username?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: region_curator */
+export type Region_Curator_Pk_Columns_Input = {
+  tenant_id: Scalars['String']['input'];
+  username: Scalars['String']['input'];
+};
+
+/** select columns of table "region_curator" */
+export enum Region_Curator_Select_Column {
+  /** column name */
+  Active = 'active',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  TenantId = 'tenant_id',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  Username = 'username'
+}
+
+/** input type for updating data in table "region_curator" */
+export type Region_Curator_Set_Input = {
+  active?: InputMaybe<Scalars['Boolean']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  tenant_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  username?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** update columns of table "region_curator" */
+export enum Region_Curator_Update_Column {
+  /** column name */
+  Active = 'active',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  TenantId = 'tenant_id',
+  /** column name */
+  UpdatedAt = 'updated_at',
+  /** column name */
+  Username = 'username'
+}
+
+export type Region_Curator_Updates = {
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Region_Curator_Set_Input>;
+  where: Region_Curator_Bool_Exp;
+};
 
 /** columns and relationships of "region_geometry" */
 export type Region_Geometry = {
@@ -20474,6 +26923,72 @@ export type St_D_Within_Input = {
 
 export type Subscription_Root = {
   __typename?: 'subscription_root';
+  /** fetch data from the table: "adapter.data_object" */
+  adapter_data_object: Array<Adapter_Data_Object>;
+  /** fetch aggregated fields from the table: "adapter.data_object" */
+  adapter_data_object_aggregate: Adapter_Data_Object_Aggregate;
+  /** fetch data from the table: "adapter.data_object" using primary key columns */
+  adapter_data_object_by_pk?: Maybe<Adapter_Data_Object>;
+  /** fetch data from the table: "adapter.data_object_variable" */
+  adapter_data_object_variable: Array<Adapter_Data_Object_Variable>;
+  /** fetch aggregated fields from the table: "adapter.data_object_variable" */
+  adapter_data_object_variable_aggregate: Adapter_Data_Object_Variable_Aggregate;
+  /** fetch data from the table: "adapter.data_object_variable" using primary key columns */
+  adapter_data_object_variable_by_pk?: Maybe<Adapter_Data_Object_Variable>;
+  /** fetch data from the table: "adapter.provenance_event" */
+  adapter_provenance_event: Array<Adapter_Provenance_Event>;
+  /** fetch aggregated fields from the table: "adapter.provenance_event" */
+  adapter_provenance_event_aggregate: Adapter_Provenance_Event_Aggregate;
+  /** fetch data from the table: "adapter.provenance_event" using primary key columns */
+  adapter_provenance_event_by_pk?: Maybe<Adapter_Provenance_Event>;
+  /** fetch data from the table: "adapter.readiness_assessment" */
+  adapter_readiness_assessment: Array<Adapter_Readiness_Assessment>;
+  /** fetch aggregated fields from the table: "adapter.readiness_assessment" */
+  adapter_readiness_assessment_aggregate: Adapter_Readiness_Assessment_Aggregate;
+  /** fetch data from the table: "adapter.readiness_assessment" using primary key columns */
+  adapter_readiness_assessment_by_pk?: Maybe<Adapter_Readiness_Assessment>;
+  /** fetch data from the table: "adapter.secret" */
+  adapter_secret: Array<Adapter_Secret>;
+  /** fetch aggregated fields from the table: "adapter.secret" */
+  adapter_secret_aggregate: Adapter_Secret_Aggregate;
+  /** fetch data from the table: "adapter.secret" using primary key columns */
+  adapter_secret_by_pk?: Maybe<Adapter_Secret>;
+  /** fetch data from the table: "adapter.secret_event" */
+  adapter_secret_event: Array<Adapter_Secret_Event>;
+  /** fetch aggregated fields from the table: "adapter.secret_event" */
+  adapter_secret_event_aggregate: Adapter_Secret_Event_Aggregate;
+  /** fetch data from the table: "adapter.secret_event" using primary key columns */
+  adapter_secret_event_by_pk?: Maybe<Adapter_Secret_Event>;
+  /** fetch data from the table: "adapter.transform_contract" */
+  adapter_transform_contract: Array<Adapter_Transform_Contract>;
+  /** fetch aggregated fields from the table: "adapter.transform_contract" */
+  adapter_transform_contract_aggregate: Adapter_Transform_Contract_Aggregate;
+  /** fetch data from the table: "adapter.transform_contract" using primary key columns */
+  adapter_transform_contract_by_pk?: Maybe<Adapter_Transform_Contract>;
+  /** fetch data from the table: "adapter.transform_edge" */
+  adapter_transform_edge: Array<Adapter_Transform_Edge>;
+  /** fetch aggregated fields from the table: "adapter.transform_edge" */
+  adapter_transform_edge_aggregate: Adapter_Transform_Edge_Aggregate;
+  /** fetch data from the table: "adapter.transform_edge" using primary key columns */
+  adapter_transform_edge_by_pk?: Maybe<Adapter_Transform_Edge>;
+  /** fetch data from the table: "adapter.transform_spec" */
+  adapter_transform_spec: Array<Adapter_Transform_Spec>;
+  /** fetch aggregated fields from the table: "adapter.transform_spec" */
+  adapter_transform_spec_aggregate: Adapter_Transform_Spec_Aggregate;
+  /** fetch data from the table: "adapter.transform_spec" using primary key columns */
+  adapter_transform_spec_by_pk?: Maybe<Adapter_Transform_Spec>;
+  /** fetch data from the table: "adapter.workflow_plan" */
+  adapter_workflow_plan: Array<Adapter_Workflow_Plan>;
+  /** fetch aggregated fields from the table: "adapter.workflow_plan" */
+  adapter_workflow_plan_aggregate: Adapter_Workflow_Plan_Aggregate;
+  /** fetch data from the table: "adapter.workflow_plan" using primary key columns */
+  adapter_workflow_plan_by_pk?: Maybe<Adapter_Workflow_Plan>;
+  /** fetch data from the table: "adapter.workflow_run" */
+  adapter_workflow_run: Array<Adapter_Workflow_Run>;
+  /** fetch aggregated fields from the table: "adapter.workflow_run" */
+  adapter_workflow_run_aggregate: Adapter_Workflow_Run_Aggregate;
+  /** fetch data from the table: "adapter.workflow_run" using primary key columns */
+  adapter_workflow_run_by_pk?: Maybe<Adapter_Workflow_Run>;
   /** fetch data from the table: "dataset" */
   dataset: Array<Dataset>;
   /** fetch aggregated fields from the table: "dataset" */
@@ -20638,6 +27153,18 @@ export type Subscription_Root = {
   modelcatalog_diagram_part_aggregate: Modelcatalog_Diagram_Part_Aggregate;
   /** fetch data from the table: "modelcatalog_diagram_part" using primary key columns */
   modelcatalog_diagram_part_by_pk?: Maybe<Modelcatalog_Diagram_Part>;
+  /** fetch data from the table: "modelcatalog_etl_process" */
+  modelcatalog_etl_process: Array<Modelcatalog_Etl_Process>;
+  /** fetch aggregated fields from the table: "modelcatalog_etl_process" */
+  modelcatalog_etl_process_aggregate: Modelcatalog_Etl_Process_Aggregate;
+  /** fetch data from the table: "modelcatalog_etl_process" using primary key columns */
+  modelcatalog_etl_process_by_pk?: Maybe<Modelcatalog_Etl_Process>;
+  /** fetch data from the table: "modelcatalog_etl_process_contract" */
+  modelcatalog_etl_process_contract: Array<Modelcatalog_Etl_Process_Contract>;
+  /** fetch aggregated fields from the table: "modelcatalog_etl_process_contract" */
+  modelcatalog_etl_process_contract_aggregate: Modelcatalog_Etl_Process_Contract_Aggregate;
+  /** fetch data from the table: "modelcatalog_etl_process_contract" using primary key columns */
+  modelcatalog_etl_process_contract_by_pk?: Maybe<Modelcatalog_Etl_Process_Contract>;
   /** fetch data from the table: "modelcatalog_grid" */
   modelcatalog_grid: Array<Modelcatalog_Grid>;
   /** fetch aggregated fields from the table: "modelcatalog_grid" */
@@ -20830,6 +27357,12 @@ export type Subscription_Root = {
   region_category_tree_aggregate: Region_Category_Tree_Aggregate;
   /** fetch data from the table: "region_category_tree" using primary key columns */
   region_category_tree_by_pk?: Maybe<Region_Category_Tree>;
+  /** fetch data from the table: "region_curator" */
+  region_curator: Array<Region_Curator>;
+  /** fetch aggregated fields from the table: "region_curator" */
+  region_curator_aggregate: Region_Curator_Aggregate;
+  /** fetch data from the table: "region_curator" using primary key columns */
+  region_curator_by_pk?: Maybe<Region_Curator>;
   /** fetch data from the table: "region_geometry" */
   region_geometry: Array<Region_Geometry>;
   /** fetch aggregated fields from the table: "region_geometry" */
@@ -20866,6 +27399,12 @@ export type Subscription_Root = {
   task_provenance_by_pk?: Maybe<Task_Provenance>;
   /** fetch data from the table: "thread" */
   thread: Array<Thread>;
+  /** fetch data from the table: "thread_adapter_plan" */
+  thread_adapter_plan: Array<Thread_Adapter_Plan>;
+  /** fetch aggregated fields from the table: "thread_adapter_plan" */
+  thread_adapter_plan_aggregate: Thread_Adapter_Plan_Aggregate;
+  /** fetch data from the table: "thread_adapter_plan" using primary key columns */
+  thread_adapter_plan_by_pk?: Maybe<Thread_Adapter_Plan>;
   /** fetch aggregated fields from the table: "thread" */
   thread_aggregate: Thread_Aggregate;
   /** fetch data from the table: "thread" using primary key columns */
@@ -20918,6 +27457,18 @@ export type Subscription_Root = {
   thread_provenance_aggregate: Thread_Provenance_Aggregate;
   /** fetch data from the table: "thread_provenance" using primary key columns */
   thread_provenance_by_pk?: Maybe<Thread_Provenance>;
+  /** fetch data from the table: "unified_execution" */
+  unified_execution: Array<Unified_Execution>;
+  /** fetch aggregated fields from the table: "unified_execution" */
+  unified_execution_aggregate: Unified_Execution_Aggregate;
+  /** fetch data from the table: "unified_execution" using primary key columns */
+  unified_execution_by_pk?: Maybe<Unified_Execution>;
+  /** fetch data from the table: "unified_execution_step" */
+  unified_execution_step: Array<Unified_Execution_Step>;
+  /** fetch aggregated fields from the table: "unified_execution_step" */
+  unified_execution_step_aggregate: Unified_Execution_Step_Aggregate;
+  /** fetch data from the table: "unified_execution_step" using primary key columns */
+  unified_execution_step_by_pk?: Maybe<Unified_Execution_Step>;
   /** fetch data from the table: "variable" */
   variable: Array<Variable>;
   /** fetch aggregated fields from the table: "variable" */
@@ -20930,6 +27481,259 @@ export type Subscription_Root = {
   variable_category_aggregate: Variable_Category_Aggregate;
   /** fetch data from the table: "variable_category" using primary key columns */
   variable_category_by_pk?: Maybe<Variable_Category>;
+};
+
+
+export type Subscription_RootAdapter_Data_ObjectArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Data_Object_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Data_Object_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAdapter_Data_Object_VariableArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Variable_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Variable_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Variable_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Data_Object_Variable_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Data_Object_Variable_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Data_Object_Variable_Order_By>>;
+  where?: InputMaybe<Adapter_Data_Object_Variable_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Data_Object_Variable_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAdapter_Provenance_EventArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Provenance_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Provenance_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Provenance_Event_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Provenance_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Provenance_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Provenance_Event_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Provenance_Event_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAdapter_Readiness_AssessmentArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Readiness_Assessment_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Readiness_Assessment_Order_By>>;
+  where?: InputMaybe<Adapter_Readiness_Assessment_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Readiness_Assessment_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Readiness_Assessment_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Readiness_Assessment_Order_By>>;
+  where?: InputMaybe<Adapter_Readiness_Assessment_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Readiness_Assessment_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAdapter_SecretArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Secret_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Secret_Order_By>>;
+  where?: InputMaybe<Adapter_Secret_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Secret_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Secret_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Secret_Order_By>>;
+  where?: InputMaybe<Adapter_Secret_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Secret_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+export type Subscription_RootAdapter_Secret_EventArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Secret_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Secret_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Secret_Event_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Secret_Event_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Secret_Event_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Secret_Event_Order_By>>;
+  where?: InputMaybe<Adapter_Secret_Event_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Secret_Event_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+export type Subscription_RootAdapter_Transform_ContractArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Contract_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Transform_Contract_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Contract_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Contract_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Transform_Contract_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAdapter_Transform_EdgeArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Edge_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Edge_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Edge_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Transform_Edge_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Edge_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Edge_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Edge_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Transform_Edge_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAdapter_Transform_SpecArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Spec_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Spec_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Spec_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Transform_Spec_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Transform_Spec_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Transform_Spec_Order_By>>;
+  where?: InputMaybe<Adapter_Transform_Spec_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Transform_Spec_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAdapter_Workflow_PlanArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Plan_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Workflow_Plan_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Plan_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Plan_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Workflow_Plan_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootAdapter_Workflow_RunArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Run_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Run_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Workflow_Run_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Adapter_Workflow_Run_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Adapter_Workflow_Run_Order_By>>;
+  where?: InputMaybe<Adapter_Workflow_Run_Bool_Exp>;
+};
+
+
+export type Subscription_RootAdapter_Workflow_Run_By_PkArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -21588,6 +28392,54 @@ export type Subscription_RootModelcatalog_Diagram_Part_AggregateArgs = {
 export type Subscription_RootModelcatalog_Diagram_Part_By_PkArgs = {
   causal_diagram_id: Scalars['String']['input'];
   part_id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootModelcatalog_Etl_ProcessArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Bool_Exp>;
+};
+
+
+export type Subscription_RootModelcatalog_Etl_Process_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Bool_Exp>;
+};
+
+
+export type Subscription_RootModelcatalog_Etl_Process_By_PkArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type Subscription_RootModelcatalog_Etl_Process_ContractArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Contract_Bool_Exp>;
+};
+
+
+export type Subscription_RootModelcatalog_Etl_Process_Contract_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Modelcatalog_Etl_Process_Contract_Order_By>>;
+  where?: InputMaybe<Modelcatalog_Etl_Process_Contract_Bool_Exp>;
+};
+
+
+export type Subscription_RootModelcatalog_Etl_Process_Contract_By_PkArgs = {
+  etl_process_id: Scalars['String']['input'];
+  position: Scalars['Int']['input'];
+  role: Scalars['String']['input'];
 };
 
 
@@ -22342,6 +29194,30 @@ export type Subscription_RootRegion_Category_Tree_By_PkArgs = {
 };
 
 
+export type Subscription_RootRegion_CuratorArgs = {
+  distinct_on?: InputMaybe<Array<Region_Curator_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Region_Curator_Order_By>>;
+  where?: InputMaybe<Region_Curator_Bool_Exp>;
+};
+
+
+export type Subscription_RootRegion_Curator_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Region_Curator_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Region_Curator_Order_By>>;
+  where?: InputMaybe<Region_Curator_Bool_Exp>;
+};
+
+
+export type Subscription_RootRegion_Curator_By_PkArgs = {
+  tenant_id: Scalars['String']['input'];
+  username: Scalars['String']['input'];
+};
+
+
 export type Subscription_RootRegion_GeometryArgs = {
   distinct_on?: InputMaybe<Array<Region_Geometry_Select_Column>>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -22484,6 +29360,29 @@ export type Subscription_RootThreadArgs = {
   offset?: InputMaybe<Scalars['Int']['input']>;
   order_by?: InputMaybe<Array<Thread_Order_By>>;
   where?: InputMaybe<Thread_Bool_Exp>;
+};
+
+
+export type Subscription_RootThread_Adapter_PlanArgs = {
+  distinct_on?: InputMaybe<Array<Thread_Adapter_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Thread_Adapter_Plan_Order_By>>;
+  where?: InputMaybe<Thread_Adapter_Plan_Bool_Exp>;
+};
+
+
+export type Subscription_RootThread_Adapter_Plan_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Thread_Adapter_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Thread_Adapter_Plan_Order_By>>;
+  where?: InputMaybe<Thread_Adapter_Plan_Bool_Exp>;
+};
+
+
+export type Subscription_RootThread_Adapter_Plan_By_PkArgs = {
+  id: Scalars['uuid']['input'];
 };
 
 
@@ -22691,6 +29590,52 @@ export type Subscription_RootThread_Provenance_By_PkArgs = {
   event: Scalars['thread_events']['input'];
   thread_id: Scalars['String']['input'];
   timestamp: Scalars['timestamptz']['input'];
+};
+
+
+export type Subscription_RootUnified_ExecutionArgs = {
+  distinct_on?: InputMaybe<Array<Unified_Execution_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Unified_Execution_Order_By>>;
+  where?: InputMaybe<Unified_Execution_Bool_Exp>;
+};
+
+
+export type Subscription_RootUnified_Execution_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Unified_Execution_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Unified_Execution_Order_By>>;
+  where?: InputMaybe<Unified_Execution_Bool_Exp>;
+};
+
+
+export type Subscription_RootUnified_Execution_By_PkArgs = {
+  id: Scalars['uuid']['input'];
+};
+
+
+export type Subscription_RootUnified_Execution_StepArgs = {
+  distinct_on?: InputMaybe<Array<Unified_Execution_Step_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Unified_Execution_Step_Order_By>>;
+  where?: InputMaybe<Unified_Execution_Step_Bool_Exp>;
+};
+
+
+export type Subscription_RootUnified_Execution_Step_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Unified_Execution_Step_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Unified_Execution_Step_Order_By>>;
+  where?: InputMaybe<Unified_Execution_Step_Bool_Exp>;
+};
+
+
+export type Subscription_RootUnified_Execution_Step_By_PkArgs = {
+  id: Scalars['uuid']['input'];
 };
 
 
@@ -23562,6 +30507,517 @@ export type ThreadThread_Models_AggregateArgs = {
   where?: InputMaybe<Thread_Model_Bool_Exp>;
 };
 
+/** columns and relationships of "thread_adapter_plan" */
+export type Thread_Adapter_Plan = {
+  __typename?: 'thread_adapter_plan';
+  adapter_plan_id?: Maybe<Scalars['String']['output']>;
+  created_at: Scalars['timestamptz']['output'];
+  executor: Scalars['String']['output'];
+  id: Scalars['uuid']['output'];
+  model_io_id: Scalars['String']['output'];
+  parameter_schema_hash?: Maybe<Scalars['String']['output']>;
+  parameter_values: Scalars['jsonb']['output'];
+  plan_json: Scalars['jsonb']['output'];
+  plan_revision?: Maybe<Scalars['Int']['output']>;
+  source_contract?: Maybe<Scalars['jsonb']['output']>;
+  source_contract_hash?: Maybe<Scalars['String']['output']>;
+  source_kind: Scalars['String']['output'];
+  source_resource_id?: Maybe<Scalars['String']['output']>;
+  stage: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  /** An object relationship */
+  thread_model: Thread_Model;
+  thread_model_id: Scalars['uuid']['output'];
+  updated_at: Scalars['timestamptz']['output'];
+};
+
+
+/** columns and relationships of "thread_adapter_plan" */
+export type Thread_Adapter_PlanParameter_ValuesArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "thread_adapter_plan" */
+export type Thread_Adapter_PlanPlan_JsonArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "thread_adapter_plan" */
+export type Thread_Adapter_PlanSource_ContractArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Aggregate = {
+  __typename?: 'thread_adapter_plan_aggregate';
+  aggregate?: Maybe<Thread_Adapter_Plan_Aggregate_Fields>;
+  nodes: Array<Thread_Adapter_Plan>;
+};
+
+/** aggregate fields of "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Aggregate_Fields = {
+  __typename?: 'thread_adapter_plan_aggregate_fields';
+  avg?: Maybe<Thread_Adapter_Plan_Avg_Fields>;
+  count: Scalars['Int']['output'];
+  max?: Maybe<Thread_Adapter_Plan_Max_Fields>;
+  min?: Maybe<Thread_Adapter_Plan_Min_Fields>;
+  stddev?: Maybe<Thread_Adapter_Plan_Stddev_Fields>;
+  stddev_pop?: Maybe<Thread_Adapter_Plan_Stddev_Pop_Fields>;
+  stddev_samp?: Maybe<Thread_Adapter_Plan_Stddev_Samp_Fields>;
+  sum?: Maybe<Thread_Adapter_Plan_Sum_Fields>;
+  var_pop?: Maybe<Thread_Adapter_Plan_Var_Pop_Fields>;
+  var_samp?: Maybe<Thread_Adapter_Plan_Var_Samp_Fields>;
+  variance?: Maybe<Thread_Adapter_Plan_Variance_Fields>;
+};
+
+
+/** aggregate fields of "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Thread_Adapter_Plan_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** order by aggregate values of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Aggregate_Order_By = {
+  avg?: InputMaybe<Thread_Adapter_Plan_Avg_Order_By>;
+  count?: InputMaybe<Order_By>;
+  max?: InputMaybe<Thread_Adapter_Plan_Max_Order_By>;
+  min?: InputMaybe<Thread_Adapter_Plan_Min_Order_By>;
+  stddev?: InputMaybe<Thread_Adapter_Plan_Stddev_Order_By>;
+  stddev_pop?: InputMaybe<Thread_Adapter_Plan_Stddev_Pop_Order_By>;
+  stddev_samp?: InputMaybe<Thread_Adapter_Plan_Stddev_Samp_Order_By>;
+  sum?: InputMaybe<Thread_Adapter_Plan_Sum_Order_By>;
+  var_pop?: InputMaybe<Thread_Adapter_Plan_Var_Pop_Order_By>;
+  var_samp?: InputMaybe<Thread_Adapter_Plan_Var_Samp_Order_By>;
+  variance?: InputMaybe<Thread_Adapter_Plan_Variance_Order_By>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Thread_Adapter_Plan_Append_Input = {
+  parameter_values?: InputMaybe<Scalars['jsonb']['input']>;
+  plan_json?: InputMaybe<Scalars['jsonb']['input']>;
+  source_contract?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** input type for inserting array relation for remote table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Arr_Rel_Insert_Input = {
+  data: Array<Thread_Adapter_Plan_Insert_Input>;
+  /** upsert condition */
+  on_conflict?: InputMaybe<Thread_Adapter_Plan_On_Conflict>;
+};
+
+/** aggregate avg on columns */
+export type Thread_Adapter_Plan_Avg_Fields = {
+  __typename?: 'thread_adapter_plan_avg_fields';
+  plan_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by avg() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Avg_Order_By = {
+  plan_revision?: InputMaybe<Order_By>;
+};
+
+/** Boolean expression to filter rows from the table "thread_adapter_plan". All fields are combined with a logical 'AND'. */
+export type Thread_Adapter_Plan_Bool_Exp = {
+  _and?: InputMaybe<Array<Thread_Adapter_Plan_Bool_Exp>>;
+  _not?: InputMaybe<Thread_Adapter_Plan_Bool_Exp>;
+  _or?: InputMaybe<Array<Thread_Adapter_Plan_Bool_Exp>>;
+  adapter_plan_id?: InputMaybe<String_Comparison_Exp>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  executor?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<Uuid_Comparison_Exp>;
+  model_io_id?: InputMaybe<String_Comparison_Exp>;
+  parameter_schema_hash?: InputMaybe<String_Comparison_Exp>;
+  parameter_values?: InputMaybe<Jsonb_Comparison_Exp>;
+  plan_json?: InputMaybe<Jsonb_Comparison_Exp>;
+  plan_revision?: InputMaybe<Int_Comparison_Exp>;
+  source_contract?: InputMaybe<Jsonb_Comparison_Exp>;
+  source_contract_hash?: InputMaybe<String_Comparison_Exp>;
+  source_kind?: InputMaybe<String_Comparison_Exp>;
+  source_resource_id?: InputMaybe<String_Comparison_Exp>;
+  stage?: InputMaybe<String_Comparison_Exp>;
+  status?: InputMaybe<String_Comparison_Exp>;
+  thread_model?: InputMaybe<Thread_Model_Bool_Exp>;
+  thread_model_id?: InputMaybe<Uuid_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "thread_adapter_plan" */
+export enum Thread_Adapter_Plan_Constraint {
+  /** unique or primary key constraint on columns "thread_model_id", "model_io_id", "source_resource_id" */
+  ThreadAdapterPlanInputBindingKey = 'thread_adapter_plan_input_binding_key',
+  /** unique or primary key constraint on columns "id" */
+  ThreadAdapterPlanPkey = 'thread_adapter_plan_pkey',
+  /** unique or primary key constraint on columns "thread_model_id", "model_io_id", "adapter_plan_id", "plan_revision" */
+  ThreadAdapterPlanPostModelBindingKey = 'thread_adapter_plan_post_model_binding_key'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Thread_Adapter_Plan_Delete_At_Path_Input = {
+  parameter_values?: InputMaybe<Array<Scalars['String']['input']>>;
+  plan_json?: InputMaybe<Array<Scalars['String']['input']>>;
+  source_contract?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Thread_Adapter_Plan_Delete_Elem_Input = {
+  parameter_values?: InputMaybe<Scalars['Int']['input']>;
+  plan_json?: InputMaybe<Scalars['Int']['input']>;
+  source_contract?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Thread_Adapter_Plan_Delete_Key_Input = {
+  parameter_values?: InputMaybe<Scalars['String']['input']>;
+  plan_json?: InputMaybe<Scalars['String']['input']>;
+  source_contract?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for incrementing numeric columns in table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Inc_Input = {
+  plan_revision?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** input type for inserting data into table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Insert_Input = {
+  adapter_plan_id?: InputMaybe<Scalars['String']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  executor?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  model_io_id?: InputMaybe<Scalars['String']['input']>;
+  parameter_schema_hash?: InputMaybe<Scalars['String']['input']>;
+  parameter_values?: InputMaybe<Scalars['jsonb']['input']>;
+  plan_json?: InputMaybe<Scalars['jsonb']['input']>;
+  plan_revision?: InputMaybe<Scalars['Int']['input']>;
+  source_contract?: InputMaybe<Scalars['jsonb']['input']>;
+  source_contract_hash?: InputMaybe<Scalars['String']['input']>;
+  source_kind?: InputMaybe<Scalars['String']['input']>;
+  source_resource_id?: InputMaybe<Scalars['String']['input']>;
+  stage?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  thread_model?: InputMaybe<Thread_Model_Obj_Rel_Insert_Input>;
+  thread_model_id?: InputMaybe<Scalars['uuid']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+};
+
+/** aggregate max on columns */
+export type Thread_Adapter_Plan_Max_Fields = {
+  __typename?: 'thread_adapter_plan_max_fields';
+  adapter_plan_id?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  executor?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  model_io_id?: Maybe<Scalars['String']['output']>;
+  parameter_schema_hash?: Maybe<Scalars['String']['output']>;
+  plan_revision?: Maybe<Scalars['Int']['output']>;
+  source_contract_hash?: Maybe<Scalars['String']['output']>;
+  source_kind?: Maybe<Scalars['String']['output']>;
+  source_resource_id?: Maybe<Scalars['String']['output']>;
+  stage?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  thread_model_id?: Maybe<Scalars['uuid']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** order by max() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Max_Order_By = {
+  adapter_plan_id?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  executor?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  model_io_id?: InputMaybe<Order_By>;
+  parameter_schema_hash?: InputMaybe<Order_By>;
+  plan_revision?: InputMaybe<Order_By>;
+  source_contract_hash?: InputMaybe<Order_By>;
+  source_kind?: InputMaybe<Order_By>;
+  source_resource_id?: InputMaybe<Order_By>;
+  stage?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  thread_model_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** aggregate min on columns */
+export type Thread_Adapter_Plan_Min_Fields = {
+  __typename?: 'thread_adapter_plan_min_fields';
+  adapter_plan_id?: Maybe<Scalars['String']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  executor?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  model_io_id?: Maybe<Scalars['String']['output']>;
+  parameter_schema_hash?: Maybe<Scalars['String']['output']>;
+  plan_revision?: Maybe<Scalars['Int']['output']>;
+  source_contract_hash?: Maybe<Scalars['String']['output']>;
+  source_kind?: Maybe<Scalars['String']['output']>;
+  source_resource_id?: Maybe<Scalars['String']['output']>;
+  stage?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  thread_model_id?: Maybe<Scalars['uuid']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** order by min() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Min_Order_By = {
+  adapter_plan_id?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  executor?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  model_io_id?: InputMaybe<Order_By>;
+  parameter_schema_hash?: InputMaybe<Order_By>;
+  plan_revision?: InputMaybe<Order_By>;
+  source_contract_hash?: InputMaybe<Order_By>;
+  source_kind?: InputMaybe<Order_By>;
+  source_resource_id?: InputMaybe<Order_By>;
+  stage?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  thread_model_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** response of any mutation on the table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Mutation_Response = {
+  __typename?: 'thread_adapter_plan_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Thread_Adapter_Plan>;
+};
+
+/** on_conflict condition type for table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_On_Conflict = {
+  constraint: Thread_Adapter_Plan_Constraint;
+  update_columns?: Array<Thread_Adapter_Plan_Update_Column>;
+  where?: InputMaybe<Thread_Adapter_Plan_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "thread_adapter_plan". */
+export type Thread_Adapter_Plan_Order_By = {
+  adapter_plan_id?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  executor?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  model_io_id?: InputMaybe<Order_By>;
+  parameter_schema_hash?: InputMaybe<Order_By>;
+  parameter_values?: InputMaybe<Order_By>;
+  plan_json?: InputMaybe<Order_By>;
+  plan_revision?: InputMaybe<Order_By>;
+  source_contract?: InputMaybe<Order_By>;
+  source_contract_hash?: InputMaybe<Order_By>;
+  source_kind?: InputMaybe<Order_By>;
+  source_resource_id?: InputMaybe<Order_By>;
+  stage?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  thread_model?: InputMaybe<Thread_Model_Order_By>;
+  thread_model_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: thread_adapter_plan */
+export type Thread_Adapter_Plan_Pk_Columns_Input = {
+  id: Scalars['uuid']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Thread_Adapter_Plan_Prepend_Input = {
+  parameter_values?: InputMaybe<Scalars['jsonb']['input']>;
+  plan_json?: InputMaybe<Scalars['jsonb']['input']>;
+  source_contract?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "thread_adapter_plan" */
+export enum Thread_Adapter_Plan_Select_Column {
+  /** column name */
+  AdapterPlanId = 'adapter_plan_id',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Executor = 'executor',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  ModelIoId = 'model_io_id',
+  /** column name */
+  ParameterSchemaHash = 'parameter_schema_hash',
+  /** column name */
+  ParameterValues = 'parameter_values',
+  /** column name */
+  PlanJson = 'plan_json',
+  /** column name */
+  PlanRevision = 'plan_revision',
+  /** column name */
+  SourceContract = 'source_contract',
+  /** column name */
+  SourceContractHash = 'source_contract_hash',
+  /** column name */
+  SourceKind = 'source_kind',
+  /** column name */
+  SourceResourceId = 'source_resource_id',
+  /** column name */
+  Stage = 'stage',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  ThreadModelId = 'thread_model_id',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+/** input type for updating data in table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Set_Input = {
+  adapter_plan_id?: InputMaybe<Scalars['String']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  executor?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  model_io_id?: InputMaybe<Scalars['String']['input']>;
+  parameter_schema_hash?: InputMaybe<Scalars['String']['input']>;
+  parameter_values?: InputMaybe<Scalars['jsonb']['input']>;
+  plan_json?: InputMaybe<Scalars['jsonb']['input']>;
+  plan_revision?: InputMaybe<Scalars['Int']['input']>;
+  source_contract?: InputMaybe<Scalars['jsonb']['input']>;
+  source_contract_hash?: InputMaybe<Scalars['String']['input']>;
+  source_kind?: InputMaybe<Scalars['String']['input']>;
+  source_resource_id?: InputMaybe<Scalars['String']['input']>;
+  stage?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  thread_model_id?: InputMaybe<Scalars['uuid']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+};
+
+/** aggregate stddev on columns */
+export type Thread_Adapter_Plan_Stddev_Fields = {
+  __typename?: 'thread_adapter_plan_stddev_fields';
+  plan_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by stddev() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Stddev_Order_By = {
+  plan_revision?: InputMaybe<Order_By>;
+};
+
+/** aggregate stddev_pop on columns */
+export type Thread_Adapter_Plan_Stddev_Pop_Fields = {
+  __typename?: 'thread_adapter_plan_stddev_pop_fields';
+  plan_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by stddev_pop() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Stddev_Pop_Order_By = {
+  plan_revision?: InputMaybe<Order_By>;
+};
+
+/** aggregate stddev_samp on columns */
+export type Thread_Adapter_Plan_Stddev_Samp_Fields = {
+  __typename?: 'thread_adapter_plan_stddev_samp_fields';
+  plan_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by stddev_samp() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Stddev_Samp_Order_By = {
+  plan_revision?: InputMaybe<Order_By>;
+};
+
+/** aggregate sum on columns */
+export type Thread_Adapter_Plan_Sum_Fields = {
+  __typename?: 'thread_adapter_plan_sum_fields';
+  plan_revision?: Maybe<Scalars['Int']['output']>;
+};
+
+/** order by sum() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Sum_Order_By = {
+  plan_revision?: InputMaybe<Order_By>;
+};
+
+/** update columns of table "thread_adapter_plan" */
+export enum Thread_Adapter_Plan_Update_Column {
+  /** column name */
+  AdapterPlanId = 'adapter_plan_id',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  Executor = 'executor',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  ModelIoId = 'model_io_id',
+  /** column name */
+  ParameterSchemaHash = 'parameter_schema_hash',
+  /** column name */
+  ParameterValues = 'parameter_values',
+  /** column name */
+  PlanJson = 'plan_json',
+  /** column name */
+  PlanRevision = 'plan_revision',
+  /** column name */
+  SourceContract = 'source_contract',
+  /** column name */
+  SourceContractHash = 'source_contract_hash',
+  /** column name */
+  SourceKind = 'source_kind',
+  /** column name */
+  SourceResourceId = 'source_resource_id',
+  /** column name */
+  Stage = 'stage',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  ThreadModelId = 'thread_model_id',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+export type Thread_Adapter_Plan_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Thread_Adapter_Plan_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Thread_Adapter_Plan_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Thread_Adapter_Plan_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Thread_Adapter_Plan_Delete_Key_Input>;
+  /** increments the numeric columns with given value of the filtered values */
+  _inc?: InputMaybe<Thread_Adapter_Plan_Inc_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Thread_Adapter_Plan_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Thread_Adapter_Plan_Set_Input>;
+  where: Thread_Adapter_Plan_Bool_Exp;
+};
+
+/** aggregate var_pop on columns */
+export type Thread_Adapter_Plan_Var_Pop_Fields = {
+  __typename?: 'thread_adapter_plan_var_pop_fields';
+  plan_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by var_pop() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Var_Pop_Order_By = {
+  plan_revision?: InputMaybe<Order_By>;
+};
+
+/** aggregate var_samp on columns */
+export type Thread_Adapter_Plan_Var_Samp_Fields = {
+  __typename?: 'thread_adapter_plan_var_samp_fields';
+  plan_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by var_samp() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Var_Samp_Order_By = {
+  plan_revision?: InputMaybe<Order_By>;
+};
+
+/** aggregate variance on columns */
+export type Thread_Adapter_Plan_Variance_Fields = {
+  __typename?: 'thread_adapter_plan_variance_fields';
+  plan_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** order by variance() on columns of table "thread_adapter_plan" */
+export type Thread_Adapter_Plan_Variance_Order_By = {
+  plan_revision?: InputMaybe<Order_By>;
+};
+
 /** aggregated selection of "thread" */
 export type Thread_Aggregate = {
   __typename?: 'thread_aggregate';
@@ -23876,6 +31332,10 @@ export type Thread_Min_Order_By = {
 export type Thread_Model = {
   __typename?: 'thread_model';
   /** An array relationship */
+  adapter_plans: Array<Thread_Adapter_Plan>;
+  /** An aggregate relationship */
+  adapter_plans_aggregate: Thread_Adapter_Plan_Aggregate;
+  /** An array relationship */
   data_bindings: Array<Thread_Model_Io>;
   /** An aggregate relationship */
   data_bindings_aggregate: Thread_Model_Io_Aggregate;
@@ -23899,6 +31359,26 @@ export type Thread_Model = {
   /** An object relationship */
   thread: Thread;
   thread_id: Scalars['String']['output'];
+};
+
+
+/** columns and relationships of "thread_model" */
+export type Thread_ModelAdapter_PlansArgs = {
+  distinct_on?: InputMaybe<Array<Thread_Adapter_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Thread_Adapter_Plan_Order_By>>;
+  where?: InputMaybe<Thread_Adapter_Plan_Bool_Exp>;
+};
+
+
+/** columns and relationships of "thread_model" */
+export type Thread_ModelAdapter_Plans_AggregateArgs = {
+  distinct_on?: InputMaybe<Array<Thread_Adapter_Plan_Select_Column>>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  order_by?: InputMaybe<Array<Thread_Adapter_Plan_Order_By>>;
+  where?: InputMaybe<Thread_Adapter_Plan_Bool_Exp>;
 };
 
 
@@ -24022,6 +31502,7 @@ export type Thread_Model_Bool_Exp = {
   _and?: InputMaybe<Array<Thread_Model_Bool_Exp>>;
   _not?: InputMaybe<Thread_Model_Bool_Exp>;
   _or?: InputMaybe<Array<Thread_Model_Bool_Exp>>;
+  adapter_plans?: InputMaybe<Thread_Adapter_Plan_Bool_Exp>;
   data_bindings?: InputMaybe<Thread_Model_Io_Bool_Exp>;
   execution_summary?: InputMaybe<Thread_Model_Execution_Summary_Bool_Exp>;
   executions?: InputMaybe<Thread_Model_Execution_Bool_Exp>;
@@ -24772,6 +32253,7 @@ export type Thread_Model_Execution_Updates = {
 
 /** input type for inserting data into table "thread_model" */
 export type Thread_Model_Insert_Input = {
+  adapter_plans?: InputMaybe<Thread_Adapter_Plan_Arr_Rel_Insert_Input>;
   data_bindings?: InputMaybe<Thread_Model_Io_Arr_Rel_Insert_Input>;
   execution_summary?: InputMaybe<Thread_Model_Execution_Summary_Arr_Rel_Insert_Input>;
   executions?: InputMaybe<Thread_Model_Execution_Arr_Rel_Insert_Input>;
@@ -25018,6 +32500,7 @@ export type Thread_Model_On_Conflict = {
 
 /** Ordering options when selecting data from "thread_model". */
 export type Thread_Model_Order_By = {
+  adapter_plans_aggregate?: InputMaybe<Thread_Adapter_Plan_Aggregate_Order_By>;
   data_bindings_aggregate?: InputMaybe<Thread_Model_Io_Aggregate_Order_By>;
   execution_summary_aggregate?: InputMaybe<Thread_Model_Execution_Summary_Aggregate_Order_By>;
   executions_aggregate?: InputMaybe<Thread_Model_Execution_Aggregate_Order_By>;
@@ -25750,6 +33233,853 @@ export type Timestamptz_Comparison_Exp = {
   _nin?: InputMaybe<Array<Scalars['timestamptz']['input']>>;
 };
 
+/** columns and relationships of "unified_execution" */
+export type Unified_Execution = {
+  __typename?: 'unified_execution';
+  adapter_run_ids: Scalars['jsonb']['output'];
+  adapter_steps: Scalars['jsonb']['output'];
+  created_at: Scalars['timestamptz']['output'];
+  error_message?: Maybe<Scalars['String']['output']>;
+  execution_engine: Scalars['String']['output'];
+  failure_code?: Maybe<Scalars['String']['output']>;
+  id: Scalars['uuid']['output'];
+  idempotency_key: Scalars['String']['output'];
+  model_child_id?: Maybe<Scalars['String']['output']>;
+  model_id: Scalars['String']['output'];
+  model_output_id?: Maybe<Scalars['String']['output']>;
+  model_result?: Maybe<Scalars['jsonb']['output']>;
+  output_handoff?: Maybe<Scalars['jsonb']['output']>;
+  parameter_values: Scalars['jsonb']['output'];
+  parameter_values_hash?: Maybe<Scalars['String']['output']>;
+  plan_hash: Scalars['String']['output'];
+  plan_id: Scalars['String']['output'];
+  schema_version: Scalars['Int']['output'];
+  state_revision: Scalars['Int']['output'];
+  status: Scalars['String']['output'];
+  thread_id: Scalars['String']['output'];
+  updated_at: Scalars['timestamptz']['output'];
+};
+
+
+/** columns and relationships of "unified_execution" */
+export type Unified_ExecutionAdapter_Run_IdsArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "unified_execution" */
+export type Unified_ExecutionAdapter_StepsArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "unified_execution" */
+export type Unified_ExecutionModel_ResultArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "unified_execution" */
+export type Unified_ExecutionOutput_HandoffArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** columns and relationships of "unified_execution" */
+export type Unified_ExecutionParameter_ValuesArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "unified_execution" */
+export type Unified_Execution_Aggregate = {
+  __typename?: 'unified_execution_aggregate';
+  aggregate?: Maybe<Unified_Execution_Aggregate_Fields>;
+  nodes: Array<Unified_Execution>;
+};
+
+/** aggregate fields of "unified_execution" */
+export type Unified_Execution_Aggregate_Fields = {
+  __typename?: 'unified_execution_aggregate_fields';
+  avg?: Maybe<Unified_Execution_Avg_Fields>;
+  count: Scalars['Int']['output'];
+  max?: Maybe<Unified_Execution_Max_Fields>;
+  min?: Maybe<Unified_Execution_Min_Fields>;
+  stddev?: Maybe<Unified_Execution_Stddev_Fields>;
+  stddev_pop?: Maybe<Unified_Execution_Stddev_Pop_Fields>;
+  stddev_samp?: Maybe<Unified_Execution_Stddev_Samp_Fields>;
+  sum?: Maybe<Unified_Execution_Sum_Fields>;
+  var_pop?: Maybe<Unified_Execution_Var_Pop_Fields>;
+  var_samp?: Maybe<Unified_Execution_Var_Samp_Fields>;
+  variance?: Maybe<Unified_Execution_Variance_Fields>;
+};
+
+
+/** aggregate fields of "unified_execution" */
+export type Unified_Execution_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Unified_Execution_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Unified_Execution_Append_Input = {
+  adapter_run_ids?: InputMaybe<Scalars['jsonb']['input']>;
+  adapter_steps?: InputMaybe<Scalars['jsonb']['input']>;
+  model_result?: InputMaybe<Scalars['jsonb']['input']>;
+  output_handoff?: InputMaybe<Scalars['jsonb']['input']>;
+  parameter_values?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** aggregate avg on columns */
+export type Unified_Execution_Avg_Fields = {
+  __typename?: 'unified_execution_avg_fields';
+  schema_version?: Maybe<Scalars['Float']['output']>;
+  state_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** Boolean expression to filter rows from the table "unified_execution". All fields are combined with a logical 'AND'. */
+export type Unified_Execution_Bool_Exp = {
+  _and?: InputMaybe<Array<Unified_Execution_Bool_Exp>>;
+  _not?: InputMaybe<Unified_Execution_Bool_Exp>;
+  _or?: InputMaybe<Array<Unified_Execution_Bool_Exp>>;
+  adapter_run_ids?: InputMaybe<Jsonb_Comparison_Exp>;
+  adapter_steps?: InputMaybe<Jsonb_Comparison_Exp>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  error_message?: InputMaybe<String_Comparison_Exp>;
+  execution_engine?: InputMaybe<String_Comparison_Exp>;
+  failure_code?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<Uuid_Comparison_Exp>;
+  idempotency_key?: InputMaybe<String_Comparison_Exp>;
+  model_child_id?: InputMaybe<String_Comparison_Exp>;
+  model_id?: InputMaybe<String_Comparison_Exp>;
+  model_output_id?: InputMaybe<String_Comparison_Exp>;
+  model_result?: InputMaybe<Jsonb_Comparison_Exp>;
+  output_handoff?: InputMaybe<Jsonb_Comparison_Exp>;
+  parameter_values?: InputMaybe<Jsonb_Comparison_Exp>;
+  parameter_values_hash?: InputMaybe<String_Comparison_Exp>;
+  plan_hash?: InputMaybe<String_Comparison_Exp>;
+  plan_id?: InputMaybe<String_Comparison_Exp>;
+  schema_version?: InputMaybe<Int_Comparison_Exp>;
+  state_revision?: InputMaybe<Int_Comparison_Exp>;
+  status?: InputMaybe<String_Comparison_Exp>;
+  thread_id?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "unified_execution" */
+export enum Unified_Execution_Constraint {
+  /** unique or primary key constraint on columns "idempotency_key" */
+  UnifiedExecutionIdempotencyKey = 'unified_execution_idempotency_key',
+  /** unique or primary key constraint on columns "id" */
+  UnifiedExecutionPkey = 'unified_execution_pkey',
+  /** unique or primary key constraint on columns "plan_id" */
+  UnifiedExecutionPlanIdKey = 'unified_execution_plan_id_key'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Unified_Execution_Delete_At_Path_Input = {
+  adapter_run_ids?: InputMaybe<Array<Scalars['String']['input']>>;
+  adapter_steps?: InputMaybe<Array<Scalars['String']['input']>>;
+  model_result?: InputMaybe<Array<Scalars['String']['input']>>;
+  output_handoff?: InputMaybe<Array<Scalars['String']['input']>>;
+  parameter_values?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Unified_Execution_Delete_Elem_Input = {
+  adapter_run_ids?: InputMaybe<Scalars['Int']['input']>;
+  adapter_steps?: InputMaybe<Scalars['Int']['input']>;
+  model_result?: InputMaybe<Scalars['Int']['input']>;
+  output_handoff?: InputMaybe<Scalars['Int']['input']>;
+  parameter_values?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Unified_Execution_Delete_Key_Input = {
+  adapter_run_ids?: InputMaybe<Scalars['String']['input']>;
+  adapter_steps?: InputMaybe<Scalars['String']['input']>;
+  model_result?: InputMaybe<Scalars['String']['input']>;
+  output_handoff?: InputMaybe<Scalars['String']['input']>;
+  parameter_values?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for incrementing numeric columns in table "unified_execution" */
+export type Unified_Execution_Inc_Input = {
+  schema_version?: InputMaybe<Scalars['Int']['input']>;
+  state_revision?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** input type for inserting data into table "unified_execution" */
+export type Unified_Execution_Insert_Input = {
+  adapter_run_ids?: InputMaybe<Scalars['jsonb']['input']>;
+  adapter_steps?: InputMaybe<Scalars['jsonb']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  error_message?: InputMaybe<Scalars['String']['input']>;
+  execution_engine?: InputMaybe<Scalars['String']['input']>;
+  failure_code?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  idempotency_key?: InputMaybe<Scalars['String']['input']>;
+  model_child_id?: InputMaybe<Scalars['String']['input']>;
+  model_id?: InputMaybe<Scalars['String']['input']>;
+  model_output_id?: InputMaybe<Scalars['String']['input']>;
+  model_result?: InputMaybe<Scalars['jsonb']['input']>;
+  output_handoff?: InputMaybe<Scalars['jsonb']['input']>;
+  parameter_values?: InputMaybe<Scalars['jsonb']['input']>;
+  parameter_values_hash?: InputMaybe<Scalars['String']['input']>;
+  plan_hash?: InputMaybe<Scalars['String']['input']>;
+  plan_id?: InputMaybe<Scalars['String']['input']>;
+  schema_version?: InputMaybe<Scalars['Int']['input']>;
+  state_revision?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  thread_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+};
+
+/** aggregate max on columns */
+export type Unified_Execution_Max_Fields = {
+  __typename?: 'unified_execution_max_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  execution_engine?: Maybe<Scalars['String']['output']>;
+  failure_code?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  idempotency_key?: Maybe<Scalars['String']['output']>;
+  model_child_id?: Maybe<Scalars['String']['output']>;
+  model_id?: Maybe<Scalars['String']['output']>;
+  model_output_id?: Maybe<Scalars['String']['output']>;
+  parameter_values_hash?: Maybe<Scalars['String']['output']>;
+  plan_hash?: Maybe<Scalars['String']['output']>;
+  plan_id?: Maybe<Scalars['String']['output']>;
+  schema_version?: Maybe<Scalars['Int']['output']>;
+  state_revision?: Maybe<Scalars['Int']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  thread_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** aggregate min on columns */
+export type Unified_Execution_Min_Fields = {
+  __typename?: 'unified_execution_min_fields';
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  execution_engine?: Maybe<Scalars['String']['output']>;
+  failure_code?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  idempotency_key?: Maybe<Scalars['String']['output']>;
+  model_child_id?: Maybe<Scalars['String']['output']>;
+  model_id?: Maybe<Scalars['String']['output']>;
+  model_output_id?: Maybe<Scalars['String']['output']>;
+  parameter_values_hash?: Maybe<Scalars['String']['output']>;
+  plan_hash?: Maybe<Scalars['String']['output']>;
+  plan_id?: Maybe<Scalars['String']['output']>;
+  schema_version?: Maybe<Scalars['Int']['output']>;
+  state_revision?: Maybe<Scalars['Int']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  thread_id?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** response of any mutation on the table "unified_execution" */
+export type Unified_Execution_Mutation_Response = {
+  __typename?: 'unified_execution_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Unified_Execution>;
+};
+
+/** on_conflict condition type for table "unified_execution" */
+export type Unified_Execution_On_Conflict = {
+  constraint: Unified_Execution_Constraint;
+  update_columns?: Array<Unified_Execution_Update_Column>;
+  where?: InputMaybe<Unified_Execution_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "unified_execution". */
+export type Unified_Execution_Order_By = {
+  adapter_run_ids?: InputMaybe<Order_By>;
+  adapter_steps?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  error_message?: InputMaybe<Order_By>;
+  execution_engine?: InputMaybe<Order_By>;
+  failure_code?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  idempotency_key?: InputMaybe<Order_By>;
+  model_child_id?: InputMaybe<Order_By>;
+  model_id?: InputMaybe<Order_By>;
+  model_output_id?: InputMaybe<Order_By>;
+  model_result?: InputMaybe<Order_By>;
+  output_handoff?: InputMaybe<Order_By>;
+  parameter_values?: InputMaybe<Order_By>;
+  parameter_values_hash?: InputMaybe<Order_By>;
+  plan_hash?: InputMaybe<Order_By>;
+  plan_id?: InputMaybe<Order_By>;
+  schema_version?: InputMaybe<Order_By>;
+  state_revision?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  thread_id?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: unified_execution */
+export type Unified_Execution_Pk_Columns_Input = {
+  id: Scalars['uuid']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Unified_Execution_Prepend_Input = {
+  adapter_run_ids?: InputMaybe<Scalars['jsonb']['input']>;
+  adapter_steps?: InputMaybe<Scalars['jsonb']['input']>;
+  model_result?: InputMaybe<Scalars['jsonb']['input']>;
+  output_handoff?: InputMaybe<Scalars['jsonb']['input']>;
+  parameter_values?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "unified_execution" */
+export enum Unified_Execution_Select_Column {
+  /** column name */
+  AdapterRunIds = 'adapter_run_ids',
+  /** column name */
+  AdapterSteps = 'adapter_steps',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  ErrorMessage = 'error_message',
+  /** column name */
+  ExecutionEngine = 'execution_engine',
+  /** column name */
+  FailureCode = 'failure_code',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IdempotencyKey = 'idempotency_key',
+  /** column name */
+  ModelChildId = 'model_child_id',
+  /** column name */
+  ModelId = 'model_id',
+  /** column name */
+  ModelOutputId = 'model_output_id',
+  /** column name */
+  ModelResult = 'model_result',
+  /** column name */
+  OutputHandoff = 'output_handoff',
+  /** column name */
+  ParameterValues = 'parameter_values',
+  /** column name */
+  ParameterValuesHash = 'parameter_values_hash',
+  /** column name */
+  PlanHash = 'plan_hash',
+  /** column name */
+  PlanId = 'plan_id',
+  /** column name */
+  SchemaVersion = 'schema_version',
+  /** column name */
+  StateRevision = 'state_revision',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  ThreadId = 'thread_id',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+/** input type for updating data in table "unified_execution" */
+export type Unified_Execution_Set_Input = {
+  adapter_run_ids?: InputMaybe<Scalars['jsonb']['input']>;
+  adapter_steps?: InputMaybe<Scalars['jsonb']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  error_message?: InputMaybe<Scalars['String']['input']>;
+  execution_engine?: InputMaybe<Scalars['String']['input']>;
+  failure_code?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  idempotency_key?: InputMaybe<Scalars['String']['input']>;
+  model_child_id?: InputMaybe<Scalars['String']['input']>;
+  model_id?: InputMaybe<Scalars['String']['input']>;
+  model_output_id?: InputMaybe<Scalars['String']['input']>;
+  model_result?: InputMaybe<Scalars['jsonb']['input']>;
+  output_handoff?: InputMaybe<Scalars['jsonb']['input']>;
+  parameter_values?: InputMaybe<Scalars['jsonb']['input']>;
+  parameter_values_hash?: InputMaybe<Scalars['String']['input']>;
+  plan_hash?: InputMaybe<Scalars['String']['input']>;
+  plan_id?: InputMaybe<Scalars['String']['input']>;
+  schema_version?: InputMaybe<Scalars['Int']['input']>;
+  state_revision?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  thread_id?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+};
+
+/** aggregate stddev on columns */
+export type Unified_Execution_Stddev_Fields = {
+  __typename?: 'unified_execution_stddev_fields';
+  schema_version?: Maybe<Scalars['Float']['output']>;
+  state_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_pop on columns */
+export type Unified_Execution_Stddev_Pop_Fields = {
+  __typename?: 'unified_execution_stddev_pop_fields';
+  schema_version?: Maybe<Scalars['Float']['output']>;
+  state_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_samp on columns */
+export type Unified_Execution_Stddev_Samp_Fields = {
+  __typename?: 'unified_execution_stddev_samp_fields';
+  schema_version?: Maybe<Scalars['Float']['output']>;
+  state_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** columns and relationships of "unified_execution_step" */
+export type Unified_Execution_Step = {
+  __typename?: 'unified_execution_step';
+  attempt: Scalars['Int']['output'];
+  created_at: Scalars['timestamptz']['output'];
+  error_message?: Maybe<Scalars['String']['output']>;
+  execution_id: Scalars['uuid']['output'];
+  external_id?: Maybe<Scalars['String']['output']>;
+  id: Scalars['uuid']['output'];
+  idempotency_key: Scalars['String']['output'];
+  output_reference?: Maybe<Scalars['jsonb']['output']>;
+  parameter_values_hash?: Maybe<Scalars['String']['output']>;
+  plan_hash: Scalars['String']['output'];
+  stage: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  step_key: Scalars['String']['output'];
+  updated_at: Scalars['timestamptz']['output'];
+};
+
+
+/** columns and relationships of "unified_execution_step" */
+export type Unified_Execution_StepOutput_ReferenceArgs = {
+  path?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** aggregated selection of "unified_execution_step" */
+export type Unified_Execution_Step_Aggregate = {
+  __typename?: 'unified_execution_step_aggregate';
+  aggregate?: Maybe<Unified_Execution_Step_Aggregate_Fields>;
+  nodes: Array<Unified_Execution_Step>;
+};
+
+/** aggregate fields of "unified_execution_step" */
+export type Unified_Execution_Step_Aggregate_Fields = {
+  __typename?: 'unified_execution_step_aggregate_fields';
+  avg?: Maybe<Unified_Execution_Step_Avg_Fields>;
+  count: Scalars['Int']['output'];
+  max?: Maybe<Unified_Execution_Step_Max_Fields>;
+  min?: Maybe<Unified_Execution_Step_Min_Fields>;
+  stddev?: Maybe<Unified_Execution_Step_Stddev_Fields>;
+  stddev_pop?: Maybe<Unified_Execution_Step_Stddev_Pop_Fields>;
+  stddev_samp?: Maybe<Unified_Execution_Step_Stddev_Samp_Fields>;
+  sum?: Maybe<Unified_Execution_Step_Sum_Fields>;
+  var_pop?: Maybe<Unified_Execution_Step_Var_Pop_Fields>;
+  var_samp?: Maybe<Unified_Execution_Step_Var_Samp_Fields>;
+  variance?: Maybe<Unified_Execution_Step_Variance_Fields>;
+};
+
+
+/** aggregate fields of "unified_execution_step" */
+export type Unified_Execution_Step_Aggregate_FieldsCountArgs = {
+  columns?: InputMaybe<Array<Unified_Execution_Step_Select_Column>>;
+  distinct?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** append existing jsonb value of filtered columns with new jsonb value */
+export type Unified_Execution_Step_Append_Input = {
+  output_reference?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** aggregate avg on columns */
+export type Unified_Execution_Step_Avg_Fields = {
+  __typename?: 'unified_execution_step_avg_fields';
+  attempt?: Maybe<Scalars['Float']['output']>;
+};
+
+/** Boolean expression to filter rows from the table "unified_execution_step". All fields are combined with a logical 'AND'. */
+export type Unified_Execution_Step_Bool_Exp = {
+  _and?: InputMaybe<Array<Unified_Execution_Step_Bool_Exp>>;
+  _not?: InputMaybe<Unified_Execution_Step_Bool_Exp>;
+  _or?: InputMaybe<Array<Unified_Execution_Step_Bool_Exp>>;
+  attempt?: InputMaybe<Int_Comparison_Exp>;
+  created_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+  error_message?: InputMaybe<String_Comparison_Exp>;
+  execution_id?: InputMaybe<Uuid_Comparison_Exp>;
+  external_id?: InputMaybe<String_Comparison_Exp>;
+  id?: InputMaybe<Uuid_Comparison_Exp>;
+  idempotency_key?: InputMaybe<String_Comparison_Exp>;
+  output_reference?: InputMaybe<Jsonb_Comparison_Exp>;
+  parameter_values_hash?: InputMaybe<String_Comparison_Exp>;
+  plan_hash?: InputMaybe<String_Comparison_Exp>;
+  stage?: InputMaybe<String_Comparison_Exp>;
+  status?: InputMaybe<String_Comparison_Exp>;
+  step_key?: InputMaybe<String_Comparison_Exp>;
+  updated_at?: InputMaybe<Timestamptz_Comparison_Exp>;
+};
+
+/** unique or primary key constraints on table "unified_execution_step" */
+export enum Unified_Execution_Step_Constraint {
+  /** unique or primary key constraint on columns "execution_id", "step_key" */
+  UnifiedExecutionStepKey = 'unified_execution_step_key',
+  /** unique or primary key constraint on columns "execution_id", "parameter_values_hash", "step_key", "plan_hash" */
+  UnifiedExecutionStepLaunchKey = 'unified_execution_step_launch_key',
+  /** unique or primary key constraint on columns "id" */
+  UnifiedExecutionStepPkey = 'unified_execution_step_pkey'
+}
+
+/** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+export type Unified_Execution_Step_Delete_At_Path_Input = {
+  output_reference?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+/** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+export type Unified_Execution_Step_Delete_Elem_Input = {
+  output_reference?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** delete key/value pair or string element. key/value pairs are matched based on their key value */
+export type Unified_Execution_Step_Delete_Key_Input = {
+  output_reference?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** input type for incrementing numeric columns in table "unified_execution_step" */
+export type Unified_Execution_Step_Inc_Input = {
+  attempt?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** input type for inserting data into table "unified_execution_step" */
+export type Unified_Execution_Step_Insert_Input = {
+  attempt?: InputMaybe<Scalars['Int']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  error_message?: InputMaybe<Scalars['String']['input']>;
+  execution_id?: InputMaybe<Scalars['uuid']['input']>;
+  external_id?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  idempotency_key?: InputMaybe<Scalars['String']['input']>;
+  output_reference?: InputMaybe<Scalars['jsonb']['input']>;
+  parameter_values_hash?: InputMaybe<Scalars['String']['input']>;
+  plan_hash?: InputMaybe<Scalars['String']['input']>;
+  stage?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  step_key?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+};
+
+/** aggregate max on columns */
+export type Unified_Execution_Step_Max_Fields = {
+  __typename?: 'unified_execution_step_max_fields';
+  attempt?: Maybe<Scalars['Int']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  execution_id?: Maybe<Scalars['uuid']['output']>;
+  external_id?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  idempotency_key?: Maybe<Scalars['String']['output']>;
+  parameter_values_hash?: Maybe<Scalars['String']['output']>;
+  plan_hash?: Maybe<Scalars['String']['output']>;
+  stage?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  step_key?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** aggregate min on columns */
+export type Unified_Execution_Step_Min_Fields = {
+  __typename?: 'unified_execution_step_min_fields';
+  attempt?: Maybe<Scalars['Int']['output']>;
+  created_at?: Maybe<Scalars['timestamptz']['output']>;
+  error_message?: Maybe<Scalars['String']['output']>;
+  execution_id?: Maybe<Scalars['uuid']['output']>;
+  external_id?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['uuid']['output']>;
+  idempotency_key?: Maybe<Scalars['String']['output']>;
+  parameter_values_hash?: Maybe<Scalars['String']['output']>;
+  plan_hash?: Maybe<Scalars['String']['output']>;
+  stage?: Maybe<Scalars['String']['output']>;
+  status?: Maybe<Scalars['String']['output']>;
+  step_key?: Maybe<Scalars['String']['output']>;
+  updated_at?: Maybe<Scalars['timestamptz']['output']>;
+};
+
+/** response of any mutation on the table "unified_execution_step" */
+export type Unified_Execution_Step_Mutation_Response = {
+  __typename?: 'unified_execution_step_mutation_response';
+  /** number of rows affected by the mutation */
+  affected_rows: Scalars['Int']['output'];
+  /** data from the rows affected by the mutation */
+  returning: Array<Unified_Execution_Step>;
+};
+
+/** on_conflict condition type for table "unified_execution_step" */
+export type Unified_Execution_Step_On_Conflict = {
+  constraint: Unified_Execution_Step_Constraint;
+  update_columns?: Array<Unified_Execution_Step_Update_Column>;
+  where?: InputMaybe<Unified_Execution_Step_Bool_Exp>;
+};
+
+/** Ordering options when selecting data from "unified_execution_step". */
+export type Unified_Execution_Step_Order_By = {
+  attempt?: InputMaybe<Order_By>;
+  created_at?: InputMaybe<Order_By>;
+  error_message?: InputMaybe<Order_By>;
+  execution_id?: InputMaybe<Order_By>;
+  external_id?: InputMaybe<Order_By>;
+  id?: InputMaybe<Order_By>;
+  idempotency_key?: InputMaybe<Order_By>;
+  output_reference?: InputMaybe<Order_By>;
+  parameter_values_hash?: InputMaybe<Order_By>;
+  plan_hash?: InputMaybe<Order_By>;
+  stage?: InputMaybe<Order_By>;
+  status?: InputMaybe<Order_By>;
+  step_key?: InputMaybe<Order_By>;
+  updated_at?: InputMaybe<Order_By>;
+};
+
+/** primary key columns input for table: unified_execution_step */
+export type Unified_Execution_Step_Pk_Columns_Input = {
+  id: Scalars['uuid']['input'];
+};
+
+/** prepend existing jsonb value of filtered columns with new jsonb value */
+export type Unified_Execution_Step_Prepend_Input = {
+  output_reference?: InputMaybe<Scalars['jsonb']['input']>;
+};
+
+/** select columns of table "unified_execution_step" */
+export enum Unified_Execution_Step_Select_Column {
+  /** column name */
+  Attempt = 'attempt',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  ErrorMessage = 'error_message',
+  /** column name */
+  ExecutionId = 'execution_id',
+  /** column name */
+  ExternalId = 'external_id',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IdempotencyKey = 'idempotency_key',
+  /** column name */
+  OutputReference = 'output_reference',
+  /** column name */
+  ParameterValuesHash = 'parameter_values_hash',
+  /** column name */
+  PlanHash = 'plan_hash',
+  /** column name */
+  Stage = 'stage',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  StepKey = 'step_key',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+/** input type for updating data in table "unified_execution_step" */
+export type Unified_Execution_Step_Set_Input = {
+  attempt?: InputMaybe<Scalars['Int']['input']>;
+  created_at?: InputMaybe<Scalars['timestamptz']['input']>;
+  error_message?: InputMaybe<Scalars['String']['input']>;
+  execution_id?: InputMaybe<Scalars['uuid']['input']>;
+  external_id?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['uuid']['input']>;
+  idempotency_key?: InputMaybe<Scalars['String']['input']>;
+  output_reference?: InputMaybe<Scalars['jsonb']['input']>;
+  parameter_values_hash?: InputMaybe<Scalars['String']['input']>;
+  plan_hash?: InputMaybe<Scalars['String']['input']>;
+  stage?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  step_key?: InputMaybe<Scalars['String']['input']>;
+  updated_at?: InputMaybe<Scalars['timestamptz']['input']>;
+};
+
+/** aggregate stddev on columns */
+export type Unified_Execution_Step_Stddev_Fields = {
+  __typename?: 'unified_execution_step_stddev_fields';
+  attempt?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_pop on columns */
+export type Unified_Execution_Step_Stddev_Pop_Fields = {
+  __typename?: 'unified_execution_step_stddev_pop_fields';
+  attempt?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate stddev_samp on columns */
+export type Unified_Execution_Step_Stddev_Samp_Fields = {
+  __typename?: 'unified_execution_step_stddev_samp_fields';
+  attempt?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate sum on columns */
+export type Unified_Execution_Step_Sum_Fields = {
+  __typename?: 'unified_execution_step_sum_fields';
+  attempt?: Maybe<Scalars['Int']['output']>;
+};
+
+/** update columns of table "unified_execution_step" */
+export enum Unified_Execution_Step_Update_Column {
+  /** column name */
+  Attempt = 'attempt',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  ErrorMessage = 'error_message',
+  /** column name */
+  ExecutionId = 'execution_id',
+  /** column name */
+  ExternalId = 'external_id',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IdempotencyKey = 'idempotency_key',
+  /** column name */
+  OutputReference = 'output_reference',
+  /** column name */
+  ParameterValuesHash = 'parameter_values_hash',
+  /** column name */
+  PlanHash = 'plan_hash',
+  /** column name */
+  Stage = 'stage',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  StepKey = 'step_key',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+export type Unified_Execution_Step_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Unified_Execution_Step_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Unified_Execution_Step_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Unified_Execution_Step_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Unified_Execution_Step_Delete_Key_Input>;
+  /** increments the numeric columns with given value of the filtered values */
+  _inc?: InputMaybe<Unified_Execution_Step_Inc_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Unified_Execution_Step_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Unified_Execution_Step_Set_Input>;
+  where: Unified_Execution_Step_Bool_Exp;
+};
+
+/** aggregate var_pop on columns */
+export type Unified_Execution_Step_Var_Pop_Fields = {
+  __typename?: 'unified_execution_step_var_pop_fields';
+  attempt?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate var_samp on columns */
+export type Unified_Execution_Step_Var_Samp_Fields = {
+  __typename?: 'unified_execution_step_var_samp_fields';
+  attempt?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate variance on columns */
+export type Unified_Execution_Step_Variance_Fields = {
+  __typename?: 'unified_execution_step_variance_fields';
+  attempt?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate sum on columns */
+export type Unified_Execution_Sum_Fields = {
+  __typename?: 'unified_execution_sum_fields';
+  schema_version?: Maybe<Scalars['Int']['output']>;
+  state_revision?: Maybe<Scalars['Int']['output']>;
+};
+
+/** update columns of table "unified_execution" */
+export enum Unified_Execution_Update_Column {
+  /** column name */
+  AdapterRunIds = 'adapter_run_ids',
+  /** column name */
+  AdapterSteps = 'adapter_steps',
+  /** column name */
+  CreatedAt = 'created_at',
+  /** column name */
+  ErrorMessage = 'error_message',
+  /** column name */
+  ExecutionEngine = 'execution_engine',
+  /** column name */
+  FailureCode = 'failure_code',
+  /** column name */
+  Id = 'id',
+  /** column name */
+  IdempotencyKey = 'idempotency_key',
+  /** column name */
+  ModelChildId = 'model_child_id',
+  /** column name */
+  ModelId = 'model_id',
+  /** column name */
+  ModelOutputId = 'model_output_id',
+  /** column name */
+  ModelResult = 'model_result',
+  /** column name */
+  OutputHandoff = 'output_handoff',
+  /** column name */
+  ParameterValues = 'parameter_values',
+  /** column name */
+  ParameterValuesHash = 'parameter_values_hash',
+  /** column name */
+  PlanHash = 'plan_hash',
+  /** column name */
+  PlanId = 'plan_id',
+  /** column name */
+  SchemaVersion = 'schema_version',
+  /** column name */
+  StateRevision = 'state_revision',
+  /** column name */
+  Status = 'status',
+  /** column name */
+  ThreadId = 'thread_id',
+  /** column name */
+  UpdatedAt = 'updated_at'
+}
+
+export type Unified_Execution_Updates = {
+  /** append existing jsonb value of filtered columns with new jsonb value */
+  _append?: InputMaybe<Unified_Execution_Append_Input>;
+  /** delete the field or element with specified path (for JSON arrays, negative integers count from the end) */
+  _delete_at_path?: InputMaybe<Unified_Execution_Delete_At_Path_Input>;
+  /** delete the array element with specified index (negative integers count from the end). throws an error if top level container is not an array */
+  _delete_elem?: InputMaybe<Unified_Execution_Delete_Elem_Input>;
+  /** delete key/value pair or string element. key/value pairs are matched based on their key value */
+  _delete_key?: InputMaybe<Unified_Execution_Delete_Key_Input>;
+  /** increments the numeric columns with given value of the filtered values */
+  _inc?: InputMaybe<Unified_Execution_Inc_Input>;
+  /** prepend existing jsonb value of filtered columns with new jsonb value */
+  _prepend?: InputMaybe<Unified_Execution_Prepend_Input>;
+  /** sets the columns of the filtered rows to the given values */
+  _set?: InputMaybe<Unified_Execution_Set_Input>;
+  where: Unified_Execution_Bool_Exp;
+};
+
+/** aggregate var_pop on columns */
+export type Unified_Execution_Var_Pop_Fields = {
+  __typename?: 'unified_execution_var_pop_fields';
+  schema_version?: Maybe<Scalars['Float']['output']>;
+  state_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate var_samp on columns */
+export type Unified_Execution_Var_Samp_Fields = {
+  __typename?: 'unified_execution_var_samp_fields';
+  schema_version?: Maybe<Scalars['Float']['output']>;
+  state_revision?: Maybe<Scalars['Float']['output']>;
+};
+
+/** aggregate variance on columns */
+export type Unified_Execution_Variance_Fields = {
+  __typename?: 'unified_execution_variance_fields';
+  schema_version?: Maybe<Scalars['Float']['output']>;
+  state_revision?: Maybe<Scalars['Float']['output']>;
+};
+
 /** Boolean expression to compare columns of type "uuid". All fields are combined with logical 'AND'. */
 export type Uuid_Comparison_Exp = {
   _eq?: InputMaybe<Scalars['uuid']['input']>;
@@ -26182,17 +34512,30 @@ export type Variable_Updates = {
   where: Variable_Bool_Exp;
 };
 
+/** Boolean expression to compare columns of type "vector". All fields are combined with logical 'AND'. */
+export type Vector_Comparison_Exp = {
+  _eq?: InputMaybe<Scalars['vector']['input']>;
+  _gt?: InputMaybe<Scalars['vector']['input']>;
+  _gte?: InputMaybe<Scalars['vector']['input']>;
+  _in?: InputMaybe<Array<Scalars['vector']['input']>>;
+  _is_null?: InputMaybe<Scalars['Boolean']['input']>;
+  _lt?: InputMaybe<Scalars['vector']['input']>;
+  _lte?: InputMaybe<Scalars['vector']['input']>;
+  _neq?: InputMaybe<Scalars['vector']['input']>;
+  _nin?: InputMaybe<Array<Scalars['vector']['input']>>;
+};
+
 export type VariablePresentationFieldsFragment = { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null };
 
 export type DatasetSpecificationFieldsFragment = { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> };
 
-export type InputFieldsFragment = { __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string, is_optional: boolean, input: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } };
+export type InputFieldsFragment = { __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string, is_optional: boolean, app_input_name?: string | null, input: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } };
 
 export type OutputFieldsFragment = { __typename?: 'modelcatalog_configuration_output', configuration_id: string, output_id: string, output: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } };
 
 export type ParameterFieldsFragment = { __typename?: 'modelcatalog_parameter', id: string, label: string, description?: string | null, has_data_type?: string | null, has_default_value?: string | null, has_minimum_accepted_value?: string | null, has_maximum_accepted_value?: string | null, has_fixed_value?: string | null, has_accepted_values?: string[] | null, position?: number | null, parameter_type?: string | null };
 
-export type ConfigurationFieldsFragment = { __typename?: 'modelcatalog_configuration', id: string, label: string, description?: string | null, software_version_id?: string | null, model_configuration_id?: string | null, software_version?: { __typename?: 'modelcatalog_software_version', id: string, version_id?: string | null, software?: { __typename?: 'modelcatalog_software', id: string, label: string } | null } | null, time_intervals: Array<{ __typename?: 'modelcatalog_configuration_time_interval', configuration_id: string, time_interval_id: string, time_interval: { __typename?: 'modelcatalog_time_interval', id: string, label: string, description?: string | null, interval_unit?: string | null, interval_value?: string | null } }>, inputs: Array<{ __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string, is_optional: boolean, input: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } }>, outputs: Array<{ __typename?: 'modelcatalog_configuration_output', configuration_id: string, output_id: string, output: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } }>, parameters: Array<{ __typename?: 'modelcatalog_configuration_parameter', configuration_id: string, parameter_id: string, parameter: { __typename?: 'modelcatalog_parameter', id: string, label: string, description?: string | null, has_data_type?: string | null, has_default_value?: string | null, has_minimum_accepted_value?: string | null, has_maximum_accepted_value?: string | null, has_fixed_value?: string | null, has_accepted_values?: string[] | null, position?: number | null, parameter_type?: string | null } }>, authors: Array<{ __typename?: 'modelcatalog_configuration_author', configuration_id: string, person_id: string, person: { __typename?: 'modelcatalog_person', id: string, label: string } }>, regions: Array<{ __typename?: 'modelcatalog_configuration_region', configuration_id: string, region_id: string, region: { __typename?: 'modelcatalog_region', id: string, label: string } }> };
+export type ConfigurationFieldsFragment = { __typename?: 'modelcatalog_configuration', id: string, label: string, description?: string | null, software_version_id?: string | null, model_configuration_id?: string | null, software_version?: { __typename?: 'modelcatalog_software_version', id: string, version_id?: string | null, software?: { __typename?: 'modelcatalog_software', id: string, label: string } | null } | null, time_intervals: Array<{ __typename?: 'modelcatalog_configuration_time_interval', configuration_id: string, time_interval_id: string, time_interval: { __typename?: 'modelcatalog_time_interval', id: string, label: string, description?: string | null, interval_unit?: string | null, interval_value?: string | null } }>, inputs: Array<{ __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string, is_optional: boolean, app_input_name?: string | null, input: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } }>, outputs: Array<{ __typename?: 'modelcatalog_configuration_output', configuration_id: string, output_id: string, output: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } }>, parameters: Array<{ __typename?: 'modelcatalog_configuration_parameter', configuration_id: string, parameter_id: string, parameter: { __typename?: 'modelcatalog_parameter', id: string, label: string, description?: string | null, has_data_type?: string | null, has_default_value?: string | null, has_minimum_accepted_value?: string | null, has_maximum_accepted_value?: string | null, has_fixed_value?: string | null, has_accepted_values?: string[] | null, position?: number | null, parameter_type?: string | null } }>, authors: Array<{ __typename?: 'modelcatalog_configuration_author', configuration_id: string, person_id: string, person: { __typename?: 'modelcatalog_person', id: string, label: string } }>, regions: Array<{ __typename?: 'modelcatalog_configuration_region', configuration_id: string, region_id: string, region: { __typename?: 'modelcatalog_region', id: string, label: string } }> };
 
 export type SoftwareFieldsFragment = { __typename?: 'modelcatalog_software', id: string, label: string, description?: string | null, type?: string | null, author?: { __typename?: 'modelcatalog_person', id: string, label: string } | null };
 
@@ -26263,6 +34606,13 @@ export type DeleteConfigurationInputMutationVariables = Exact<{
 
 
 export type DeleteConfigurationInputMutation = { __typename?: 'mutation_root', delete_modelcatalog_configuration_input_by_pk?: { __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string } | null };
+
+export type DeleteModelConfigurationMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteModelConfigurationMutation = { __typename?: 'mutation_root', delete_modelcatalog_configuration_by_pk?: { __typename?: 'modelcatalog_configuration', id: string } | null };
 
 export type DeleteConfigurationOutputMutationVariables = Exact<{
   configurationId: Scalars['String']['input'];
@@ -26336,6 +34686,7 @@ export type RegisterModelMutationVariables = Exact<{
   configurationId: Scalars['String']['input'];
   configurationLabel: Scalars['String']['input'];
   configurationDescription?: InputMaybe<Scalars['String']['input']>;
+  ownerUsername: Scalars['String']['input'];
 }>;
 
 
@@ -26399,6 +34750,7 @@ export type CreateConfigurationMutationVariables = Exact<{
   description?: InputMaybe<Scalars['String']['input']>;
   softwareVersionId?: InputMaybe<Scalars['String']['input']>;
   componentLocation?: InputMaybe<Scalars['String']['input']>;
+  ownerUsername: Scalars['String']['input'];
 }>;
 
 
@@ -26408,10 +34760,11 @@ export type SetConfigurationInputOptionalMutationVariables = Exact<{
   configurationId: Scalars['String']['input'];
   inputId: Scalars['String']['input'];
   isOptional: Scalars['Boolean']['input'];
+  appInputName?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type SetConfigurationInputOptionalMutation = { __typename?: 'mutation_root', delete_modelcatalog_configuration_input_by_pk?: { __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string } | null, insert_modelcatalog_configuration_input_one?: { __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string, is_optional: boolean } | null };
+export type SetConfigurationInputOptionalMutation = { __typename?: 'mutation_root', delete_modelcatalog_configuration_input_by_pk?: { __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string } | null, insert_modelcatalog_configuration_input_one?: { __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string, is_optional: boolean, app_input_name?: string | null } | null };
 
 export type InsertConfigurationOutputJunctionMutationVariables = Exact<{
   configurationId: Scalars['String']['input'];
@@ -26448,7 +34801,7 @@ export type GetConfigurationQueryVariables = Exact<{
 }>;
 
 
-export type GetConfigurationQuery = { __typename?: 'query_root', modelcatalog_configuration_by_pk?: { __typename?: 'modelcatalog_configuration', id: string, label: string, description?: string | null, software_version_id?: string | null, model_configuration_id?: string | null, software_version?: { __typename?: 'modelcatalog_software_version', id: string, version_id?: string | null, software?: { __typename?: 'modelcatalog_software', id: string, label: string } | null } | null, time_intervals: Array<{ __typename?: 'modelcatalog_configuration_time_interval', configuration_id: string, time_interval_id: string, time_interval: { __typename?: 'modelcatalog_time_interval', id: string, label: string, description?: string | null, interval_unit?: string | null, interval_value?: string | null } }>, inputs: Array<{ __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string, is_optional: boolean, input: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } }>, outputs: Array<{ __typename?: 'modelcatalog_configuration_output', configuration_id: string, output_id: string, output: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } }>, parameters: Array<{ __typename?: 'modelcatalog_configuration_parameter', configuration_id: string, parameter_id: string, parameter: { __typename?: 'modelcatalog_parameter', id: string, label: string, description?: string | null, has_data_type?: string | null, has_default_value?: string | null, has_minimum_accepted_value?: string | null, has_maximum_accepted_value?: string | null, has_fixed_value?: string | null, has_accepted_values?: string[] | null, position?: number | null, parameter_type?: string | null } }>, authors: Array<{ __typename?: 'modelcatalog_configuration_author', configuration_id: string, person_id: string, person: { __typename?: 'modelcatalog_person', id: string, label: string } }>, regions: Array<{ __typename?: 'modelcatalog_configuration_region', configuration_id: string, region_id: string, region: { __typename?: 'modelcatalog_region', id: string, label: string } }> } | null };
+export type GetConfigurationQuery = { __typename?: 'query_root', modelcatalog_configuration_by_pk?: { __typename?: 'modelcatalog_configuration', id: string, label: string, description?: string | null, software_version_id?: string | null, model_configuration_id?: string | null, software_version?: { __typename?: 'modelcatalog_software_version', id: string, version_id?: string | null, software?: { __typename?: 'modelcatalog_software', id: string, label: string } | null } | null, time_intervals: Array<{ __typename?: 'modelcatalog_configuration_time_interval', configuration_id: string, time_interval_id: string, time_interval: { __typename?: 'modelcatalog_time_interval', id: string, label: string, description?: string | null, interval_unit?: string | null, interval_value?: string | null } }>, inputs: Array<{ __typename?: 'modelcatalog_configuration_input', configuration_id: string, input_id: string, is_optional: boolean, app_input_name?: string | null, input: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } }>, outputs: Array<{ __typename?: 'modelcatalog_configuration_output', configuration_id: string, output_id: string, output: { __typename?: 'modelcatalog_dataset_specification', id: string, label: string, description?: string | null, has_format?: string | null, has_dimensionality?: number | null, position?: number | null, presentations: Array<{ __typename?: 'modelcatalog_dataset_specification_presentation', dataset_specification_id: string, presentation_id: string, presentation: { __typename?: 'modelcatalog_variable_presentation', id: string, label: string, has_long_name?: string | null, has_short_name?: string | null, standard_variable?: { __typename?: 'modelcatalog_standard_variable', id: string, label: string, description?: string | null } | null, unit?: { __typename?: 'modelcatalog_unit', id: string, label: string } | null } }> } }>, parameters: Array<{ __typename?: 'modelcatalog_configuration_parameter', configuration_id: string, parameter_id: string, parameter: { __typename?: 'modelcatalog_parameter', id: string, label: string, description?: string | null, has_data_type?: string | null, has_default_value?: string | null, has_minimum_accepted_value?: string | null, has_maximum_accepted_value?: string | null, has_fixed_value?: string | null, has_accepted_values?: string[] | null, position?: number | null, parameter_type?: string | null } }>, authors: Array<{ __typename?: 'modelcatalog_configuration_author', configuration_id: string, person_id: string, person: { __typename?: 'modelcatalog_person', id: string, label: string } }>, regions: Array<{ __typename?: 'modelcatalog_configuration_region', configuration_id: string, region_id: string, region: { __typename?: 'modelcatalog_region', id: string, label: string } }> } | null };
 
 export type SearchModelConfigurationsQueryVariables = Exact<{
   where: Modelcatalog_Configuration_Bool_Exp;
@@ -26463,6 +34816,13 @@ export type GetConfigurationBySlugQueryVariables = Exact<{
 
 
 export type GetConfigurationBySlugQuery = { __typename?: 'query_root', modelcatalog_configuration: Array<{ __typename?: 'modelcatalog_configuration', id: string }> };
+
+export type GetOwnedModelConfigurationsQueryVariables = Exact<{
+  ownerUsername: Scalars['String']['input'];
+}>;
+
+
+export type GetOwnedModelConfigurationsQuery = { __typename?: 'query_root', modelcatalog_configuration: Array<{ __typename?: 'modelcatalog_configuration', id: string, child_configurations: Array<{ __typename?: 'modelcatalog_configuration', id: string }> }> };
 
 export type GetModelCategoryOptionsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -26609,6 +34969,7 @@ export const InputFieldsFragmentDoc = gql`
   configuration_id
   input_id
   is_optional
+  app_input_name
   input {
     ...DatasetSpecificationFields
   }
@@ -26954,6 +35315,39 @@ export function useDeleteConfigurationInputMutation(baseOptions?: Apollo.Mutatio
 export type DeleteConfigurationInputMutationHookResult = ReturnType<typeof useDeleteConfigurationInputMutation>;
 export type DeleteConfigurationInputMutationResult = Apollo.MutationResult<DeleteConfigurationInputMutation>;
 export type DeleteConfigurationInputMutationOptions = Apollo.BaseMutationOptions<DeleteConfigurationInputMutation, DeleteConfigurationInputMutationVariables>;
+export const DeleteModelConfigurationDocument = gql`
+    mutation DeleteModelConfiguration($id: String!) {
+  delete_modelcatalog_configuration_by_pk(id: $id) {
+    id
+  }
+}
+    `;
+export type DeleteModelConfigurationMutationFn = Apollo.MutationFunction<DeleteModelConfigurationMutation, DeleteModelConfigurationMutationVariables>;
+
+/**
+ * __useDeleteModelConfigurationMutation__
+ *
+ * To run a mutation, you first call `useDeleteModelConfigurationMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useDeleteModelConfigurationMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [deleteModelConfigurationMutation, { data, loading, error }] = useDeleteModelConfigurationMutation({
+ *   variables: {
+ *      id: // value for 'id'
+ *   },
+ * });
+ */
+export function useDeleteModelConfigurationMutation(baseOptions?: Apollo.MutationHookOptions<DeleteModelConfigurationMutation, DeleteModelConfigurationMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<DeleteModelConfigurationMutation, DeleteModelConfigurationMutationVariables>(DeleteModelConfigurationDocument, options);
+      }
+export type DeleteModelConfigurationMutationHookResult = ReturnType<typeof useDeleteModelConfigurationMutation>;
+export type DeleteModelConfigurationMutationResult = Apollo.MutationResult<DeleteModelConfigurationMutation>;
+export type DeleteModelConfigurationMutationOptions = Apollo.BaseMutationOptions<DeleteModelConfigurationMutation, DeleteModelConfigurationMutationVariables>;
 export const DeleteConfigurationOutputDocument = gql`
     mutation DeleteConfigurationOutput($configurationId: String!, $outputId: String!) {
   delete_modelcatalog_configuration_output_by_pk(
@@ -27204,9 +35598,9 @@ export type CreateStandardVariableMutationHookResult = ReturnType<typeof useCrea
 export type CreateStandardVariableMutationResult = Apollo.MutationResult<CreateStandardVariableMutation>;
 export type CreateStandardVariableMutationOptions = Apollo.BaseMutationOptions<CreateStandardVariableMutation, CreateStandardVariableMutationVariables>;
 export const RegisterModelDocument = gql`
-    mutation RegisterModel($softwareId: String!, $softwareLabel: String!, $softwareDescription: String, $softwareType: String!, $versionId: String!, $versionLabel: String!, $versionVersionId: String, $versionDescription: String, $configurationId: String!, $configurationLabel: String!, $configurationDescription: String) {
+    mutation RegisterModel($softwareId: String!, $softwareLabel: String!, $softwareDescription: String, $softwareType: String!, $versionId: String!, $versionLabel: String!, $versionVersionId: String, $versionDescription: String, $configurationId: String!, $configurationLabel: String!, $configurationDescription: String, $ownerUsername: String!) {
   insert_modelcatalog_software_one(
-    object: {id: $softwareId, label: $softwareLabel, description: $softwareDescription, type: $softwareType, versions: {data: [{id: $versionId, label: $versionLabel, version_id: $versionVersionId, description: $versionDescription, configurations: {data: [{id: $configurationId, label: $configurationLabel, description: $configurationDescription}]}}]}}
+    object: {id: $softwareId, label: $softwareLabel, description: $softwareDescription, type: $softwareType, versions: {data: [{id: $versionId, label: $versionLabel, version_id: $versionVersionId, description: $versionDescription, configurations: {data: [{id: $configurationId, label: $configurationLabel, description: $configurationDescription, owner_username: $ownerUsername}]}}]}}
   ) {
     id
     label
@@ -27247,6 +35641,7 @@ export type RegisterModelMutationFn = Apollo.MutationFunction<RegisterModelMutat
  *      configurationId: // value for 'configurationId'
  *      configurationLabel: // value for 'configurationLabel'
  *      configurationDescription: // value for 'configurationDescription'
+ *      ownerUsername: // value for 'ownerUsername'
  *   },
  * });
  */
@@ -27496,9 +35891,9 @@ export type CreateModelFamilyMutationHookResult = ReturnType<typeof useCreateMod
 export type CreateModelFamilyMutationResult = Apollo.MutationResult<CreateModelFamilyMutation>;
 export type CreateModelFamilyMutationOptions = Apollo.BaseMutationOptions<CreateModelFamilyMutation, CreateModelFamilyMutationVariables>;
 export const CreateConfigurationDocument = gql`
-    mutation CreateConfiguration($id: String!, $label: String!, $description: String, $softwareVersionId: String, $componentLocation: String) {
+    mutation CreateConfiguration($id: String!, $label: String!, $description: String, $softwareVersionId: String, $componentLocation: String, $ownerUsername: String!) {
   insert_modelcatalog_configuration_one(
-    object: {id: $id, label: $label, description: $description, software_version_id: $softwareVersionId, has_component_location: $componentLocation}
+    object: {id: $id, label: $label, description: $description, software_version_id: $softwareVersionId, has_component_location: $componentLocation, owner_username: $ownerUsername}
   ) {
     id
     label
@@ -27527,6 +35922,7 @@ export type CreateConfigurationMutationFn = Apollo.MutationFunction<CreateConfig
  *      description: // value for 'description'
  *      softwareVersionId: // value for 'softwareVersionId'
  *      componentLocation: // value for 'componentLocation'
+ *      ownerUsername: // value for 'ownerUsername'
  *   },
  * });
  */
@@ -27538,7 +35934,7 @@ export type CreateConfigurationMutationHookResult = ReturnType<typeof useCreateC
 export type CreateConfigurationMutationResult = Apollo.MutationResult<CreateConfigurationMutation>;
 export type CreateConfigurationMutationOptions = Apollo.BaseMutationOptions<CreateConfigurationMutation, CreateConfigurationMutationVariables>;
 export const SetConfigurationInputOptionalDocument = gql`
-    mutation SetConfigurationInputOptional($configurationId: String!, $inputId: String!, $isOptional: Boolean!) {
+    mutation SetConfigurationInputOptional($configurationId: String!, $inputId: String!, $isOptional: Boolean!, $appInputName: String) {
   delete_modelcatalog_configuration_input_by_pk(
     configuration_id: $configurationId
     input_id: $inputId
@@ -27547,11 +35943,12 @@ export const SetConfigurationInputOptionalDocument = gql`
     input_id
   }
   insert_modelcatalog_configuration_input_one(
-    object: {configuration_id: $configurationId, input_id: $inputId, is_optional: $isOptional}
+    object: {configuration_id: $configurationId, input_id: $inputId, is_optional: $isOptional, app_input_name: $appInputName}
   ) {
     configuration_id
     input_id
     is_optional
+    app_input_name
   }
 }
     `;
@@ -27573,6 +35970,7 @@ export type SetConfigurationInputOptionalMutationFn = Apollo.MutationFunction<Se
  *      configurationId: // value for 'configurationId'
  *      inputId: // value for 'inputId'
  *      isOptional: // value for 'isOptional'
+ *      appInputName: // value for 'appInputName'
  *   },
  * });
  */
@@ -27661,6 +36059,7 @@ export type UpdateModelParameterMutationFn = Apollo.MutationFunction<UpdateModel
  *      hasFixedValue: // value for 'hasFixedValue'
  *      hasAcceptedValues: // value for 'hasAcceptedValues'
  *      position: // value for 'position'
+ *      parameterType: // value for 'parameterType'
  *   },
  * });
  */
@@ -27885,6 +36284,56 @@ export type GetConfigurationBySlugQueryHookResult = ReturnType<typeof useGetConf
 export type GetConfigurationBySlugLazyQueryHookResult = ReturnType<typeof useGetConfigurationBySlugLazyQuery>;
 export type GetConfigurationBySlugSuspenseQueryHookResult = ReturnType<typeof useGetConfigurationBySlugSuspenseQuery>;
 export type GetConfigurationBySlugQueryResult = Apollo.QueryResult<GetConfigurationBySlugQuery, GetConfigurationBySlugQueryVariables>;
+export const GetOwnedModelConfigurationsDocument = gql`
+    query GetOwnedModelConfigurations($ownerUsername: String!) {
+  modelcatalog_configuration(
+    where: {owner_username: {_eq: $ownerUsername}, model_configuration_id: {_is_null: true}}
+    order_by: {label: asc}
+    limit: 500
+  ) {
+    id
+    child_configurations {
+      id
+    }
+  }
+}
+    `;
+
+/**
+ * __useGetOwnedModelConfigurationsQuery__
+ *
+ * To run a query within a React component, call `useGetOwnedModelConfigurationsQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetOwnedModelConfigurationsQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetOwnedModelConfigurationsQuery({
+ *   variables: {
+ *      ownerUsername: // value for 'ownerUsername'
+ *   },
+ * });
+ */
+export function useGetOwnedModelConfigurationsQuery(baseOptions: Apollo.QueryHookOptions<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables> & ({ variables: GetOwnedModelConfigurationsQueryVariables; skip?: boolean; } | { skip: boolean; }) ) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useQuery<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables>(GetOwnedModelConfigurationsDocument, options);
+      }
+export function useGetOwnedModelConfigurationsLazyQuery(baseOptions?: Apollo.LazyQueryHookOptions<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables>) {
+          const options = {...defaultOptions, ...baseOptions}
+          return Apollo.useLazyQuery<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables>(GetOwnedModelConfigurationsDocument, options);
+        }
+// @ts-ignore
+export function useGetOwnedModelConfigurationsSuspenseQuery(baseOptions?: Apollo.SuspenseQueryHookOptions<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables>): Apollo.UseSuspenseQueryResult<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables>;
+export function useGetOwnedModelConfigurationsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables>): Apollo.UseSuspenseQueryResult<GetOwnedModelConfigurationsQuery | undefined, GetOwnedModelConfigurationsQueryVariables>;
+export function useGetOwnedModelConfigurationsSuspenseQuery(baseOptions?: Apollo.SkipToken | Apollo.SuspenseQueryHookOptions<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables>) {
+          const options = baseOptions === Apollo.skipToken ? baseOptions : {...defaultOptions, ...baseOptions}
+          return Apollo.useSuspenseQuery<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables>(GetOwnedModelConfigurationsDocument, options);
+        }
+export type GetOwnedModelConfigurationsQueryHookResult = ReturnType<typeof useGetOwnedModelConfigurationsQuery>;
+export type GetOwnedModelConfigurationsLazyQueryHookResult = ReturnType<typeof useGetOwnedModelConfigurationsLazyQuery>;
+export type GetOwnedModelConfigurationsSuspenseQueryHookResult = ReturnType<typeof useGetOwnedModelConfigurationsSuspenseQuery>;
+export type GetOwnedModelConfigurationsQueryResult = Apollo.QueryResult<GetOwnedModelConfigurationsQuery, GetOwnedModelConfigurationsQueryVariables>;
 export const GetModelCategoryOptionsDocument = gql`
     query GetModelCategoryOptions {
   modelcatalog_model_category(order_by: {label: asc}) {
