@@ -1,0 +1,14 @@
+query get_configuration_response_variables($id: String!) {
+    modelcatalog_configuration_by_pk(id: $id) {
+        id
+        outputs {
+            output {
+                presentations {
+                    presentation {
+                        has_standard_variable
+                    }
+                }
+            }
+        }
+    }
+}

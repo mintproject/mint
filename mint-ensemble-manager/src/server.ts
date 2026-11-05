@@ -35,6 +35,10 @@ import tapisRouter from "@/api/api-v1/paths/tapis";
 import executionEnginesRouter from "@/api/api-v1/paths/executionEngines/tapis";
 import problemStatementsRouter from "@/api/api-v1/paths/problemStatements";
 import unifiedExecutionRouter from "@/api/api-v1/paths/unifiedExecution";
+import regionsRouter from "@/api/api-v1/paths/regions";
+import regionsService from "@/api/api-v1/services/regionsService";
+import { createScenarioService, defaultScenarioDeps } from "@/api/api-v1/services/scenarioService";
+import { createHasuraUnifiedExecutionStore } from "@/api/api-v1/services/unifiedExecutionStore";
 import executionsTapisService from "@/api/api-v1/services/executionsTapisService";
 import { getConfiguration } from "./classes/mint/mint-functions";
 import { modelBindingsRouter } from "./api/api-v1/paths/modelBindings";
@@ -101,14 +105,21 @@ app.use(`/${version}/threads`, threadsRoutes(v1ThreadsService, runHistoryService
 app.use(`/${version}/executionEngines`, executionEnginesRouter());
 app.use(`/${version}/modelBindings`, modelBindingsRouter());
 app.use(`/${version}/tapis`, tapisRouter());
+app.use(`/${version}/regions`, regionsRouter(regionsService));
+const unifiedExecutionStore = createHasuraUnifiedExecutionStore();
+const unifiedExecutionService = createUnifiedExecutionService(
+    {
+        local: v1ExecutionsLocalService,
+        wings: v1ExecutionsService,
+        tapis: executionsTapisService
+    },
+    { store: unifiedExecutionStore }
+);
 app.use(
     `/${version}/plans`,
     unifiedExecutionRouter(
-        createUnifiedExecutionService({
-            local: v1ExecutionsLocalService,
-            wings: v1ExecutionsService,
-            tapis: executionsTapisService
-        })
+        unifiedExecutionService,
+        createScenarioService(defaultScenarioDeps(unifiedExecutionService, unifiedExecutionStore))
     )
 );
 

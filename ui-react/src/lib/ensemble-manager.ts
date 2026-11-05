@@ -171,6 +171,11 @@ export interface PlanPublisher {
   catalog_tokens: string[];
   parameters: UnifiedParameterDefinition[];
   can_publish: { ok: boolean; reason: string | null };
+  /**
+   * Declared formats of the model outputs this publisher can take, verbatim
+   * from the model catalog. Absent on an older adapter.
+   */
+  output_formats?: string[];
 }
 
 export interface PlanPublishersResponse {
@@ -364,6 +369,11 @@ export function createExecutionPlan(
     };
     /** Catalog tokens to publish the model output to; unknown tokens are a 422. */
     publish?: string[];
+    /**
+     * Which declared model output to publish (name or id). Without it the
+     * Ensemble Manager takes the first output a requested publisher can take.
+     */
+    model_output_key?: string;
   },
 ): Promise<UnifiedExecutionPlan> {
   return unifiedRequest<UnifiedExecutionPlan>(ensembleManagerApi, '/plans', 'POST', body);

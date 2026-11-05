@@ -1,5 +1,9 @@
 import { Router } from "express";
 import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionService";
+import { HttpError } from "@/classes/common/errors";
+import type { createScenarioService } from "@/api/api-v1/services/scenarioService";
+
+type ScenarioService = ReturnType<typeof createScenarioService>;
 
 /**
  * @openapi
@@ -48,6 +52,17 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *                   outcome is `output_handoff.publication` on the run (status
  *                   `published`, `failed` or `awaiting_owner`) and a failed
  *                   publication does not fail the run.
+ *               model_output_key:
+ *                 type: string
+ *                 description: >
+ *                   Which declared model output the post-model stage (and so
+ *                   `publish`) applies to, by name or id. Without it the first
+ *                   output a requested publisher can take is used (the adapter's
+ *                   `output_formats`), else the first declared output. 422
+ *                   PUBLISH_OUTPUT_NOT_PUBLISHABLE when the chosen or every
+ *                   output has a format no requested publisher accepts (details
+ *                   list `requested` and `publishable`); 422
+ *                   MODEL_OUTPUT_NOT_DECLARED when the key names no output.
  *     responses:
  *       200:
  *         description: >
@@ -126,7 +141,8 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *         description: >
  *           Publishers reachable from the model output, each with its
  *           `transform_spec_id`, `name`, `catalog_tokens`, user-facing
- *           `parameters` and `can_publish` (`ok`, `reason`).
+ *           `parameters`, `can_publish` (`ok`, `reason`) and `output_formats`
+ *           (the declared formats of the model outputs it can take).
  *         content:
  *           application/json:
  *             schema:
@@ -282,6 +298,130 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *               $ref: '#/components/schemas/UnifiedExecutionError'
  */
 
+/**
+ * @openapi
+ * /plans/scenario:
+ *   post:
+ *     summary: Create a region, thread, bindings, plan and run in one call.
+ *     description: >
+ *       Creates (or reuses) the caller's standing problem statement for
+ *       `app_label`, a task for the region, a thread for this run with the model
+ *       bound to the request dates and `parameter_values`, then creates the plan
+ *       and submits it. Submit is last, so a failed call leaves nothing that
+ *       blocks a retry; repeating a request with the same `idempotency_key`
+ *       returns the existing run with `reused: true`. A failure reports the
+ *       failing `step` and the ids created so far in `details`, with the
+ *       underlying error's status and code (`SCENARIO_STEP_FAILED` when it has
+ *       none). 422 codes include DATES_CONFLICT, REGION_INVALID and
+ *       UNKNOWN_PARAMETER. `dry_run: true` has the adapter generate the
+ *       pipeline without starting it.
+ *     operationId: createUnifiedScenario
+ *     security:
+ *       - BearerAuth: []
+ *       - oauth2: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: true
+ *             properties:
+ *               idempotency_key:
+ *                 type: string
+ *               app_label:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               region:
+ *                 type: object
+ *                 additionalProperties: true
+ *                 description: '`{region_id}` or `{geojson, name}`.'
+ *               model_id:
+ *                 type: string
+ *               start_date:
+ *                 type: string
+ *                 description: YYYY-MM-DD.
+ *               end_date:
+ *                 type: string
+ *                 description: YYYY-MM-DD.
+ *               parameter_values:
+ *                 type: object
+ *                 additionalProperties: true
+ *               publish:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               max_minutes:
+ *                 type: integer
+ *               dry_run:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: The run (new, or the existing one when `reused` is true).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties: true
+ *       default:
+ *         description: Scenario creation failed.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UnifiedExecutionError'
+ */
+
+/**
+ * @openapi
+ * /plans/runs:
+ *   get:
+ *     summary: List the caller's runs under a problem statement.
+ *     description: >
+ *       Rows carry the stored status, newest first. Read `GET /plans/runs/{runId}`
+ *       for the reconciled status of a run that is still active.
+ *     operationId: listUnifiedRuns
+ *     security:
+ *       - BearerAuth: []
+ *       - oauth2: []
+ *     parameters:
+ *       - in: query
+ *         name: problem_statement_id
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: app_label
+ *         schema:
+ *           type: string
+ *         description: Selects the caller's standing problem statement for this label.
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: >
+ *           `{problem_statement_id, runs}`; each run has run_id, name, thread_id,
+ *           model_id, status, failure_code, created_at and output_handoff.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties: true
+ *       403:
+ *         description: The caller cannot read the problem statement.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UnifiedExecutionError'
+ *       default:
+ *         description: Listing failed.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UnifiedExecutionError'
+ */
+
 function sendError(res: any, error: unknown) {
     if (error instanceof UnifiedExecutionError) {
         return res.status(error.statusCode).json({
@@ -289,6 +429,9 @@ function sendError(res: any, error: unknown) {
             code: error.code,
             details: error.details
         });
+    }
+    if (error instanceof HttpError) {
+        return res.status(error.statusCode).json({ message: error.message, code: error.code });
     }
     const message = error instanceof Error ? error.message : String(error);
     return res.status(500).json({ message });
@@ -298,7 +441,7 @@ function sendError(res: any, error: unknown) {
  * Public plan/submit boundary for both ordinary Ensemble Manager runs and
  * SVO-adapter-backed runs. The adapter URL and credentials stay server-side.
  */
-export default function (service: any) {
+export default function (service: any, scenario?: ScenarioService) {
     const router = Router();
 
     router.post("/", async (req, res) => {
@@ -321,6 +464,27 @@ export default function (service: any) {
             return sendError(res, error);
         }
     });
+
+    // Static paths come before the parameterised ones below (/:planId, /runs/:runId).
+    if (scenario) {
+        router.post("/scenario", async (req, res) => {
+            try {
+                const result = await scenario.createScenario(req.body, req.headers.authorization);
+                return res.status(200).json(result);
+            } catch (error) {
+                return sendError(res, error);
+            }
+        });
+
+        router.get("/runs", async (req, res) => {
+            try {
+                const result = await scenario.listRuns(req.query, req.headers.authorization);
+                return res.status(200).json(result);
+            } catch (error) {
+                return sendError(res, error);
+            }
+        });
+    }
 
     router.get("/runs/:runId", async (req, res) => {
         try {

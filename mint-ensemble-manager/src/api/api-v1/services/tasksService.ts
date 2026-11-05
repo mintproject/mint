@@ -1,8 +1,16 @@
 import { Task, ThreadInfo } from "@/classes/mint/mint-types";
 import { addTask } from "@/classes/graphql/graphql_functions";
 import { getTokenFromAuthorizationHeader } from "@/utils/authUtils";
-import { UnauthorizedError, InternalServerError, NotFoundError } from "@/classes/common/errors";
-import problemStatementsService from "./problemStatementsService";
+import {
+    UnauthorizedError,
+    InternalServerError,
+    NotFoundError,
+    HttpError
+} from "@/classes/common/errors";
+import problemStatementsService, {
+    CreateOptions,
+    sharedPermissions
+} from "./problemStatementsService";
 import subTasksService from "./subTasksService";
 import { getTasksByProblemStatementId } from "@/classes/graphql/graphql_functions_v2";
 import { taskFromGQL } from "@/classes/graphql/adapters/problem_statement_adapter";
@@ -15,13 +23,15 @@ export interface TasksService {
     createTask(
         problemStatementId: string,
         task: Task,
-        authorizationHeader: string
+        authorizationHeader: string,
+        options?: CreateOptions
     ): Promise<string>;
     createTaskWithThread(
         problemStatementId: string,
         task: Task,
         thread: ThreadInfo,
-        authorizationHeader: string
+        authorizationHeader: string,
+        options?: CreateOptions
     ): Promise<string[]>;
 }
 
@@ -37,7 +47,12 @@ const tasksService: TasksService = {
         return tasks.map((task) => taskFromGQL(task));
     },
 
-    async createTask(problemStatementId: string, task: Task, authorizationHeader: string) {
+    async createTask(
+        problemStatementId: string,
+        task: Task,
+        authorizationHeader: string,
+        options: CreateOptions = {}
+    ) {
         const access_token = getTokenFromAuthorizationHeader(authorizationHeader);
         if (!access_token) {
             throw new UnauthorizedError("Invalid authorization header");
@@ -61,18 +76,20 @@ const tasksService: TasksService = {
                 notes: "Added task from API"
             }
         ];
-        task.permissions = [{ read: true, write: true, execute: true, owner: false, userid: "*" }];
+        task.permissions = options.permissions ?? sharedPermissions();
         try {
             const id = await addTask(
                 problemStatement,
                 { ...task, regionid: region_id },
-                access_token
+                access_token,
+                options
             );
             if (!id) {
                 throw new InternalServerError("Failed to create task");
             }
             return id;
         } catch (error) {
+            if (error instanceof HttpError) throw error;
             console.error("Error creating task:", error);
             throw new InternalServerError("Error creating task: " + error.message);
         }
@@ -82,7 +99,8 @@ const tasksService: TasksService = {
         problemStatementId: string,
         task: Task,
         thread: ThreadInfo,
-        authorizationHeader: string
+        authorizationHeader: string,
+        options: CreateOptions = {}
     ) {
         const access_token = getTokenFromAuthorizationHeader(authorizationHeader);
         if (!access_token) {
@@ -108,7 +126,7 @@ const tasksService: TasksService = {
                 notes: "Added task from API"
             }
         ];
-        task.permissions = [{ read: true, write: true, execute: true, owner: false, userid: "*" }];
+        task.permissions = options.permissions ?? sharedPermissions();
         try {
             const id = await addTask(problemStatement, task);
             if (!id) {
@@ -118,10 +136,12 @@ const tasksService: TasksService = {
                 problemStatementId,
                 id,
                 { ...thread, regionid: region_id },
-                authorizationHeader
+                authorizationHeader,
+                { permissions: options.permissions }
             );
             return [id, subtaskId];
         } catch (error) {
+            if (error instanceof HttpError) throw error;
             console.error("Error creating task with thread:", error);
             throw new InternalServerError("Error creating task with thread: " + error.message);
         }

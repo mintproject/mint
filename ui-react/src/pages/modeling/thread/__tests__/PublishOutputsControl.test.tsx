@@ -32,13 +32,26 @@ const publisher: PlanPublisher = {
   can_publish: { ok: true, reason: null },
 };
 
-function Harness({ publishers }: { publishers: PlanPublisher[] }) {
+const outputs = [
+  { id: 'zip-io', name: 'Archive zip', format: 'application/zip' },
+  { id: 'tif-io', name: 'Displacement GeoTIFF', format: 'image/tiff;application=geotiff' },
+  { id: 'vel-io', name: 'Velocity GeoTIFF', format: 'image/tiff;application=geotiff' },
+];
+
+function Harness({
+  publishers,
+  outputs: declared,
+}: {
+  publishers: PlanPublisher[];
+  outputs?: typeof outputs;
+}) {
   const [selection, setSelection] = useState<PublishSelection | null>(null);
   return (
     <>
       <PublishOutputsControl
         modelId="m1"
         publishers={publishers}
+        outputs={declared}
         selection={selection}
         onChange={setSelection}
       />
@@ -102,5 +115,32 @@ describe('PublishOutputsControl', () => {
     });
     fireEvent.click(screen.getByTestId('publish-toggle-m1'));
     expect(screen.getByTestId('request')).toHaveTextContent('null');
+  });
+
+  it('offers only the outputs the publisher can take and sends the chosen one', () => {
+    const withFormats = { ...publisher, output_formats: ['image/tiff;application=geotiff'] };
+    render(<Harness publishers={[withFormats]} outputs={outputs} />);
+    fireEvent.click(screen.getByTestId('publish-toggle-m1'));
+    const select = screen.getByTestId('publish-output-m1') as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
+      'Displacement GeoTIFF',
+      'Velocity GeoTIFF',
+    ]);
+    expect(JSON.parse(screen.getByTestId('request').textContent ?? 'null')).toMatchObject({
+      model_output_key: 'tif-io',
+    });
+    fireEvent.change(select, { target: { value: 'vel-io' } });
+    expect(JSON.parse(screen.getByTestId('request').textContent ?? 'null')).toMatchObject({
+      model_output_key: 'vel-io',
+    });
+  });
+
+  it('hides the output choice and sends no output key when the adapter lists no formats', () => {
+    render(<Harness publishers={[publisher]} outputs={outputs} />);
+    fireEvent.click(screen.getByTestId('publish-toggle-m1'));
+    expect(screen.queryByTestId('publish-output-m1')).toBeNull();
+    expect(JSON.parse(screen.getByTestId('request').textContent ?? 'null')).not.toHaveProperty(
+      'model_output_key',
+    );
   });
 });

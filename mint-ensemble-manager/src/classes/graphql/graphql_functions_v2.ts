@@ -9,6 +9,7 @@ import listTasksByProblemStatementGQL from "./queries/task/listTasksByProblemSta
 import getThreadGQL from "./queries/thread/get.graphql";
 import listExecutionHistoryGQL from "./queries/execution/list-history.graphql";
 import checkVariableByIdGQL from "./queries/variable/check-by-id.graphql";
+import getRegionGQL from "./queries/region/get.graphql";
 import checkRegionByIdGQL from "./queries/region/check-by-id.graphql";
 
 export const getProblemStatements = async (access_token: string): Promise<Problem_Statement[]> => {
@@ -154,4 +155,20 @@ export const checkRegionExistsById = async (
     }
 
     return result.data.region_by_pk !== null;
+};
+
+/** Region name and geometries, read with the service credentials. */
+export const getRegionWithGeometries = async (
+    regionId: string
+): Promise<{ id: string; name: string; geometries: { geometry: unknown }[] } | null> => {
+    const APOLLO_CLIENT = GraphQL.instance(KeycloakAdapter.getUser());
+    const result = await APOLLO_CLIENT.query({
+        query: getRegionGQL,
+        variables: { id: regionId },
+        fetchPolicy: "no-cache"
+    });
+    if (!result || (result.errors && result.errors.length > 0)) {
+        throw new InternalServerError("Error reading region " + result?.errors?.[0]?.message);
+    }
+    return result.data.region_by_pk ?? null;
 };

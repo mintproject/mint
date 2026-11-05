@@ -822,6 +822,7 @@ export function MintThread({
         adapter_steps: adapterSteps,
         ...(postModelSpec ? { post_model_adapter: postModelSpec } : {}),
         ...(publish ? { publish: publish.tokens } : {}),
+        ...(publish?.model_output_key ? { model_output_key: publish.model_output_key } : {}),
       });
       if (!plan.plan_id) throw new Error('Ensemble Manager did not return an execution plan.');
       const defaultBoundaryUri = adapterPlans

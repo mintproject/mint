@@ -11,4 +11,9 @@ fragment thread_info on thread {
     response_variable_id
     dataset_id
     ...thread_events
+    permissions {
+        user_id
+        read
+        write
+    }
 }

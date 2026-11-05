@@ -423,7 +423,7 @@ function adapterParameterValues(
     return { values: withDefaults, hash: parameterValuesHash(withDefaults) };
 }
 
-function parentRunId(id: string): string {
+export function parentRunId(id: string): string {
     return `ue_${id}`;
 }
 
@@ -1826,17 +1826,21 @@ export function createUnifiedExecutionService(
         }
     };
 
+    /** A publisher as GET /publishers on the adapter describes it. */
+    type OfferedPublisher = { catalog_tokens?: string[]; output_formats?: string[] };
+
     /**
      * Normalise the requested catalog tokens and check them against the
      * publishers the adapter offers for the model. The adapter is the source of
-     * truth; the Ensemble Manager keeps no token list.
+     * truth; the Ensemble Manager keeps no token list. The offered publishers
+     * come back too, so the output to publish can be chosen from them.
      */
     const validatedPublishTokens = async (
         requested: unknown,
         modelId: string,
         authorization?: string
-    ): Promise<string[]> => {
-        if (requested === undefined || requested === null) return [];
+    ): Promise<{ tokens: string[]; offered: OfferedPublisher[] }> => {
+        if (requested === undefined || requested === null) return { tokens: [], offered: [] };
         if (!Array.isArray(requested) || requested.some((token) => typeof token !== "string")) {
             throw new UnifiedExecutionError(
                 400,
@@ -1845,18 +1849,15 @@ export function createUnifiedExecutionService(
             );
         }
         const tokens = [...new Set(requested.map((token: string) => token.trim()).filter(Boolean))];
-        if (!tokens.length) return [];
-        const offered = await adapterRequest(
+        if (!tokens.length) return { tokens: [], offered: [] };
+        const response = await adapterRequest(
             `/publishers?configuration_id=${encodeURIComponent(modelId)}`,
             {},
             authorization
         );
+        const offered = (response?.publishers || []) as OfferedPublisher[];
         const available = [
-            ...new Set(
-                ((offered?.publishers || []) as Array<{ catalog_tokens?: string[] }>).flatMap(
-                    (publisher) => publisher.catalog_tokens || []
-                )
-            )
+            ...new Set(offered.flatMap((publisher) => publisher.catalog_tokens || []))
         ];
         if (tokens.some((token) => !available.includes(token))) {
             throw new UnifiedExecutionError(
@@ -1866,7 +1867,30 @@ export function createUnifiedExecutionService(
                 { requested: tokens, available }
             );
         }
-        return tokens;
+        return { tokens, offered };
+    };
+
+    /**
+     * The model outputs a publisher for the requested catalogs can take, in
+     * catalog order. The adapter reports each publisher's `output_formats`
+     * verbatim from the model catalog, so an output qualifies when its declared
+     * format is one of them; no format aliasing happens here. Returns null when
+     * the adapter reported no formats at all (an older adapter), so the caller
+     * can keep its previous choice instead of refusing every publish.
+     */
+    const publishableOutputs = (
+        outputs: { id: string; name: string; format?: string }[],
+        offered: OfferedPublisher[],
+        tokens: string[]
+    ): { id: string; name: string; format?: string }[] | null => {
+        const relevant = offered.filter((publisher) =>
+            (publisher.catalog_tokens || []).some((token) => tokens.includes(token))
+        );
+        if (!relevant.some((publisher) => Array.isArray(publisher.output_formats))) return null;
+        const formats = new Set(
+            relevant.flatMap((publisher) => publisher.output_formats || []).map((f) => f.trim())
+        );
+        return outputs.filter((output) => formats.has((output.format || "").trim()));
     };
 
     return {
@@ -1956,7 +1980,7 @@ export function createUnifiedExecutionService(
                     "THREAD_MODEL_REQUIRED"
                 );
             }
-            const publish = await validatedPublishTokens(
+            const { tokens: publish, offered: offeredPublishers } = await validatedPublishTokens(
                 body.publish,
                 body.model_id,
                 authorization
@@ -2048,13 +2072,42 @@ export function createUnifiedExecutionService(
                         typeof body.model_output_key === "string"
                             ? body.model_output_key.trim()
                             : "";
-                    const output =
-                        (requested &&
-                            derived.outputs.find(
-                                (candidate) =>
-                                    candidate.name === requested || candidate.id === requested
-                            )) ||
-                        (requested ? undefined : derived.outputs[0]);
+                    // With publish, the output must be one the publisher can take:
+                    // a model's first declared output is often an archive or a
+                    // manifest, and planning that against the publish piece is
+                    // the "no transform path" 422 of 2026-11-05.
+                    const eligible = publish.length
+                        ? publishableOutputs(derived.outputs, offeredPublishers, publish)
+                        : null;
+                    const notPublishable = (what: string) =>
+                        new UnifiedExecutionError(
+                            422,
+                            `${what} cannot be published to ${publish.join("+")}; ` +
+                                `publishable outputs: ${
+                                    eligible?.map((candidate) => candidate.name).join(", ") ||
+                                    "none"
+                                }`,
+                            "PUBLISH_OUTPUT_NOT_PUBLISHABLE",
+                            {
+                                requested: requested || null,
+                                publishable: (eligible || []).map((candidate) => candidate.name)
+                            }
+                        );
+                    let output: (typeof derived.outputs)[number] | undefined;
+                    if (requested) {
+                        output = derived.outputs.find(
+                            (candidate) =>
+                                candidate.name === requested || candidate.id === requested
+                        );
+                        if (output && eligible && !eligible.includes(output)) {
+                            throw notPublishable(`output ${requested}`);
+                        }
+                    } else if (eligible) {
+                        if (!eligible.length) throw notPublishable("none of the model's outputs");
+                        output = eligible[0];
+                    } else {
+                        output = derived.outputs[0];
+                    }
                     if (!output) {
                         throw new UnifiedExecutionError(
                             422,
@@ -2418,6 +2471,7 @@ export function createUnifiedExecutionService(
                                 },
                                 execution_id: parentRunId(parent.id),
                                 idempotency_key: submitKey,
+                                ...(body.dry_run ? { dry_run: true } : {}),
                                 model_task: {
                                     stage_id: "model",
                                     configuration_id: modelTask.configuration_id,
@@ -2440,6 +2494,33 @@ export function createUnifiedExecutionService(
                         },
                         authorization
                     );
+                    if (body.dry_run) {
+                        // The adapter only generated the pipeline; nothing runs.
+                        // A dry run must not consume the caller's idempotency key:
+                        // the key is released so a later real submit is not
+                        // answered with this record.
+                        const generated = await store.update(parent.id, {
+                            status: "planned",
+                            idempotency_key: `dry-run:${parent.id}`,
+                            adapter_run_ids: [
+                                {
+                                    adapter_plan_id: adapter.adapter_plan_id,
+                                    model_io_id: adapter.model_io_id,
+                                    stage: "composite",
+                                    run_id: submitted.run_id,
+                                    status: submitted.status || "generated",
+                                    execution_kind: "composite_workflow"
+                                }
+                            ],
+                            error_message: null,
+                            failure_code: null
+                        });
+                        return {
+                            ...parentResponse(generated || { ...parent, status: "planned" }),
+                            dry_run: true,
+                            tapis_workflow_definition: submitted.tapis_workflow_definition || null
+                        };
+                    }
                     const modelChildId = modelTask.execution_id;
                     const updated = await store.update(parent.id, {
                         status: "model_running",
