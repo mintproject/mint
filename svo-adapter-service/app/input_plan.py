@@ -29,6 +29,7 @@ MAX_AOI_AREA_KM2 = 160_000
 MAX_POLYGONS = 500
 MAX_VERTICES = 50_000
 MAX_SOURCE_CHARS = 200_000
+MAX_DERIVATION_KEYS = 12
 _KM_PER_DEG = math.pi / 180 * 6371.0088
 
 _EXTENSIONS = {"geojson": "geojson", "json": "json", "csv": "csv", "netcdf": "nc",
@@ -125,7 +126,15 @@ def _validate_source(source: Any, k: int) -> tuple[dict[str, Any], dict[str, Any
     derivation = source.get("derivation")
     if derivation is not None and not isinstance(derivation, dict):
         raise _invalid(f"{where}.derivation must be an object")
-    return normalized, {**measures, "bytes": len(text), "derivation": derivation or {}}
+    # The caller's provenance notes ride into the digest and the run record, so
+    # they are kept small and flat: a few scalar fields, not a second payload.
+    derivation = derivation or {}
+    if len(derivation) > MAX_DERIVATION_KEYS or any(
+            not isinstance(k, str) or len(k) > 64 or not (v is None or _number(v) or isinstance(v, bool)
+                                                       or (isinstance(v, str) and len(v) <= 200))
+            for k, v in derivation.items()):
+        raise _invalid(f"{where}.derivation must be at most {MAX_DERIVATION_KEYS} short scalar fields")
+    return normalized, {**measures, "bytes": len(text), "derivation": derivation}
 
 
 # --- planning -----------------------------------------------------------------------

@@ -130,3 +130,25 @@ def test_the_model_row_is_never_an_intermediate_step():
     looping["contracts"][-1] = {"id": "loop-out", "role": "output", "standard_variable_uri": AOI_VAR, "format": "geojson"}
     result = plan([looping])
     assert [s["transform_type"] for s in result["input_steps"][0]["steps"]] == ["aoi_from_boundary"]
+
+
+def test_catalog_format_case_does_not_matter():
+    # The catalog stores "GeoJSON"; the piece declares "geojson". The planner's
+    # format comparison is case-insensitive, and this pins that for the Waco path.
+    row = model_row(inputs=[("aoi-geojson", True, "ds-aoi", AOI_VAR, "GeoJSON")])
+    result = plan([row], sources=[GEO])
+    [step] = result["input_steps"]
+    assert step["extension"] == "geojson"
+    assert outcomes(result) == [("aoi-geojson", "planned", False)]
+
+
+def test_derivation_notes_are_kept_small_and_flat():
+    ok = {**BBOX, "derivation": {"method": "region_bbox", "region_id": "subside-aoi-waco", "vertices_in": 9}}
+    assert plan(sources=[ok])["input_steps"][0]["derivation"]["region_id"] == "subside-aoi-waco"
+    nested = {**BBOX, "derivation": {"blob": {"geometry": SQUARE}}}
+    with pytest.raises(InputPlanError) as exc:
+        plan(sources=[nested])
+    assert exc.value.code == "INPUT_SOURCE_INVALID"
+    wide = {**BBOX, "derivation": {f"k{i}": i for i in range(13)}}
+    with pytest.raises(InputPlanError):
+        plan(sources=[wide])

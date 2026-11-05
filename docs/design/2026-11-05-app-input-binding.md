@@ -278,8 +278,12 @@ bindings, checks digest → hosted input tasks → `$SCRATCH` → model task add
   the registry, secrets are re-read by the adapter from the catalog, and
   staging writes only to the caller's own `$SCRATCH`.
 - **Junction rewrites.** Delete-then-insert writers (UI, scripts) that omit
-  `appInputName` would null the binding. All known writers are updated; a
-  regression test covers each.
+  `appInputName` would null the binding. Both scripts are updated and tested.
+  The UI fix (`SetConfigurationInputOptional` re-inserts the binding) is
+  written on `feat/ui-app-input-binding` but its generated types can only be
+  regenerated against a Hasura that has the column, so it ships as PR C right
+  after PR A deploys. Until then, toggling "optional" on an OPERA input in the
+  dev UI would null its binding; nobody but the author uses that form on dev.
 - **Event trigger.** Re-PUTting the OPERA junctions fires the semantic-search
   webhook twice. Acceptable.
 
@@ -380,6 +384,15 @@ typed contract column, MODFLOW fallback removal.
   exist. (f) Generated GraphQL types in the EM and catalog API were hand-edited
   minimally; run codegen against dev once the column is live. (g) The SUBSIDE
   loader gained `SUBSIDE_CATALOG_YAML` to point tests at a YAML path.
+
+- 2026-11-05 (QA): no blockers. Fixed: a model with no bindings at all now
+  yields an `input_warnings` entry instead of silence; a mixed-case format
+  test pins the case-insensitive planner match ("GeoJSON" vs "geojson");
+  client `derivation` notes are capped (12 short scalar fields). Deferred as
+  PR C: the ui-react round-trip (codegen needs the live column). Noted:
+  `register_forecast_to_mint.py` sends no `appInputName` (correct, in-process
+  model); `--legacy-api-schema` against an older API would drop the key, so
+  deploy the catalog API before running the scripts and read the binding back.
 
 ## User feedback / decisions
 
