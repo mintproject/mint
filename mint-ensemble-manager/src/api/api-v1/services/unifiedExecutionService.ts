@@ -364,8 +364,11 @@ function adapterParameterValues(
     body: any
 ): { values: Record<string, unknown>; hash: string } {
     const adapter = plan.post_model_adapter;
-    const values = adapter
-        ? body.adapter_parameter_values?.[adapter.adapter_plan_id] || body.parameter_values || {}
+    const values: Record<string, unknown> = adapter
+        ? {
+              ...(body.parameter_values || {}),
+              ...(body.adapter_parameter_values?.[adapter.adapter_plan_id] || {})
+          }
         : {};
     const missing = (adapter?.parameters || [])
         .filter(
@@ -386,6 +389,29 @@ function adapterParameterValues(
             "required adapter parameters are missing",
             "PARAMETER_VALIDATION_FAILED",
             { fields: missing }
+        );
+    }
+    const notAllowed = (adapter?.parameters || [])
+        .filter(
+            (parameter) =>
+                Array.isArray(parameter.allowed_values) &&
+                parameter.allowed_values.length > 0 &&
+                values[parameter.name] !== undefined &&
+                values[parameter.name] !== "" &&
+                !parameter.allowed_values.includes(values[parameter.name])
+        )
+        .map((parameter) => ({
+            step: adapter?.adapter_plan_id,
+            name: parameter.name,
+            reason: "not_allowed",
+            allowed: parameter.allowed_values
+        }));
+    if (notAllowed.length) {
+        throw new UnifiedExecutionError(
+            422,
+            "adapter parameter values are not allowed",
+            "PARAMETER_VALIDATION_FAILED",
+            { fields: notAllowed }
         );
     }
     const withDefaults = { ...values };
@@ -789,7 +815,14 @@ export function createUnifiedExecutionService(
         const compositeOutput = (modelResult: Record<string, unknown> | null | undefined) => {
             // The handoff URI is the registered model output; it covers runs
             // whose model result carries no composite output_uri.
-            const outputUri = modelResult?.output_uri ?? existingHandoff.resource_uri;
+            // Only for runs that ended in a publication outcome; other runs keep
+            // the model result as the only source.
+            const outputUri =
+                modelResult?.output_uri ??
+                (existingHandoff.publication?.status === "published" ||
+                existingHandoff.publication?.status === "failed"
+                    ? existingHandoff.resource_uri
+                    : undefined);
             if (!adapter || typeof outputUri !== "string") return undefined;
             return {
                 model_io_id: adapter.model_io_id,
@@ -817,9 +850,10 @@ export function createUnifiedExecutionService(
             (child) =>
                 child.execution_kind === "workflow" &&
                 child.stage === "post_model" &&
-                // A failed publication is an outcome of a completed run, not a
-                // failed child: never resubmit it (and never under another identity).
-                child.publication?.status !== "failed" &&
+                // A publication outcome (published or failed) belongs to a completed
+                // run, not a stale child: never resubmit it (and never under
+                // another identity).
+                !child.publication &&
                 ((compositeWorkflowRunId && child.tapis_run_id === compositeWorkflowRunId) ||
                     finalUriLooksLikeModelUri ||
                     (record.status === "failed" && child.status === "failed"))
@@ -1051,6 +1085,8 @@ export function createUnifiedExecutionService(
                 );
                 const run = { ...(polled || {}), ...(persisted || {}) } as Record<string, any>;
                 if (!run.output_uri && polled?.output_uri) run.output_uri = polled.output_uri;
+                // A null persisted publication must not hide the polled one.
+                if (!run.publication && polled?.publication) run.publication = polled.publication;
                 child.status = run.status;
                 child.output_data_object_id = run.output_data_object_id || null;
                 child.error_message = run.error_message || null;
@@ -1058,15 +1094,17 @@ export function createUnifiedExecutionService(
                 child.tapis_run_id = run.tapis_run_id || child.tapis_run_id || null;
                 const publication = publicationOf(run);
                 if (publication) child.publication = publication;
-                if (child.stage === "post_model" && publication?.status === "failed") {
-                    // Publication is an outcome of a completed run: the model
-                    // output stays registered and usable, and the failed child
+                if (child.stage === "post_model" && publication) {
+                    // Publication is an outcome of a completed run. The model
+                    // output registered at handoff stays the run's output: the
+                    // publish child's own output_uri (a STAC item URL) is never
+                    // registered or mirrored, and nothing waits on it. The child
                     // is never resubmitted (see the stale-child predicate).
-                    const failedHandoff = {
+                    const outcomeHandoff = {
                         ...((record.output_handoff as Record<string, unknown> | null) || {}),
                         publication
                     };
-                    const modelOutputUri = (failedHandoff as Record<string, any>).resource_uri;
+                    const modelOutputUri = (outcomeHandoff as Record<string, any>).resource_uri;
                     if (
                         legacyServices.tapis.updateCompositeWorkflowExecution &&
                         record.model_child_id
@@ -1089,19 +1127,19 @@ export function createUnifiedExecutionService(
                                     : undefined)
                         );
                     }
-                    const failedPublication = await store.update(record.id, {
+                    const publicationOutcome = await store.update(record.id, {
                         status: "completed",
                         adapter_run_ids: adapterChildren,
-                        output_handoff: failedHandoff,
+                        output_handoff: outcomeHandoff,
                         error_message: null,
                         failure_code: null
                     });
                     return parentResponse(
-                        failedPublication || {
+                        publicationOutcome || {
                             ...record,
                             status: "completed",
                             adapter_run_ids: adapterChildren,
-                            output_handoff: failedHandoff
+                            output_handoff: outcomeHandoff
                         }
                     );
                 }
@@ -1427,7 +1465,7 @@ export function createUnifiedExecutionService(
             });
             return parentResponse(updated || { ...record, status: "adapter_running" });
         } catch (error) {
-            if (isRunOwnerMismatch(error)) {
+            if (isRunOwnerMismatch(error) && plan.publish?.length) {
                 // Someone other than the submitter observed completion. The
                 // publication runs as the owner, so wait for the owner's poll:
                 // not a failure, and no child exists to count as stale.

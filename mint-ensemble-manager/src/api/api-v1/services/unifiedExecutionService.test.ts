@@ -2137,9 +2137,13 @@ describe("unifiedExecutionService", () => {
             },
             ...extra
         });
-        const seed = async (store: UnifiedExecutionStore, set: Partial<UnifiedExecutionRecord>) =>
+        const seed = async (
+            store: UnifiedExecutionStore,
+            set: Partial<UnifiedExecutionRecord>,
+            planExtra: Record<string, unknown> = {}
+        ) =>
             store.insert({
-                plan_id: secretSign(wacoPlan()),
+                plan_id: secretSign(wacoPlan(planExtra)),
                 thread_id: "thread-1",
                 model_id: "model-1",
                 execution_engine: "tapis",
@@ -2251,7 +2255,76 @@ describe("unifiedExecutionService", () => {
             });
         });
 
-        it("waits for the owner on a 403 RUN_OWNER_MISMATCH and retries on a later poll", async () => {
+        it("completes a published run from output_handoff alone, ignoring the child's STAC output_uri", async () => {
+            const publication = { status: "published", stac_item: "https://stacapi.test/i/1" };
+            for (const outputUri of ["https://stacapi.test/collections/c/items/ue-1", undefined]) {
+                jest.clearAllMocks();
+                stubRun({
+                    status: "completed",
+                    ...(outputUri ? { output_uri: outputUri } : {}),
+                    publication
+                });
+                const store = fakeStore();
+                await seed(store, { adapter_run_ids: [postModelChild()] });
+                const service = createUnifiedExecutionService(legacy, { store });
+
+                const done = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+                expect(done.status).toBe("completed");
+                expect(done.output_handoff).toMatchObject({
+                    data_object_id: "do-1",
+                    resource_uri: "tapis://ls6/out/model",
+                    publication: { status: "published" }
+                });
+                expect(done.output_handoff.final_resource_uri).toBeUndefined();
+                expect(done.output_handoff.final_output_data_object_id).toBeUndefined();
+                expect(calls("/register-output")).toHaveLength(0);
+                for (const call of legacy.tapis.updateCompositeWorkflowExecution.mock.calls) {
+                    expect(call[4]?.url).toBe("tapis://ls6/out/model");
+                }
+                // A later poll neither resubmits nor waits on the child.
+                const again = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+                expect(again.status).toBe("completed");
+                expect(calls("/workflows/submit")).toHaveLength(0);
+            }
+        });
+
+        it("keeps a polled publication when the persisted run carries null", async () => {
+            const publication = { status: "published", stac_item: "https://stac.test/i/1" };
+            stubRun(
+                {},
+                {
+                    "/runs/post-run-1/poll": [200, { status: "completed", publication }],
+                    "/runs/post-run-1": [200, { status: "completed", publication: null }]
+                }
+            );
+            const store = fakeStore();
+            await seed(store, { adapter_run_ids: [postModelChild()] });
+            const service = createUnifiedExecutionService(legacy, { store });
+            const done = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+            expect(done.output_handoff.publication.status).toBe("published");
+        });
+
+        it("does not mirror the handoff URI for a run without a publication outcome", async () => {
+            stubRun({ status: "completed", output_uri: "tapis://ls6/out/final" });
+            const store = fakeStore();
+            await seed(store, {
+                status: "completed",
+                model_result: {},
+                adapter_run_ids: [],
+                output_handoff: { data_object_id: "do-1", resource_uri: "tapis://ls6/out/model" }
+            });
+            const service = createUnifiedExecutionService(legacy, { store });
+            await service.getRun("ue_parent-1", "Bearer user-token");
+            expect(legacy.tapis.updateCompositeWorkflowExecution).toHaveBeenCalledWith(
+                "thread-1",
+                "model-1",
+                "model-child-1",
+                "completed",
+                undefined
+            );
+        });
+
+        it("does not mark awaiting_owner for a plan that did not ask to publish", async () => {
             legacy.tapis.getExecution.mockResolvedValue({
                 status: "SUCCESS",
                 results: [
@@ -2265,6 +2338,76 @@ describe("unifiedExecutionService", () => {
             stubRun({}, { "/workflows/submit": [403, { detail: { code: "RUN_OWNER_MISMATCH" } }] });
             const store = fakeStore();
             await seed(store, { status: "model_succeeded" });
+            const service = createUnifiedExecutionService(legacy, { store });
+            const run = (await service.getRun("ue_parent-1", "Bearer other")) as any;
+            expect(run.status).toBe("failed");
+            expect(run.output_handoff?.publication).toBeUndefined();
+        });
+
+        it("rejects a submitted value outside allowed_values and merges top-level with per-plan values", async () => {
+            stubAdapter();
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, publish: ["ckan", "stac"] },
+                "Bearer user-token"
+            )) as any;
+            legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue({
+                execution_id: "model-child-1",
+                output_uri: "tapis://ls6/o",
+                output_name: "displacement",
+                job_definition: { name: "j", appId: "a", appVersion: "1" }
+            });
+            await expect(
+                service.submit(
+                    {
+                        plan_id: plan.plan_id,
+                        parameter_values: { stac_collection: "subsidence-rates" }
+                    },
+                    "Bearer user-token"
+                )
+            ).rejects.toMatchObject({
+                statusCode: 422,
+                code: "PARAMETER_VALIDATION_FAILED",
+                details: {
+                    fields: [
+                        {
+                            name: "stac_collection",
+                            reason: "not_allowed",
+                            allowed: ["subsidence-rates-dev"]
+                        }
+                    ]
+                }
+            });
+            expect(calls("/workflows/submit")).toHaveLength(0);
+
+            await service.submit(
+                {
+                    plan_id: plan.plan_id,
+                    parameter_values: { public: true },
+                    adapter_parameter_values: {
+                        "deferred-plan-1": { stac_collection: "subsidence-rates-dev" }
+                    }
+                },
+                "Bearer user-token"
+            );
+            const args = JSON.parse(calls("/workflows/submit")[0][1].body).args;
+            expect(args).toMatchObject({ public: true, stac_collection: "subsidence-rates-dev" });
+        });
+
+        it("waits for the owner on a 403 RUN_OWNER_MISMATCH and retries on a later poll", async () => {
+            legacy.tapis.getExecution.mockResolvedValue({
+                status: "SUCCESS",
+                results: [
+                    {
+                        model_io: { id: "out-io" },
+                        resource: { name: "disp", url: "tapis://ls6/out/model" }
+                    }
+                ]
+            });
+            legacy.tapis.getJobStatus.mockResolvedValue({ status: "SUCCESS" });
+            stubRun({}, { "/workflows/submit": [403, { detail: { code: "RUN_OWNER_MISMATCH" } }] });
+            const store = fakeStore();
+            await seed(store, { status: "model_succeeded" }, { publish: ["ckan", "stac"] });
             const service = createUnifiedExecutionService(legacy, { store });
 
             const awaiting = (await service.getRun("ue_parent-1", "Bearer other-user")) as any;
