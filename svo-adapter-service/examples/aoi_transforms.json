@@ -1,0 +1,42 @@
+{
+  "_about": "Area-of-interest ETL piece. Turns a polygon source (inline GeoJSON, a 'minx miny maxx maxy' box, or the output of a boundary piece) into the single-polygon GeoJSON a model reads as its AOI input. Runs as an input-side task ahead of the model in a composite run (see model_task.input_steps).",
+
+  "_svo": {
+    "aoi_boundary": "https://w3id.org/okn/i/mint/area_of_interest__boundary"
+  },
+
+  "transform_specs": [
+    {
+      "id": "ts-aoi-from-boundary",
+      "name": "aoi-from-boundary",
+      "version": "1.0.0",
+      "description": "Normalize a polygon source (GeoJSON geometry/feature/collection, a bounding box, or a boundary piece's output) into one (Multi)Polygon FeatureCollection in EPSG:4326, with optional buffer, simplify, dissolve and bbox-only. Hard-fails when the bounding box exceeds max_area_km2.",
+      "transform_type": "aoi_from_boundary",
+      "is_lossy": false,
+      "method": "tapis_function",
+      "tapis_app_id": null,
+      "stage": "aoi-from-boundary",
+      "env_from_args": {
+        "BUFFER_M": "buffer_m",
+        "SIMPLIFY_M": "simplify_m",
+        "DISSOLVE": "dissolve",
+        "BBOX_ONLY": "bbox_only",
+        "MAX_AREA_KM2": "max_area_km2"
+      },
+      "parameters_schema_json": {
+        "type": "object",
+        "properties": {
+          "buffer_m": {"type": "number", "default": 0, "minimum": 0, "description": "Buffer distance in metres (0 = none)."},
+          "simplify_m": {"type": "number", "default": 0, "minimum": 0, "description": "Simplify tolerance in metres (0 = none)."},
+          "dissolve": {"type": "boolean", "default": true, "description": "Union all polygons into one feature."},
+          "bbox_only": {"type": "boolean", "default": false, "description": "Replace the geometry with its bounding box."},
+          "max_area_km2": {"type": "number", "default": 160000, "minimum": 1, "description": "Fail when the AOI bounding box is larger than this (km2)."}
+        }
+      },
+      "contracts": [
+        {"id": "c-aoi-in",  "role": "input",  "format": "geojson", "spatial_type": "polygon"},
+        {"id": "c-aoi-out", "role": "output", "standard_variable_uri": "https://w3id.org/okn/i/mint/area_of_interest__boundary", "format": "geojson", "spatial_type": "polygon", "crs_requirement": "EPSG:4326"}
+      ]
+    }
+  ]
+}

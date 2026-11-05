@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import time
 import textwrap
 from typing import Any
@@ -96,6 +97,72 @@ STANDARD_PARAMS: dict[str, dict[str, Any]] = {
     "ckan_url": {"type": "string", "default": "https://ckan.tacc.utexas.edu", "required": False},
     "ckan_token": {"type": "string", "default": "", "required": False},
 }
+
+# Staging of input-side ETL results (design 2026-11-05-aoi-etl-piece.md, section 3).
+# Spliced into the (dedented) model task source only when a run has input steps.
+_INPUT_STAGING_DEFS = textwrap.dedent(
+    """
+    import hashlib
+    _input_stages = __INPUT_STAGES__
+    _staging_dir = _input("INPUT_STAGING_DIR", "", allow_environment=False).strip()
+
+    def _put_file(_system, _path, _data):
+        # Tapis Files v3 insert: multipart POST; it creates missing parent
+        # directories and overwrites, so a retry writes identical bytes.
+        _url_path = "/v3/files/ops/%s/%s" % (_up.quote(_system, safe=""), _up.quote(_path.lstrip("/"), safe="/"))
+        _crlf = chr(13) + chr(10)
+        _mark = "svoinput" + hashlib.sha256(_data).hexdigest()[:24]
+        _body = (("--%s" % _mark + _crlf
+                  + 'Content-Disposition: form-data; name="file"; filename="%s"' % _path.rsplit("/", 1)[-1] + _crlf
+                  + "Content-Type: application/octet-stream" + _crlf + _crlf).encode()
+                 + _data + (_crlf + "--%s--" % _mark + _crlf).encode())
+        for _try in range(3):
+            _request_obj = _ur.Request(
+                _base + _url_path, data=_body, method="POST",
+                headers={"X-Tapis-Token": _auth["token"], "Accept": "application/json",
+                         "Content-Type": "multipart/form-data; boundary=" + _mark})
+            try:
+                with _ur.urlopen(_request_obj, timeout=90) as _resp:
+                    _note({"method": "POST", "path": _url_path, "status": _resp.getcode()})
+                    return
+            except _ue.HTTPError as exc:
+                _note({"method": "POST", "path": _url_path, "status": exc.code})
+                if exc.code == 401 and _try == 0 and _fetch_token():
+                    continue
+                if exc.code < 500 and exc.code != 429:
+                    _die("could not write the produced input to Tapis Files (HTTP %s)" % exc.code,
+                         "INPUT_STAGING_FAILED", {"http_status": exc.code})
+            except (_ue.URLError, OSError, http.client.HTTPException):
+                _note({"method": "POST", "path": _url_path, "status": "transport_error"})
+            time.sleep(2 * (_try + 1))
+        _die("could not write the produced input to Tapis Files", "INPUT_STAGING_FAILED")
+
+    def _stage_inputs(_definition):
+        _system = str(_definition.get("execSystemId") or "")
+        if not (_system and _staging_dir):
+            _die("input staging needs the job's execSystemId and the resolved input_staging_dir",
+                 "INPUT_STAGING_FAILED")
+        _list = _definition.get("fileInputs")
+        if not isinstance(_list, list):
+            _list = _definition["fileInputs"] = []
+        for _stage in _input_stages:
+            if any(isinstance(_i, dict) and _i.get("name") == _stage["app_input"] for _i in _list):
+                _die("input %s is already supplied by a bound dataset; remove the input step or the binding"
+                     % _stage["app_input"], code="INPUT_CONFLICT")
+            _content = _input(_stage["env"], "", allow_environment=False)
+            if not _content:
+                _die("the input step for %s produced no content" % _stage["app_input"],
+                     "INPUT_STAGING_FAILED")
+            _data = str(_content).encode()
+            _path = "%s/%s.%s" % (_staging_dir.rstrip("/"), _stage["name"], _stage["ext"])
+            _put_file(_system, _path, _data)
+            _uri = "tapis://%s/%s" % (_system, _path.lstrip("/"))
+            _note({"method": "STAGE", "path": _stage["app_input"], "status": "ok",
+                   "sha256": hashlib.sha256(_data).hexdigest(), "uri": _uri})
+            _list.append({"name": _stage["app_input"], "sourceUrl": _uri})
+
+    """).lstrip("\n")
+_INPUT_STAGING_CALL = "    _stage_inputs(_definition)\n"
 
 
 def _model_execution_code(model_task: dict[str, Any]) -> str:
@@ -403,6 +470,7 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
 
         _credentials_url = _input("CREDENTIALS_URL", "", allow_environment=False).strip()
 
+        __INPUT_STAGING_DEFS__
         def _submit_definition():
             # Copy of _job_definition for the submit call only: the secrets bound
             # to this run are fetched from the adapter (authorised by the signal
@@ -415,6 +483,7 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 _definition["fileInputs"] = [
                     _i for _i in _inputs
                     if not (isinstance(_i, dict) and _i.get("name") == "earthdata-netrc")]
+            __INPUT_STAGING_CALL__
             if not _credentials_url:
                 return _definition
             if not _signal_token:
@@ -549,8 +618,18 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         print(json.dumps(_manifest))
         """
     )
+    stages = model_task.get("input_stages") or []
+    # Without produced inputs both placeholders vanish and the code is unchanged.
+    source = source.replace(
+        "__INPUT_STAGING_DEFS__\n", _INPUT_STAGING_DEFS if stages else "", 1
+    ).replace(
+        "    __INPUT_STAGING_CALL__\n", _INPUT_STAGING_CALL if stages else "", 1
+    )
     return (
         source.replace("__JOB_DEFINITION__", repr(job_definition))
+        .replace("__INPUT_STAGES__", repr([
+            {"env": f"INPUT_{k}", "name": st["name"], "app_input": st["app_input_name"],
+             "ext": st["extension"]} for k, st in enumerate(stages)]))
         .replace("__JOB_NAME__", repr(job_definition.get("name") or ""))
         .replace("__OUTPUT_NAME__", repr(output_name))
         .replace("__OUTPUT_FORMAT__", repr(output_format))
@@ -558,6 +637,96 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         .replace("__OUTAGE_SECONDS__", str(max(0, int(settings.model_poll_outage_seconds))))
         .replace("__TARGET_PREFIX__", settings.run_token_target_prefix)
     )
+
+
+# ---------------------------------------------------------------------------
+# Input-side ETL: tasks that run before the model and hand it file inputs
+# (design 2026-11-05-aoi-etl-piece.md, section 4).
+# ---------------------------------------------------------------------------
+_INPUT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_INPUT_EXT_RE = re.compile(r"^[a-z0-9]{1,8}$")
+
+
+def _input_param_definitions(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """Chain-local parameters of one input step (pipeline-wide ones excluded)."""
+    from .planner import parameter_definitions  # lazy: planner imports models
+    return [d for d in parameter_definitions(item.get("steps") or [])
+            if d["name"] not in STANDARD_PARAMS and d["name"] != "source_uri"]
+
+
+def input_stage_arg_names(input_steps: list[dict[str, Any]] | None) -> set[str]:
+    """Pipeline args a run's input steps may be given (`in<k>_source`, `in<k>_<param>`)."""
+    names: set[str] = set()
+    for k, item in enumerate(input_steps or []):
+        names.add(f"in{k}_source")
+        names.update(f"in{k}_{d['name']}" for d in _input_param_definitions(item))
+    return names
+
+
+def _input_stage_tasks(
+    input_steps: list[dict[str, Any]],
+    params: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Emit each input chain as hosted function tasks; return ``(tasks, stages)``.
+
+    Task ids are ``in<k>-step-<n>-<type>`` and args ``in<k>_<param>`` so chains
+    never collide with each other or with the post-model steps. The first task
+    reads ``in<k>_source``, later ones the previous task's ``result``. Pipeline-wide
+    args (the token, base URL) bind unprefixed. ``stages`` names each chain's
+    last task for the model task to read.
+    """
+    from . import task_code as _task_code
+    tasks: list[dict[str, Any]] = []
+    stages: list[dict[str, Any]] = []
+    for k, item in enumerate(input_steps):
+        name = str(item.get("name") or "")
+        extension = str(item.get("extension") or "geojson")
+        if not _INPUT_NAME_RE.match(name) or not _INPUT_EXT_RE.match(extension):
+            raise ValueError(f"input step {k} needs a file-safe name and extension")
+        if not item.get("app_input_name") or not item.get("steps"):
+            raise ValueError(f"input step {k} needs app_input_name and steps")
+        params[f"in{k}_source"] = {
+            "type": "string", "required": True,
+            "description": "Source for the input-side ETL chain",
+        }
+        for d in _input_param_definitions(item):
+            params[f"in{k}_{d['name']}"] = {
+                "type": d.get("type", "string"), "required": False,
+                **{key: d[key] for key in ("default", "description") if d.get(key) is not None},
+            }
+        previous: str | None = None
+        for n, step in enumerate(item["steps"]):
+            if step.get("tapis_app_id"):
+                raise ValueError("input steps must be hosted function pieces")
+            task_id = f"in{k}-step-{n}-{step.get('transform_type') or 'transform'}"
+            inputs: dict[str, Any] = {
+                key: {"type": "string", "value_from": {
+                    "args": arg if arg in STANDARD_PARAMS else f"in{k}_{arg}"}}
+                for key, arg in (normalize_env_from_args(step.get("env_from_args") or {}) or {}).items()
+            }
+            inputs["SOURCE"] = {"type": "string", "value_from": (
+                {"args": f"in{k}_source"} if previous is None else
+                {"task_output": {"task_id": previous, "output_id": "result"}})}
+            task: dict[str, Any] = {
+                "id": task_id,
+                "type": "function",
+                "runtime": "python:3.11",
+                "installer": "pip",
+                "description": step.get("name"),
+                "code": step.get("python_source") or _task_code.get_code(step.get("transform_type")),
+                "output": {"result": {"type": "string"}},
+                "input": inputs,
+                "execution_profile": {"max_retries": 1, "max_exec_time": 600},
+            }
+            if step.get("python_entrypoint"):
+                task["entrypoint"] = step["python_entrypoint"]
+            if previous:
+                task["depends_on"] = [{"id": previous}]
+            tasks.append(task)
+            previous = task_id
+        stages.append({"name": name, "extension": extension,
+                       "app_input_name": str(item["app_input_name"]), "task_id": previous})
+    return tasks, stages
 
 
 # ---------------------------------------------------------------------------
@@ -624,6 +793,16 @@ def generate_tapis_workflow(
 
     tasks: list[dict[str, Any]] = []
     prev_id: str | None = None
+    input_stages: list[dict[str, Any]] = []
+    if model_task and model_task.get("input_steps"):
+        # Input chains run before the model and never touch prev_id, so the
+        # first post-model step still reads the model's result.
+        params["input_staging_dir"] = {
+            "type": "string", "required": False,
+            "description": "Server-resolved scratch directory for produced model inputs",
+        }
+        input_tasks, input_stages = _input_stage_tasks(model_task["input_steps"], params)
+        tasks.extend(input_tasks)
     if model_task:
         job_definition = dict(model_task.get("job_definition") or {})
         if not job_definition.get("appId") or not job_definition.get("appVersion"):
@@ -638,7 +817,8 @@ def generate_tapis_workflow(
             "installer": "pip",
             "description": "Run the model and resolve its declared output for adapter stages",
             "output": {"result": {"type": "string"}, "token": {"type": "string"}},
-            "code": _model_execution_code({**model_task, "job_definition": job_definition}),
+            "code": _model_execution_code({
+                **model_task, "job_definition": job_definition, "input_stages": input_stages}),
             "input": {
                 "TAPIS_BASE_URL": {
                     "type": "string",
@@ -665,6 +845,13 @@ def generate_tapis_workflow(
                 "max_exec_time": settings.model_task_max_exec_seconds,
             },
         })
+        if input_stages:
+            tasks[-1]["input"]["INPUT_STAGING_DIR"] = {
+                "type": "string", "value_from": {"args": "input_staging_dir"}}
+            for k, stage in enumerate(input_stages):
+                tasks[-1]["input"][f"INPUT_{k}"] = {"type": "string", "value_from": {
+                    "task_output": {"task_id": stage["task_id"], "output_id": "result"}}}
+            tasks[-1]["depends_on"] = [{"id": stage["task_id"]} for stage in input_stages]
         prev_id = model_id
     # Keep each transform as its own task. Hosted function tasks publish a
     # named `result` output, and scalar-consuming transforms bind explicitly to
@@ -1107,6 +1294,41 @@ def userinfo_username(token: str) -> str | None:
         return None
     username = result.get("username")
     return str(username) if username else None
+
+
+_SCRATCH_ROOTS: dict[tuple[str, str], str] = {}
+
+
+def resolve_scratch_root(token: str, username: str, system: str) -> str | None:
+    """The submitter's ``$SCRATCH`` on ``system``, or None when it cannot be known.
+
+    Tapis Files cannot expand ``$SCRATCH``, so read it off the user's most recent
+    job there: ls6's ``jobWorkingDir`` is ``HOST_EVAL($SCRATCH)/tapis/${JobUUID}``,
+    so ``execSystemExecDir`` is ``<scratch root>/tapis/<uuid>``. Cached per
+    (user, system) for the life of the process.
+    """
+    cached = _SCRATCH_ROOTS.get((username, system))
+    if cached:
+        return cached
+    import requests
+    try:
+        resp = requests.get(
+            f"{settings.tapis_base_url.rstrip('/')}/v3/jobs/list",
+            params={"search": f"execSystemId.eq.{system}", "select": "uuid,execSystemExecDir",
+                    "orderBy": "created(desc)", "limit": "20"},
+            headers={"X-Tapis-Token": token, "Accept": "application/json"},
+            timeout=settings.request_timeout_seconds,
+        )
+        rows = (resp.json() or {}).get("result") or [] if resp.ok else []
+    except (requests.RequestException, ValueError):
+        return None
+    for row in rows:
+        exec_dir = str((row or {}).get("execSystemExecDir") or "")
+        root = exec_dir.split("/tapis/", 1)[0] if "/tapis/" in exec_dir else ""
+        if root.startswith("/"):
+            _SCRATCH_ROOTS[(username, system)] = root.rstrip("/")
+            return _SCRATCH_ROOTS[(username, system)]
+    return None
 
 
 def get_job(token: str, job_uuid: str) -> dict[str, Any] | None:
