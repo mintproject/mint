@@ -1,7 +1,8 @@
 # Explicit app-input binding; input ETL planned by the bridge
 
-Status: Approved (rev 2, 2026-11-05, after architect + skeptic review; user said
-"ok do it") — Implementing
+Status: Implemented (rev 2, 2026-11-05) — code on branch `feat/app-input-binding` in
+monorepo, modflow-executables and subside; ui-react round-trip deferred to a
+follow-up PR; live rollout (migration, bindings, sync, Waco) pending
 
 Base: `origin/develop` d0c275c, which includes the AOI piece (#387), the EM
 derivation (#388) and the sync contract-replace fix (#389). Revises section 5
@@ -364,6 +365,21 @@ typed contract column, MODFLOW fallback removal.
   it); keeping `input_steps` as a transition path (never released beyond dev).
 - 2026-11-05: `input_steps` removed from the submit contract; `/plans/input`
   removed; the allow-list stays.
+
+- 2026-11-05 (implementation deviations): (a) the adapter's path search runs
+  over a registry limited to allow-listed input-step pieces, with the model's
+  own row excluded, so a shorter disallowed path cannot shadow an allowed one;
+  the post-hoc allow-list check stays as a backstop. (b) An empty path (source
+  already compatible) counts as no path, since a step with no task produces no
+  file. (c) The preview response also carries `tapis_app_id`, which submit uses
+  for `MODEL_APP_MISMATCH`; `fixed` is never emitted because the EM reports
+  FIXED inputs in `filled_app_inputs`. (d) `compositeModelContext` returns
+  `has_bound_inputs`; a model with no bound input skips derivation without
+  building the job, so it gets no unmatched-optional warnings. (e) The EM
+  attaches `input_sources`/`filled_app_inputs`/`steps_digest` only when steps
+  exist. (f) Generated GraphQL types in the EM and catalog API were hand-edited
+  minimally; run codegen against dev once the column is live. (g) The SUBSIDE
+  loader gained `SUBSIDE_CATALOG_YAML` to point tests at a YAML path.
 
 ## User feedback / decisions
 
