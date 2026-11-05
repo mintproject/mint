@@ -61,6 +61,7 @@ from .models import (
     DeferredPlanIn,
     GenerateWorkflowIn,
     ModelRunIn,
+    PlanInputIn,
     PlanIn,
     ReadinessCheckIn,
     ReadinessResult,
@@ -1362,6 +1363,42 @@ async def create_deferred_plan(
     }
 
 
+@app.post("/plans/input", tags=["Core: Planning"])
+async def plan_input_chain(body: PlanInputIn, authorization: str | None = Header(None)):
+    """Plan the input-side ETL chain for one model file input (no plan row).
+
+    The result is the ``steps``/``parameters`` a composite submit carries in
+    ``model_task.input_steps``. All source kinds start from a polygon-shaped
+    GeoJSON-compatible contract; the AOI piece also accepts a bbox string.
+    """
+    h = get_client(_bearer(authorization))
+    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    edge_map = await _load_edge_map(registry)
+    source = DataObjectContract(
+        format="geojson", spatial_type="polygon", resource_uri=f"input-source:{body.source_kind}")
+    target = DataObjectContract(standard_variable_uri=body.target_standard_variable_uri)
+    path = find_path(source, target, registry, edge_map=edge_map)
+    if not path:
+        raise HTTPException(422, detail={
+            "code": "NO_INPUT_TRANSFORM_PATH",
+            "message": "no ETL piece produces %s from a %s source"
+                       % (body.target_standard_variable_uri, body.source_kind),
+        })
+    plan = build_plan_json(path)
+    defaults = {d["name"]: d.get("default") for d in plan["parameters"]
+                if d.get("default") is not None and not d.get("managed")}
+    unknown = sorted(set(body.params or {}) - {d["name"] for d in plan["parameters"]})
+    if unknown:
+        raise HTTPException(422, detail={"code": "UNKNOWN_PARAMETERS", "parameters": unknown})
+    return {
+        "source_kind": body.source_kind,
+        "app_input_name": body.app_input_name,
+        "steps": plan["steps"],
+        "parameters": plan["parameters"],
+        "params": {**defaults, **(body.params or {})},
+    }
+
+
 @app.post("/plans/deferred/{plan_id}/bind", tags=["Core: Planning"])
 async def bind_deferred_plan(
     plan_id: str,
@@ -2049,7 +2086,8 @@ def _composite_task_contains_secret(value: Any) -> bool:
     """Reject credentials in coordinator-owned composite task descriptors."""
     if isinstance(value, dict):
         for key, item in value.items():
-            if str(key).lower() in {"tapis_token", "authorization", "x-tapis-token"}:
+            if str(key).lower() in {"tapis_token", "authorization", "x-tapis-token",
+                                    "credentials_url", "signal_token", "token_fetch_token"}:
                 if item not in (None, "", {}, []):
                     return True
             if _composite_task_contains_secret(item):
@@ -2058,6 +2096,110 @@ def _composite_task_contains_secret(value: Any) -> bool:
     if isinstance(value, list):
         return any(_composite_task_contains_secret(item) for item in value)
     return isinstance(value, str) and bool(re.search(r"\bbearer\s+", value, flags=re.IGNORECASE))
+
+
+_RESERVED_INPUT_ARGS = re.compile(r"^(in\d+_.*|input_staging_dir)$")
+_EXECUTION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _input_source_text(source: Any, k: int, bad) -> str:
+    """The `in<k>_source` arg text: a source object ({kind, geometry|bbox}) as
+    JSON, or a plain GeoJSON / 'minx miny maxx maxy' string."""
+    if isinstance(source, dict):
+        kind = source.get("kind")
+        if kind == "geojson" and isinstance(source.get("geometry"), dict):
+            source = {"kind": kind, "geometry": source["geometry"]}
+        elif (kind == "bbox" and isinstance(source.get("bbox"), list) and len(source["bbox"]) == 4
+              and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in source["bbox"])):
+            source = {"kind": kind, "bbox": source["bbox"]}
+        else:
+            raise bad(f"input_steps[{k}].source must be {{kind: geojson, geometry}} or {{kind: bbox, bbox: [4 numbers]}}")
+        source = json.dumps(source, sort_keys=True, separators=(",", ":"))
+    if not isinstance(source, str) or not source.strip() or len(source) > 200_000:
+        raise bad(f"input_steps[{k}].source must be non-empty (at most 200000 characters)")
+    return source
+
+
+# Transform types a caller may run as an input-side ETL step.
+INPUT_STEP_TRANSFORM_TYPES = {"aoi_from_boundary"}
+
+
+def _validate_input_steps(
+    input_steps: Any, registry: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Check ``model_task.input_steps``, re-resolve each step from the registry, return it.
+
+    A request step is only a reference: its ``transform_spec_id`` selects a
+    registry spec and the step is rebuilt with ``build_plan_json``, so code,
+    entrypoint, env bindings and transform type never come from the request.
+    """
+    def bad(message: str) -> HTTPException:
+        return HTTPException(422, detail={"code": "INVALID_INPUT_STEPS", "message": message})
+
+    by_id = {str(spec.get("id")): spec for spec in registry or [] if spec.get("id")}
+    if not isinstance(input_steps, list) or not 0 < len(input_steps) <= 4:
+        raise bad("input_steps must be a list of 1 to 4 entries")
+    names: set[str] = set()
+    app_inputs: set[str] = set()
+    for k, item in enumerate(input_steps):
+        if not isinstance(item, dict):
+            raise bad(f"input_steps[{k}] must be an object")
+        steps = item.get("steps")
+        if not (isinstance(steps, list) and 0 < len(steps) <= 8
+                and all(isinstance(st, dict) and st.get("transform_type") for st in steps)):
+            raise bad(f"input_steps[{k}].steps must be 1 to 8 plan steps with a transform_type")
+        resolved = []
+        for n, st in enumerate(steps):
+            spec = by_id.get(str(st.get("transform_spec_id") or ""))
+            if spec is None:
+                raise bad(f"input_steps[{k}].steps[{n}] has an unknown transform_spec_id")
+            if spec.get("transform_type") not in INPUT_STEP_TRANSFORM_TYPES:
+                raise bad(f"input_steps[{k}].steps[{n}] transform_type is not allowed as an input step")
+            resolved.append(build_plan_json([spec])["steps"][0])
+        item["steps"] = resolved
+        item["source"] = _input_source_text(item.get("source"), k, bad)
+        derivation = item.get("derivation")
+        if derivation is not None and not isinstance(derivation, dict):
+            raise bad(f"input_steps[{k}].derivation must be an object")
+        for key in ("name", "app_input_name"):
+            if not isinstance(item.get(key), str) or not item[key]:
+                raise bad(f"input_steps[{k}].{key} is required")
+        names.add(item["name"])
+        app_inputs.add(item["app_input_name"])
+        allowed = {d["name"] for d in tapis._input_param_definitions(item)}
+        params = item.get("params") or {}
+        if not isinstance(params, dict) or set(params) - allowed or not all(
+                isinstance(v, (str, int, float, bool)) for v in params.values()):
+            raise bad(f"input_steps[{k}].params must be scalar values for: {', '.join(sorted(allowed)) or 'none'}")
+    if len(names) != len(input_steps) or len(app_inputs) != len(input_steps):
+        raise bad("input step names and app_input_name values must be unique")
+    try:  # name/extension safety is enforced where the pipeline is generated
+        tapis._input_stage_tasks(input_steps, {})
+    except ValueError as exc:
+        raise bad(str(exc))
+    return input_steps
+
+
+async def _resolve_input_staging(
+    input_steps: list[dict[str, Any]], model_task: dict[str, Any], token: str | None,
+    execution_id: str,
+) -> str:
+    """The run's scratch staging directory on the job's execution system, or 422."""
+    system = str((model_task.get("job_definition") or {}).get("execSystemId") or "")
+    inputs = ", ".join(item["app_input_name"] for item in input_steps)
+    unresolved = lambda message: HTTPException(422, detail={  # noqa: E731
+        "code": "INPUT_STAGING_UNRESOLVED", "message": message})
+    if not system:
+        raise unresolved(f"the model job definition has no execSystemId to stage {inputs} on")
+    if not _EXECUTION_ID_RE.match(execution_id):
+        raise unresolved("execution_id is not safe to use in a staging path")
+    username = await run_in_threadpool(tapis.userinfo_username, token) if token else None
+    root = (await run_in_threadpool(tapis.resolve_scratch_root, token, username, system)
+            if token and username else None)
+    if not root:
+        raise unresolved(f"could not find your scratch directory on {system}: run any job on "
+                         f"{system} once, or bind a dataset to {inputs}")
+    return f"{root}/dynamo-runs/{execution_id}/inputs"
 
 
 def _resolve_bound_plan_id(plan_id: str) -> tuple[str, str | None]:
@@ -2132,6 +2274,10 @@ def _validate_plan_args(
         # receive execution_id in their submission args, while their bound
         # plan does not carry the composite model_task descriptor.
         allowed.update({"execution_id", "source_uri"})
+    input_steps = (plan_json.get("model_task") or {}).get("input_steps")
+    if input_steps:
+        allowed.update(tapis.input_stage_arg_names(input_steps))
+        allowed.add("input_staging_dir")
     unknown = sorted(set(normalized) - allowed)
     if unknown:
         raise HTTPException(
@@ -2298,6 +2444,20 @@ async def submit_workflow(
                 "message": "composite model submissions require execution_id metadata",
             })
         service_args.setdefault("execution_id", body.execution_id)
+        if body.model_task.get("input_steps"):
+            input_steps = _validate_input_steps(
+                body.model_task["input_steps"],
+                (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"])
+            # Server-owned: a caller may not set these through args.
+            for key in [k for k in service_args if _RESERVED_INPUT_ARGS.match(str(k))]:
+                del service_args[key]
+            for k, item in enumerate(input_steps):
+                service_args[f"in{k}_source"] = item["source"]
+                for name, value in (item.get("params") or {}).items():
+                    service_args[f"in{k}_{name}"] = value
+            if not body.dry_run:
+                service_args["input_staging_dir"] = await _resolve_input_staging(
+                    input_steps, body.model_task, token, body.execution_id)
 
     # The model descriptor is server-generated and intentionally request-local:
     # it is part of this composite run, not mutable plan state.  The adapter
@@ -2357,6 +2517,17 @@ async def submit_workflow(
         "workflow_run_id": run["id"], "event_type": "workflow_submit_requested",
         "payload_json": {"plan_id": body.plan_id, "dry_run": body.dry_run},
     }})
+    if body.model_task is not None and body.model_task.get("input_steps"):
+        # Names and step ids only; the produced content is never recorded here.
+        await h.execute(INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run["id"], "event_type": "run.input.planned",
+            "payload_json": {"inputs": [
+                {"name": item["name"], "app_input_name": item["app_input_name"],
+                 **({"derivation": item["derivation"]} if item.get("derivation") else {}),
+                 "step_ids": [f"in{k}-step-{n}-{st.get('transform_type')}"
+                              for n, st in enumerate(item["steps"])]}
+                for k, item in enumerate(body.model_task["input_steps"])]},
+        }})
 
     if body.dry_run:
         await h.execute(UPDATE_RUN, {"id": run["id"], "set": {"status": "generated"}})

@@ -1,0 +1,279 @@
+{
+ "binds_model_input": null,
+ "description": "svo-adapter generated ETL pipeline (2 step(s))",
+ "group_id": "adapter-ops",
+ "id": "golden-plan",
+ "owner": "${apiUserId}",
+ "params": {
+  "allocation": {
+   "default": "PT2050-DataX",
+   "required": false,
+   "type": "string"
+  },
+  "aoi_geojson_uri": {
+   "required": false,
+   "type": "string"
+  },
+  "ckan_token": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "ckan_url": {
+   "default": "https://ckan.tacc.utexas.edu",
+   "required": false,
+   "type": "string"
+  },
+  "credentials_url": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "earthdata_netrc_uri": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "end_date": {
+   "required": false,
+   "type": "string"
+  },
+  "execution_id": {
+   "description": "Ensemble Manager logical workflow execution",
+   "required": true,
+   "type": "string"
+  },
+  "geo_actor_id": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "lat": {
+   "description": "Point latitude (WGS84)",
+   "required": false,
+   "type": "number"
+  },
+  "lon": {
+   "description": "Point longitude (WGS84)",
+   "required": false,
+   "type": "number"
+  },
+  "signal_expires": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "signal_token": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "signal_url": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "source_uri": {
+   "description": "Server-owned model-output handoff URI",
+   "name": "source_uri",
+   "required": false,
+   "type": "string"
+  },
+  "stac_collection": {
+   "default": "subsidence-rates",
+   "required": false,
+   "type": "string"
+  },
+  "stac_url": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "start_date": {
+   "required": false,
+   "type": "string"
+  },
+  "tapis_base_url": {
+   "default": "https://portals.tapis.io",
+   "type": "string"
+  },
+  "tapis_token": {
+   "description": "User Tapis bearer token for the job submissions",
+   "required": true,
+   "type": "string"
+  },
+  "token_fetch_expires": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "token_fetch_token": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  },
+  "token_url": {
+   "default": "",
+   "required": false,
+   "type": "string"
+  }
+ },
+ "tasks": [
+  {
+   "code": "\nimport base64, http.client, json, socket, time, urllib.error as _ue, urllib.parse as _up, urllib.request as _ur\ntry:\n    from owe_python_sdk.runtime import execution_context as _ctx\nexcept Exception:\n    _ctx = None\n\ndef _input(name, default=\"\", allow_environment=True):\n    value = None\n    if _ctx is not None:\n        try:\n            value = _ctx.get_input(name)\n        except Exception:\n            value = None\n    # Hosted composite tasks must receive the caller's token through\n    # the workflow argument binding.  Environment fallback remains\n    # useful for local/generated-code tests, but is never consulted\n    # when the hosted execution context is present and the caller\n    # token is requested with allow_environment=False.\n    if value in (None, \"\") and (allow_environment or _ctx is None):\n        import os\n        value = os.environ.get(name, default)\n    return default if value in (None, \"\") else value\n\n_signal_url = _input(\"SIGNAL_URL\", \"\", allow_environment=False).strip()\n_signal_token = _input(\"SIGNAL_TOKEN\", \"\", allow_environment=False).strip()\n_signal_expires = _input(\"SIGNAL_EXPIRES\", \"\", allow_environment=False).strip()\n\ndef _signal(event, retry_for=5, **fields):\n    # Best-effort liveness report to the adapter (app/run_state.py). It\n    # never changes this task's outcome, and never prints the request,\n    # the token or an exception: Workflows captures stdout.\n    if not (_signal_url and _signal_token):\n        return\n    payload = {\"schema\": 1, \"event\": event, \"task_id\": \"model\", \"attempt\": 1}\n    payload.update({k: v for k, v in fields.items() if v is not None})\n    request = _ur.Request(\n        _signal_url, data=json.dumps(payload).encode(), method=\"POST\",\n        headers={\"Content-Type\": \"application/json\",\n                 \"X-Run-Signal-Token\": _signal_token,\n                 \"X-Run-Signal-Expires\": _signal_expires})\n    deadline = time.time() + retry_for\n    delay = 1\n    while True:\n        try:\n            with _ur.urlopen(request, timeout=5):\n                return\n        except Exception:\n            if time.time() >= deadline:\n                return\n            time.sleep(delay)\n            delay = min(delay * 2, 10)\n\n# First action: the staleness sweep treats silence after dispatch as a\n# task that never ran, so this must go out before anything can fail.\n_signal(\"started\", retry_for=60)\n\n_attempts = []\n\ndef _die(message, code=\"MODEL_OUTPUT_DISCOVERY_FAILED\", details=None):\n    payload = {\"schema_version\": 1, \"status\": \"error\", \"code\": code,\n               \"message\": message, \"attempts\": _attempts[-40:]}\n    if details:\n        payload[\"details\"] = details\n    text = json.dumps(payload)\n    if _ctx is not None:\n        try:\n            _ctx.set_output(\"result\", text)\n        except Exception:\n            pass\n    print(text)\n    _signal(\"finished\", code=code, message=message[:500],\n            job_uuid=(details or {}).get(\"job_uuid\"),\n            job_status=(details or {}).get(\"status\"))\n    # SystemExit is rendered by Tapis Workflows as `Task Failed: []`,\n    # discarding the structured diagnostic.  A bounded RuntimeError\n    # keeps the task failed while preserving the safe category/message\n    # in the workflow task's last_message.\n    raise RuntimeError(\"%s: %s\" % (code, message))\n\n_base = _input(\"TAPIS_BASE_URL\", \"https://portals.tapis.io\").rstrip(\"/\")\n_token = _input(\"TAPIS_TOKEN\", \"\", allow_environment=False).strip()\n_job_definition = {'name': 'mint-workflow-model-x', 'appId': 'modflow6-simulation', 'appVersion': '0.0.test', 'archiveSystemId': 'ls6', 'fileInputs': [], 'parameterSet': {'appArgs': []}, 'execSystemInputDir': '${JobWorkingDir}', 'execSystemOutputDir': '${JobWorkingDir}/output'}\n_job_name = 'mint-workflow-model-x'\n_output_name = 'cbb'.lower()\n_output_format = 'cbc'.lower()\n_renew_ttl = 0\nif not _token:\n    _die(\"TAPIS_TOKEN is required for the composite model stage\", \"MODEL_SUBMISSION_AUTH_REQUIRED\")\n# The live token sits in a dict so renewal can swap it without rebinding a global.\n_auth = {\"token\": _token, \"retry_at\": 0.0}\n\ndef _claims(token):\n    try:\n        payload = token.split(\".\")[1]\n        payload += \"=\" * (-len(payload) % 4)\n        return json.loads(base64.urlsafe_b64decode(payload))\n    except Exception:\n        return {}\n\ndef _renew_if_due(force=False):\n    # Mint a fresh token from the live one before it expires, so the wait is\n    # bounded by the job and not by any single token's lifetime. A failed\n    # renewal is retried shortly; the current token keeps working until it\n    # actually expires, and a rejected token still ends the stage.\n    # force=True skips the due check; it is used once, at the end, to hand\n    # the next stage a token with a full lifetime.\n    if not _renew_ttl or (not force and time.time() < _auth[\"retry_at\"]):\n        return\n    claims = _claims(_auth[\"token\"])\n    expires_at = claims.get(\"exp\")\n    if not force and (not expires_at or int(expires_at) - time.time() > max(300, _renew_ttl // 4)):\n        return\n    body = {\n        \"token_tenant_id\": claims.get(\"tapis/tenant_id\") or \"portals\",\n        \"account_type\": \"user\",\n        \"token_username\": claims.get(\"tapis/username\"),\n        \"target_site_id\": \"svo-adapter-run-%x\" % int(time.time()),\n        \"access_token_ttl\": _renew_ttl,\n    }\n    request = _ur.Request(\n        _base + \"/v3/tokens\", data=json.dumps(body).encode(),\n        headers={\"X-Tapis-Token\": _auth[\"token\"], \"Content-Type\": \"application/json\"},\n        method=\"POST\")\n    try:\n        with _ur.urlopen(request, timeout=90) as response:\n            fresh = (((json.loads(response.read().decode()) or {}).get(\"result\") or {})\n                     .get(\"access_token\") or {}).get(\"access_token\")\n    except Exception:\n        fresh = None\n    if fresh:\n        _auth[\"token\"] = fresh\n    else:\n        _auth[\"retry_at\"] = time.time() + 30\n\n# Token keeper (adapter run_tokens.py): the engine can start this task\n# hours after dispatch, after the token in the args has expired. The\n# adapter keeps a live copy and serves it at TOKEN_URL to the holder of\n# this run's fetch credential. Best effort and silent, like _signal:\n# nothing here prints, and a failed fetch just leaves the current token.\n_token_url = _input(\"TOKEN_URL\", \"\", allow_environment=False).strip()\n_fetch_cred = _input(\"TOKEN_FETCH_TOKEN\", \"\", allow_environment=False).strip()\n_fetch_expires = _input(\"TOKEN_FETCH_EXPIRES\", \"\", allow_environment=False).strip()\n_auth[\"fetches\"] = 0\n\ndef _fetch_token():\n    # True when a different, non-empty token was installed.\n    if not (_token_url and _fetch_cred) or _auth[\"fetches\"] >= 20:\n        return False\n    _auth[\"fetches\"] += 1\n    request = _ur.Request(\n        _token_url, data=b\"\", method=\"POST\",\n        headers={\"X-Run-Token-Credential\": _fetch_cred,\n                 \"X-Run-Token-Expires\": _fetch_expires,\n                 \"Accept\": \"application/json\"})\n    for _try in range(3):\n        try:\n            with _ur.urlopen(request, timeout=5) as response:\n                fresh = ((json.loads(response.read().decode()) or {}).get(\"token\") or \"\").strip()\n            _note({\"method\": \"FETCH\", \"path\": \"run-token\", \"status\": \"ok\" if fresh else \"empty\"})\n            if fresh and fresh != _auth[\"token\"]:\n                _auth[\"token\"] = fresh\n                return True\n            return False\n        except _ue.HTTPError as exc:\n            _note({\"method\": \"FETCH\", \"path\": \"run-token\", \"status\": exc.code})\n            if exc.code in (401, 404, 429):\n                return False  # refused for good; do not hammer the adapter\n        except Exception:\n            _note({\"method\": \"FETCH\", \"path\": \"run-token\", \"status\": \"transport_error\"})\n        time.sleep(2 * (_try + 1))\n    return False\n\ndef _token_expired_or_due():\n    expires_at = _claims(_auth[\"token\"]).get(\"exp\")\n    if not expires_at:\n        return False\n    margin = max(300, (_renew_ttl or 0) // 4)\n    return int(expires_at) - time.time() <= margin\n\nclass _Transient(Exception):\n    pass\n\ndef _note(entry):\n    _attempts.append(entry)\n    del _attempts[:-200]\n\ndef _request(path, method=\"GET\", payload=None, tolerate=False, auth_retry=True):\n    # tolerate=True raises _Transient for network errors and 5xx/429 so a\n    # long wait can ride out an outage. A 401 (expired token) gets one\n    # fetch from the adapter's token keeper and one retry; 403 is a real\n    # authorization failure and ends the stage at once.\n    body = None if payload is None else json.dumps(payload).encode()\n    headers = {\"X-Tapis-Token\": _auth[\"token\"], \"Accept\": \"application/json\"}\n    if body is not None:\n        headers[\"Content-Type\"] = \"application/json\"\n    request = _ur.Request(_base + path, data=body, headers=headers, method=method)\n    try:\n        with _ur.urlopen(request, timeout=90) as response:\n            _note({\"method\": method, \"path\": path, \"status\": response.getcode()})\n            return json.loads(response.read().decode())\n    except _ue.HTTPError as exc:\n        _note({\"method\": method, \"path\": path, \"status\": exc.code})\n        if exc.code == 401 and auth_retry and _fetch_token():\n            if method == \"POST\" and path.endswith(\"/jobs/submit\"):\n                # Tapis may have accepted the job before the 401 surfaced;\n                # attach to it by name rather than submit a duplicate.\n                _dup = _existing_job()\n                if _dup:\n                    _note({\"method\": \"ATTACH\", \"path\": \"/v3/jobs/\" + _dup, \"status\": \"existing_job\"})\n                    return {\"result\": {\"uuid\": _dup}}\n            return _request(path, method, payload, tolerate, auth_retry=False)\n        if exc.code in (401, 403):\n            _die(\n                \"the UI Tapis token was rejected during model %s (HTTP %s)\"\n                % (method.lower(), exc.code),\n                \"MODEL_PROVIDER_AUTH_FAILED\",\n                {\"http_status\": exc.code, \"operation\": method.lower(), \"path\": path},\n            )\n        if tolerate and (exc.code >= 500 or exc.code in (408, 429)):\n            raise _Transient()\n        _die(\"Tapis model request failed with HTTP %s\" % exc.code,\n             \"MODEL_PROVIDER_REQUEST_FAILED\")\n    except (_ue.URLError, OSError, http.client.HTTPException, ValueError) as exc:\n        _note({\"method\": method, \"path\": path,\n               \"status\": \"transport_error\", \"error\": type(exc).__name__})\n        if tolerate:\n            raise _Transient()\n        _die(\"Tapis model request failed: %s\" % type(exc).__name__,\n             \"MODEL_PROVIDER_REQUEST_FAILED\")\n\ndef _request_retry(path):\n    # One-off reads after the job finished: a blip here must not discard the run.\n    for _try in range(6):\n        try:\n            return _request(path, tolerate=True)\n        except _Transient:\n            time.sleep(10)\n    _die(\"Tapis kept failing after the model job finished\",\n         \"MODEL_PROVIDER_REQUEST_FAILED\")\n\ndef _find(value, names):\n    if isinstance(value, dict):\n        for name in names:\n            if value.get(name):\n                return value[name]\n        for child in value.values():\n            found = _find(child, names)\n            if found:\n                return found\n    elif isinstance(value, list):\n        for child in value:\n            found = _find(child, names)\n            if found:\n                return found\n    return None\n\ndef _existing_job():\n    # The Workflows engine can fail this task (e.g. a Kubernetes 504 while it\n    # polls) after the Tapis job was already submitted, and may then retry the\n    # task. Attach to that job instead of submitting a duplicate. Job names are\n    # unique per execution, and a failed/cancelled job is not worth attaching to.\n    if not _job_name:\n        return None\n    _found = _request_retry(\n        \"/v3/jobs/list?search=name.eq.%s&select=uuid,name,status,created\"\n        \"&orderBy=created(desc)\" % _up.quote(_job_name, safe=\"\"))\n    for _candidate in ((_found or {}).get(\"result\") or []):\n        if not isinstance(_candidate, dict) or _candidate.get(\"name\") != _job_name:\n            continue\n        _state = str(_candidate.get(\"status\") or \"\").upper()\n        if _state in {\"FAILED\", \"CANCELLED\", \"CANCELED\", \"KILLED\", \"SYSTEM_ERROR\"}:\n            continue\n        if _candidate.get(\"uuid\"):\n            return str(_candidate[\"uuid\"])\n    return None\n\n# Late start (the engine held this task past the baked token's life):\n# swap in a live token before the first Tapis call, and say so clearly\n# if none can be had, instead of a misleading \"token rejected\".\nif _token_expired_or_due():\n    _fetched = _fetch_token()\n    _exp = _claims(_auth[\"token\"]).get(\"exp\")\n    if not _fetched and _exp and int(_exp) <= time.time():\n        _die(\"the run token expired before the model task started and no live \"\n             \"token could be fetched from the adapter\",\n             \"RUN_TOKEN_EXPIRED_BEFORE_START\",\n             {\"token_fetch_configured\": bool(_token_url and _fetch_cred)})\n\n_credentials_url = _input(\"CREDENTIALS_URL\", \"\", allow_environment=False).strip()\n\ndef _submit_definition():\n    # Copy of _job_definition for the submit call only: the secrets bound\n    # to this run are fetched from the adapter (authorised by the signal\n    # token) and added to the copy in memory. _job_definition itself,\n    # and anything printed about it, never holds the values.\n    _definition = json.loads(json.dumps(_job_definition))\n    _inputs = _definition.get(\"fileInputs\")\n    if isinstance(_inputs, list):\n        # A user-supplied netrc must never override the system credential.\n        _definition[\"fileInputs\"] = [\n            _i for _i in _inputs\n            if not (isinstance(_i, dict) and _i.get(\"name\") == \"earthdata-netrc\")]\n    if not _credentials_url:\n        return _definition\n    if not _signal_token:\n        _die(\"credential endpoint configured but no run signal token was issued\",\n             code=\"SECRET_UNAVAILABLE\")\n    _creds = None\n    for _try in range(3):\n        try:\n            with _ur.urlopen(_ur.Request(\n                    _credentials_url, method=\"GET\",\n                    headers={\"X-Run-Signal-Token\": _signal_token,\n                             \"X-Run-Signal-Expires\": _signal_expires,\n                             \"Accept\": \"application/json\"}), timeout=10) as _resp:\n                _creds = json.loads(_resp.read().decode()) or {}\n            break\n        except _ue.HTTPError as exc:\n            _note({\"method\": \"FETCH\", \"path\": \"run-credentials\", \"status\": exc.code})\n            if exc.code < 500 and exc.code != 429:\n                break  # 404/403/409: the run bound secrets, so this is a failure\n        except Exception:\n            _note({\"method\": \"FETCH\", \"path\": \"run-credentials\", \"status\": \"transport_error\"})\n        time.sleep(2 * (_try + 1))\n    _env_values = _creds.get(\"env\") if isinstance(_creds, dict) else None\n    if not (isinstance(_env_values, dict) and _env_values):\n        _die(\"could not obtain the run's secrets from the adapter\",\n             \"SECRET_UNAVAILABLE\")\n    _params = _definition.setdefault(\"parameterSet\", {})\n    _env = _params.get(\"envVariables\")\n    if not isinstance(_env, list):\n        _env = _params[\"envVariables\"] = []\n    for _key, _value in _env_values.items():\n        # Replace, never duplicate: Tapis rejects repeated env keys.\n        _env[:] = [_e for _e in _env if not (isinstance(_e, dict) and _e.get(\"key\") == _key)]\n        _env.append({\"key\": str(_key), \"value\": str(_value)})\n    return _definition\n\n_job_uuid = _existing_job()\nif _job_uuid:\n    _note({\"method\": \"ATTACH\", \"path\": \"/v3/jobs/\" + _job_uuid, \"status\": \"existing_job\"})\nelse:\n    _submitted = _request(\"/v3/jobs/submit\", method=\"POST\", payload=_submit_definition())\n    _job_uuid = _find(_submitted, {\"uuid\", \"jobUuid\", \"jobUUID\"})\n    if not _job_uuid:\n        _die(\"Tapis did not return a model job UUID\", \"MODEL_PROVIDER_JOB_ID_MISSING\")\n    _job_uuid = str(_job_uuid)\n_signal(\"job_submitted\", job_uuid=_job_uuid, job_name=_job_name,\n        attached=bool(_attempts and _attempts[-1].get(\"status\") == \"existing_job\"))\n_status_path = \"/v3/jobs/%s/status\" % _up.quote(_job_uuid, safe=\"\")\n_terminal = None\n_last_ok = time.time()\nwhile True:\n    _renew_if_due()\n    try:\n        _status_payload = _request(_status_path, tolerate=True)\n    except _Transient:\n        # Ride out a Tapis/network outage; give up only if it persists.\n        if time.time() - _last_ok > 1800:\n            _die(\"Tapis job status was unreachable for over %d seconds\" % 1800,\n                 \"MODEL_PROVIDER_REQUEST_FAILED\", {\"job_uuid\": _job_uuid})\n        time.sleep(15)\n        continue\n    _last_ok = time.time()\n    _status_result = ((_status_payload or {}).get(\"result\")\n                      if isinstance(_status_payload, dict) else None)\n    _status = str(_find(_status_result, {\"status\", \"state\", \"job_status\", \"jobStatus\"})\n                  or _find(_status_payload, {\"state\", \"job_status\", \"jobStatus\"})\n                  or \"\").upper().replace(\" \", \"_\")\n    if _status in {\n        \"FINISHED\",\n        \"COMPLETED\",\n        \"SUCCESS\",\n        \"SUCCEEDED\",\n        \"NORMAL_COMPLETION\",\n    }:\n        _terminal = _status\n        break\n    if _status in {\"FAILED\", \"CANCELLED\", \"CANCELED\", \"KILLED\", \"SYSTEM_ERROR\"}:\n        _die(\"model job %s ended with status %s\" % (_job_uuid, _status),\n             \"MODEL_PROVIDER_JOB_FAILED\", {\"job_uuid\": _job_uuid, \"status\": _status})\n    time.sleep(5)\n\n_detail = _request_retry(\"/v3/jobs/%s\" % _up.quote(_job_uuid, safe=\"\"))\n_job = (_detail.get(\"result\") if isinstance(_detail, dict) else None) or {}\n_files_payload = _request_retry(\"/v3/jobs/%s/output/list/\" % _up.quote(_job_uuid, safe=\"\"))\n_files_result = (_files_payload or {}).get(\"result\") or []\nif isinstance(_files_result, dict):\n    _files_result = (_files_result.get(\"files\") or _files_result.get(\"items\") or\n                     _files_result.get(\"results\") or [])\n_files = [entry for entry in _files_result if isinstance(entry, dict) and entry.get(\"type\") != \"dir\"]\n_wanted = _output_name\n_exact = [entry for entry in _files if str(entry.get(\"name\") or \"\").lower() == _wanted]\nif len(_exact) == 1:\n    _selected = _exact[0]\nelse:\n    _extensions = ([\".cbc\", \".cbb\"] if _wanted in {\"cbc\", \"cbb\"} or \"cbc\" in _output_format\n                   else ([\".\" + _wanted] if _wanted else []))\n    _matches = [entry for entry in _files if any(\n        str(entry.get(\"name\") or \"\").lower().endswith(ext) for ext in _extensions)]\n    if len(_matches) != 1:\n        _die(\"model output %s was not uniquely matched\" % _output_name,\n             \"MODEL_OUTPUT_AMBIGUOUS\",\n             {\"job_uuid\": _job_uuid, \"archived_files\": [str(e.get(\"name\") or \"\") for e in _files[:40]]})\n    _selected = _matches[0]\n\n_url = str(_selected.get(\"url\") or _selected.get(\"uri\") or \"\")\n_parsed = _up.urlparse(_url)\nif _parsed.scheme == \"tapis\" and _parsed.netloc and _parsed.path:\n    _resource_uri = _url\nelse:\n    _system = str(_job.get(\"archiveSystemId\") or _job.get(\"archive_system_id\") or\n                  _job_definition.get(\"archiveSystemId\") or \"\")\n    _path = str(_selected.get(\"path\") or \"\").lstrip(\"/\")\n    if not _system or not _path:\n        _die(\"Tapis did not return a complete path for the selected model output\",\n             \"MODEL_OUTPUT_PATH_MISSING\", {\"job_uuid\": _job_uuid})\n    _resource_uri = \"tapis://%s/%s\" % (_system, _path)\n_manifest = {\"schema_version\": 1, \"status\": \"ok\", \"resource_uri\": _resource_uri,\n             \"model_output_key\": _output_name, \"model_job_name\": _job_name,\n             \"model_job_uuid\": _job_uuid, \"archived_name\": _selected.get(\"name\")}\n# Later stages run after this wait, possibly past the lifetime of the token\n# the run was submitted with, so hand them this stage's live token. A failed\n# mint keeps the current token, which Tapis may still accept.\n_renew_if_due(force=True)\nif _ctx is not None:\n    try:\n        _ctx.set_output(\"result\", _resource_uri)\n        _ctx.set_output(\"token\", _auth[\"token\"])\n    except Exception:\n        pass\n_signal(\"finished\", job_uuid=_job_uuid, job_status=_terminal,\n        condition=str(_job.get(\"condition\") or \"\") or None)\nprint(json.dumps(_manifest))\n",
+   "description": "Run the model and resolve its declared output for adapter stages",
+   "execution_profile": {
+    "max_exec_time": 172800,
+    "max_retries": 2
+   },
+   "id": "model",
+   "input": {
+    "CREDENTIALS_URL": {
+     "type": "string",
+     "value_from": {
+      "args": "credentials_url"
+     }
+    },
+    "SIGNAL_EXPIRES": {
+     "type": "string",
+     "value_from": {
+      "args": "signal_expires"
+     }
+    },
+    "SIGNAL_TOKEN": {
+     "type": "string",
+     "value_from": {
+      "args": "signal_token"
+     }
+    },
+    "SIGNAL_URL": {
+     "type": "string",
+     "value_from": {
+      "args": "signal_url"
+     }
+    },
+    "TAPIS_BASE_URL": {
+     "type": "string",
+     "value_from": {
+      "args": "tapis_base_url"
+     }
+    },
+    "TAPIS_TOKEN": {
+     "type": "string",
+     "value_from": {
+      "args": "tapis_token"
+     }
+    },
+    "TOKEN_FETCH_EXPIRES": {
+     "type": "string",
+     "value_from": {
+      "args": "token_fetch_expires"
+     }
+    },
+    "TOKEN_FETCH_TOKEN": {
+     "type": "string",
+     "value_from": {
+      "args": "token_fetch_token"
+     }
+    },
+    "TOKEN_URL": {
+     "type": "string",
+     "value_from": {
+      "args": "token_url"
+     }
+    }
+   },
+   "installer": "pip",
+   "output": {
+    "result": {
+     "type": "string"
+    },
+    "token": {
+     "type": "string"
+    }
+   },
+   "runtime": "python:3.11",
+   "type": "function"
+  },
+  {
+   "code": "import json, os\ntry:\n    from owe_python_sdk.runtime import execution_context as _ctx\nexcept Exception:\n    _ctx = None\n\ndef _input(name, default=\"\"):\n    value = None\n    if _ctx is not None:\n        try:\n            value = _ctx.get_input(name)\n        except Exception:\n            value = None\n    if value in (None, \"\"):\n        value = os.environ.get(name, default)\n    return default if value in (None, \"\") else value\n\ndef _input_alias(canonical, *legacy, default=\"\"):\n    # Read canonical task input first, then historical environment names.\n    for name in (canonical, *legacy):\n        value = _input(name, \"\")\n        if value not in (None, \"\"):\n            return value\n    return default\n\ndef _emit_result(result):\n    # Keep stdout as a bounded, inspectable record while also publishing the\n    # same value through the Workflows function-task output contract. The\n    # latter is the typed handoff consumed by downstream tasks.\n    text = json.dumps(result)\n    if _ctx is not None:\n        try:\n            _ctx.set_output(\"result\", text)\n        except Exception:\n            pass\n    print(text)\n\ndef _die(message):\n    # Keep task failures structured so Workflows and the facilitator UI can\n    # distinguish a failed transform from a successful JSON result.\n    text = json.dumps({\"schema_version\": 1, \"status\": \"error\", \"message\": message})\n    if _ctx is not None:\n        try:\n            _ctx.set_output(\"result\", text)\n        except Exception:\n            pass\n    print(text)\n    raise SystemExit(1)\nimport json, socket, time, urllib.error as _ue, urllib.request as _ur\n\ndef _actor_run(msg):\n    _base = _input(\"TAPIS_BASE_URL\", \"https://portals.tapis.io\").rstrip(\"/\")\n    _aid  = _input(\"GEO_ACTOR_ID\", \"\").strip()\n    _tok  = _input(\"TAPIS_TOKEN\", \"\").strip()\n    if not _aid:\n        _die(\"GEO_ACTOR_ID is required for geo_actor-backed DFC transforms\")\n    if not _tok:\n        _die(\"TAPIS_TOKEN is required so the geo_actor can read Tapis/CKAN inputs\")\n    _hdr  = {\"X-Tapis-Token\": _tok, \"Content-Type\": \"application/json\"}\n    def _req(method, url, body=None, attempts=1):\n        d = json.dumps(body).encode() if body else None\n        raw = \"\"\n        for _attempt in range(1, attempts + 1):\n            r = _ur.Request(url, data=d, headers=_hdr, method=method)\n            try:\n                raw = _ur.urlopen(r, timeout=90).read().decode()\n                break\n            except _ue.HTTPError as exc:\n                err = exc.read().decode(errors=\"replace\")[:800]\n                _die(f\"Tapis geo_actor API {method} failed with HTTP {exc.code}: {err}\")\n            except (_ue.URLError, TimeoutError, socket.timeout) as exc:\n                if _attempt >= attempts:\n                    _die(f\"Tapis geo_actor API {method} failed after {attempts} attempts: {type(exc).__name__}: {exc}\")\n                time.sleep(min(2 ** _attempt, 20))\n            except Exception as exc:\n                _die(f\"Tapis geo_actor API {method} failed: {type(exc).__name__}: {exc}\")\n        try:\n            return json.loads(raw)\n        except Exception:\n            _die(f\"Tapis geo_actor API {method} returned non-JSON: {raw[:800]}\")\n    sub  = _req(\"POST\", f\"{_base}/v3/actors/{_aid}/messages\", {\"message\": json.dumps(msg)}, attempts=3)\n    eid  = sub[\"result\"][\"execution_id\"]\n    st = \"SUBMITTED\"\n    for _ in range(60):\n        st = _req(\"GET\", f\"{_base}/v3/actors/{_aid}/executions/{eid}\", attempts=5)[\"result\"][\"status\"]\n        if st in (\"COMPLETE\", \"FAILED\", \"ERROR\"):\n            break\n        time.sleep(5)\n    logs = _req(\"GET\", f\"{_base}/v3/actors/{_aid}/executions/{eid}/logs\", attempts=5)[\"result\"][\"logs\"]\n    if st != \"COMPLETE\":\n        _die(f\"geo_actor execution {eid} ended with {st}: {str(logs)[:1200]}\")\n    try:\n        return json.loads(logs)\n    except Exception:\n        for _line in reversed(str(logs).splitlines()):\n            _line = _line.strip()\n            if not _line.startswith(\"{\"):\n                continue\n            try:\n                return json.loads(_line)\n            except Exception:\n                pass\n        _die(f\"geo_actor execution {eid} completed but logs were not JSON: {str(logs)[:1200]}\")\n\ndef _die(message):\n    print(json.dumps({\"schema_version\": 1, \"status\": \"error\", \"message\": message}))\n    raise SystemExit(1)\ndef _budget_candidates(default):\n    raw = _input(\"BUDGET_PACKAGE_CANDIDATES\", \"\")\n    if not raw:\n        return default\n    try:\n        parsed = json.loads(raw) if isinstance(raw, str) else raw\n    except (TypeError, ValueError):\n        parsed = [part.strip() for part in str(raw).split(\",\")]\n    if isinstance(parsed, str):\n        parsed = [parsed]\n    if not isinstance(parsed, list) or not parsed or len(parsed) > 8:\n        _die(\"BUDGET_PACKAGE_CANDIDATES must be a non-empty list of at most 8 labels\")\n    candidates = [str(item).strip().upper() for item in parsed]\n    if any(not item or len(item) > 64 for item in candidates):\n        _die(\"BUDGET_PACKAGE_CANDIDATES contains an invalid label\")\n    return list(dict.fromkeys(candidates))\n\n_source_uri   = _input(\"SOURCE_URI\", \"\")\n_gma_id       = _input_alias(\"SPATIAL_SCOPE_ID\", \"GMA_ID\")\n_area         = _input_alias(\"SPATIAL_SCOPE_NAME\", \"AREA\")\n_boundary_uri = _input(\"DFC_AREA_BOUNDARY_URI\", \"\") or _input_alias(\"GEOMETRY_SOURCE_URI\", \"GMA_BOUNDARY_URI\")\n_token        = _input(\"TAPIS_TOKEN\", \"\")\n_packages     = _budget_candidates([\"DRN\", \"DRAINS\"])\nresult = _actor_run({\n    \"operation\": \"extract_budget_gma\",\n    \"input_url\": _source_uri,\n    \"read_token\": _token,\n    \"params\": {\"package\": _packages[0], \"packages\": _packages, \"gma_id\": _gma_id, \"area\": _area, \"boundary_uri\": _boundary_uri},\n})\n_emit_result(result)\n",
+   "depends_on": [
+    {
+     "id": "model"
+    }
+   ],
+   "description": "budget-extract",
+   "id": "step-0-budget_extract_drain",
+   "input": {
+    "SOURCE_URI": {
+     "type": "string",
+     "value_from": {
+      "task_output": {
+       "output_id": "result",
+       "task_id": "model"
+      }
+     }
+    },
+    "TAPIS_TOKEN": {
+     "type": "string",
+     "value_from": {
+      "task_output": {
+       "output_id": "token",
+       "task_id": "model"
+      }
+     }
+    }
+   },
+   "installer": "pip",
+   "output": {
+    "result": {
+     "type": "string"
+    }
+   },
+   "runtime": "python:3.11",
+   "type": "function"
+  },
+  {
+   "code": "import json, os\ntry:\n    from owe_python_sdk.runtime import execution_context as _ctx\nexcept Exception:\n    _ctx = None\n\ndef _input(name, default=\"\"):\n    value = None\n    if _ctx is not None:\n        try:\n            value = _ctx.get_input(name)\n        except Exception:\n            value = None\n    if value in (None, \"\"):\n        value = os.environ.get(name, default)\n    return default if value in (None, \"\") else value\n\ndef _input_alias(canonical, *legacy, default=\"\"):\n    # Read canonical task input first, then historical environment names.\n    for name in (canonical, *legacy):\n        value = _input(name, \"\")\n        if value not in (None, \"\"):\n            return value\n    return default\n\ndef _emit_result(result):\n    # Keep stdout as a bounded, inspectable record while also publishing the\n    # same value through the Workflows function-task output contract. The\n    # latter is the typed handoff consumed by downstream tasks.\n    text = json.dumps(result)\n    if _ctx is not None:\n        try:\n            _ctx.set_output(\"result\", text)\n        except Exception:\n            pass\n    print(text)\n\ndef _die(message):\n    # Keep task failures structured so Workflows and the facilitator UI can\n    # distinguish a failed transform from a successful JSON result.\n    text = json.dumps({\"schema_version\": 1, \"status\": \"error\", \"message\": message})\n    if _ctx is not None:\n        try:\n            _ctx.set_output(\"result\", text)\n        except Exception:\n            pass\n    print(text)\n    raise SystemExit(1)\n_raw_source_result = _input_alias(\"SOURCE_RESULT\", \"INTERMEDIATE_RESULT\")\nif not _raw_source_result:\n    _die(\"SOURCE_RESULT is required for modular unit conversion\")\ntry:\n    _source_payload = json.loads(_raw_source_result) if isinstance(_raw_source_result, str) else _raw_source_result\nexcept Exception as exc:\n    _die(f\"SOURCE_RESULT must be JSON: {exc}\")\nif isinstance(_source_payload, dict) and isinstance(_source_payload.get(\"result\"), dict):\n    _source_payload = _source_payload[\"result\"]\nif isinstance(_source_payload, dict) and str(_source_payload.get(\"status\") or \"\").lower() == \"error\":\n    _die(_source_payload.get(\"message\") or \"upstream transform failed\")\nif not isinstance(_source_payload, dict):\n    _die(\"SOURCE_RESULT must be a JSON object containing a numeric value\")\n_source_value = _source_payload.get(\"value\")\nif isinstance(_source_value, bool) or not isinstance(_source_value, (int, float)):\n    for _key in (\"spring_flow\", \"stream_flow\", \"baseflow\", \"flow\", \"total_flow\", \"mean\", \"average\", \"average_value\"):\n        _candidate = _source_payload.get(_key)\n        if not isinstance(_candidate, bool) and isinstance(_candidate, (int, float)):\n            _source_value = _candidate\n            break\nif isinstance(_source_value, bool) or not isinstance(_source_value, (int, float)):\n    _die(\"SOURCE_RESULT did not contain a numeric value\")\n_src_unit = str(_source_payload.get(\"unit\") or _source_payload.get(\"units\") or _input(\"SOURCE_UNIT\", \"m\"))\n_tgt_unit = _input(\"TARGET_UNIT\", \"ft\")\n# Linear factor table \u2014 extend as needed.\n_FACTORS: dict[tuple[str, str], float] = {\n    (\"m\", \"ft\"): 3.28084,\n    (\"ft\", \"m\"): 0.3048,\n    (\"m\", \"cm\"): 100.0,\n    (\"cm\", \"m\"): 0.01,\n    (\"m\", \"mm\"): 1000.0,\n    (\"mm\", \"m\"): 0.001,\n    (\"degc\", \"degf\"): None,  # non-linear \u2014 handled below\n    (\"degf\", \"degc\"): None,\n    # Flow conversions \u2014 GMA spring/stream flow DFC targets\n    # 1 cfs = 0.028317 m\u00b3/s; 1 mgd = 0.043813 m\u00b3/s; 1 af/month \u2248 0.0004691 m\u00b3/s (30.44-day avg month)\n    (\"cfs\", \"m3s\"):      0.028317,\n    (\"m3s\", \"cfs\"):      35.3147,\n    (\"mgd\", \"m3s\"):      0.043813,\n    (\"m3s\", \"mgd\"):      22.8245,\n    (\"cfs\", \"mgd\"):      0.64632,\n    (\"mgd\", \"cfs\"):      1.5472,\n    (\"cfs\", \"af_month\"): 60.376,\n    (\"af_month\", \"cfs\"): 0.016562,\n    (\"m3s\", \"af_month\"): 2131.7,\n    (\"af_month\", \"m3s\"): 0.0004691,\n}\n_key = (_src_unit.lower(), _tgt_unit.lower())\n_factor = _FACTORS.get(_key)\nif _factor is None and _key == (\"degc\", \"degf\"):\n    def _convert(v): return v * 9 / 5 + 32\nelif _factor is None and _key == (\"degf\", \"degc\"):\n    def _convert(v): return (v - 32) * 5 / 9\nelif _factor is not None:\n    def _convert(v): return v * _factor\nelse:\n    raise RuntimeError(f\"No unit conversion defined for {_src_unit!r} -> {_tgt_unit!r}\")\n_converted = _convert(_source_value)\nresult = {\n    \"schema_version\": 1,\n    \"status\": \"ok\",\n    \"operation\": \"unit_convert\",\n    \"value\": _converted,\n    \"source_unit\": _src_unit,\n    \"unit\": _tgt_unit,\n    \"conversion_factor\": _factor,\n}\n_emit_result(result)\n",
+   "depends_on": [
+    {
+     "id": "step-0-budget_extract_drain"
+    }
+   ],
+   "description": "convert",
+   "id": "step-1-unit_convert",
+   "input": {
+    "SOURCE_RESULT": {
+     "type": "string",
+     "value_from": {
+      "task_output": {
+       "output_id": "result",
+       "task_id": "step-0-budget_extract_drain"
+      }
+     }
+    },
+    "SOURCE_UNIT": {
+     "type": "string",
+     "value_from": {
+      "args": "source_unit"
+     }
+    },
+    "TARGET_UNIT": {
+     "type": "string",
+     "value_from": {
+      "args": "target_unit"
+     }
+    }
+   },
+   "installer": "pip",
+   "output": {
+    "result": {
+     "type": "string"
+    }
+   },
+   "runtime": "python:3.11",
+   "type": "function"
+  }
+ ],
+ "type": "workflow"
+}

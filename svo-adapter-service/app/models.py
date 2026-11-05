@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -108,6 +108,15 @@ class DeferredPlanIn(BaseModel):
     target_dataset_specification_id: str | None = None
     target_contract: DataObjectContract | None = None
     model_output_key: str
+
+
+class PlanInputIn(BaseModel):
+    """Plan an input-side ETL chain that produces one model file input."""
+
+    source_kind: Literal["region", "bbox", "geojson"]
+    target_standard_variable_uri: str
+    app_input_name: str
+    params: dict[str, Any] | None = None
 
 
 class BindDeferredPlanIn(BaseModel):

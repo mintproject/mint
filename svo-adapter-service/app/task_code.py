@@ -828,6 +828,230 @@ print(json.dumps({
 """
 
 
+# Input-side AOI piece. SOURCE (read via _input) accepts:
+#   * GeoJSON text: a Geometry, Feature or FeatureCollection;
+#   * the Ensemble Manager's object form, {"kind": "geojson", "geometry": {...}} or
+#     {"kind": "bbox", "bbox": [minx, miny, maxx, maxy]} (as JSON text);
+#   * a bounding box, "minx miny maxx maxy" (commas or spaces) or a JSON list of 4 numbers;
+#   * the `result` of a preceding boundary piece: JSON (or JSON text inside JSON,
+#     e.g. a geo_actor blob) whose GeoJSON is nested anywhere below the top level.
+# Coordinates must already be lon/lat (EPSG:4326). Output: ctx.set_output("result",
+# <FeatureCollection text>) with exactly one (Multi)Polygon feature, sorted keys,
+# 7-decimal coordinates. Stdlib only unless buffer_m/simplify_m > 0, when shapely and
+# pyproj are pip-installed at task start. dissolve=true only merges several polygons
+# into one MultiPolygon feature (concatenation, no union); a true union happens only
+# on the shapely path (buffer_m/simplify_m > 0). Overlapping parts are not unioned otherwise.
+_AOI_FROM_BOUNDARY_SNIPPET = _INPUT_HELPER + """\
+import math, subprocess, sys, tempfile
+
+_GEOJSON_TYPES = {"Polygon", "MultiPolygon", "Point", "MultiPoint", "LineString",
+                  "MultiLineString", "GeometryCollection", "Feature", "FeatureCollection"}
+
+def _num(name, default):
+    try:
+        return float(_input(name, default))
+    except (TypeError, ValueError):
+        _die(name + " must be a number")
+
+def _flag(name, default):
+    return str(_input(name, default)).strip().lower() in ("1", "true", "yes", "y", "on")
+
+_buffer_m = _num("BUFFER_M", 0)
+_simplify_m = _num("SIMPLIFY_M", 0)
+_dissolve = _flag("DISSOLVE", "true")
+_bbox_only = _flag("BBOX_ONLY", "false")
+_max_area_km2 = _num("MAX_AREA_KM2", 160000)
+
+def _find_geojson(value, depth=0):
+    if isinstance(value, str):
+        text = value.strip()
+        if text[:1] not in ("{", "["):
+            return None
+        try:
+            value = json.loads(text)
+        except ValueError:
+            return None
+    if depth > 8:
+        return None
+    if isinstance(value, dict):
+        if value.get("type") in _GEOJSON_TYPES:
+            return value
+        children = list(value.values())
+    elif isinstance(value, list):
+        if value and all(isinstance(i, dict) and i.get("type") in _GEOJSON_TYPES for i in value):
+            return {"type": "FeatureCollection", "features": value}
+        children = value
+    else:
+        return None
+    for child in children:
+        found = _find_geojson(child, depth + 1)
+        if found is not None:
+            return found
+    return None
+
+def _bbox_from(value):
+    parts = value
+    if isinstance(value, str):
+        text = value.strip()
+        if text[:1] == "[":
+            try:
+                parts = json.loads(text)
+            except ValueError:
+                return None
+        else:
+            parts = text.replace(",", " ").split()
+    if not isinstance(parts, list) or len(parts) != 4:
+        return None
+    try:
+        minx, miny, maxx, maxy = [float(p) for p in parts]
+    except (TypeError, ValueError):
+        return None
+    if not (minx < maxx and miny < maxy):
+        _die("bounding box must be minx miny maxx maxy with min < max")
+    return [[[[minx, miny], [maxx, miny], [maxx, maxy], [minx, maxy], [minx, miny]]]]
+
+def _collect(geom, out):
+    kind = geom.get("type") if isinstance(geom, dict) else None
+    if kind == "Polygon":
+        out.append(geom.get("coordinates") or [])
+    elif kind == "MultiPolygon":
+        out.extend(geom.get("coordinates") or [])
+    elif kind == "GeometryCollection":
+        for child in geom.get("geometries") or []:
+            _collect(child, out)
+    elif kind == "Feature":
+        if geom.get("geometry"):
+            _collect(geom["geometry"], out)
+    elif kind == "FeatureCollection":
+        for child in geom.get("features") or []:
+            _collect(child, out)
+    else:
+        _die("unsupported geometry type %r: the area of interest must be a polygon" % (kind,))
+
+def _clean_ring(ring):
+    points = []
+    for point in ring:
+        try:
+            x, y = float(point[0]), float(point[1])
+        except (TypeError, ValueError, IndexError):
+            _die("malformed coordinate in the area of interest")
+        if not (math.isfinite(x) and math.isfinite(y)):
+            _die("non-finite coordinate in the area of interest")
+        if abs(x) > 180 or abs(y) > 90:
+            _die("coordinates look projected; the area of interest must be lon/lat EPSG:4326")
+        points.append([round(x, 7), round(y, 7)])
+    if points and points[0] != points[-1]:
+        points.append(list(points[0]))
+    if len(points) < 4:
+        _die("a polygon ring needs at least 3 distinct points")
+    return points
+
+def _clean_polygons(polygons):
+    return [[_clean_ring(ring) for ring in polygon] for polygon in polygons if polygon]
+
+def _extent(polygons):
+    xs = [p[0] for poly in polygons for ring in poly for p in ring]
+    ys = [p[1] for poly in polygons for ring in poly for p in ring]
+    return min(xs), min(ys), max(xs), max(ys)
+
+def _area_km2(extent):
+    minx, miny, maxx, maxy = extent
+    mid = math.radians((miny + maxy) / 2.0)
+    return (maxx - minx) * 111.32 * math.cos(mid) * (maxy - miny) * 110.574
+
+def _shapely_pass(polygons):
+    # buffer/simplify run in a local metric projection; shapely/pyproj are not in
+    # the function runtime, so install them here (only when asked for).
+    target = tempfile.mkdtemp(prefix="aoi-libs-")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet",
+                               "--target", target, "shapely", "pyproj"])
+    except Exception as exc:
+        _die("could not install shapely/pyproj for buffer/simplify: %s" % type(exc).__name__)
+    sys.path.insert(0, target)
+    import pyproj
+    from shapely.geometry import shape
+    from shapely.ops import transform, unary_union
+    from shapely.validation import make_valid
+    geom = unary_union([make_valid(shape({"type": "Polygon", "coordinates": p})) for p in polygons])
+    centre = geom.centroid
+    local = "+proj=aeqd +lat_0=%.6f +lon_0=%.6f +datum=WGS84 +units=m" % (centre.y, centre.x)
+    forward = pyproj.Transformer.from_crs("EPSG:4326", local, always_xy=True).transform
+    inverse = pyproj.Transformer.from_crs(local, "EPSG:4326", always_xy=True).transform
+    metric = transform(forward, geom)
+    if _buffer_m > 0:
+        metric = metric.buffer(_buffer_m)
+    if _simplify_m > 0:
+        metric = metric.simplify(_simplify_m, preserve_topology=True)
+    geom = make_valid(transform(inverse, metric))
+    parts = [g for g in getattr(geom, "geoms", [geom]) if g.geom_type in ("Polygon", "MultiPolygon")]
+    out = []
+    for part in parts:
+        for poly in getattr(part, "geoms", [part]):
+            out.append([[list(c) for c in poly.exterior.coords]]
+                       + [[list(c) for c in ring.coords] for ring in poly.interiors])
+    return out
+
+_source = _input("SOURCE", "")
+if not str(_source).strip():
+    _die("empty input: SOURCE must be GeoJSON, a bounding box, or a boundary result")
+
+_polygons = None
+_parsed = _source
+if isinstance(_source, str) and _source.strip()[:1] == "{":
+    try:
+        _parsed = json.loads(_source)
+    except ValueError:
+        _parsed = _source
+if isinstance(_parsed, dict) and _parsed.get("kind") == "bbox":
+    # The Ensemble Manager's object form: {"kind": "bbox", "bbox": [minx, miny, maxx, maxy]}.
+    _polygons = _bbox_from(_parsed.get("bbox"))
+    if _polygons is None:
+        _die("bbox source must hold four numbers: minx miny maxx maxy")
+elif isinstance(_parsed, dict) and _parsed.get("kind") == "geojson":
+    _source = _parsed.get("geometry")
+else:
+    _polygons = _bbox_from(_source)
+if _polygons is None:
+    _found = _find_geojson(_source)
+    if _found is None:
+        _die("SOURCE holds no GeoJSON polygon and is not a bounding box")
+    _polygons = []
+    _collect(_found, _polygons)
+_polygons = _clean_polygons(_polygons)
+if not _polygons:
+    _die("empty input: no polygon in SOURCE")
+
+if _buffer_m > 0 or _simplify_m > 0:
+    _polygons = _clean_polygons(_shapely_pass(_polygons))
+    if not _polygons:
+        _die("the area of interest is empty after buffer/simplify")
+if _bbox_only:
+    _minx, _miny, _maxx, _maxy = _extent(_polygons)
+    _polygons = [[[[_minx, _miny], [_maxx, _miny], [_maxx, _maxy], [_minx, _maxy], [_minx, _miny]]]]
+if len(_polygons) > 1 and not _dissolve:
+    _die("SOURCE has several polygons; set dissolve=true to merge them into one feature")
+
+_area = _area_km2(_extent(_polygons))
+if _area > _max_area_km2:
+    _die("region too large (%.0f km2 > max_area_km2 %.0f); bind an AOI dataset or choose a smaller region"
+         % (_area, _max_area_km2))
+
+_geometry = ({"type": "Polygon", "coordinates": _polygons[0]} if len(_polygons) == 1
+             else {"type": "MultiPolygon", "coordinates": _polygons})
+_text = json.dumps({"type": "FeatureCollection",
+                    "features": [{"type": "Feature", "properties": {}, "geometry": _geometry}]},
+                   sort_keys=True, separators=(",", ":"))
+if _ctx is not None:
+    try:
+        _ctx.set_output("result", _text)
+    except Exception:
+        pass
+import hashlib
+print("sha256=%s bytes=%d" % (hashlib.sha256(_text.encode()).hexdigest(), len(_text.encode())))
+"""
+
+
 def _json_b64(value: object) -> str:
     return base64.b64encode(json.dumps(value).encode()).decode()
 
@@ -895,6 +1119,8 @@ def get_code(transform_type: str | None) -> str:
         return textwrap.dedent(_RASTERIZE_POINTS_SNIPPET)
     if t == "dis_top_to_geotiff":
         return textwrap.dedent(_DIS_TOP_TO_GEOTIFF_SNIPPET)
+    if t == "aoi_from_boundary":
+        return textwrap.dedent(_AOI_FROM_BOUNDARY_SNIPPET)
     # Unknown transform code must fail closed. Returning a successful stub makes
     # a generated workflow look complete even though no real transform ran.
     return (
