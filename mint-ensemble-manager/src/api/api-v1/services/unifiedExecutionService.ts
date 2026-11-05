@@ -1518,7 +1518,18 @@ export function createUnifiedExecutionService(
             { thread_id: plan.thread_id, model_id: plan.model_id },
             authorization || ""
         );
-        if (!context.has_bound_inputs) return { ...empty, outputs: context.outputs };
+        if (!context.has_bound_inputs) {
+            // The Waco miss of 2026-11-05 was exactly this state: nothing bound,
+            // so nothing planned and nothing said. Say it, so a model registered
+            // without bindings is never a silent label-only run.
+            return {
+                ...empty,
+                outputs: context.outputs,
+                warnings: [
+                    `model ${plan.model_id} records no app-input bindings; its app file inputs are matched by label only`
+                ]
+            };
+        }
         if (!context.region) {
             throw new UnifiedExecutionError(
                 422,

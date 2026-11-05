@@ -1410,6 +1410,8 @@ describe("unifiedExecutionService", () => {
             )) as any;
             expect(plan.input_steps).toBeUndefined();
             expect(adapterCalls("/plans/model-inputs")).toHaveLength(0);
+            // Not silent: the plan says why nothing was planned.
+            expect(plan.input_warnings).toEqual([expect.stringContaining("no app-input bindings")]);
             expect(
                 JSON.parse(
                     Buffer.from(
