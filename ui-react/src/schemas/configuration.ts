@@ -60,6 +60,8 @@ export const inputRowSchema = z.object({
   position: z.number().int().min(0),
   /** First-class form field — stored on the junction row. */
   isOptional: z.boolean().default(false),
+  /** Tapis app file input this input feeds (junction row); set by registration, shown read-only. */
+  appInputName: z.string().nullable().optional(),
   /** Zero, one, or many standard variables — one per VariablePresentation. */
   presentations: z.array(presentationRowSchema).default([]),
 });

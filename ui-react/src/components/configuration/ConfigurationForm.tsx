@@ -99,6 +99,7 @@ function configToFormData(config: ConfigurationFieldsFragment): ConfigurationFor
       hasDimensionality: ds.has_dimensionality ?? undefined,
       position: ds.position ?? i,
       isOptional: inp.is_optional ?? false,
+      appInputName: inp.app_input_name ?? null,
       presentations: toPresentationList(vp),
     };
   });
@@ -302,6 +303,8 @@ export function ConfigurationForm({ configurationId, onSaved, onCancel }: Config
               configurationId,
               inputId: row.existingId!,
               isOptional: row.isOptional,
+              // Replacing the row must keep the binding the registration wrote.
+              appInputName: originalInput.appInputName ?? null,
             },
           });
         }
