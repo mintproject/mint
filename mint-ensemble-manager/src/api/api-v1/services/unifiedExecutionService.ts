@@ -43,6 +43,9 @@ interface LegacyPlan {
     // indexed column, so it has to stay small (see MAX_PLAN_ID_LENGTH).
     input_region_id?: string;
     steps_digest?: string;
+    // Catalog tokens the run asked its outputs to be published to. Tokens only;
+    // the publish parameters travel with the submit, not the plan id.
+    publish?: string[];
 }
 
 interface ConsideredInput {
@@ -315,6 +318,34 @@ function isRetryableAdapterAuthFailure(record: UnifiedExecutionRecord): boolean 
 
 function adapterPlanId(planId: string): string {
     return planId.startsWith("svo_") ? planId.slice(4) : planId;
+}
+
+// What the adapter reports about a run's output publication, reduced to the
+// fields the unified execution keeps in output_handoff.publication.
+function publicationOf(run: Record<string, any> | null | undefined) {
+    const publication = run?.publication;
+    if (!publication || typeof publication !== "object") return undefined;
+    if (publication.status === "published") {
+        return {
+            status: "published",
+            ckan_dataset: publication.ckan_dataset,
+            stac_item: publication.stac_item,
+            public: publication.public,
+            catalog: publication.catalog
+        };
+    }
+    if (publication.status === "failed") {
+        return { status: "failed", error: publication.error };
+    }
+    return undefined;
+}
+
+function isRunOwnerMismatch(error: unknown): boolean {
+    return (
+        error instanceof UnifiedExecutionError &&
+        error.statusCode === 403 &&
+        error.code === "RUN_OWNER_MISMATCH"
+    );
 }
 
 function planHash(plan: LegacyPlan): string {
@@ -756,7 +787,9 @@ export function createUnifiedExecutionService(
         const plan = decodePlan(record.plan_id);
         const adapter = plan.post_model_adapter;
         const compositeOutput = (modelResult: Record<string, unknown> | null | undefined) => {
-            const outputUri = modelResult?.output_uri;
+            // The handoff URI is the registered model output; it covers runs
+            // whose model result carries no composite output_uri.
+            const outputUri = modelResult?.output_uri ?? existingHandoff.resource_uri;
             if (!adapter || typeof outputUri !== "string") return undefined;
             return {
                 model_io_id: adapter.model_io_id,
@@ -784,6 +817,9 @@ export function createUnifiedExecutionService(
             (child) =>
                 child.execution_kind === "workflow" &&
                 child.stage === "post_model" &&
+                // A failed publication is an outcome of a completed run, not a
+                // failed child: never resubmit it (and never under another identity).
+                child.publication?.status !== "failed" &&
                 ((compositeWorkflowRunId && child.tapis_run_id === compositeWorkflowRunId) ||
                     finalUriLooksLikeModelUri ||
                     (record.status === "failed" && child.status === "failed"))
@@ -1020,6 +1056,55 @@ export function createUnifiedExecutionService(
                 child.error_message = run.error_message || null;
                 child.tapis_workflow_id = run.tapis_workflow_id || child.tapis_workflow_id || null;
                 child.tapis_run_id = run.tapis_run_id || child.tapis_run_id || null;
+                const publication = publicationOf(run);
+                if (publication) child.publication = publication;
+                if (child.stage === "post_model" && publication?.status === "failed") {
+                    // Publication is an outcome of a completed run: the model
+                    // output stays registered and usable, and the failed child
+                    // is never resubmitted (see the stale-child predicate).
+                    const failedHandoff = {
+                        ...((record.output_handoff as Record<string, unknown> | null) || {}),
+                        publication
+                    };
+                    const modelOutputUri = (failedHandoff as Record<string, any>).resource_uri;
+                    if (
+                        legacyServices.tapis.updateCompositeWorkflowExecution &&
+                        record.model_child_id
+                    ) {
+                        await legacyServices.tapis.updateCompositeWorkflowExecution(
+                            plan.thread_id,
+                            plan.model_id,
+                            record.model_child_id,
+                            "completed",
+                            compositeOutput(
+                                record.model_result as Record<string, unknown> | null
+                            ) ||
+                                (typeof modelOutputUri === "string"
+                                    ? {
+                                          model_io_id: adapter.model_io_id,
+                                          resource_id: modelOutputUri,
+                                          name: adapter.model_output_key,
+                                          url: modelOutputUri
+                                      }
+                                    : undefined)
+                        );
+                    }
+                    const failedPublication = await store.update(record.id, {
+                        status: "completed",
+                        adapter_run_ids: adapterChildren,
+                        output_handoff: failedHandoff,
+                        error_message: null,
+                        failure_code: null
+                    });
+                    return parentResponse(
+                        failedPublication || {
+                            ...record,
+                            status: "completed",
+                            adapter_run_ids: adapterChildren,
+                            output_handoff: failedHandoff
+                        }
+                    );
+                }
                 if (run.status === "completed" && !child.output_data_object_id) {
                     if (!run.output_uri) {
                         const updated = await store.update(record.id, {
@@ -1103,7 +1188,8 @@ export function createUnifiedExecutionService(
                                   final_resource_uri: run.output_uri || null,
                                   ...(run.result && typeof run.result === "object"
                                       ? { result: run.result }
-                                      : {})
+                                      : {}),
+                                  ...(publication ? { publication } : {})
                               }
                             : record.output_handoff,
                     error_message: run.error_message || null,
@@ -1288,6 +1374,7 @@ export function createUnifiedExecutionService(
             // Workflows argument validation.
             execution_id: parentRunId(record.id)
         };
+        const statusBeforeDispatch = record.status;
         try {
             await store.update(record.id, { status: "adapter_dispatching" });
             const binding = await adapterRequest(
@@ -1318,6 +1405,9 @@ export function createUnifiedExecutionService(
                 },
                 authorization
             );
+            const { publication: priorPublication, ...handoffWithoutPublication } = handoff;
+            const dispatchedHandoff =
+                priorPublication?.status === "awaiting_owner" ? handoffWithoutPublication : handoff;
             const child = {
                 adapter_plan_id: adapter.adapter_plan_id,
                 model_io_id: adapter.model_io_id,
@@ -1331,11 +1421,29 @@ export function createUnifiedExecutionService(
             const updated = await store.update(record.id, {
                 status: "adapter_running",
                 adapter_run_ids: [child],
-                output_handoff: { ...handoff, bound_plan_id: binding.bound_plan_id },
+                // The owner's poll dispatched it: drop any awaiting_owner marker.
+                output_handoff: { ...dispatchedHandoff, bound_plan_id: binding.bound_plan_id },
                 error_message: null
             });
             return parentResponse(updated || { ...record, status: "adapter_running" });
         } catch (error) {
+            if (isRunOwnerMismatch(error)) {
+                // Someone other than the submitter observed completion. The
+                // publication runs as the owner, so wait for the owner's poll:
+                // not a failure, and no child exists to count as stale.
+                const awaitingHandoff = { ...handoff, publication: { status: "awaiting_owner" } };
+                const awaiting = await store.update(record.id, {
+                    status: statusBeforeDispatch,
+                    output_handoff: awaitingHandoff
+                });
+                return parentResponse(
+                    awaiting || {
+                        ...record,
+                        status: statusBeforeDispatch,
+                        output_handoff: awaitingHandoff
+                    }
+                );
+            }
             const updated = await store.update(record.id, {
                 status:
                     error instanceof UnifiedExecutionError && error.statusCode < 500
@@ -1680,7 +1788,61 @@ export function createUnifiedExecutionService(
         }
     };
 
+    /**
+     * Normalise the requested catalog tokens and check them against the
+     * publishers the adapter offers for the model. The adapter is the source of
+     * truth; the Ensemble Manager keeps no token list.
+     */
+    const validatedPublishTokens = async (
+        requested: unknown,
+        modelId: string,
+        authorization?: string
+    ): Promise<string[]> => {
+        if (requested === undefined || requested === null) return [];
+        if (!Array.isArray(requested) || requested.some((token) => typeof token !== "string")) {
+            throw new UnifiedExecutionError(
+                400,
+                "publish must be an array of catalog tokens",
+                "PUBLISH_INVALID"
+            );
+        }
+        const tokens = [...new Set(requested.map((token: string) => token.trim()).filter(Boolean))];
+        if (!tokens.length) return [];
+        const offered = await adapterRequest(
+            `/publishers?configuration_id=${encodeURIComponent(modelId)}`,
+            {},
+            authorization
+        );
+        const available = [
+            ...new Set(
+                ((offered?.publishers || []) as Array<{ catalog_tokens?: string[] }>).flatMap(
+                    (publisher) => publisher.catalog_tokens || []
+                )
+            )
+        ];
+        if (tokens.some((token) => !available.includes(token))) {
+            throw new UnifiedExecutionError(
+                422,
+                `unknown publish catalog; available: ${available.join(", ") || "none"}`,
+                "PUBLISH_CATALOG_UNKNOWN",
+                { requested: tokens, available }
+            );
+        }
+        return tokens;
+    };
+
     return {
+        async listPublishers(modelId: unknown, authorization?: string) {
+            if (typeof modelId !== "string" || !modelId) {
+                throw new UnifiedExecutionError(400, "model_id is required", "MODEL_ID_REQUIRED");
+            }
+            return adapterRequest(
+                `/publishers?configuration_id=${encodeURIComponent(modelId)}`,
+                {},
+                authorization
+            );
+        },
+
         async createPlan(body: any, authorization?: string) {
             const executor = body?.executor as UnifiedExecutor;
             let inputPlan: InputPlanResult | undefined;
@@ -1756,12 +1918,18 @@ export function createUnifiedExecutionService(
                     "THREAD_MODEL_REQUIRED"
                 );
             }
+            const publish = await validatedPublishTokens(
+                body.publish,
+                body.model_id,
+                authorization
+            );
             const plan: LegacyPlan = {
                 executor,
                 thread_id: body.thread_id,
                 model_id: body.model_id,
                 execution_engine:
-                    body.execution_engine || getConfiguration().execution_engine || "localex"
+                    body.execution_engine || getConfiguration().execution_engine || "localex",
+                ...(publish.length ? { publish } : {})
             };
             // Composite path: an explicit post-model adapter, or input-only ETL.
             // Input ETL is automatic for Tapis plans (the bridge is not called
@@ -1802,6 +1970,15 @@ export function createUnifiedExecutionService(
                         "post_model_adapter requires model_io_id, model_output_key, source_contract, and target_contract",
                         "POST_MODEL_ADAPTER_INVALID"
                     );
+                }
+                if (publish.length) {
+                    adapter = {
+                        ...adapter,
+                        target_contract: {
+                            ...adapter.target_contract,
+                            catalog: publish.join("+")
+                        }
+                    };
                 }
                 if (body.input_etl !== false) {
                     inputPlan = await deriveInputSteps(
@@ -1850,10 +2027,20 @@ export function createUnifiedExecutionService(
                         model_io_id: output.id,
                         model_output_key: output.name,
                         source_contract: contract,
-                        target_contract: { ...contract }
+                        target_contract: {
+                            ...contract,
+                            ...(publish.length ? { catalog: publish.join("+") } : {})
+                        }
                     };
                     identityPostModel = true;
                 }
+            }
+            if (publish.length && adapter === undefined) {
+                throw new UnifiedExecutionError(
+                    422,
+                    "publish needs a post-model stage: use the Tapis engine with planned input ETL or supply post_model_adapter",
+                    "PUBLISH_REQUIRES_POST_MODEL"
+                );
             }
             if (adapter !== undefined) {
                 const result = (await adapterRequest(
@@ -1877,7 +2064,17 @@ export function createUnifiedExecutionService(
                         "DEFERRED_PLAN_INVALID"
                     );
                 }
-                if (identityPostModel && result.plan_json?.steps?.length) {
+                // An identity plan without publish has no post-model steps. With
+                // publish, the only steps allowed are the ones the adapter marks
+                // as publishing; the marker comes from the adapter, not from
+                // transform-type names, so new publishers need no change here.
+                const planned = (result.plan_json?.steps || []) as Array<{ publishes?: boolean }>;
+                if (
+                    identityPostModel &&
+                    (publish.length
+                        ? !planned.every((step) => step?.publishes === true)
+                        : planned.length > 0)
+                ) {
                     throw new UnifiedExecutionError(
                         502,
                         "SVO adapter planned post-model steps for an input-only plan",

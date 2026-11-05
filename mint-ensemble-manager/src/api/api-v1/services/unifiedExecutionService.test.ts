@@ -1837,4 +1837,449 @@ describe("unifiedExecutionService", () => {
         });
         expect((global.fetch as jest.Mock).mock.calls).toHaveLength(fetchCallsBeforeRead);
     });
+
+    describe("output publication", () => {
+        const stacStep = { type: "catalog_register", name: "stac-publish", publishes: true };
+        const publishers = {
+            configuration_id: "model-1",
+            publishers: [
+                {
+                    transform_spec_id: "ts-subside-stac-publish",
+                    name: "STAC publish",
+                    catalog_tokens: ["ckan", "stac"],
+                    parameters: [
+                        {
+                            name: "stac_collection",
+                            type: "string",
+                            required: false,
+                            default: "subsidence-rates-dev",
+                            allowed_values: ["subsidence-rates-dev"]
+                        },
+                        { name: "public", type: "boolean", required: false, default: false }
+                    ],
+                    can_publish: { ok: true, reason: "" }
+                }
+            ]
+        };
+        const baseRequest = {
+            executor: "ensemble_manager",
+            thread_id: "thread-1",
+            model_id: "model-1",
+            execution_engine: "tapis"
+        };
+        const plannedInput = {
+            name: "aoi-geojson",
+            app_input_name: "aoi-geojson",
+            steps: [{ type: "function", name: "aoi-from-boundary" }],
+            source: { kind: "geojson" },
+            params: {},
+            derivation: { method: "region_geometry" }
+        };
+        const square = {
+            type: "Polygon",
+            coordinates: [
+                [
+                    [0, 0],
+                    [1, 0],
+                    [1, 1],
+                    [0, 1],
+                    [0, 0]
+                ]
+            ]
+        };
+
+        function stubAdapter(deferredSteps: unknown[] = [stacStep]) {
+            (global.fetch as jest.Mock).mockImplementation(async (url: string, init: any) => {
+                const path = String(url).replace("http://adapter.local", "");
+                const ok = (json: unknown) => ({ ok: true, status: 200, json: async () => json });
+                if (path.startsWith("/publishers")) return ok(publishers);
+                if (path === "/plans/model-inputs") {
+                    return ok({
+                        input_steps: [plannedInput],
+                        considered: [],
+                        steps_digest: "digest-1",
+                        registry: "ok"
+                    });
+                }
+                if (path === "/plans/deferred") {
+                    return ok({
+                        status: "deferred",
+                        plan_id: "deferred-plan-1",
+                        plan_hash: "deferred-hash-1",
+                        plan_json: {
+                            parameters: publishers.publishers[0].parameters,
+                            steps: deferredSteps
+                        }
+                    });
+                }
+                return ok({ run_id: "run-1", status: "queued" });
+            });
+            legacy.tapis.compositeModelContext.mockResolvedValue({
+                configuration_id: "config/subside",
+                region: {
+                    id: "region-waco",
+                    name: "Waco",
+                    category_id: "c",
+                    geometries: [square]
+                },
+                has_bound_inputs: true,
+                filled_app_inputs: [],
+                unmatched_optional_inputs: [],
+                outputs: [{ id: "out-io", name: "displacement", format: "geotiff" }]
+            });
+        }
+        const calls = (path: string) =>
+            (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).endsWith(path));
+
+        it("sets the target catalog from publish and lists the publisher parameters", async () => {
+            stubAdapter();
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, publish: ["ckan", "stac"] },
+                "Bearer user-token"
+            )) as any;
+
+            const deferred = JSON.parse(calls("/plans/deferred")[0][1].body);
+            expect(deferred.source_contract).toEqual({ format: "geotiff" });
+            expect(deferred.target_contract).toEqual({ format: "geotiff", catalog: "ckan+stac" });
+            expect(calls("/publishers?configuration_id=model-1")).toHaveLength(1);
+            expect(calls("/publishers?configuration_id=model-1")[0][1].headers).toMatchObject({
+                Authorization: "Bearer user-token"
+            });
+            expect(plan.status).toBe("post_model_ready");
+            expect(plan.parameters.map((p: any) => p.name)).toEqual(["stac_collection", "public"]);
+            expect(plan.parameters[0].allowed_values).toEqual(["subsidence-rates-dev"]);
+            expect(((await service.getPlan(plan.plan_id)) as any).publish).toEqual([
+                "ckan",
+                "stac"
+            ]);
+        });
+
+        it("merges the catalog into an explicit post_model_adapter target contract", async () => {
+            stubAdapter();
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await service.createPlan(
+                {
+                    ...baseRequest,
+                    input_etl: false,
+                    publish: ["stac"],
+                    post_model_adapter: {
+                        model_io_id: "out-io",
+                        model_output_key: "displacement",
+                        source_contract: { format: "geotiff" },
+                        target_contract: { format: "geotiff", unit: "m" }
+                    }
+                },
+                "Bearer user-token"
+            );
+            const deferred = JSON.parse(calls("/plans/deferred")[0][1].body);
+            expect(deferred.target_contract).toEqual({
+                format: "geotiff",
+                unit: "m",
+                catalog: "stac"
+            });
+        });
+
+        it("rejects an unknown catalog token with the available tokens", async () => {
+            stubAdapter();
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(
+                service.createPlan({ ...baseRequest, publish: ["zenodo"] }, "Bearer user-token")
+            ).rejects.toMatchObject({
+                statusCode: 422,
+                code: "PUBLISH_CATALOG_UNKNOWN",
+                details: { requested: ["zenodo"], available: ["ckan", "stac"] }
+            });
+            expect(calls("/plans/deferred")).toHaveLength(0);
+        });
+
+        it("does not consult the adapter publishers when publish is empty or absent", async () => {
+            stubAdapter([]);
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, publish: [] },
+                "Bearer user-token"
+            )) as any;
+            expect(calls("/publishers?configuration_id=model-1")).toHaveLength(0);
+            expect(JSON.parse(calls("/plans/deferred")[0][1].body).target_contract).toEqual({
+                format: "geotiff"
+            });
+            expect(((await service.getPlan(plan.plan_id)) as any).publish).toBeUndefined();
+        });
+
+        it("refuses publish when the plan has no post-model stage", async () => {
+            stubAdapter();
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(
+                service.createPlan(
+                    { ...baseRequest, input_etl: false, publish: ["stac"] },
+                    "Bearer user-token"
+                )
+            ).rejects.toMatchObject({ statusCode: 422, code: "PUBLISH_REQUIRES_POST_MODEL" });
+        });
+
+        it("accepts publishing steps on an identity plan and rejects other steps", async () => {
+            stubAdapter([stacStep]);
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(
+                service.createPlan({ ...baseRequest, publish: ["stac"] }, "Bearer user-token")
+            ).resolves.toMatchObject({ status: "post_model_ready" });
+
+            stubAdapter([{ type: "unit_convert" }]);
+            await expect(
+                service.createPlan({ ...baseRequest, publish: ["stac"] }, "Bearer user-token")
+            ).rejects.toMatchObject({ code: "INPUT_ONLY_PLAN_NOT_IDENTITY" });
+        });
+
+        it("still rejects a publishing step on an identity plan that did not ask to publish", async () => {
+            stubAdapter([stacStep]);
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(
+                service.createPlan({ ...baseRequest }, "Bearer user-token")
+            ).rejects.toMatchObject({ code: "INPUT_ONLY_PLAN_NOT_IDENTITY" });
+        });
+
+        it("keeps the encoded plan under the size budget with publish and long ids", async () => {
+            stubAdapter();
+            legacy.tapis.compositeModelContext.mockResolvedValue({
+                configuration_id: "config/subside",
+                region: {
+                    id: "r".repeat(36),
+                    name: "Waco",
+                    category_id: "c",
+                    geometries: [square]
+                },
+                has_bound_inputs: true,
+                filled_app_inputs: [],
+                unmatched_optional_inputs: [],
+                outputs: [{ id: "o".repeat(120), name: "displacement", format: "geotiff" }]
+            });
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                {
+                    ...baseRequest,
+                    thread_id: "t".repeat(60),
+                    model_id: "m".repeat(120),
+                    publish: ["ckan", "stac"]
+                },
+                "Bearer user-token"
+            )) as any;
+            expect(plan.plan_id.length).toBeLessThan(2400);
+            expect(plan.parameters).toHaveLength(2);
+        });
+
+        // Post-model reconciliation: a stored plan, a record, and an adapter stub.
+        const secretSign = (plan: Record<string, unknown>) => {
+            const encoded = Buffer.from(JSON.stringify(plan))
+                .toString("base64")
+                .replace(/\+/g, "-")
+                .replace(/\//g, "_")
+                .replace(/=+$/, "");
+            const signature = require("crypto")
+                .createHmac("sha256", "test-secret")
+                .update(encoded)
+                .digest("hex");
+            return `em_${encoded}.${signature}`;
+        };
+        const wacoPlan = (extra: Record<string, unknown> = {}) => ({
+            executor: "ensemble_manager",
+            thread_id: "thread-1",
+            model_id: "model-1",
+            execution_engine: "tapis",
+            input_region_id: "region-waco",
+            steps_digest: "digest-1",
+            post_model_adapter: {
+                adapter_plan_id: "deferred-plan-1",
+                model_io_id: "out-io",
+                model_output_key: "displacement",
+                source_contract: { format: "geotiff" },
+                target_contract: { format: "geotiff" },
+                plan_hash: "deferred-hash-1",
+                parameters: []
+            },
+            ...extra
+        });
+        const seed = async (store: UnifiedExecutionStore, set: Partial<UnifiedExecutionRecord>) =>
+            store.insert({
+                plan_id: secretSign(wacoPlan()),
+                thread_id: "thread-1",
+                model_id: "model-1",
+                execution_engine: "tapis",
+                status: "adapter_running",
+                idempotency_key: "k",
+                plan_hash: "h",
+                adapter_steps: [],
+                adapter_run_ids: [],
+                parameter_values: {},
+                parameter_values_hash: "pv",
+                model_child_id: "model-child-1",
+                model_result: { output_uri: "tapis://ls6/out/model" },
+                output_handoff: { data_object_id: "do-1", resource_uri: "tapis://ls6/out/model" },
+                ...set
+            } as any);
+        const postModelChild = (extra: Record<string, unknown> = {}) => ({
+            adapter_plan_id: "deferred-plan-1",
+            model_io_id: "out-io",
+            stage: "post_model",
+            run_id: "post-run-1",
+            status: "running",
+            execution_kind: "workflow",
+            ...extra
+        });
+        function stubRun(run: Record<string, unknown>, overrides: Record<string, any> = {}) {
+            (global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+                const path = String(url).replace("http://adapter.local", "");
+                const respond = (status: number, json: unknown) => ({
+                    ok: status < 400,
+                    status,
+                    json: async () => json
+                });
+                if (overrides[path]) return respond(...(overrides[path] as [number, unknown]));
+                if (path === "/runs/post-run-1/poll" || path === "/runs/post-run-1") {
+                    return respond(200, run);
+                }
+                if (path.endsWith("/register-output")) {
+                    return respond(200, { output_data_object: { id: "do-final" } });
+                }
+                if (path.endsWith("/bind")) return respond(200, { bound_plan_id: "bound-1" });
+                if (path === "/workflows/submit") {
+                    return respond(200, { run_id: "post-run-2", status: "running" });
+                }
+                return respond(200, {});
+            });
+        }
+
+        it("ends completed with the output retained when the publication failed, and never resubmits", async () => {
+            stubRun({
+                status: "failed",
+                error_message: "task failed",
+                publication: { status: "failed", error: "CKAN 403 forbidden" }
+            });
+            const store = fakeStore();
+            await seed(store, { adapter_run_ids: [postModelChild()] });
+            const service = createUnifiedExecutionService(legacy, { store });
+
+            const first = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+            expect(first.status).toBe("completed");
+            expect(first.output_handoff).toMatchObject({
+                data_object_id: "do-1",
+                resource_uri: "tapis://ls6/out/model",
+                publication: { status: "failed", error: "CKAN 403 forbidden" }
+            });
+            expect(legacy.tapis.updateCompositeWorkflowExecution).toHaveBeenCalledWith(
+                "thread-1",
+                "model-1",
+                "model-child-1",
+                "completed",
+                expect.objectContaining({ url: "tapis://ls6/out/model" })
+            );
+
+            const second = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+            expect(second.status).toBe("completed");
+            expect(second.output_handoff.publication.status).toBe("failed");
+            expect(calls("/workflows/submit")).toHaveLength(0);
+            expect(calls("/bind")).toHaveLength(0);
+            const mirror = legacy.tapis.updateCompositeWorkflowExecution.mock.calls.at(-1);
+            expect(mirror?.[3]).toBe("completed");
+            expect(mirror?.[4]).toBeDefined();
+        });
+
+        it("copies the publication links into output_handoff when published", async () => {
+            const publication = {
+                status: "published",
+                ckan_dataset: "https://ckan.test/dataset/ue-1",
+                stac_item: "https://stac.test/collections/c/items/ue-1",
+                public: true,
+                catalog: "ckan+stac",
+                extra_field: "dropped"
+            };
+            stubRun({
+                status: "completed",
+                output_uri: "tapis://ls6/out/final",
+                publication
+            });
+            const store = fakeStore();
+            await seed(store, { adapter_run_ids: [postModelChild()] });
+            const service = createUnifiedExecutionService(legacy, { store });
+
+            const done = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+            expect(done.status).toBe("completed");
+            expect(done.output_handoff.publication).toEqual({
+                status: "published",
+                ckan_dataset: publication.ckan_dataset,
+                stac_item: publication.stac_item,
+                public: true,
+                catalog: "ckan+stac"
+            });
+        });
+
+        it("waits for the owner on a 403 RUN_OWNER_MISMATCH and retries on a later poll", async () => {
+            legacy.tapis.getExecution.mockResolvedValue({
+                status: "SUCCESS",
+                results: [
+                    {
+                        model_io: { id: "out-io" },
+                        resource: { name: "disp", url: "tapis://ls6/out/model" }
+                    }
+                ]
+            });
+            legacy.tapis.getJobStatus.mockResolvedValue({ status: "SUCCESS" });
+            stubRun({}, { "/workflows/submit": [403, { detail: { code: "RUN_OWNER_MISMATCH" } }] });
+            const store = fakeStore();
+            await seed(store, { status: "model_succeeded" });
+            const service = createUnifiedExecutionService(legacy, { store });
+
+            const awaiting = (await service.getRun("ue_parent-1", "Bearer other-user")) as any;
+            expect(awaiting.status).toBe("model_succeeded");
+            expect(awaiting.status).not.toBe("failed");
+            expect(awaiting.output_handoff.publication).toEqual({ status: "awaiting_owner" });
+            expect(awaiting.failure_code ?? null).toBeNull();
+
+            stubRun({});
+            const dispatched = (await service.getRun("ue_parent-1", "Bearer owner")) as any;
+            expect(dispatched.status).toBe("adapter_running");
+            const submits = calls("/workflows/submit");
+            expect(submits).toHaveLength(2);
+            expect(submits[1][1].headers).toMatchObject({ Authorization: "Bearer owner" });
+            expect(dispatched.output_handoff.publication).toBeUndefined();
+        });
+
+        it("dispatches an old identity plan with no publish as before", async () => {
+            legacy.tapis.getExecution.mockResolvedValue({
+                status: "SUCCESS",
+                results: [
+                    {
+                        model_io: { id: "out-io" },
+                        resource: { name: "disp", url: "tapis://ls6/out/model" }
+                    }
+                ]
+            });
+            legacy.tapis.getJobStatus.mockResolvedValue({ status: "SUCCESS" });
+            stubRun({});
+            const store = fakeStore();
+            await seed(store, { status: "model_succeeded" });
+            const service = createUnifiedExecutionService(legacy, { store });
+            const planId = secretSign(wacoPlan());
+            expect(((await service.getPlan(planId)) as any).publish).toBeUndefined();
+
+            const run = (await service.getRun("ue_parent-1", "Bearer owner")) as any;
+            expect(run.status).toBe("adapter_running");
+            expect(calls("/workflows/submit")).toHaveLength(1);
+            expect(calls("/publishers?configuration_id=model-1")).toHaveLength(0);
+            const body = JSON.parse(calls("/workflows/submit")[0][1].body);
+            expect(JSON.stringify(body)).not.toContain("catalog");
+            expect(run.output_handoff.publication).toBeUndefined();
+        });
+
+        it("proxies the adapter publishers for a model", async () => {
+            stubAdapter();
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(service.listPublishers("model-1", "Bearer user-token")).resolves.toEqual(
+                publishers
+            );
+            await expect(service.listPublishers(undefined)).rejects.toMatchObject({
+                statusCode: 400
+            });
+        });
+    });
 });
