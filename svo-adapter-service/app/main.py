@@ -1594,7 +1594,11 @@ async def list_publishers(
     configuration_id: str = Query(...),
     authorization: str | None = Header(None),
 ):
-    """Catalog publishers a model configuration's output can be routed through."""
+    """Catalog publishers a model configuration's output can be routed through.
+
+    Each publisher lists ``output_formats``: the declared formats of the model
+    outputs that reach its catalog, so a caller can pick a publishable output.
+    """
     token = _bearer(authorization)
     h = get_client(token)
     registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
@@ -1604,23 +1608,33 @@ async def list_publishers(
                                          "message": "the configuration is not in the adapter registry"})
     publishers = [s for s in registry if str(s.get("transform_type") or "").lower() == tapis.PUBLISH_STEP_TYPE]
     found: dict[str, dict[str, Any]] = {}
+    # Every output contract is tried, not just the first that reaches a catalog:
+    # a model declares several outputs (archive, manifest, GeoTIFF, ...) and the
+    # Ensemble Manager needs to know which of them a publisher can take. The
+    # formats are reported verbatim, as the catalog records them, so the EM
+    # matches its own output list by equality instead of re-implementing the
+    # planner's format aliases.
     for contract in (c for c in model.get("contracts") or [] if c.get("role") == "output"):
         source = _contract_from_registry(contract).model_copy(
             update={"resource_uri": "deferred-model-output", "catalog": None})
         for spec in publishers:
             catalog = _spec_output_catalog(spec)
-            if not catalog or spec.get("id") in found:
+            if not catalog:
                 continue
             # The piece plus the ordinary ETL pieces, so no other publisher can stand in for it.
             usable = [s for s in registry if s is spec or s not in publishers]
             path = find_path(source, source.model_copy(update={"catalog": catalog}), usable)
             if path and any(step.get("id") == spec.get("id") for step in path):
-                found[spec["id"]] = {
+                item = found.setdefault(spec["id"], {
                     "transform_spec_id": spec["id"],
                     "name": spec.get("name"),
                     "catalog_tokens": sorted(_catalogs(catalog)),
                     "parameters": _publisher_parameters(spec),
-                }
+                    "output_formats": [],
+                })
+                output_format = contract.get("format")
+                if output_format and output_format not in item["output_formats"]:
+                    item["output_formats"].append(output_format)
     if not found:
         return {"configuration_id": configuration_id, "publishers": []}
     can_publish = await run_in_threadpool(_can_publish, token)

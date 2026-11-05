@@ -2,16 +2,26 @@
  * PublishOutputsControl — optional "Publish outputs" section of the run form.
  *
  * Shown only when the Ensemble Manager offers at least one publisher for the
- * model. The user picks a catalog (one option per publisher) and the
- * publisher's user-facing parameters; the parent sends the tokens as `publish`
- * on plan creation and the values as `parameter_values` on submit.
+ * model. The user picks a catalog (one option per publisher), the model output
+ * to publish when the publisher can take more than one, and the publisher's
+ * user-facing parameters; the parent sends the tokens as `publish` and the
+ * output as `model_output_key` on plan creation and the values as
+ * `parameter_values` on submit.
  */
 import type { PlanPublisher, UnifiedParameterDefinition } from '@/lib/ensemble-manager';
-import { publisherDefaults, publisherLabel, type PublishSelection } from '@/lib/publish-outputs';
+import {
+  publishableOutputs,
+  publisherDefaults,
+  publisherLabel,
+  type PublishableOutput,
+  type PublishSelection,
+} from '@/lib/publish-outputs';
 
 interface PublishOutputsControlProps {
   modelId: string;
   publishers: PlanPublisher[];
+  /** The model's declared outputs, in catalog order. */
+  outputs?: readonly PublishableOutput[];
   selection: PublishSelection | null;
   onChange: (selection: PublishSelection | null) => void;
   disabled?: boolean;
@@ -99,6 +109,7 @@ function ParameterField({
 export function PublishOutputsControl({
   modelId,
   publishers,
+  outputs = [],
   selection,
   onChange,
   disabled = false,
@@ -109,12 +120,16 @@ export function PublishOutputsControl({
   const firstUsable = publishers.find((item) => item.can_publish.ok);
   const blockedReason = !firstUsable ? publishers[0]?.can_publish.reason : null;
   const enabled = Boolean(selection);
+  const eligibleOutputs = selected ? publishableOutputs(selected, outputs) : [];
 
-  const choose = (publisher: PlanPublisher) =>
+  const choose = (publisher: PlanPublisher) => {
+    const first = publishableOutputs(publisher, outputs)[0];
     onChange({
       transformSpecId: publisher.transform_spec_id,
       values: publisherDefaults(publisher),
+      ...(first ? { outputId: first.id } : {}),
     });
+  };
 
   return (
     <fieldset
@@ -171,6 +186,31 @@ export function PublishOutputsControl({
               ))}
             </select>
           </label>
+          {eligibleOutputs.length > 1 && (
+            <label className="flex flex-col gap-1 text-xs text-gray-700">
+              <span>Output</span>
+              <select
+                data-testid={`publish-output-${modelId}`}
+                aria-label="Output"
+                value={selection?.outputId ?? eligibleOutputs[0]?.id ?? ''}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({
+                    transformSpecId: selected.transform_spec_id,
+                    values: selection?.values ?? {},
+                    outputId: event.target.value,
+                  })
+                }
+                className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                {eligibleOutputs.map((output) => (
+                  <option key={output.id} value={output.id}>
+                    {output.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {selected.parameters.map((parameter) => (
             <ParameterField
               key={parameter.name}
@@ -182,6 +222,7 @@ export function PublishOutputsControl({
                 onChange({
                   transformSpecId: selected.transform_spec_id,
                   values: { ...selection?.values, [parameter.name]: value },
+                  ...(selection?.outputId ? { outputId: selection.outputId } : {}),
                 })
               }
             />

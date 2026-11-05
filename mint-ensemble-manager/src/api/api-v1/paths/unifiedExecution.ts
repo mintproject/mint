@@ -52,6 +52,17 @@ type ScenarioService = ReturnType<typeof createScenarioService>;
  *                   outcome is `output_handoff.publication` on the run (status
  *                   `published`, `failed` or `awaiting_owner`) and a failed
  *                   publication does not fail the run.
+ *               model_output_key:
+ *                 type: string
+ *                 description: >
+ *                   Which declared model output the post-model stage (and so
+ *                   `publish`) applies to, by name or id. Without it the first
+ *                   output a requested publisher can take is used (the adapter's
+ *                   `output_formats`), else the first declared output. 422
+ *                   PUBLISH_OUTPUT_NOT_PUBLISHABLE when the chosen or every
+ *                   output has a format no requested publisher accepts (details
+ *                   list `requested` and `publishable`); 422
+ *                   MODEL_OUTPUT_NOT_DECLARED when the key names no output.
  *     responses:
  *       200:
  *         description: >
@@ -130,7 +141,8 @@ type ScenarioService = ReturnType<typeof createScenarioService>;
  *         description: >
  *           Publishers reachable from the model output, each with its
  *           `transform_spec_id`, `name`, `catalog_tokens`, user-facing
- *           `parameters` and `can_publish` (`ok`, `reason`).
+ *           `parameters`, `can_publish` (`ok`, `reason`) and `output_formats`
+ *           (the declared formats of the model outputs it can take).
  *         content:
  *           application/json:
  *             schema:

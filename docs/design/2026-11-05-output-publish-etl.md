@@ -507,6 +507,24 @@ production rows stay unless the user asks.
   when `adapter_parameter_values` is absent); one publisher is selected at a
   time; the publish graph node appears from `publishes` steps or from a
   recorded `publication`.
+- 2026-11-05 (deviation, first live attempt): the first publish from DYNAMO
+  failed with 422 NO_DEFERRED_TRANSFORM_PATH. Cause: with `publish` and no
+  `model_output_key`, the EM planned the model's *first declared* output
+  (H2I: the archive zip; WERC: the anchor JSON), whose format no publisher
+  input accepts, while `GET /publishers` had matched a *later* output (the
+  GeoTIFF). Fix: `GET /publishers` now evaluates every output contract and
+  reports `output_formats` (verbatim catalog formats of the outputs that
+  reach the catalog); the EM picks the first declared output whose format is
+  listed, honours an explicit `model_output_key` only when it is listed, and
+  refuses with 422 PUBLISH_OUTPUT_NOT_PUBLISHABLE (details `requested`,
+  `publishable`) when nothing qualifies; the UI offers an Output choice when
+  more than one output qualifies and sends `model_output_key`. Formats are
+  compared by equality in the EM and UI because both strings come from the
+  same catalog column; aliasing stays in the adapter planner. An adapter
+  without `output_formats` keeps the previous first-output behaviour.
+  Consequence noted: the subsidence forecast (json outputs) and MODFLOW
+  (hds/cbc) models cannot publish through the stac-publish piece as its
+  input contracts stand; that is a piece-contract decision, not a bug.
 
 ## User feedback / decisions
 

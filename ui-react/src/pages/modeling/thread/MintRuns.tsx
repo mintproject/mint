@@ -1365,6 +1365,7 @@ export function MintRuns({
                       <PublishOutputsControl
                         modelId={mid}
                         publishers={publishers[mid] ?? []}
+                        outputs={model.output_files}
                         selection={publishSelections[mid] ?? null}
                         disabled={waiting[mid]}
                         onChange={(selection) =>

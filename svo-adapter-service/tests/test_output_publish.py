@@ -379,6 +379,20 @@ def test_kill_switch_disables_publishers_and_publish_plans(monkeypatch, werc_con
         "source_contract": GEOTIFF, "target_contract": GEOTIFF, "model_output_key": "out"}).status_code == 200
 
 
+def test_publishers_list_the_output_formats_that_reach_the_catalog(monkeypatch, werc_config):
+    """Only outputs the piece can take are listed, verbatim as the catalog declares them."""
+    import requests
+    monkeypatch.setattr(requests, "get", _Ckan())
+    spec = STORE.transform_spec["ts-subside-run-werc"]
+    spec["contracts"] = list(spec["contracts"]) + [
+        {"role": "output", "format": "application/json", "standard_variable_uri": None, "unit": None},
+        {"role": "output", "format": "image/tiff;application=geotiff", "standard_variable_uri": None,
+         "unit": None},
+    ]
+    [publisher] = _publishers(werc_config).json()["publishers"]
+    assert publisher["output_formats"] == ["geotiff", "image/tiff;application=geotiff"]
+
+
 def test_publishers_unknown_configuration_is_404():
     assert _publishers("cfg-missing").status_code == 404
 

@@ -1900,7 +1900,8 @@ describe("unifiedExecutionService", () => {
                         },
                         { name: "public", type: "boolean", required: false, default: false }
                     ],
-                    can_publish: { ok: true, reason: "" }
+                    can_publish: { ok: true, reason: "" },
+                    output_formats: ["geotiff"]
                 }
             ]
         };
@@ -1931,11 +1932,11 @@ describe("unifiedExecutionService", () => {
             ]
         };
 
-        function stubAdapter(deferredSteps: unknown[] = [stacStep]) {
+        function stubAdapter(deferredSteps: unknown[] = [stacStep], offered: unknown = publishers) {
             (global.fetch as jest.Mock).mockImplementation(async (url: string, init: any) => {
                 const path = String(url).replace("http://adapter.local", "");
                 const ok = (json: unknown) => ({ ok: true, status: 200, json: async () => json });
-                if (path.startsWith("/publishers")) return ok(publishers);
+                if (path.startsWith("/publishers")) return ok(offered);
                 if (path === "/plans/model-inputs") {
                     return ok({
                         input_steps: [plannedInput],
@@ -2086,6 +2087,95 @@ describe("unifiedExecutionService", () => {
             expect(submit.expected_steps_digest).toBeUndefined();
             expect(submit.input_sources).toBeUndefined();
             expect(submit.plan_id).toBe("deferred-plan-1");
+        });
+
+        describe("choosing the output to publish", () => {
+            const archive = { id: "zip-io", name: "archive", format: "application/zip" };
+            const geotiff = { id: "tif-io", name: "displacement", format: "geotiff" };
+            const manifest = { id: "json-io", name: "manifest", format: "application/json" };
+            function withOutputs(outputs: unknown[], offered: unknown = publishers) {
+                stubAdapter([stacStep], offered);
+                legacy.tapis.compositeModelContext.mockResolvedValue({
+                    configuration_id: "config/subside",
+                    region: null,
+                    has_bound_inputs: false,
+                    filled_app_inputs: [],
+                    unmatched_optional_inputs: [],
+                    outputs
+                });
+                return createUnifiedExecutionService(legacy, { store: fakeStore() });
+            }
+            const deferredBody = () => JSON.parse(calls("/plans/deferred")[0][1].body);
+
+            it("skips declared outputs the publisher cannot take and plans the first publishable one", async () => {
+                const service = withOutputs([archive, geotiff, manifest]);
+                const plan = (await service.createPlan(
+                    { ...baseRequest, publish: ["ckan", "stac"] },
+                    "Bearer user-token"
+                )) as { post_model_adapter: { model_io_id: string } };
+                expect(deferredBody()).toMatchObject({
+                    model_output_key: "displacement",
+                    source_contract: { format: "geotiff" },
+                    target_contract: { format: "geotiff", catalog: "ckan+stac" }
+                });
+                expect(plan.post_model_adapter.model_io_id).toBe("tif-io");
+            });
+
+            it("honours an explicit model_output_key when the publisher can take it", async () => {
+                const service = withOutputs([
+                    geotiff,
+                    { ...geotiff, id: "tif-2", name: "velocity" }
+                ]);
+                await service.createPlan(
+                    { ...baseRequest, publish: ["stac"], model_output_key: "velocity" },
+                    "Bearer user-token"
+                );
+                expect(deferredBody().model_output_key).toBe("velocity");
+            });
+
+            it("refuses an explicit model_output_key the publisher cannot take", async () => {
+                const service = withOutputs([archive, geotiff]);
+                await expect(
+                    service.createPlan(
+                        { ...baseRequest, publish: ["stac"], model_output_key: "archive" },
+                        "Bearer user-token"
+                    )
+                ).rejects.toMatchObject({
+                    statusCode: 422,
+                    code: "PUBLISH_OUTPUT_NOT_PUBLISHABLE",
+                    details: { requested: "archive", publishable: ["displacement"] }
+                });
+                expect(calls("/plans/deferred")).toHaveLength(0);
+            });
+
+            it("refuses to publish a model none of whose outputs the publisher can take", async () => {
+                const service = withOutputs([archive, manifest]);
+                await expect(
+                    service.createPlan({ ...baseRequest, publish: ["stac"] }, "Bearer user-token")
+                ).rejects.toMatchObject({
+                    statusCode: 422,
+                    code: "PUBLISH_OUTPUT_NOT_PUBLISHABLE",
+                    details: { requested: null, publishable: [] }
+                });
+                expect(calls("/plans/deferred")).toHaveLength(0);
+            });
+
+            it("keeps the first declared output when the adapter reports no output formats", async () => {
+                const older = {
+                    ...publishers,
+                    publishers: publishers.publishers.map((item) => {
+                        const copy: Partial<typeof item> = { ...item };
+                        delete copy.output_formats;
+                        return copy;
+                    })
+                };
+                const service = withOutputs([archive, geotiff], older);
+                await service.createPlan(
+                    { ...baseRequest, publish: ["stac"] },
+                    "Bearer user-token"
+                );
+                expect(deferredBody().model_output_key).toBe("archive");
+            });
         });
 
         it("refuses publish when the plan has no post-model stage", async () => {
