@@ -152,6 +152,32 @@ export interface UnifiedExecutionPlan {
   [key: string]: unknown;
 }
 
+/**
+ * Outcome of the optional publish step. Publication is an outcome of a
+ * completed run, not a run status: a failed publish leaves the run completed.
+ */
+export interface UnifiedPublication {
+  status: 'published' | 'failed' | 'awaiting_owner' | string;
+  error?: string | null;
+  ckan_dataset?: string | null;
+  stac_item?: string | null;
+  public?: boolean | null;
+}
+
+/** One catalog an output can be published to, as offered by GET /plans/publishers. */
+export interface PlanPublisher {
+  transform_spec_id: string;
+  name: string;
+  catalog_tokens: string[];
+  parameters: UnifiedParameterDefinition[];
+  can_publish: { ok: boolean; reason: string | null };
+}
+
+export interface PlanPublishersResponse {
+  configuration_id: string | null;
+  publishers: PlanPublisher[];
+}
+
 /** Liveness verdict the adapter keeps beside a run's lifecycle status. */
 export type UnifiedRunHealth = 'ok' | 'stalled' | 'reported_failed' | string;
 
@@ -205,6 +231,7 @@ export interface UnifiedRunSnapshot {
     final_output_data_object_id?: string | null;
     final_resource_uri?: string | null;
     result?: unknown;
+    publication?: UnifiedPublication | null;
     [key: string]: unknown;
   } | null;
   adapter_runs?: UnifiedAdapterRun[];
@@ -335,9 +362,26 @@ export function createExecutionPlan(
       target_contract: Record<string, unknown>;
       target_dataset_specification_id?: string;
     };
+    /** Catalog tokens to publish the model output to; unknown tokens are a 422. */
+    publish?: string[];
   },
 ): Promise<UnifiedExecutionPlan> {
   return unifiedRequest<UnifiedExecutionPlan>(ensembleManagerApi, '/plans', 'POST', body);
+}
+
+/** Catalogs a model's output can be published to, with their user-facing parameters. */
+export function fetchPlanPublishers(
+  ensembleManagerApi: string,
+  modelId: string,
+  signal?: AbortSignal,
+): Promise<PlanPublishersResponse> {
+  return unifiedRequest<PlanPublishersResponse>(
+    ensembleManagerApi,
+    `/plans/publishers?model_id=${encodeURIComponent(modelId)}`,
+    'GET',
+    undefined,
+    signal,
+  );
 }
 
 /** Submit a previously-created plan; adapter validation happens server-side. */

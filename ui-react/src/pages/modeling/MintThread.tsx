@@ -72,6 +72,7 @@ import { cn } from '@/lib/utils';
 
 import { MintSummary } from './thread/MintSummary';
 import { MintParameters } from './thread/MintParameters';
+import type { PublishRequest } from '@/lib/publish-outputs';
 import type { SpatialSelection } from './thread/SpatialScopeMap';
 import { MintRuns } from './thread/MintRuns';
 import { MintResults } from './thread/MintResults';
@@ -768,7 +769,7 @@ export function MintThread({
   );
 
   const handleSubmitRuns = useCallback(
-    async (modelId: string, maxMinutes: number) => {
+    async (modelId: string, maxMinutes: number, publish?: PublishRequest) => {
       if (adapterPlansLoading || adapterPlanError) {
         throw new Error('SVO adapter plan discovery must complete before workflow submission.');
       }
@@ -820,6 +821,7 @@ export function MintThread({
         model_id: modelId,
         adapter_steps: adapterSteps,
         ...(postModelSpec ? { post_model_adapter: postModelSpec } : {}),
+        ...(publish ? { publish: publish.tokens } : {}),
       });
       if (!plan.plan_id) throw new Error('Ensemble Manager did not return an execution plan.');
       const defaultBoundaryUri = adapterPlans
@@ -848,6 +850,9 @@ export function MintThread({
         plan_id: plan.plan_id,
         max_minutes: maxMinutes,
         adapter_parameter_values: adapterParameterValues,
+        ...(publish && Object.keys(publish.values).length > 0
+          ? { parameter_values: publish.values }
+          : {}),
       });
       if (submitted.run_id?.startsWith('ue_')) {
         rememberUnifiedRun(modelId, submitted);
