@@ -2,6 +2,7 @@
  * Tests for MintThread — step workflow container.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { fireEvent } from '@testing-library/react';
 import { screen, waitFor } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
 import { MockedProvider } from '@apollo/client/testing';
@@ -235,6 +236,48 @@ const modelTreeMock = {
   result: { data: { modelcatalog_software: [] } },
 };
 
+/** The thread with one run configured but not yet sent: the Runs step's submit form. */
+const executionReadyToSendMock = {
+  request: { query: GetThreadExecutionDocument, variables: { id: 'test-thread-id' } },
+  result: {
+    data: {
+      thread_by_pk: {
+        ...executionMock.result.data.thread_by_pk,
+        thread_models: executionMock.result.data.thread_by_pk.thread_models.map((tm) => ({
+          ...tm,
+          parameter_bindings: [
+            {
+              __typename: 'thread_model_parameter',
+              thread_model_id: 'tm-1',
+              model_parameter_id: 'pAdj',
+              parameter_value: '0.5',
+            },
+          ],
+          execution_summary: [
+            {
+              __typename: 'execution_summary',
+              total_runs: 1,
+              submitted_runs: 0,
+              successful_runs: 0,
+              failed_runs: 0,
+              ingested_runs: 0,
+              registered_runs: 0,
+              published_runs: 0,
+              fetched_run_outputs: 0,
+              submission_time: null,
+              submitted_for_execution: false,
+              submitted_for_ingestion: false,
+              submitted_for_publishing: false,
+              submitted_for_registration: false,
+              workflow_name: null,
+            },
+          ],
+        })),
+      },
+    },
+  },
+};
+
 /** Renders MintThread inside a proper Route so useParams works. */
 function renderMintThread(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -386,5 +429,99 @@ describe('MintThread', () => {
       },
       { timeout: 3000 },
     );
+  });
+
+  it('sends the chosen catalog on plan creation and its values on submit', async () => {
+    const publisher = {
+      transform_spec_id: 'ts-subside-stac-publish',
+      name: 'SUBSIDE STAC publish',
+      catalog_tokens: ['ckan', 'stac'],
+      parameters: [
+        {
+          name: 'stac_collection',
+          type: 'string',
+          required: true,
+          default: 'subsidence-rates-dev',
+          allowed_values: ['subsidence-rates-dev', 'subsidence-rates'],
+        },
+        {
+          name: 'ckan_org',
+          type: 'string',
+          required: true,
+          default: 'tacc-water',
+          allowed_values: ['tacc-water'],
+        },
+        { name: 'public', type: 'boolean', required: false, default: false },
+      ],
+      can_publish: { ok: true, reason: null },
+    };
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const json = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+      if (url.includes('/plans/publishers')) {
+        return json({ configuration_id: 'cfgA', publishers: [publisher] });
+      }
+      if (url.endsWith('/plans/submit')) return json({ run_id: 'exec-1', status: 'submitted' });
+      if (url.endsWith('/plans') && init?.method === 'POST') {
+        return json({ plan_id: 'plan-1', executor: 'ensemble_manager', parameters: [] });
+      }
+      return json({});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    window.__MINT_CONFIG__ = { ENSEMBLE_MANAGER_API: 'http://ensemble/v1' } as never;
+
+    try {
+      const writableThread = {
+        ...getThreadWithModelMock,
+        result: {
+          data: {
+            thread_by_pk: {
+              ...threadWithModel,
+              permissions: [
+                {
+                  __typename: 'thread_permission',
+                  thread_id: 'test-thread-id',
+                  user_id: '*',
+                  read: true,
+                  write: true,
+                },
+              ],
+            },
+          },
+        },
+      };
+      renderMintThread([writableThread, executionReadyToSendMock, regionsMock, modelTreeMock]);
+
+      const runsStep = await screen.findByTestId('rail-step-runs');
+      await waitFor(() => expect(runsStep).not.toBeDisabled(), { timeout: 3000 });
+      runsStep.click();
+
+      fireEvent.click(await screen.findByTestId('publish-toggle-cfgA'));
+      fireEvent.change(await screen.findByTestId('publish-param-cfgA-stac_collection'), {
+        target: { value: 'subsidence-rates' },
+      });
+      fireEvent.click(screen.getByTestId('publish-param-cfgA-public'));
+      fireEvent.click(screen.getByTestId('submit-runs-cfgA'));
+
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/plans/submit'))).toBe(
+          true,
+        ),
+      );
+      const bodyOf = (suffix: string) => {
+        const call = fetchMock.mock.calls.find(
+          ([url, init]) => String(url).endsWith(suffix) && init?.method === 'POST',
+        );
+        return JSON.parse(String(call?.[1]?.body));
+      };
+      expect(bodyOf('/v1/plans').publish).toEqual(['ckan', 'stac']);
+      expect(bodyOf('/plans/submit').parameter_values).toEqual({
+        stac_collection: 'subsidence-rates',
+        ckan_org: 'tacc-water',
+        public: true,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      delete (window as { __MINT_CONFIG__?: unknown }).__MINT_CONFIG__;
+    }
   });
 });
