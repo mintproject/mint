@@ -7,7 +7,11 @@ import { renderWithProviders } from '@/test/utils/render';
 import { storeTokens } from '@/lib/auth/token-store';
 import { MintRuns } from '../MintRuns';
 import type { ThreadExecutionData, ModelExecutionsMap } from '@/graphql/generated/execution';
-import { EnsembleManagerError, type UnifiedRunSnapshot } from '@/lib/ensemble-manager';
+import {
+  EnsembleManagerError,
+  type UnifiedPublication,
+  type UnifiedRunSnapshot,
+} from '@/lib/ensemble-manager';
 import type { ThreadAdapterPlan } from '@/lib/adapter-execution';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -424,6 +428,109 @@ describe('MintRuns', () => {
 
     expect(screen.getByTestId('run-answer-card')).toHaveTextContent('23.9');
     expect(screen.getByTestId('run-answer-card')).toHaveTextContent('cfs');
+  });
+
+  describe('publication outcome', () => {
+    function renderWithPublication(publication: UnifiedPublication) {
+      renderWithProviders(
+        <MintRuns
+          threadData={mockThreadDataSubmitted}
+          executions={emptyExecutions}
+          unifiedRuns={{
+            'model-1': {
+              run_id: 'ue-pub-1',
+              execution_mode: 'workflow_pipeline',
+              status: 'completed',
+              output_handoff: { publication },
+            } as UnifiedRunSnapshot,
+          }}
+          canWrite
+          canExecute
+          ensembleManagerApi="http://ensemble"
+          onContinue={vi.fn()}
+          onFetchRuns={vi.fn()}
+          onSubmitRuns={vi.fn()}
+        />,
+      );
+    }
+
+    it('links the CKAN dataset and STAC item when published', () => {
+      renderWithPublication({
+        status: 'published',
+        ckan_dataset: 'https://ckan.example/dataset/d1',
+        stac_item: 'https://stac.example/collections/c/items/i1',
+        public: true,
+      });
+      expect(screen.getByRole('link', { name: 'CKAN dataset' })).toHaveAttribute(
+        'href',
+        'https://ckan.example/dataset/d1',
+      );
+      expect(screen.getByRole('link', { name: 'STAC item' })).toHaveAttribute(
+        'href',
+        'https://stac.example/collections/c/items/i1',
+      );
+    });
+
+    it('shows the error text when publishing failed', () => {
+      renderWithPublication({ status: 'failed', error: 'HTTP 403 from CKAN' });
+      expect(screen.getByTestId('publication-failed')).toHaveTextContent('HTTP 403 from CKAN');
+    });
+
+    it('says it is waiting for the owner when awaiting_owner', () => {
+      renderWithPublication({ status: 'awaiting_owner' });
+      expect(screen.getByTestId('publication-awaiting-owner')).toHaveTextContent(
+        "Waiting for the run's owner to publish",
+      );
+    });
+
+    it('renders a publish node labelled with its catalog in the graph', () => {
+      const postPlan: ThreadAdapterPlan = {
+        thread_model_id: 'ens-1',
+        model_io_id: 'out-1',
+        source_resource_id: null,
+        stage: 'post_model',
+        source_kind: 'model_output',
+        executor: 'svo_adapter',
+        adapter_plan_id: 'plan-pub',
+        status: 'transform_required',
+        plan_json: {
+          plan_id: null,
+          executor: 'svo_adapter',
+          version: 1,
+          status: 'ready',
+          parameters: [],
+          parameter_values: {},
+          post_model_adapter: {
+            target_contract: { catalog: 'ckan+stac' },
+            steps: [{ transform_spec_id: 'ts-stac', publishes: true, catalog: 'ckan+stac' }],
+          },
+        },
+        parameter_values: {},
+      };
+      renderWithProviders(
+        <MintRuns
+          threadData={{ ...mockThreadDataSubmitted, adapter_plans: { 'model-1': [postPlan] } }}
+          executions={emptyExecutions}
+          unifiedRuns={{
+            'model-1': {
+              run_id: 'ue-pub-2',
+              execution_mode: 'workflow_pipeline',
+              adapter_stage: 'post_model',
+              status: 'completed',
+            } as UnifiedRunSnapshot,
+          }}
+          canWrite
+          canExecute
+          ensembleManagerApi="http://ensemble"
+          onContinue={vi.fn()}
+          onFetchRuns={vi.fn()}
+          onSubmitRuns={vi.fn()}
+        />,
+      );
+      const node = screen.getByTestId('workflow-node-publish');
+      expect(node).toHaveTextContent('publish');
+      expect(node).toHaveTextContent('ckan+stac');
+    });
   });
 
   it('keeps the model successful when only the downstream adapter fails', () => {

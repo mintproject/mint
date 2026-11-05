@@ -27,12 +27,24 @@ import { RunConfigurationSummary } from '@/components/modeling/runs/RunConfigura
 import { RunAnswerCard } from '@/components/modeling/runs/RunAnswerCard';
 import { RunStageTimeline } from '@/components/modeling/runs/RunStageTimeline';
 import { RunStatusSummary } from '@/components/modeling/runs/RunStatusSummary';
-import { fetchExecutionLog, type UnifiedRunSnapshot } from '@/lib/ensemble-manager';
+import {
+  fetchExecutionLog,
+  fetchPlanPublishers,
+  type PlanPublisher,
+  type UnifiedPublication,
+  type UnifiedRunSnapshot,
+} from '@/lib/ensemble-manager';
 import { adapterParametersComplete, type ThreadAdapterPlan } from '@/lib/adapter-execution';
 import { aggregateRunStatus, stageStatusFromLegacyState } from '@/lib/modeling/run-status';
 import { inputResourceCount } from '@/lib/thread-execution';
 import { secretErrorMessage, userParameters } from '@/lib/secret-parameters';
 import { ExecutionFilesDialog } from './ExecutionFilesDialog';
+import { PublishOutputsControl } from './PublishOutputsControl';
+import {
+  publishRequestFor,
+  type PublishRequest,
+  type PublishSelection,
+} from '@/lib/publish-outputs';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -228,6 +240,91 @@ function adapterPlanSourceContract(plan: ThreadAdapterPlan): unknown {
   return planJson?.source_contract;
 }
 
+/** The step a plan marks `publishes: true`, wherever the plan nests its steps. */
+function publishingStep(plan: ThreadAdapterPlan): Record<string, unknown> | null {
+  const planJson = plan.plan_json as Record<string, unknown> | undefined;
+  const deferred = planJson?.post_model_adapter as Record<string, unknown> | undefined;
+  for (const holder of [deferred, planJson]) {
+    const steps = holder?.steps;
+    if (!Array.isArray(steps)) continue;
+    const found = steps.find(
+      (step) =>
+        step && typeof step === 'object' && (step as { publishes?: unknown }).publishes === true,
+    );
+    if (found) return found as Record<string, unknown>;
+  }
+  return null;
+}
+
+function publicationState(publication?: UnifiedPublication | null): WorkflowStageState {
+  if (!publication) return 'pending';
+  if (publication.status === 'published') return 'success';
+  if (publication.status === 'failed') return 'failure';
+  return 'pending';
+}
+
+function PublicationSummary({ publication }: { publication: UnifiedPublication }) {
+  if (publication.status === 'published') {
+    return (
+      <div
+        className="rounded border border-green-200 bg-green-50 px-2 py-2 text-green-900"
+        data-testid="publication-published"
+      >
+        <div className="font-medium">Published</div>
+        <ul className="mt-1 space-y-1">
+          {publication.ckan_dataset && (
+            <li>
+              <a
+                href={publication.ckan_dataset}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-700 underline"
+              >
+                CKAN dataset
+              </a>
+            </li>
+          )}
+          {publication.stac_item && (
+            <li>
+              <a
+                href={publication.stac_item}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-700 underline"
+              >
+                STAC item
+              </a>
+            </li>
+          )}
+        </ul>
+      </div>
+    );
+  }
+  if (publication.status === 'failed') {
+    return (
+      <div
+        className="rounded border border-red-200 bg-red-50 px-2 py-2 text-red-800"
+        data-testid="publication-failed"
+      >
+        <div className="font-medium">Publishing failed</div>
+        {publication.error && <div>{publication.error}</div>}
+        <div className="mt-1 text-red-700">The model output is still available.</div>
+      </div>
+    );
+  }
+  if (publication.status === 'awaiting_owner') {
+    return (
+      <div
+        className="rounded border border-amber-200 bg-amber-50 px-2 py-2 text-amber-800"
+        data-testid="publication-awaiting-owner"
+      >
+        Waiting for the run&apos;s owner to publish
+      </div>
+    );
+  }
+  return null;
+}
+
 interface WorkflowGraphNode {
   id: string;
   label: string;
@@ -362,6 +459,25 @@ function WorkflowGraph({
     };
   });
 
+  const publication = run.output_handoff?.publication;
+  const planPublishStep = postPlans.map(publishingStep).find(Boolean) ?? null;
+  const publishCatalog =
+    (typeof planPublishStep?.catalog === 'string' ? planPublishStep.catalog : null) ??
+    contractValue(postPlans[0] ? adapterPlanTargetContract(postPlans[0]) : undefined, 'catalog');
+  const publishNodes: WorkflowGraphNode[] =
+    planPublishStep || publication
+      ? [
+          {
+            id: 'publish',
+            label: 'publish',
+            detail: publishCatalog ? `Publish to ${publishCatalog}` : 'Publish model output',
+            state: modelStage === 'failure' ? 'failure' : publicationState(publication),
+            kind: 'etl',
+            contract: publishCatalog,
+          },
+        ]
+      : [];
+
   const modelNode: WorkflowGraphNode = {
     id: 'model',
     label: modelName || 'Model application',
@@ -377,12 +493,15 @@ function WorkflowGraph({
     kind: 'handoff',
   };
   const showHandoff =
-    postNodes.length > 0 || stages.some((stage) => stage.type === 'output_handoff');
+    postNodes.length > 0 ||
+    publishNodes.length > 0 ||
+    stages.some((stage) => stage.type === 'output_handoff');
   const currentNode = [
     ...preNodes,
     modelNode,
     ...(showHandoff ? [handoffNode] : []),
     ...postNodes,
+    ...publishNodes,
   ].find((node) => node.state === 'running');
   const sourceContract = postPlans[0]
     ? contractValue(
@@ -401,14 +520,25 @@ function WorkflowGraph({
       )
     : null;
 
-  const graphNodes = [...preNodes, modelNode, ...(showHandoff ? [handoffNode] : []), ...postNodes];
+  const graphNodes = [
+    ...preNodes,
+    modelNode,
+    ...(showHandoff ? [handoffNode] : []),
+    ...postNodes,
+    ...publishNodes,
+  ];
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const selectedNode =
     graphNodes.find((node) => node.id === selectedNodeId) ?? currentNode ?? modelNode;
   const workflowLayoutOptions = useMemo(() => ({ nodeHeight: 128 }), []);
   const flowX = preNodes.length > 0 ? 260 : 24;
   const flowStartY = Math.max(24, 24 + Math.max(0, preNodes.length - 1) * 48);
-  const flowNodes = [modelNode, ...(showHandoff ? [handoffNode] : []), ...postNodes];
+  const flowNodes = [
+    modelNode,
+    ...(showHandoff ? [handoffNode] : []),
+    ...postNodes,
+    ...publishNodes,
+  ];
   const prePositions: WorkflowCanvasPosition<WorkflowGraphNode>[] = preNodes.map((node, index) => ({
     node,
     x: 24,
@@ -776,6 +906,9 @@ function UnifiedExecutionPanel({
           queue waits on ls6 have ranged from 20 minutes to 18 hours.
         </p>
       )}
+      {run.output_handoff?.publication && (
+        <PublicationSummary publication={run.output_handoff.publication} />
+      )}
       <RunAnswerCard
         result={(run.output_handoff as { result?: unknown } | null | undefined)?.result}
         label="Modeled spring flow"
@@ -879,7 +1012,7 @@ interface MintRunsProps {
   workflowCancelling?: Record<string, boolean>;
   onContinue: () => void;
   onFetchRuns: (modelId: string, page: number, pageSize: number) => void;
-  onSubmitRuns: (modelId: string, maxMinutes: number) => Promise<void>;
+  onSubmitRuns: (modelId: string, maxMinutes: number, publish?: PublishRequest) => Promise<void>;
   onExecutionSummaryChanged?: (summary: ExecutionSummaryMap) => void;
   /**
    * Publish one execution. Absent means publishing is not available, and the
@@ -948,6 +1081,10 @@ export function MintRuns({
   const [waiting, setWaiting] = useState<Record<string, boolean>>({});
   const [maxMinutes, setMaxMinutes] = useState<Record<string, string>>({});
   const [runtimeErrors, setRuntimeErrors] = useState<Record<string, string>>({});
+  const [publishers, setPublishers] = useState<Record<string, PlanPublisher[]>>({});
+  const [publishSelections, setPublishSelections] = useState<
+    Record<string, PublishSelection | null>
+  >({});
   const [logDialogOpen, setLogDialogOpen] = useState(false);
   const [logContent, setLogContent] = useState<string | null>(null);
   const logAbortRef = useRef<AbortController | null>(null);
@@ -963,6 +1100,27 @@ export function MintRuns({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelIds.join(',')]);
+
+  // Which catalogs each model's output can be published to. A failed lookup
+  // just hides the control: publishing is optional and must not block a run.
+  const canSubmitRuns = canExecute && canWrite;
+  const unsubmittedIds = modelIds.filter((mid) => {
+    const summary = threadData.execution_summary[mid];
+    return !(summary?.submitted_for_execution || summary?.submission_time);
+  });
+  useEffect(() => {
+    if (!canSubmitRuns || !ensembleManagerApi) return;
+    const controller = new AbortController();
+    for (const mid of unsubmittedIds) {
+      fetchPlanPublishers(ensembleManagerApi, mid, controller.signal)
+        .then((response) =>
+          setPublishers((current) => ({ ...current, [mid]: response.publishers ?? [] })),
+        )
+        .catch(() => undefined);
+    }
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unsubmittedIds.join(','), ensembleManagerApi, canSubmitRuns]);
 
   const handleSubmit = useCallback(
     async (mid: string) => {
@@ -981,7 +1139,9 @@ export function MintRuns({
       });
       setWaiting((w) => ({ ...w, [mid]: true }));
       try {
-        await onSubmitRuns(mid, minutes);
+        const publish = publishRequestFor(publishers[mid] ?? [], publishSelections[mid]);
+        if (publish) await onSubmitRuns(mid, minutes, publish);
+        else await onSubmitRuns(mid, minutes);
       } catch (error) {
         setRuntimeErrors((errors) => ({
           ...errors,
@@ -992,7 +1152,7 @@ export function MintRuns({
         setWaiting((w) => ({ ...w, [mid]: false }));
       }
     },
-    [maxMinutes, onSubmitRuns],
+    [maxMinutes, onSubmitRuns, publishers, publishSelections],
   );
 
   const handleNextPage = useCallback(
@@ -1202,6 +1362,15 @@ export function MintRuns({
                           )}
                         </button>
                       </div>
+                      <PublishOutputsControl
+                        modelId={mid}
+                        publishers={publishers[mid] ?? []}
+                        selection={publishSelections[mid] ?? null}
+                        disabled={waiting[mid]}
+                        onChange={(selection) =>
+                          setPublishSelections((current) => ({ ...current, [mid]: selection }))
+                        }
+                      />
                       {runtimeErrors[mid] && (
                         <p className="text-xs text-red-600">{runtimeErrors[mid]}</p>
                       )}
