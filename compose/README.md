@@ -164,6 +164,51 @@ the whole controlled vocabulary and a subset of the catalog: 14255 rows, 4.4 MB.
 Rebuild it from a production dump with
 `graphql_engine/scripts/build-modelcatalog-fixture.sh`.
 
+## SUBSIDE through DYNAMO, locally
+
+Runs the SUBSIDE UI against this stack's Ensemble Manager, so a SUBSIDE run goes
+through `POST /v1/plans/scenario` (see
+`docs/design/2026-11-05-subside-runs-through-dynamo.md`). Nothing is deployed.
+Tapis job submission, the real secrets store and CKAN/STAC writes are not
+available locally. Use `dry_run` to see the pipeline the adapter would run.
+
+1. Load the two OPERA configurations into the local catalog. The compose
+   fixtures do not contain them. The loader needs the YAML from the `subside`
+   repo (`tapis/workflow_apps/opera-disp-s1.model-catalog.yaml`). `--api-base`
+   is model-catalog-api (port 3002, not Hasura on 8082); the loader's Hasura
+   patch phase talks to Hasura on 8082 directly.
+
+   ```bash
+   HASURA_GRAPHQL_URL=http://localhost:8082/v1/graphql \
+   HASURA_ADMIN_SECRET=mint \
+   MINT_E2E_MODE=1 \
+   MINT_API_TOKEN=<a token model-catalog-api accepts> \
+   python3 /Users/wmobley/Documents/Github/modflow-suite/modflow-executables/scripts/register_subside_to_mint.py \
+     --api-base http://localhost:3002/v2.0.0 \
+     --yaml /Users/wmobley/Documents/Github/modflow-suite/subside/tapis/workflow_apps/opera-disp-s1.model-catalog.yaml \
+     --owner-username <your Tapis username>
+   ```
+
+   Add `--dry-run` first to print the payloads without writing.
+
+2. Make the SVO adapter pick the new configurations up:
+
+   ```bash
+   curl -X POST http://localhost:8090/admin/sync-from-mint
+   ```
+
+3. Start the SUBSIDE UI dev server from `subside/ui` with the Ensemble Manager
+   as its run backend:
+
+   ```bash
+   VITE_DYNAMO_API_BASE=http://localhost:3001/v1 \
+   VITE_RUN_BACKEND=dynamo \
+   npm run dev
+   ```
+
+   The Ensemble Manager verifies the bearer token against the key in its
+   configuration, so sign in with a token it accepts. Its CORS is open.
+
 ## Watch mode
 
 `model-catalog-api` and `ensemble-manager` bind-mount their `src` directory and
