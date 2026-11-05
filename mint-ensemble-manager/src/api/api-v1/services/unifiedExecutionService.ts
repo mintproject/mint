@@ -36,15 +36,13 @@ interface LegacyPlan {
     adapter_steps?: AdapterStep[];
     post_model_adapter?: PostModelAdapter;
     // Input ETL is planned by the bridge (POST /plans/model-inputs). The plan
-    // keeps the sources and the filled app inputs that submit sends back, the
-    // digest that makes a registry change between plan and submit a 409, the
-    // steps as a display preview, and the warnings the preview raised. All are
-    // part of the plan, so the plan hash covers them.
-    input_steps?: Record<string, unknown>[];
-    input_sources?: InputSource[];
-    filled_app_inputs?: string[];
+    // records only what submit needs to plan the same steps again: the region
+    // the source was shaped from and the digest of the steps the user saw.
+    // Geometry, steps, filled inputs and warnings are returned with the plan
+    // but never encoded into it: plan_id is the encoded plan and a uniquely
+    // indexed column, so it has to stay small (see MAX_PLAN_ID_LENGTH).
+    input_region_id?: string;
     steps_digest?: string;
-    input_warnings?: string[];
 }
 
 interface ConsideredInput {
@@ -61,6 +59,7 @@ interface InputPlanResult {
     sources: InputSource[];
     filledAppInputs: string[];
     stepsDigest?: string;
+    regionId?: string;
     warnings: string[];
 }
 
@@ -191,6 +190,11 @@ function unifiedPlanSecret(): string {
     return secret;
 }
 
+// Postgres refuses btree index rows above 2704 bytes and plan_id is unique
+// indexed in unified_execution; stay well below so a plan never fails at the
+// store with an opaque database error.
+const MAX_PLAN_ID_LENGTH = 2400;
+
 function encodePlan(value: LegacyPlan): string {
     const encoded = Buffer.from(JSON.stringify(value), "utf8")
         .toString("base64")
@@ -201,7 +205,15 @@ function encodePlan(value: LegacyPlan): string {
         .createHmac("sha256", unifiedPlanSecret())
         .update(encoded)
         .digest("hex");
-    return `em_${encoded}.${signature}`;
+    const planId = `em_${encoded}.${signature}`;
+    if (planId.length > MAX_PLAN_ID_LENGTH) {
+        throw new UnifiedExecutionError(
+            500,
+            `plan id of ${planId.length} characters exceeds the ${MAX_PLAN_ID_LENGTH} the store indexes`,
+            "PLAN_TOO_LARGE"
+        );
+    }
+    return planId;
 }
 
 function decodePlan(planId: string): LegacyPlan {
@@ -1613,24 +1625,65 @@ export function createUnifiedExecutionService(
             sources: [source],
             filledAppInputs: context.filled_app_inputs,
             stepsDigest: planned?.steps_digest,
+            regionId: context.region.id,
             warnings
         };
     };
 
-    // Warnings are recorded even when no step is needed; the rest only makes
-    // sense (and is only sent on submit) when there are steps.
+    // Only the references go on the plan; the preview itself is returned
+    // alongside it (see createPlan) and re-derived at submit.
     const applyInputPlan = (plan: LegacyPlan, derived: InputPlanResult) => {
-        if (derived.warnings.length) plan.input_warnings = derived.warnings;
         if (!derived.steps.length) return;
-        plan.input_steps = derived.steps;
-        plan.input_sources = derived.sources;
-        plan.filled_app_inputs = derived.filledAppInputs;
+        plan.input_region_id = derived.regionId;
         plan.steps_digest = derived.stepsDigest;
+    };
+
+    /**
+     * Shape the thread region into the source the plan was previewed with, at
+     * submit time. The region is read again rather than stored: it is too large
+     * for the plan id, and a region swapped under the thread must be visible.
+     */
+    const inputSourcesForSubmit = async (
+        plan: LegacyPlan,
+        authorization?: string
+    ): Promise<{ input_sources: InputSource[]; filled_app_inputs: string[] }> => {
+        const contextOf = legacyServices.tapis.compositeModelContext;
+        if (!contextOf) {
+            throw new UnifiedExecutionError(
+                500,
+                "input planning is not available for this execution engine",
+                "INPUT_PLAN_UNAVAILABLE"
+            );
+        }
+        const context = await contextOf.call(
+            legacyServices.tapis,
+            { thread_id: plan.thread_id, model_id: plan.model_id },
+            authorization || ""
+        );
+        if (!context.region || context.region.id !== plan.input_region_id) {
+            throw new UnifiedExecutionError(
+                422,
+                `the thread region changed since the plan was made (planned ${plan.input_region_id}, now ${context.region?.id ?? "none"}); plan again`,
+                "INPUT_REGION_CHANGED"
+            );
+        }
+        try {
+            return {
+                input_sources: [deriveRegionSource(context.region)],
+                filled_app_inputs: context.filled_app_inputs
+            };
+        } catch (error) {
+            if (error instanceof RegionGeometryError) {
+                throw new UnifiedExecutionError(422, error.message, "AOI_REGION_GEOMETRY_INVALID");
+            }
+            throw error;
+        }
     };
 
     return {
         async createPlan(body: any, authorization?: string) {
             const executor = body?.executor as UnifiedExecutor;
+            let inputPlan: InputPlanResult | undefined;
             if (executor === "svo_adapter") {
                 const adapterBody = body.adapter_request || body.adapter;
                 if (!adapterBody || typeof adapterBody !== "object") {
@@ -1751,10 +1804,12 @@ export function createUnifiedExecutionService(
                     );
                 }
                 if (body.input_etl !== false) {
-                    applyInputPlan(
+                    inputPlan = await deriveInputSteps(
                         plan,
-                        await deriveInputSteps(plan, body.strict_inputs === true, authorization)
+                        body.strict_inputs === true,
+                        authorization
                     );
+                    applyInputPlan(plan, inputPlan);
                 }
             } else if (inputEtl) {
                 // Input-only composite. Everything downstream of the model (the
@@ -1769,6 +1824,7 @@ export function createUnifiedExecutionService(
                     body.strict_inputs === true,
                     authorization
                 );
+                inputPlan = derived;
                 applyInputPlan(plan, derived);
                 if (derived.steps.length) {
                     const requested =
@@ -1874,15 +1930,17 @@ export function createUnifiedExecutionService(
                       : "ready",
                 adapter_steps: plan.adapter_steps || [],
                 post_model_adapter: plan.post_model_adapter || null,
-                ...(plan.input_steps?.length
+                // The preview travels with the response only; the plan keeps
+                // the region id and the digest (see LegacyPlan).
+                ...(inputPlan?.steps.length
                     ? {
-                          input_steps: plan.input_steps,
-                          input_sources: plan.input_sources,
-                          filled_app_inputs: plan.filled_app_inputs,
-                          steps_digest: plan.steps_digest
+                          input_steps: inputPlan.steps,
+                          input_sources: inputPlan.sources,
+                          filled_app_inputs: inputPlan.filledAppInputs,
+                          steps_digest: inputPlan.stepsDigest
                       }
                     : {}),
-                ...(plan.input_warnings?.length ? { input_warnings: plan.input_warnings } : {})
+                ...(inputPlan?.warnings.length ? { input_warnings: inputPlan.warnings } : {})
             };
         },
 
@@ -2104,10 +2162,13 @@ export function createUnifiedExecutionService(
                     );
                     // The bridge derives the steps from the registry, excluding
                     // inputs already filled, so there is no conflict to check here.
-                    const hasInputSteps = !!plan.input_steps?.length;
+                    const hasInputPlan = !!plan.steps_digest;
+                    const inputs = hasInputPlan
+                        ? await inputSourcesForSubmit(plan, authorization)
+                        : undefined;
                     const submitKey =
                         `${parentRunId(parent.id)}:${adapter.adapter_plan_id}:${adapterValues.hash}` +
-                        (hasInputSteps ? `:in-${plan.steps_digest}` : "");
+                        (hasInputPlan ? `:in-${plan.steps_digest}` : "");
                     const submitted = await adapterRequest(
                         "/workflows/submit",
                         {
@@ -2129,10 +2190,10 @@ export function createUnifiedExecutionService(
                                     output_format: modelTask.output_format || "",
                                     max_minutes: requestedMaxMinutes,
                                     job_definition: modelTask.job_definition,
-                                    ...(hasInputSteps
+                                    ...(inputs
                                         ? {
-                                              input_sources: plan.input_sources,
-                                              filled_app_inputs: plan.filled_app_inputs,
+                                              input_sources: inputs.input_sources,
+                                              filled_app_inputs: inputs.filled_app_inputs,
                                               expected_steps_digest: plan.steps_digest
                                           }
                                         : {})

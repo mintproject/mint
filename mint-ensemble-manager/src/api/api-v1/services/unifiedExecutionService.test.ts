@@ -1341,11 +1341,33 @@ describe("unifiedExecutionService", () => {
             expect(plan.filled_app_inputs).toEqual(["earthdata-netrc"]);
             expect(plan.steps_digest).toMatch(/^digest-/);
             expect(plan.input_warnings).toBeUndefined();
-            // The signed plan carries them, so submit and getPlan see the same inputs.
+            // The signed plan keeps only the references: plan_id is a uniquely
+            // indexed column, so geometry and steps must not be encoded into it.
             const stored = (await service.getPlan(plan.plan_id)) as any;
-            expect(stored.input_steps).toEqual(plan.input_steps);
-            expect(stored.input_sources).toEqual(plan.input_sources);
+            expect(stored.input_region_id).toBe("region-waco");
             expect(stored.steps_digest).toBe(plan.steps_digest);
+            expect(stored.input_steps).toBeUndefined();
+            expect(stored.input_sources).toBeUndefined();
+            expect(plan.plan_id.length).toBeLessThan(2400);
+        });
+
+        it("keeps the plan id small even for a region with many vertices", async () => {
+            stubAdapter();
+            const ring = Array.from({ length: 3000 }, (_, i) => [
+                Math.cos((i / 3000) * 2 * Math.PI),
+                Math.sin((i / 3000) * 2 * Math.PI)
+            ]);
+            ring.push(ring[0]);
+            legacy.tapis.compositeModelContext.mockResolvedValue(
+                context([{ type: "Polygon", coordinates: [ring] }])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, post_model_adapter: postModel },
+                "Bearer user-token"
+            )) as any;
+            expect(plan.input_steps).toHaveLength(1);
+            expect(plan.plan_id.length).toBeLessThan(2400);
         });
 
         it("uses the bounding box when the geometry is too large to send inline", async () => {
@@ -1519,8 +1541,9 @@ describe("unifiedExecutionService", () => {
                 // No steps: the plan stays an ordinary non-composite plan.
                 expect(plan.input_steps).toBeUndefined();
                 expect(plan.status).toBe("ready");
-                expect(((await service.getPlan(plan.plan_id)) as any).input_warnings).toEqual(
-                    plan.input_warnings
+                // Warnings are advisory and travel with the response, not the plan.
+                expect((await service.getPlan(plan.plan_id)) as any).not.toHaveProperty(
+                    "input_warnings"
                 );
             });
 
@@ -1707,6 +1730,31 @@ describe("unifiedExecutionService", () => {
                 expect(keyA).toBe(a.body.idempotency_key);
                 expect(keyA.endsWith(`:in-${a.plan.steps_digest}`)).toBe(true);
                 expect(keyA).not.toBe(keyB);
+            });
+
+            it("refuses to submit when the thread region changed since the plan", async () => {
+                stubAdapter();
+                legacy.tapis.compositeModelContext.mockResolvedValue(context([square(0)]));
+                legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue(modelTaskResult());
+                const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+                const plan = (await service.createPlan(
+                    { ...baseRequest, post_model_adapter: postModel },
+                    "Bearer user-token"
+                )) as any;
+                legacy.tapis.compositeModelContext.mockResolvedValue(
+                    context([square(0)], {
+                        region: {
+                            id: "region-dallas",
+                            name: "Dallas",
+                            category_id: "c",
+                            geometries: [square(0)]
+                        }
+                    })
+                );
+                await expect(
+                    service.submit({ plan_id: plan.plan_id }, "Bearer user-token")
+                ).rejects.toMatchObject({ statusCode: 422, code: "INPUT_REGION_CHANGED" });
+                expect(adapterCalls("/workflows/submit")).toHaveLength(0);
             });
 
             it("changes the plan hash when the region changes", async () => {

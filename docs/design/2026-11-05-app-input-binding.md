@@ -394,6 +394,18 @@ typed contract column, MODFLOW fallback removal.
   model); `--legacy-api-schema` against an older API would drop the key, so
   deploy the catalog API before running the scripts and read the binding back.
 
+- 2026-11-05 (live, fix): the first submit under the new EM failed with a
+  Hasura "database query error": `plan_id` is the base64-encoded plan and a
+  uniquely indexed `text` column, and embedding the derived steps and the
+  region geometry pushed it past Postgres's 2704-byte btree row limit (old
+  plans were ~1.3 KB; the new one ~5.4 KB). The plan now records only
+  `input_region_id` and `steps_digest`; the preview (`input_steps`,
+  `input_sources`, `filled_app_inputs`, `input_warnings`) travels with the
+  createPlan response and submit re-shapes the region (422
+  `INPUT_REGION_CHANGED` if the thread's region changed). `encodePlan` refuses
+  ids over 2400 characters (`PLAN_TOO_LARGE`) so this class of failure is
+  explicit. Branch `fix/em-plan-id-size`.
+
 ## User feedback / decisions
 
 - 2026-11-05: "Explicit binding is this generalizable to other models?" → yes,

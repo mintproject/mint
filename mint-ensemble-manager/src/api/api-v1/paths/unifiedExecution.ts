@@ -36,7 +36,8 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *         description: >
  *           Unified plan created. When the bridge planned input ETL, the plan
  *           carries `input_steps` (a preview of the planned steps), `input_sources`
- *           and `filled_app_inputs` (sent back on submit), and `steps_digest` (the
+ *           and `filled_app_inputs` (as previewed; submit re-derives both from the
+ *           thread so a changed region is refused), and `steps_digest` (the
  *           bridge rejects a submit whose steps differ with 409 INPUT_PLAN_CHANGED).
  *           `input_warnings` lists inputs that could not be planned: registry
  *           missing, unbound model inputs, optional inputs with no transform path,
