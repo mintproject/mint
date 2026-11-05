@@ -193,7 +193,7 @@ export class TapisJobService {
         });
     }
 
-    private findModelInput(fileInputName: string, model: Model) {
+    public findModelInput(fileInputName: string, model: Model) {
         const exactInput = model.input_files.find((input) => input.name === fileInputName);
         const appInputName = fileInputName.toLowerCase();
         const semanticInputNames = new Set([

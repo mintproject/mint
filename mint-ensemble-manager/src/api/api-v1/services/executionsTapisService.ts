@@ -1,5 +1,5 @@
 import { ModelThread } from "@/classes/api";
-import { ModelSecretDeclaration } from "@/classes/mint/mint-types";
+import { ModelSecretDeclaration, Region } from "@/classes/mint/mint-types";
 import { TapisExecutionService } from "@/classes/tapis/adapters/TapisExecutionService";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { getConfiguration } from "@/classes/mint/mint-functions";
@@ -35,6 +35,15 @@ export interface ExecutionsTapisService {
         output_name: string;
         output_format?: string;
         job_definition: unknown;
+    }>;
+    findUnboundInputsByStandardVariable(
+        threadmodel: { thread_id: string; model_id: string },
+        standardVariableUri: string,
+        authorization: string
+    ): Promise<{
+        region: Region | null;
+        inputs: { app_input_name: string; model_input_id: string }[];
+        outputs: { id: string; name: string; format?: string }[];
     }>;
     resolveCompositeWorkflowOutput(
         executionId: string,
@@ -197,6 +206,22 @@ const executionsTapisService = {
         } else {
             throw new NotFoundError("Thread not found");
         }
+    },
+    async findUnboundInputsByStandardVariable(
+        threadmodel: { thread_id: string; model_id: string },
+        standardVariableUri: string,
+        authorization: string
+    ) {
+        const token = getTokenFromAuthorizationHeader(authorization);
+        if (!token) {
+            throw new Error("Unauthorized");
+        }
+        const prefs = getConfiguration();
+        const tapisExecution = new TapisExecutionService(token, prefs.tapis.basePath);
+        return tapisExecution.findUnboundInputsByStandardVariable(
+            threadmodel,
+            standardVariableUri
+        );
     },
     async buildCompositeWorkflowModelTask(
         threadmodel: AdapterAwareModelThread,

@@ -23,6 +23,7 @@ describe("unifiedExecutionService", () => {
         tapis: {
             submitExecution: jest.fn(),
             buildCompositeWorkflowModelTask: jest.fn(),
+            findUnboundInputsByStandardVariable: jest.fn(),
             getExecution: jest.fn(),
             getJobStatus: jest.fn(),
             updateCompositeWorkflowExecution: jest.fn()
@@ -32,6 +33,12 @@ describe("unifiedExecutionService", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         global.fetch = jest.fn();
+        // By default a model has no area-of-interest input (e.g. MODFLOW).
+        legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue({
+            region: null,
+            inputs: [],
+            outputs: []
+        });
     });
 
     function fakeStore(): UnifiedExecutionStore {
@@ -1205,6 +1212,355 @@ describe("unifiedExecutionService", () => {
             await expect(
                 service.submit({ plan_id: plan.plan_id }, "Bearer user-token")
             ).rejects.toMatchObject({ statusCode: 422, code: "SECRET_ENV_UNDECLARED" });
+        });
+    });
+
+    describe("input-side ETL derivation", () => {
+        const AOI = "https://w3id.org/okn/i/mint/area_of_interest__boundary";
+        const square = (x: number) => ({
+            type: "Polygon",
+            coordinates: [
+                [
+                    [x, 0],
+                    [x + 1, 0],
+                    [x + 1, 1],
+                    [x, 1],
+                    [x, 0]
+                ]
+            ]
+        });
+        const outputs = [{ id: "out-io", name: "cbb", format: "cbc" }];
+        const aoiInput = { app_input_name: "aoi-geojson", model_input_id: "in/aoi" };
+        const postModel = {
+            model_io_id: "cbc-output",
+            model_output_key: "cbc-output",
+            source_contract: { standard_variable_uri: "mint:cbc", format: "cbc" },
+            target_contract: { standard_variable_uri: "mint:springflow" }
+        };
+        const baseRequest = {
+            executor: "ensemble_manager",
+            thread_id: "thread-1",
+            model_id: "model-1",
+            execution_engine: "tapis"
+        };
+
+        // Adapter stub keyed by path; records every call.
+        function stubAdapter(deferredSteps: unknown[] = []) {
+            (global.fetch as jest.Mock).mockImplementation(async (url: string, init: any) => {
+                const path = String(url).replace("http://adapter.local", "");
+                if (path === "/plans/input") {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            steps: [{ type: "function", name: "aoi-from-boundary" }],
+                            parameters: []
+                        })
+                    };
+                }
+                if (path === "/plans/deferred") {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            status: "deferred",
+                            plan_id: "deferred-plan-1",
+                            plan_hash: "deferred-hash-1",
+                            plan_json: { parameters: [], steps: deferredSteps }
+                        })
+                    };
+                }
+                return { ok: true, json: async () => ({ run_id: "run-1", status: "queued" }) };
+            });
+        }
+        const adapterCalls = (path: string) =>
+            (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).endsWith(path));
+        const found = (geometries: any[], inputs: any[] = [aoiInput]) => ({
+            region: { id: "region-waco", name: "Waco", category_id: "c", geometries },
+            inputs,
+            outputs
+        });
+
+        it("derives one input step from the thread region and stores it on the plan", async () => {
+            stubAdapter();
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([square(0), square(3)])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, post_model_adapter: postModel },
+                "Bearer user-token"
+            )) as any;
+
+            expect(legacy.tapis.findUnboundInputsByStandardVariable).toHaveBeenCalledWith(
+                { thread_id: "thread-1", model_id: "model-1" },
+                AOI,
+                "Bearer user-token"
+            );
+            expect(JSON.parse(adapterCalls("/plans/input")[0][1].body)).toEqual({
+                source_kind: "geojson",
+                target_standard_variable_uri: AOI,
+                app_input_name: "aoi-geojson"
+            });
+            expect(plan.input_steps).toHaveLength(1);
+            expect(plan.input_steps[0]).toMatchObject({
+                name: "aoi-geojson",
+                app_input_name: "aoi-geojson",
+                steps: [{ type: "function", name: "aoi-from-boundary" }],
+                params: {},
+                source: { kind: "geojson", geometry: { type: "MultiPolygon" } },
+                derivation: { method: "region_geometry", region_id: "region-waco", vertices_in: 10 }
+            });
+            expect(plan.input_steps[0].source.geometry.coordinates).toHaveLength(2);
+            // The signed plan carries them, so submit and getPlan see the same AOI.
+            expect(((await service.getPlan(plan.plan_id)) as any).input_steps).toEqual(
+                plan.input_steps
+            );
+        });
+
+        it("uses the bounding box and records it when the geometry is too large", async () => {
+            stubAdapter();
+            const ring = Array.from({ length: 3000 }, (_, i) => [
+                100 + Math.cos(i / 3000) * 10,
+                30 + Math.sin(i / 3000) * 10
+            ]);
+            ring.push(ring[0]);
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([{ type: "Polygon", coordinates: [ring] }])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, post_model_adapter: postModel },
+                "Bearer user-token"
+            )) as any;
+            expect(JSON.parse(adapterCalls("/plans/input")[0][1].body).source_kind).toBe("bbox");
+            expect(plan.input_steps[0].source.kind).toBe("bbox");
+            expect(plan.input_steps[0].derivation).toMatchObject({
+                method: "region_bbox",
+                vertices_in: 3001
+            });
+        });
+
+        it("rejects a non-polygon region geometry", async () => {
+            stubAdapter();
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([{ type: "Point", coordinates: [0, 0] }])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(
+                service.createPlan(
+                    { ...baseRequest, post_model_adapter: postModel },
+                    "Bearer user-token"
+                )
+            ).rejects.toMatchObject({ statusCode: 422, code: "AOI_REGION_GEOMETRY_INVALID" });
+        });
+
+        it("derives nothing when no input qualifies", async () => {
+            stubAdapter();
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([square(0)], [])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, post_model_adapter: postModel },
+                "Bearer user-token"
+            )) as any;
+            expect(plan.input_steps).toBeUndefined();
+            expect(adapterCalls("/plans/input")).toHaveLength(0);
+            expect(
+                JSON.parse(
+                    Buffer.from(
+                        plan.plan_id.slice(3).split(".")[0].replace(/-/g, "+").replace(/_/g, "/"),
+                        "base64"
+                    ).toString("utf8")
+                )
+            ).not.toHaveProperty("input_steps");
+        });
+
+        it("skips with a warning when more than one input is typed as the area of interest", async () => {
+            stubAdapter();
+            const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([square(0)], [aoiInput, { app_input_name: "aoi-b", model_input_id: "in/b" }])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, post_model_adapter: postModel },
+                "Bearer user-token"
+            )) as any;
+            expect(plan.input_steps).toBeUndefined();
+            expect(adapterCalls("/plans/input")).toHaveLength(0);
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining("aoi-geojson, aoi-b"));
+            warn.mockRestore();
+        });
+
+        it("builds an input-only composite from an identity deferred plan", async () => {
+            stubAdapter([]);
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([square(0)])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, input_etl: true },
+                "Bearer user-token"
+            )) as any;
+            expect(plan.status).toBe("post_model_ready");
+            expect(plan.input_steps).toHaveLength(1);
+            const deferred = JSON.parse(adapterCalls("/plans/deferred")[0][1].body);
+            expect(deferred.source_contract).toEqual({ format: "cbc" });
+            expect(deferred.target_contract).toEqual({ format: "cbc" });
+            expect(deferred.model_output_key).toBe("cbb");
+            expect(plan.post_model_adapter).toMatchObject({
+                adapter_plan_id: "deferred-plan-1",
+                model_io_id: "out-io",
+                model_output_key: "cbb"
+            });
+        });
+
+        it("keeps an input-only request a plain plan when nothing needs deriving", async () => {
+            stubAdapter();
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([square(0)], [])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, input_etl: true },
+                "Bearer user-token"
+            )) as any;
+            expect(plan.status).toBe("ready");
+            expect(plan.post_model_adapter).toBeNull();
+            expect(adapterCalls("/plans/deferred")).toHaveLength(0);
+        });
+
+        it("refuses an input-only plan if the adapter planned post-model steps", async () => {
+            stubAdapter([{ type: "function" }]);
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([square(0)])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(
+                service.createPlan({ ...baseRequest, input_etl: true }, "Bearer user-token")
+            ).rejects.toMatchObject({ statusCode: 502, code: "INPUT_ONLY_PLAN_NOT_IDENTITY" });
+        });
+
+        it("still rejects separate-workflow adapter steps combined with a post-model adapter", async () => {
+            stubAdapter();
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(
+                service.createPlan(
+                    {
+                        ...baseRequest,
+                        post_model_adapter: postModel,
+                        adapter_steps: [
+                            {
+                                adapter_plan_id: "p",
+                                model_io_id: "io",
+                                source_resource_id: "r"
+                            }
+                        ]
+                    },
+                    "Bearer user-token"
+                )
+            ).rejects.toMatchObject({ code: "MIXED_ADAPTER_STAGES_UNSUPPORTED" });
+        });
+
+        describe("submit", () => {
+            const modelTaskResult = (fileInputs: { name: string; sourceUrl: string }[] = []) => ({
+                execution_id: "model-child-1",
+                configuration_id: "config/subside",
+                required_secrets: [],
+                output_uri: "tapis://ls6/mint-workflow-output/ue_parent-1/model/cbb",
+                output_name: "cbb",
+                job_definition: { appId: "model-app", appVersion: "0.0.1", fileInputs }
+            });
+
+            async function planAndSubmit(geometries: any[], fileInputs: any[] = []) {
+                stubAdapter();
+                legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                    found(geometries)
+                );
+                legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue(
+                    modelTaskResult(fileInputs)
+                );
+                const store = fakeStore();
+                const service = createUnifiedExecutionService(legacy, { store });
+                const plan = (await service.createPlan(
+                    { ...baseRequest, post_model_adapter: postModel },
+                    "Bearer user-token"
+                )) as any;
+                (global.fetch as jest.Mock).mockClear();
+                await service
+                    .submit({ plan_id: plan.plan_id }, "Bearer user-token")
+                    .catch((error) => error);
+                const call = adapterCalls("/workflows/submit")[0];
+                return { plan, store, call, body: call ? JSON.parse(call[1].body) : undefined };
+            }
+
+            it("forwards input_steps in model_task with the exact key set", async () => {
+                const { plan, body } = await planAndSubmit([square(0)]);
+                expect(Object.keys(body.model_task).sort()).toEqual(
+                    [
+                        "configuration_id",
+                        "input_steps",
+                        "job_definition",
+                        "output_format",
+                        "output_name",
+                        "output_uri",
+                        "required_secrets",
+                        "stage_id"
+                    ].sort()
+                );
+                expect(body.model_task.input_steps).toEqual(plan.input_steps);
+            });
+
+            it("puts a hash of input_steps in the idempotency key", async () => {
+                const a = await planAndSubmit([square(0)]);
+                const b = await planAndSubmit([square(7)]);
+                const keyA = a.call[1].headers["Idempotency-Key"];
+                const keyB = b.call[1].headers["Idempotency-Key"];
+                expect(keyA).toBe(a.body.idempotency_key);
+                expect(keyA).toMatch(/:in-[0-9a-f]{64}$/);
+                expect(keyA).not.toBe(keyB);
+            });
+
+            it("changes the plan hash when the region changes", async () => {
+                const a = await planAndSubmit([square(0)]);
+                const b = await planAndSubmit([square(7)]);
+                const recordA = await a.store.getById("parent-1");
+                const recordB = await b.store.getById("parent-1");
+                expect(a.plan.plan_id).not.toBe(b.plan.plan_id);
+                expect(recordA?.plan_hash).toMatch(/^[0-9a-f]{64}$/);
+                expect(recordA?.plan_hash).not.toBe(recordB?.plan_hash);
+            });
+
+            it("fails with INPUT_CONFLICT before calling the adapter when a dataset fills the input", async () => {
+                const { call, store } = await planAndSubmit(
+                    [square(0)],
+                    [{ name: "aoi-geojson", sourceUrl: "https://data.example/aoi.geojson" }]
+                );
+                expect(call).toBeUndefined();
+                await expect(store.getById("parent-1")).resolves.toMatchObject({
+                    status: "failed",
+                    failure_code: "INPUT_CONFLICT"
+                });
+            });
+
+            it("leaves MODFLOW-style composite plans unchanged", async () => {
+                stubAdapter();
+                legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                    found([square(0)], [])
+                );
+                legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue(modelTaskResult());
+                const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+                const plan = (await service.createPlan(
+                    { ...baseRequest, post_model_adapter: postModel },
+                    "Bearer user-token"
+                )) as any;
+                (global.fetch as jest.Mock).mockClear();
+                await service.submit({ plan_id: plan.plan_id }, "Bearer user-token");
+                const body = JSON.parse(adapterCalls("/workflows/submit")[0][1].body);
+                expect(body.model_task).not.toHaveProperty("input_steps");
+                expect(body.idempotency_key).toBe("ue_parent-1:deferred-plan-1:" + body.idempotency_key.split(":")[2]);
+                expect(body.idempotency_key).not.toContain(":in-");
+            });
         });
     });
 

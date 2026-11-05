@@ -163,57 +163,9 @@ export class TapisExecutionService implements IExecutionService {
         output_format?: string;
         job_definition: Jobs.ReqSubmitJob;
     }> {
-        if (!threadmodel.model_id) throw new NotFoundError("Model configuration not found");
-        const threadResponse = await getThread(threadmodel.thread_id);
-        const thread = threadFromGQL(threadResponse);
-        if (!thread) throw new NotFoundError("Thread not found");
-        applyExecutionInputOverrides(
-            thread,
-            threadmodel.model_id,
-            threadmodel.adapter_resource_overrides || []
-        );
-
-        const executionCreation = new ExecutionCreation(
-            thread,
-            threadmodel.model_id,
-            this,
-            this.token
-        );
-        await executionCreation.prepareExecutions();
-        if (executionCreation.executionToBeRun.length !== 1) {
-            const error = new Error(
-                "Composite workflow execution requires exactly one model execution"
-            ) as Error & { code?: string };
-            error.code = "MODEL_FANOUT_UNSUPPORTED";
-            throw error;
-        }
-        if (!executionCreation.model.output_files?.length) {
-            const error = new Error("Composite workflow model declares no outputs") as Error & {
-                code?: string;
-            };
-            error.code = "NO_OUTPUTS_DECLARED";
-            throw error;
-        }
-
-        const app = await this.loadTapisApp(executionCreation.component);
-        const requiredSecrets = executionCreation.model.required_secrets || [];
-        this.assertSecretEnvKeysDeclared(app, requiredSecrets);
-        const seed = this.seedExecutions(
-            executionCreation.executionToBeRun,
-            executionCreation.model,
-            executionCreation.threadRegion,
-            executionCreation.component
-        )[0];
-        const execution = executionCreation.executionToBeRun[0];
-        const jobDefinition = this.jobService.createJobRequest(
-            app,
-            seed,
-            executionCreation.model,
-            `mint-workflow-model-${execution.id}`,
-            `Composite workflow model execution ${execution.id}`,
-            maxMinutes,
-            logicalQueue
-        );
+        const thread = await this.loadCompositeThread(threadmodel);
+        const { executionCreation, requiredSecrets, execution, jobDefinition } =
+            await this.buildCompositeJob(thread, threadmodel, true, maxMinutes, logicalQueue);
 
         // A deterministic, run-owned archive path gives downstream workflow
         // tasks a durable handoff URI without exposing the provider job UUID.
@@ -256,6 +208,133 @@ export class TapisExecutionService implements IExecutionService {
             output_uri: `tapis://${jobDefinition.archiveSystemId}/${archivePath}/${outputName}`,
             job_definition: jobDefinition
         };
+    }
+
+    /**
+     * Load the thread a composite model task is built from, with any adapter
+     * input overrides applied.
+     */
+    private async loadCompositeThread(threadmodel: {
+        thread_id: string;
+        model_id?: string;
+        adapter_resource_overrides?: Parameters<typeof applyExecutionInputOverrides>[2];
+    }) {
+        if (!threadmodel.model_id) throw new NotFoundError("Model configuration not found");
+        const threadResponse = await getThread(threadmodel.thread_id);
+        const thread = threadFromGQL(threadResponse);
+        if (!thread) throw new NotFoundError("Thread not found");
+        applyExecutionInputOverrides(
+            thread,
+            threadmodel.model_id,
+            threadmodel.adapter_resource_overrides || []
+        );
+        return thread;
+    }
+
+    /**
+     * Build the Tapis job request for a composite model task. Shared by the
+     * submit path (`persist` true: creates the execution rows) and by planning
+     * (`persist` false: resolves the same job in memory with no writes).
+     */
+    private async buildCompositeJob(
+        thread: NonNullable<ReturnType<typeof threadFromGQL>>,
+        threadmodel: { model_id?: string },
+        persist: boolean,
+        maxMinutes?: number,
+        logicalQueue?: string
+    ) {
+        const executionCreation = new ExecutionCreation(
+            thread,
+            threadmodel.model_id,
+            this,
+            this.token
+        );
+        if (persist) {
+            await executionCreation.prepareExecutions();
+        } else {
+            await executionCreation.previewExecutions();
+        }
+        if (executionCreation.executionToBeRun.length !== 1) {
+            const error = new Error(
+                "Composite workflow execution requires exactly one model execution"
+            ) as Error & { code?: string };
+            error.code = "MODEL_FANOUT_UNSUPPORTED";
+            throw error;
+        }
+        if (!executionCreation.model.output_files?.length) {
+            const error = new Error("Composite workflow model declares no outputs") as Error & {
+                code?: string;
+            };
+            error.code = "NO_OUTPUTS_DECLARED";
+            throw error;
+        }
+
+        const app = await this.loadTapisApp(executionCreation.component);
+        const requiredSecrets = executionCreation.model.required_secrets || [];
+        this.assertSecretEnvKeysDeclared(app, requiredSecrets);
+        const seed = this.seedExecutions(
+            executionCreation.executionToBeRun,
+            executionCreation.model,
+            executionCreation.threadRegion,
+            executionCreation.component
+        )[0];
+        const execution = executionCreation.executionToBeRun[0];
+        const jobDefinition = this.jobService.createJobRequest(
+            app,
+            seed,
+            executionCreation.model,
+            `mint-workflow-model-${execution.id}`,
+            `Composite workflow model execution ${execution.id}`,
+            maxMinutes,
+            logicalQueue
+        );
+        return { executionCreation, app, requiredSecrets, execution, jobDefinition };
+    }
+
+    /**
+     * Find the app file inputs of a composite model that the job definition
+     * leaves unfilled and whose model input is typed with `standardVariableUri`.
+     * Builds the job in memory (no database writes) so the answer matches what
+     * submit would build. Returns without touching Tapis when the model has no
+     * input of that type.
+     */
+    async findUnboundInputsByStandardVariable(
+        threadmodel: { thread_id: string; model_id?: string },
+        standardVariableUri: string
+    ): Promise<{
+        region: Region | null;
+        inputs: { app_input_name: string; model_input_id: string }[];
+        outputs: { id: string; name: string; format?: string }[];
+    }> {
+        const thread = await this.loadCompositeThread(threadmodel);
+        const typed = thread.models[threadmodel.model_id]?.input_files?.some((input) =>
+            input.standard_variables?.includes(standardVariableUri)
+        );
+        if (!typed) return { region: null, inputs: [], outputs: [] };
+
+        const { executionCreation, app, jobDefinition } = await this.buildCompositeJob(
+            thread,
+            threadmodel,
+            false
+        );
+        const filled = new Set((jobDefinition.fileInputs || []).map((input) => input.name));
+        const inputs = (app.jobAttributes?.fileInputs || []).flatMap((fileInput) => {
+            if (fileInput.inputMode === Apps.FileInputModeEnum.Fixed || filled.has(fileInput.name)) {
+                return [];
+            }
+            const modelInput = this.jobService.findModelInput(
+                fileInput.name,
+                executionCreation.model
+            );
+            if (!modelInput?.standard_variables?.includes(standardVariableUri)) return [];
+            return [{ app_input_name: fileInput.name, model_input_id: modelInput.id }];
+        });
+        const outputs = executionCreation.model.output_files.map((output) => ({
+            id: output.id,
+            name: output.name || output.id,
+            format: output.format
+        }));
+        return { region: executionCreation.threadRegion, inputs, outputs };
     }
 
     /**

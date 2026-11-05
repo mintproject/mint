@@ -1,7 +1,13 @@
 import crypto from "crypto";
 import { UnifiedExecutionError } from "@/classes/common/errors";
-import { ModelSecretDeclaration } from "@/classes/mint/mint-types";
+import { ModelSecretDeclaration, Region } from "@/classes/mint/mint-types";
 import { getConfiguration } from "@/classes/mint/mint-functions";
+import {
+    AOI_STANDARD_VARIABLE_URI,
+    deriveRegionSource,
+    InputStep,
+    RegionGeometryError
+} from "./inputStepDerivation";
 import {
     createHasuraUnifiedExecutionStore,
     UnifiedExecutionRecord,
@@ -34,6 +40,9 @@ interface LegacyPlan {
     execution_engine: string;
     adapter_steps?: AdapterStep[];
     post_model_adapter?: PostModelAdapter;
+    // ETL chains that run before the model in the same composite workflow and
+    // produce one of its file inputs. Part of the plan, so the plan hash covers them.
+    input_steps?: InputStep[];
 }
 
 interface AdapterStep {
@@ -121,7 +130,11 @@ interface TapisWorkflowTracking {
 interface AdapterPlanResponse {
     status?: string;
     plan_id?: string;
-    plan_json?: { parameters?: UnifiedParameterDefinition[]; [key: string]: unknown };
+    plan_json?: {
+        parameters?: UnifiedParameterDefinition[];
+        steps?: unknown[];
+        [key: string]: unknown;
+    };
     plan_hash?: string;
     message?: string;
 }
@@ -275,6 +288,10 @@ function adapterPlanId(planId: string): string {
 
 function planHash(plan: LegacyPlan): string {
     return crypto.createHash("sha256").update(JSON.stringify(plan)).digest("hex");
+}
+
+function inputStepsHash(steps: InputStep[]): string {
+    return crypto.createHash("sha256").update(JSON.stringify(steps)).digest("hex");
 }
 
 function parameterValuesHash(values: Record<string, unknown>): string {
@@ -596,6 +613,15 @@ export function createUnifiedExecutionService(
                 output_name: string;
                 output_format?: string;
                 job_definition: unknown;
+            }>;
+            findUnboundInputsByStandardVariable?(
+                threadmodel: { thread_id: string; model_id: string },
+                standardVariableUri: string,
+                authorization: string
+            ): Promise<{
+                region: Region | null;
+                inputs: { app_input_name: string; model_input_id: string }[];
+                outputs: { id: string; name: string; format?: string }[];
             }>;
             resolveCompositeWorkflowOutput?: (
                 executionId: string,
@@ -1449,6 +1475,87 @@ export function createUnifiedExecutionService(
         }
     };
 
+    /**
+     * Derive the input-ETL steps a composite model needs. Today that is one
+     * kind: an app file input that no bound dataset fills and whose model input
+     * is typed as an area of interest gets a chain built from the thread
+     * region. Returns the model's outputs too, for an input-only plan.
+     */
+    const deriveInputSteps = async (
+        plan: LegacyPlan,
+        authorization?: string
+    ): Promise<{
+        steps: InputStep[];
+        outputs: { id: string; name: string; format?: string }[];
+    }> => {
+        const find = legacyServices.tapis.findUnboundInputsByStandardVariable;
+        if (!find) return { steps: [], outputs: [] };
+        const found = await find.call(
+            legacyServices.tapis,
+            { thread_id: plan.thread_id, model_id: plan.model_id },
+            AOI_STANDARD_VARIABLE_URI,
+            authorization || ""
+        );
+        if (found.inputs.length === 0) return { steps: [], outputs: found.outputs };
+        if (found.inputs.length > 1) {
+            console.warn(
+                `Skipping area-of-interest derivation for model ${plan.model_id}: ` +
+                    `${found.inputs.length} unbound inputs are typed ${AOI_STANDARD_VARIABLE_URI} ` +
+                    `(${found.inputs.map((input) => input.app_input_name).join(", ")}); v1 derives only one`
+            );
+            return { steps: [], outputs: found.outputs };
+        }
+        if (!found.region) {
+            throw new UnifiedExecutionError(
+                422,
+                "the thread region is required to derive an area-of-interest input",
+                "AOI_REGION_UNAVAILABLE"
+            );
+        }
+        const input = found.inputs[0];
+        let derived: ReturnType<typeof deriveRegionSource>;
+        try {
+            derived = deriveRegionSource(found.region);
+        } catch (error) {
+            if (error instanceof RegionGeometryError) {
+                throw new UnifiedExecutionError(422, error.message, "AOI_REGION_GEOMETRY_INVALID");
+            }
+            throw error;
+        }
+        const planned = await adapterRequest(
+            "/plans/input",
+            {
+                method: "POST",
+                body: {
+                    source_kind: derived.source.kind,
+                    target_standard_variable_uri: AOI_STANDARD_VARIABLE_URI,
+                    app_input_name: input.app_input_name
+                }
+            },
+            authorization
+        );
+        if (!Array.isArray(planned?.steps) || planned.steps.length === 0) {
+            throw new UnifiedExecutionError(
+                502,
+                "SVO adapter returned an incomplete input plan",
+                "INPUT_PLAN_INVALID"
+            );
+        }
+        return {
+            steps: [
+                {
+                    name: input.app_input_name,
+                    app_input_name: input.app_input_name,
+                    steps: planned.steps,
+                    source: derived.source,
+                    params: {},
+                    derivation: derived.derivation
+                }
+            ],
+            outputs: found.outputs
+        };
+    };
+
     return {
         async createPlan(body: any, authorization?: string) {
             const executor = body?.executor as UnifiedExecutor;
@@ -1531,7 +1638,11 @@ export function createUnifiedExecutionService(
                 execution_engine:
                     body.execution_engine || getConfiguration().execution_engine || "localex"
             };
-            if (body.post_model_adapter !== undefined) {
+            // Composite path: an explicit post-model adapter, or `input_etl` to
+            // ask for input-only ETL (see "input-only composites" below).
+            let adapter = body.post_model_adapter;
+            let identityPostModel = false;
+            if (adapter !== undefined || body.input_etl === true) {
                 if (plan.execution_engine !== "tapis") {
                     throw new UnifiedExecutionError(
                         422,
@@ -1546,7 +1657,8 @@ export function createUnifiedExecutionService(
                         "MIXED_ADAPTER_STAGES_UNSUPPORTED"
                     );
                 }
-                const adapter = body.post_model_adapter;
+            }
+            if (adapter !== undefined) {
                 if (
                     typeof adapter?.model_io_id !== "string" ||
                     typeof adapter?.model_output_key !== "string" ||
@@ -1559,6 +1671,48 @@ export function createUnifiedExecutionService(
                         "POST_MODEL_ADAPTER_INVALID"
                     );
                 }
+                const derived = await deriveInputSteps(plan, authorization);
+                if (derived.steps.length) plan.input_steps = derived.steps;
+            } else if (body.input_etl === true) {
+                // Input-only composite. Everything downstream of the model (the
+                // submit, the output handoff, reconciliation) keys on a stored
+                // post-model plan, so a model that needs input ETL but no
+                // post-model ETL gets an identity deferred plan: source and target
+                // contract are the model output's own, which the adapter plans as
+                // zero steps. If nothing needs deriving the plan stays an ordinary
+                // non-composite plan.
+                const derived = await deriveInputSteps(plan, authorization);
+                if (derived.steps.length) {
+                    const requested =
+                        typeof body.model_output_key === "string"
+                            ? body.model_output_key.trim()
+                            : "";
+                    const output =
+                        (requested &&
+                            derived.outputs.find(
+                                (candidate) =>
+                                    candidate.name === requested || candidate.id === requested
+                            )) ||
+                        (requested ? undefined : derived.outputs[0]);
+                    if (!output) {
+                        throw new UnifiedExecutionError(
+                            422,
+                            `model does not declare output ${requested || "(none)"}`,
+                            "MODEL_OUTPUT_NOT_DECLARED"
+                        );
+                    }
+                    const contract = output.format ? { format: output.format } : {};
+                    plan.input_steps = derived.steps;
+                    adapter = {
+                        model_io_id: output.id,
+                        model_output_key: output.name,
+                        source_contract: contract,
+                        target_contract: { ...contract }
+                    };
+                    identityPostModel = true;
+                }
+            }
+            if (adapter !== undefined) {
                 const result = (await adapterRequest(
                     "/plans/deferred",
                     {
@@ -1578,6 +1732,13 @@ export function createUnifiedExecutionService(
                         502,
                         "SVO adapter returned an incomplete deferred plan",
                         "DEFERRED_PLAN_INVALID"
+                    );
+                }
+                if (identityPostModel && result.plan_json?.steps?.length) {
+                    throw new UnifiedExecutionError(
+                        502,
+                        "SVO adapter planned post-model steps for an input-only plan",
+                        "INPUT_ONLY_PLAN_NOT_IDENTITY"
                     );
                 }
                 plan.post_model_adapter = {
@@ -1625,7 +1786,8 @@ export function createUnifiedExecutionService(
                       ? "adapter_ready"
                       : "ready",
                 adapter_steps: plan.adapter_steps || [],
-                post_model_adapter: plan.post_model_adapter || null
+                post_model_adapter: plan.post_model_adapter || null,
+                ...(plan.input_steps?.length ? { input_steps: plan.input_steps } : {})
             };
         },
 
@@ -1845,6 +2007,25 @@ export function createUnifiedExecutionService(
                         parentRunId(parent.id),
                         authorization || ""
                     );
+                    // Bound datasets win: a derived input must not collide with a
+                    // file input the job definition already carries.
+                    const inputSteps = plan.input_steps || [];
+                    const jobFileInputs =
+                        (modelTask.job_definition as { fileInputs?: { name?: string }[] })
+                            ?.fileInputs || [];
+                    const conflict = inputSteps.find((step) =>
+                        jobFileInputs.some((input) => input.name === step.app_input_name)
+                    );
+                    if (conflict) {
+                        throw new UnifiedExecutionError(
+                            422,
+                            `file input ${conflict.app_input_name} is already supplied by a bound dataset and cannot also be derived`,
+                            "INPUT_CONFLICT"
+                        );
+                    }
+                    const submitKey =
+                        `${parentRunId(parent.id)}:${adapter.adapter_plan_id}:${adapterValues.hash}` +
+                        (inputSteps.length ? `:in-${inputStepsHash(inputSteps)}` : "");
                     const submitted = await adapterRequest(
                         "/workflows/submit",
                         {
@@ -1856,7 +2037,7 @@ export function createUnifiedExecutionService(
                                     execution_id: parentRunId(parent.id)
                                 },
                                 execution_id: parentRunId(parent.id),
-                                idempotency_key: `${parentRunId(parent.id)}:${adapter.adapter_plan_id}:${adapterValues.hash}`,
+                                idempotency_key: submitKey,
                                 model_task: {
                                     stage_id: "model",
                                     configuration_id: modelTask.configuration_id,
@@ -1865,10 +2046,11 @@ export function createUnifiedExecutionService(
                                     output_name: modelTask.output_name,
                                     output_format: modelTask.output_format || "",
                                     max_minutes: requestedMaxMinutes,
-                                    job_definition: modelTask.job_definition
+                                    job_definition: modelTask.job_definition,
+                                    ...(inputSteps.length ? { input_steps: inputSteps } : {})
                                 }
                             },
-                            idempotencyKey: `${parentRunId(parent.id)}:${adapter.adapter_plan_id}:${adapterValues.hash}`
+                            idempotencyKey: submitKey
                         },
                         authorization
                     );
