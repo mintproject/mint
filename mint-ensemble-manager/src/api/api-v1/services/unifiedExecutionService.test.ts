@@ -1932,7 +1932,11 @@ describe("unifiedExecutionService", () => {
             ]
         };
 
-        function stubAdapter(deferredSteps: unknown[] = [stacStep], offered: unknown = publishers) {
+        function stubAdapter(
+            deferredSteps: unknown[] = [stacStep],
+            offered: unknown = publishers,
+            planParameters: unknown[] = publishers.publishers[0].parameters
+        ) {
             (global.fetch as jest.Mock).mockImplementation(async (url: string, init: any) => {
                 const path = String(url).replace("http://adapter.local", "");
                 const ok = (json: unknown) => ({ ok: true, status: 200, json: async () => json });
@@ -1951,7 +1955,7 @@ describe("unifiedExecutionService", () => {
                         plan_id: "deferred-plan-1",
                         plan_hash: "deferred-hash-1",
                         plan_json: {
-                            parameters: publishers.publishers[0].parameters,
+                            parameters: planParameters,
                             steps: deferredSteps
                         }
                     });
@@ -2237,6 +2241,64 @@ describe("unifiedExecutionService", () => {
             )) as any;
             expect(plan.plan_id.length).toBeLessThan(2400);
             expect(plan.parameters).toHaveLength(2);
+        });
+
+        it("keeps descriptions and managed arguments out of the plan id but still validates with it", async () => {
+            // The re-registered stac-publish piece (2026-11-05) declares twelve
+            // arguments with descriptions; encoded whole they took the id to
+            // 4643 characters. Only the user-facing contract travels in the id.
+            const verbose = Array.from({ length: 12 }, (_, i) => ({
+                name: `parameter_${i}`,
+                type: "string",
+                required: false,
+                default: "x".repeat(40),
+                allowed_values: ["x".repeat(40), "y".repeat(40)],
+                description: "d".repeat(200),
+                managed: i < 9
+            }));
+            stubAdapter([stacStep], publishers, verbose);
+            legacy.tapis.compositeModelContext.mockResolvedValue({
+                configuration_id: "config/subside",
+                region: null,
+                has_bound_inputs: false,
+                filled_app_inputs: [],
+                unmatched_optional_inputs: [],
+                outputs: [{ id: "o".repeat(120), name: "displacement", format: "geotiff" }]
+            });
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, model_id: "m".repeat(120), publish: ["ckan", "stac"] },
+                "Bearer user-token"
+            )) as { plan_id: string; parameters: unknown[] };
+            expect(plan.plan_id.length).toBeLessThan(2400);
+            // The response still carries the adapter's full definitions.
+            expect(plan.parameters).toHaveLength(12);
+            expect(JSON.stringify(plan.parameters).length).toBeGreaterThan(3000);
+            const read = (await service.getPlan(plan.plan_id)) as {
+                parameters: Array<Record<string, unknown>>;
+            };
+            expect(read.parameters.map((p) => p.name)).toEqual([
+                "parameter_9",
+                "parameter_10",
+                "parameter_11"
+            ]);
+            expect(read.parameters[0]).not.toHaveProperty("description");
+            legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue({
+                execution_id: "model-child-1",
+                output_uri: "tapis://ls6/o",
+                output_name: "displacement",
+                job_definition: { name: "j", appId: "a", appVersion: "1" }
+            });
+            await expect(
+                service.submit(
+                    { plan_id: plan.plan_id, parameter_values: { parameter_10: "nope" } },
+                    "Bearer user-token"
+                )
+            ).rejects.toMatchObject({
+                statusCode: 422,
+                code: "PARAMETER_VALIDATION_FAILED",
+                details: { fields: [{ name: "parameter_10", reason: "not_allowed" }] }
+            });
         });
 
         // Post-model reconciliation: a stored plan, a record, and an adapter stub.
