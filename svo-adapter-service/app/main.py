@@ -1362,6 +1362,11 @@ async def create_deferred_plan(
         planning_source = planning_source.model_copy(
             update={"resource_uri": "deferred-model-output"}
         )
+    if _catalogs(target.catalog) and not settings.publish_enabled:
+        raise HTTPException(422, detail={
+            "code": "PUBLISH_DISABLED",
+            "message": "publishing is disabled on this deployment",
+        })
     path = find_path(planning_source, target, registry, edge_map=edge_map)
     if path is None:
         raise HTTPException(422, detail={
@@ -1523,16 +1528,23 @@ async def bind_deferred_plan(
     }
 
 
+def _cannot(reason: str) -> dict[str, Any]:
+    return {"ok": False, "reason": reason, "orgs_ok": []}
+
+
 def _can_publish(token: str | None) -> dict[str, Any]:
     """Advisory precheck: may the caller create datasets in the default organisation?
 
     Reads the settings CKAN only, with the caller's token, a timeout and no
     redirects (the token must never follow a redirect). STAC accepts any Tapis
-    user, so this is a convenience, not the authorization.
+    user, so this is a convenience, not the authorization. ``orgs_ok`` lists the
+    allowed organisations the caller may create datasets in.
     """
     org = settings.publish_default_org
+    if not settings.publish_enabled:
+        return _cannot("publishing is disabled on this deployment")
     if not token:
-        return {"ok": False, "reason": "no Tapis token supplied"}
+        return _cannot("no Tapis token supplied")
     import requests  # noqa: PLC0415 — only this endpoint needs it
 
     try:
@@ -1543,22 +1555,23 @@ def _can_publish(token: str | None) -> dict[str, Any]:
             timeout=10, allow_redirects=False,
         )
     except requests.RequestException as exc:
-        return {"ok": False, "reason": f"CKAN could not be reached ({type(exc).__name__})"}
+        return _cannot(f"CKAN could not be reached ({type(exc).__name__})")
     if response.status_code == 401:
-        return {"ok": False, "reason": "CKAN rejected your token (HTTP 401); log in again"}
+        return _cannot("CKAN rejected your token (HTTP 401); log in again")
     if response.status_code == 403:
-        return {"ok": False, "reason": "CKAN denied the organisation check (HTTP 403)"}
+        return _cannot("CKAN denied the organisation check (HTTP 403)")
     if response.status_code != 200:
-        return {"ok": False, "reason": f"CKAN returned HTTP {response.status_code}"}
+        return _cannot(f"CKAN returned HTTP {response.status_code}")
     try:
         orgs = response.json().get("result") or []
     except ValueError:
-        return {"ok": False, "reason": "CKAN returned an unreadable response"}
+        return _cannot("CKAN returned an unreadable response")
     names = {str(o.get("name")) for o in orgs if isinstance(o, dict)}
     names |= {str(o.get("id")) for o in orgs if isinstance(o, dict)}
+    orgs_ok = [o for o in settings.publish_allowed_org_list if o in names]
     if org in names:
-        return {"ok": True, "reason": None}
-    return {"ok": False, "reason": f"you cannot create datasets in the {org} organisation"}
+        return {"ok": True, "reason": None, "orgs_ok": orgs_ok}
+    return _cannot(f"you cannot create datasets in the {org} organisation")
 
 
 def _publisher_parameters(spec: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2508,7 +2521,8 @@ async def submit_workflow(
         bound = (plan.get("plan_json") or {}).get("bound") or {}
         if bound.get("bound_plan_id") != bound_plan_id:
             raise HTTPException(409, detail={"code": "BOUND_PLAN_INVALID"})
-        await _enforce_run_owner(body.execution_id, token)
+        if tapis.plan_publishes((plan.get("plan_json") or {}).get("steps") or []):
+            await _enforce_run_owner(body.execution_id, token)
 
     if idempotency_key:
         existing_rows = (await h.execute(
@@ -2943,8 +2957,11 @@ async def poll_run(run_id: str, authorization: str | None = Header(None)):
     # from the task execution while that detail is already available so the
     # Ensemble Manager can register the final adapter artifact explicitly.
     if adapter_status == "completed":
+        # A publish run's output is the model output it published, not the last URL
+        # its publish task printed (the STAC Item); those stay in `publication`.
+        output_uri = await _published_model_output(h, run)
         try:
-            output_uri = await run_in_threadpool(
+            output_uri = output_uri or await run_in_threadpool(
                 tapis.get_output_uri, pipeline_id, run_uuid, token=token,
             )
         except Exception:  # noqa: BLE001 — output discovery is best effort
@@ -2952,6 +2969,20 @@ async def poll_run(run_id: str, authorization: str | None = Header(None)):
         if output_uri:
             response["output_uri"] = output_uri
     return response
+
+
+async def _published_model_output(h, run: dict[str, Any]) -> str | None:
+    """The bound source_uri of a run whose plan publishes, else None."""
+    plan = (await h.execute(GET_PLAN, {"id": run.get("workflow_plan_id")}))["adapter_workflow_plan_by_pk"] \
+        if run.get("workflow_plan_id") else None
+    plan_json = (plan or {}).get("plan_json") or {}
+    if not tapis.plan_publishes(plan_json.get("steps") or []):
+        return None
+    data_object_id = (plan_json.get("bound") or {}).get("data_object_id")
+    if not data_object_id:
+        return None
+    row = (await h.execute(GET_DATA_OBJECT, {"id": data_object_id})).get("adapter_data_object_by_pk")
+    return (row or {}).get("resource_uri") or None
 
 
 async def _record_run_publication(h, run: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | None:

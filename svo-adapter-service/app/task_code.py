@@ -1363,6 +1363,7 @@ def _publish():
     from stacmap.stac_client import StacClient
 
     private = not _public
+    dataset_names = []
 
     class _OwnedStac(StacClient):
         def upsert_item(self, collection_id, item):
@@ -1383,12 +1384,15 @@ def _publish():
                     _fail("CKAN dataset %s exists and does not belong to this run and user" % name)
                 if bool(existing.get("private")) != private:
                     self._action_json("package_patch", {"id": name, "private": private})
+                dataset_names.append(existing.get("name") or name)
                 return existing
-            return self.ensure_dataset(
+            created = self.ensure_dataset(
                 name, title=title or item_id, notes=notes,
                 extras={COLLECTION_FIELD: collection_id, ITEM_ID_FIELD: item_id,
                         "published_by": _username},
                 fields={"private": private})
+            dataset_names.append(created.get("name") or name)
+            return created
 
     stac = _OwnedStac(url=_stac_url, token=_token)
     ckan = _OwnedCkan(url=_ckan_url, token=_token, org=_org)
@@ -1440,10 +1444,11 @@ def _publish():
     finally:
         stac.close()
         ckan.close()
+    return dataset_names[-1] if dataset_names else None
 
 
 try:
-    _publish()
+    _dataset = _publish()
 except SystemExit:
     raise
 except BaseException as exc:
@@ -1451,7 +1456,8 @@ except BaseException as exc:
 
 _emit_result({
     "catalog": "ckan+stac",
-    "ckan_dataset": "%s/dataset/%s" % (_ckan_url, re.sub(r"[^a-z0-9_-]+", "-", ("%s--%s" % (_collection, _item_id)).lower()).strip("-")),
+    # The name CKAN reported for the dataset it created or found, not one rebuilt here.
+    "ckan_dataset": "%s/dataset/%s" % (_ckan_url, _up.quote(_dataset or "", safe="")),
     "stac_item": "%s/collections/%s/items/%s" % (_stac_url, _collection, _item_id),
     "public": _public,
 })

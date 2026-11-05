@@ -78,6 +78,7 @@ class Fake:
         self.payloads: list[tuple[str, dict]] = []
         self.echo_auth_on_ckan_create = False
         self.redirect_listing = False
+        self.rename_dataset_to = None
         self.auth_seen: list[tuple[str, str | None]] = []
         fake = self
 
@@ -162,6 +163,9 @@ class Fake:
                     "message": "denied", "echo": h.headers.get("Authorization")}})
             ds = {**fields, "id": "id-" + fields["name"], "resources": []}
             self.datasets[fields["name"]] = ds
+            if self.rename_dataset_to:  # CKAN may report a different name than the one requested
+                ds["name"] = self.rename_dataset_to
+                self.datasets[self.rename_dataset_to] = ds
             return ok(ds)
         if action == "package_patch":
             self.datasets[fields["id"]].update({k: v for k, v in fields.items() if k != "id"})
@@ -355,6 +359,14 @@ def test_a_dataset_that_is_not_this_users_run_is_never_touched(fake):
         assert proc.returncode == 2 and "does not belong to this run and user" in result["message"]
         assert counts(fake).keys() <= {"package_show"}, counts(fake)
         assert fake.datasets[name]["private"] is True
+
+
+@needs_stacmap
+def test_the_dataset_link_uses_the_name_ckan_reported(fake):
+    fake.rename_dataset_to = "renamed-by-ckan"
+    proc, result = run_task(fake)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert result["ckan_dataset"] == fake.url + "/ckan/dataset/renamed-by-ckan"
 
 
 def test_a_redirect_is_refused_and_the_token_is_not_replayed(fake):

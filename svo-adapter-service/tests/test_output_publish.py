@@ -156,8 +156,8 @@ def test_publish_task_gets_its_own_time_limit_and_no_retries(monkeypatch):
 
 
 # --- bound submit ---------------------------------------------------------------------
-def _bound_plan(execution_id="ue_1"):
-    plan = _deferred().json()
+def _bound_plan(execution_id="ue_1", plan=None):
+    plan = plan or _deferred().json()
     STORE.data_object["do-1"] = {
         "id": "do-1", "label": "out", "resource_uri": "tapis://ls6/work/runs/ue_1",
         "format": "geotiff", "owner_execution_id": execution_id, "variables": []}
@@ -221,6 +221,17 @@ def test_any_parent_row_with_an_owner_counts_even_without_a_model_job_name():
     STORE.run["parent"] = {"id": "parent", "execution_id": "ue_1", "submitted_by": "alice"}
     assert _submit(bound_id, token=BOB).status_code == 403
     assert _submit(bound_id, token=ALICE).status_code == 200
+
+
+def test_a_non_publish_bound_submit_without_a_parent_row_is_unchanged():
+    plan = client.post("/plans/deferred", json={
+        "source_contract": GEOTIFF, "target_contract": {"format": "netcdf"}, "model_output_key": "out"}).json()
+    assert [s["transform_type"] for s in plan["plan_json"]["steps"]] == ["format_convert"]
+    assert not plan["plan_json"]["steps"][0]["publishes"]
+    bound_id = _bound_plan(plan=plan)
+    assert STORE.run == {}
+    response = _submit(bound_id, token=BOB)
+    assert response.status_code == 200, response.text
 
 
 def test_non_owner_is_refused_before_any_run_row_is_written():
@@ -319,7 +330,7 @@ def test_publishers_lists_the_piece_with_user_parameters_and_membership(monkeypa
     [publisher] = body["publishers"]
     assert publisher["transform_spec_id"] == "ts-subside-stac-publish"
     assert publisher["catalog_tokens"] == ["ckan", "stac"]
-    assert publisher["can_publish"] == {"ok": True, "reason": None}
+    assert publisher["can_publish"] == {"ok": True, "reason": None, "orgs_ok": [settings.publish_default_org]}
     names = {p["name"] for p in publisher["parameters"]}
     assert names == {"stac_collection", "ckan_org", "public"}
     collection = next(p for p in publisher["parameters"] if p["name"] == "stac_collection")
@@ -343,6 +354,29 @@ def test_publishers_can_publish_reports_why_not(monkeypatch, werc_config, status
     [publisher] = _publishers(werc_config).json()["publishers"]
     assert publisher["can_publish"]["ok"] is False
     assert fragment in publisher["can_publish"]["reason"]
+
+
+def test_publishers_orgs_ok_lists_only_allowed_orgs_the_caller_belongs_to(monkeypatch, werc_config):
+    import requests
+    monkeypatch.setattr(settings, "publish_allowed_orgs", "dso-internal,stac-datasets,other")
+    monkeypatch.setattr(requests, "get", _Ckan(orgs=("dso-internal", "stac-datasets", "unrelated")))
+    [publisher] = _publishers(werc_config).json()["publishers"]
+    assert publisher["can_publish"]["orgs_ok"] == ["dso-internal", "stac-datasets"]
+
+
+def test_kill_switch_disables_publishers_and_publish_plans(monkeypatch, werc_config):
+    import requests
+    monkeypatch.setattr(settings, "publish_enabled", False)
+    monkeypatch.setattr(requests, "get", _Ckan())  # would say ok if it were asked
+    [publisher] = _publishers(werc_config).json()["publishers"]
+    assert publisher["can_publish"] == {
+        "ok": False, "reason": "publishing is disabled on this deployment", "orgs_ok": []}
+    response = _deferred()
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "PUBLISH_DISABLED"
+    # Plans that ask for no catalog are unaffected.
+    assert client.post("/plans/deferred", json={
+        "source_contract": GEOTIFF, "target_contract": GEOTIFF, "model_output_key": "out"}).status_code == 200
 
 
 def test_publishers_unknown_configuration_is_404():
@@ -386,6 +420,32 @@ def _run_with_plan(plan_json):
     STORE.plan["plan-x"] = {"id": "plan-x", "plan_json": plan_json}
     STORE.run["run-x"] = {"id": "run-x", "workflow_plan_id": "plan-x", "status": "completed",
                           "tapis_workflow_id": "pipe", "tapis_run_id": "run-uuid"}
+
+
+def _publishing_run(monkeypatch, bound_to="do-out"):
+    STORE.data_object[bound_to] = {"id": bound_to, "resource_uri": "tapis://ls6/work/runs/ue_1", "variables": []}
+    STORE.plan["plan-x"] = {"id": "plan-x", "plan_json": {
+        "steps": [{"transform_type": "catalog_register"}], "bound": {"data_object_id": bound_to}}}
+    STORE.run["run-x"] = {"id": "run-x", "workflow_plan_id": "plan-x", "status": "running",
+                          "tapis_workflow_id": "pipe", "tapis_run_id": "run-uuid"}
+    result = {"catalog": "ckan+stac", "ckan_dataset": "d", "stac_item": "https://stac/items/ue_1", "public": False}
+    monkeypatch.setattr(tapis, "get_run_detail", lambda *a, **k: {
+        "status": "COMPLETED", "tasks": [_task(json.dumps(result))]})
+    monkeypatch.setattr(tapis, "get_output_uri", lambda *a, **k: "https://stac/items/ue_1")
+
+
+def test_a_publish_runs_output_uri_is_the_model_output_not_the_stac_item(monkeypatch):
+    _publishing_run(monkeypatch)
+    polled = client.post("/runs/run-x/poll", headers=_bearer(ALICE)).json()
+    assert polled["output_uri"] == "tapis://ls6/work/runs/ue_1"
+    assert polled["publication"]["stac_item"] == "https://stac/items/ue_1"
+
+
+def test_a_non_publish_run_keeps_the_discovered_output_uri(monkeypatch):
+    _publishing_run(monkeypatch)
+    STORE.plan["plan-x"]["plan_json"]["steps"] = [{"transform_type": "unit_convert"}]
+    polled = client.post("/runs/run-x/poll", headers=_bearer(ALICE)).json()
+    assert polled["output_uri"] == "https://stac/items/ue_1"
 
 
 def test_get_run_publication_is_null_without_a_publish_step():
