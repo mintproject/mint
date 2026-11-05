@@ -47,8 +47,8 @@ export interface UnifiedExecutionStore {
     getById(id: string): Promise<UnifiedExecutionRecord | null>;
     getByModelChildId?(modelChildId: string): Promise<UnifiedExecutionRecord | null>;
     listByThread?(threadId: string, modelId?: string): Promise<UnifiedExecutionRecord[]>;
-    /** Runs of any of the threads, newest first. */
-    listByThreads?(threadIds: string[]): Promise<UnifiedExecutionRecord[]>;
+    /** At most `limit` runs of any of the threads, newest first. */
+    listByThreads?(threadIds: string[], limit?: number): Promise<UnifiedExecutionRecord[]>;
     findByIdempotencyKey?(key: string): Promise<UnifiedExecutionRecord | null>;
     listSteps?(executionId: string): Promise<UnifiedExecutionStep[]>;
     upsertStep?(input: Omit<UnifiedExecutionStep, "id">): Promise<UnifiedExecutionStep>;
@@ -105,9 +105,10 @@ query ListUnifiedExecutionsByThread($threadId: String!) {
 }`;
 
 const LIST_BY_THREADS = `
-query ListUnifiedExecutionsByThreads($threadIds: [String!]!) {
+query ListUnifiedExecutionsByThreads($threadIds: [String!]!, $limit: Int!) {
   unified_execution(
     where: {thread_id: {_in: $threadIds}}
+    limit: $limit
     order_by: [{created_at: desc}, {id: desc}]
   ) {
     id plan_id thread_id model_id execution_engine status idempotency_key plan_hash
@@ -266,11 +267,11 @@ export function createHasuraUnifiedExecutionStore(): UnifiedExecutionStore {
             );
             return data.unified_execution || [];
         },
-        async listByThreads(threadIds) {
+        async listByThreads(threadIds, limit = 200) {
             if (threadIds.length === 0) return [];
             const data = await hasuraRequest<{ unified_execution: UnifiedExecutionRecord[] }>(
                 LIST_BY_THREADS,
-                { threadIds }
+                { threadIds, limit }
             );
             return data.unified_execution || [];
         },

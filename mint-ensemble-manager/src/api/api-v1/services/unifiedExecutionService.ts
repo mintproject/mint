@@ -2443,8 +2443,12 @@ export function createUnifiedExecutionService(
                     );
                     if (body.dry_run) {
                         // The adapter only generated the pipeline; nothing runs.
+                        // A dry run must not consume the caller's idempotency key:
+                        // the key is released so a later real submit is not
+                        // answered with this record.
                         const generated = await store.update(parent.id, {
                             status: "planned",
+                            idempotency_key: `dry-run:${parent.id}`,
                             adapter_run_ids: [
                                 {
                                     adapter_plan_id: adapter.adapter_plan_id,

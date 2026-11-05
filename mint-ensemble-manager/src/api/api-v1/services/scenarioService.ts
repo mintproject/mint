@@ -99,8 +99,28 @@ interface ScenarioRequest {
 
 const hash16 = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 16);
 
+// JSON-encoded so no character in the label can shift the boundary between the two.
 export const standingProblemStatementId = (username: string, appLabel: string) =>
-    `ps-${hash16(`${username}|${appLabel}`)}`;
+    `ps-${hash16(JSON.stringify([username, appLabel]))}`;
+
+/**
+ * The key as stored: namespaced by the caller, so another caller's key can
+ * neither match nor collide with it (and replaying one gives no signal).
+ */
+const scopedIdempotencyKey = (username: string, key: string) =>
+    `${createHash("sha256").update(username).digest("hex").slice(0, 12)}:${key}`;
+
+const APP_LABEL_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
+
+const parseAppLabel = (value: unknown): string => {
+    if (typeof value !== "string" || !APP_LABEL_PATTERN.test(value)) {
+        throw unprocessable(
+            "app_label must be 1 to 40 letters, digits, underscores or hyphens",
+            "APP_LABEL_INVALID"
+        );
+    }
+    return value;
+};
 
 const taskIdFor = (problemStatementId: string, regionId: string) =>
     `task-${hash16(`${problemStatementId}|${regionId}`)}`;
@@ -175,7 +195,7 @@ const parseRequest = (body: any): ScenarioRequest => {
     }
     return {
         idempotency_key: nonEmptyString(body.idempotency_key, "idempotency_key", 200),
-        app_label: nonEmptyString(body.app_label, "app_label", 64),
+        app_label: parseAppLabel(body.app_label),
         name: nonEmptyString(body.name, "name"),
         region: parsedRegion,
         model_id: nonEmptyString(body.model_id, "model_id", 500),
@@ -234,6 +254,14 @@ const stepError = (step: string, created: CreatedIds, error: unknown): UnifiedEx
     };
     const status = inner?.statusCode ?? inner?.status ?? 500;
     const code = typeof inner?.code === "string" ? inner.code : "SCENARIO_STEP_FAILED";
+    if (status >= 500) {
+        // Server-side detail (Hasura, adapter or driver text) stays in the log.
+        console.error(`Scenario step '${step}' failed:`, error);
+        return new UnifiedExecutionError(status, `The ${step} step failed`, code, {
+            step,
+            created
+        });
+    }
     const message = error instanceof Error ? error.message : String(error);
     return new UnifiedExecutionError(status, message, code, {
         ...(isRecord(inner?.details) ? inner.details : {}),
@@ -242,19 +270,15 @@ const stepError = (step: string, created: CreatedIds, error: unknown): UnifiedEx
     });
 };
 
-const readableBy = (problemStatement: ProblemStatement, username: string): boolean => {
-    const permissions: MintPermission[] = problemStatement.permissions || [];
-    // Hasura already filters problem statements by permission; an empty list
-    // means the rows are not exposed to this role, not that access is denied.
-    if (permissions.length === 0) return true;
-    return permissions.some((p) => (p.userid === username || p.userid === "*") && p.read);
-};
+const grantsRead = (permissions: MintPermission[] | undefined, username: string): boolean =>
+    (permissions || []).some((p) => (p.userid === username || p.userid === "*") && p.read);
 
 interface ThreadSummary {
     id: string;
     name: string;
     taskId: string;
     regionId: string | null;
+    permissions: MintPermission[];
     start_date: string | null;
     end_date: string | null;
 }
@@ -268,6 +292,7 @@ const threadsOf = (problemStatement: ProblemStatement): ThreadSummary[] => {
                 name: thread.name,
                 taskId: task.id,
                 regionId: thread.regionid || task.regionid || null,
+                permissions: thread.permissions || [],
                 start_date: dateOnly(thread.dates?.start_date),
                 end_date: dateOnly(thread.dates?.end_date)
             });
@@ -373,18 +398,26 @@ export function createScenarioService(deps: ScenarioDeps) {
     ];
 
     /** The caller's own thread for an earlier request with this key, as a response. */
-    const reuse = async (record: UnifiedExecutionRecord, psId: string, authorization: string) => {
+    const reuse = async (
+        record: UnifiedExecutionRecord,
+        psId: string,
+        username: string,
+        authorization: string
+    ) => {
         let found: ThreadSummary | undefined;
         try {
             const standing = await problemStatements.getProblemStatementById(psId, authorization);
-            found = threadsOf(standing).find((thread) => thread.id === record.thread_id);
+            found = threadsOf(standing).find(
+                (thread) =>
+                    thread.id === record.thread_id && grantsRead(thread.permissions, username)
+            );
         } catch (error) {
             if (!(error instanceof NotFoundError)) throw error;
         }
         if (!found) {
             throw new UnifiedExecutionError(
                 409,
-                "idempotency_key was used by another caller",
+                "the run for this idempotency_key is not one of your threads",
                 "IDEMPOTENCY_KEY_CONFLICT"
             );
         }
@@ -414,8 +447,9 @@ export function createScenarioService(deps: ScenarioDeps) {
                 const modelId = convertApiUrlToW3Id(request.model_id);
 
                 step = "idempotency";
-                const existing = await requireStore().findByIdempotencyKey(request.idempotency_key);
-                if (existing) return await reuse(existing, psId, authorization);
+                const storedKey = scopedIdempotencyKey(username, request.idempotency_key);
+                const existing = await requireStore().findByIdempotencyKey(storedKey);
+                if (existing) return await reuse(existing, psId, username, authorization);
 
                 step = "model";
                 const spec = await catalog.getModelSpec(modelId, token);
@@ -423,15 +457,12 @@ export function createScenarioService(deps: ScenarioDeps) {
 
                 step = "region";
                 let regionId: string;
-                let regionName: string;
                 if ("region_id" in request.region) {
                     regionId = request.region.region_id;
-                    regionName = regionId;
                     if (!(await regions.regionExists(regionId, authorization))) {
                         throw new NotFoundError(`Region '${regionId}' does not exist`);
                     }
                 } else {
-                    regionName = request.region.name;
                     regionId = (
                         await regions.createRegion(
                             { name: request.region.name, geojson: request.region.geojson },
@@ -440,6 +471,11 @@ export function createScenarioService(deps: ScenarioDeps) {
                     ).region_id;
                 }
                 created.region_id = regionId;
+                // The task is named after the region's own name.
+                const regionSummary = await summarizeRegion(regionId);
+                const regionName =
+                    regionSummary?.name ||
+                    ("name" in request.region ? request.region.name : regionId);
 
                 const dates = {
                     start_date: request.start_date,
@@ -511,6 +547,14 @@ export function createScenarioService(deps: ScenarioDeps) {
                     authorization
                 );
                 created.plan_id = plan.plan_id;
+                // Only the post-model adapter path honours dry_run. On any other
+                // plan a "dry run" would start a real job, so it is refused.
+                if (request.dry_run && !plan.post_model_adapter) {
+                    throw unprocessable(
+                        "dry_run is only supported for plans that run through the adapter",
+                        "DRY_RUN_UNSUPPORTED"
+                    );
+                }
                 const declared = new Set<string>(
                     (plan.parameters || []).map((p: { name: string }) => p.name)
                 );
@@ -529,7 +573,7 @@ export function createScenarioService(deps: ScenarioDeps) {
                         plan_id: plan.plan_id,
                         parameter_values: extra,
                         max_minutes: request.max_minutes,
-                        idempotency_key: request.idempotency_key,
+                        idempotency_key: storedKey,
                         dry_run: request.dry_run
                     },
                     authorization
@@ -542,7 +586,7 @@ export function createScenarioService(deps: ScenarioDeps) {
                     plan_id: plan.plan_id,
                     run_id: submitted.run_id,
                     status: submitted.status,
-                    region: await summarizeRegion(regionId),
+                    region: regionSummary,
                     thread: { start_date: request.start_date, end_date: request.end_date },
                     reused: false,
                     ...(request.dry_run
@@ -567,14 +611,14 @@ export function createScenarioService(deps: ScenarioDeps) {
 
             const explicitId =
                 typeof query.problem_statement_id === "string" ? query.problem_statement_id : "";
-            const appLabel = typeof query.app_label === "string" ? query.app_label.trim() : "";
-            if (!explicitId && !appLabel) {
+            if (!explicitId && query.app_label === undefined) {
                 throw badRequest(
                     "problem_statement_id or app_label is required",
                     "PROBLEM_STATEMENT_REQUIRED"
                 );
             }
-            const psId = explicitId || standingProblemStatementId(username, appLabel);
+            const psId =
+                explicitId || standingProblemStatementId(username, parseAppLabel(query.app_label));
             const parsedLimit = Number(query.limit);
             const limit =
                 Number.isInteger(parsedLimit) && parsedLimit > 0
@@ -588,20 +632,43 @@ export function createScenarioService(deps: ScenarioDeps) {
                     authorization!
                 );
             } catch (error) {
-                if (!(error instanceof NotFoundError)) throw error;
+                if (!(error instanceof NotFoundError)) {
+                    console.error("Reading the problem statement failed:", error);
+                    throw new UnifiedExecutionError(
+                        500,
+                        "Runs could not be listed",
+                        "RUNS_LIST_FAILED"
+                    );
+                }
                 // No standing statement yet is an empty history; an explicit id
                 // the caller cannot read is indistinguishable from one that is
                 // not there, and is reported as denied.
                 if (!explicitId) return { problem_statement_id: psId, runs: [] };
                 throw new ForbiddenError("You cannot read this problem statement");
             }
-            if (!readableBy(problemStatement, username)) {
+            if (!grantsRead(problemStatement.permissions, username)) {
                 throw new ForbiddenError("You cannot read this problem statement");
             }
 
-            const threads = threadsOf(problemStatement);
+            // A thread is listed only if it is itself readable by the caller.
+            const threads = threadsOf(problemStatement).filter((thread) =>
+                grantsRead(thread.permissions, username)
+            );
             const byId = new Map(threads.map((thread) => [thread.id, thread]));
-            const records = await listByThreads(threads.map((thread) => thread.id));
+            let records: UnifiedExecutionRecord[];
+            try {
+                records = await listByThreads(
+                    threads.map((thread) => thread.id),
+                    limit
+                );
+            } catch (error) {
+                console.error("Listing runs failed:", error);
+                throw new UnifiedExecutionError(
+                    500,
+                    "Runs could not be listed",
+                    "RUNS_LIST_FAILED"
+                );
+            }
             const regionCache = new Map<string, Promise<RegionSummary | null>>();
             const regionOf = (regionId: string | null) => {
                 if (!regionId) return Promise.resolve(null);

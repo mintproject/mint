@@ -1197,7 +1197,10 @@ describe("unifiedExecutionService", () => {
                 dry_run: true,
                 tapis_workflow_definition: { id: "pipeline" }
             });
-            await expect(store.getById("parent-1")).resolves.toMatchObject({ status: "planned" });
+            await expect(store.getById("parent-1")).resolves.toMatchObject({
+                status: "planned",
+                idempotency_key: "dry-run:parent-1"
+            });
         });
 
         it("does not send dry_run on a normal submit", async () => {

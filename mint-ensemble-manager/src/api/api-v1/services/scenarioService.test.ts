@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import jwt from "jsonwebtoken";
+import { createHash } from "crypto";
 import unifiedExecutionRouter from "@/api/api-v1/paths/unifiedExecution";
 import { NotFoundError, UnifiedExecutionError } from "@/classes/common/errors";
 import {
@@ -23,6 +24,9 @@ const tokenFor = (username: string) =>
     `Bearer ${jwt.sign({ "tapis/username": username }, "test-key", { algorithm: "HS256" })}`;
 const alice = tokenFor("alice");
 const bob = tokenFor("bob");
+
+const scoped = (username: string, key: string) =>
+    `${createHash("sha256").update(username).digest("hex").slice(0, 12)}:${key}`;
 
 const MODEL = "https://w3id.org/okn/i/mint/opera-disp-s1-werc";
 const SQUARE = {
@@ -53,6 +57,7 @@ function build(overrides: Partial<ScenarioDeps> = {}) {
                 return {
                     plan_id: `plan-${planCounter}`,
                     parameters: [{ name: "ckan_dataset" }],
+                    post_model_adapter: { adapter_plan_id: "adapter-1" },
                     body
                 };
             }),
@@ -67,7 +72,10 @@ function build(overrides: Partial<ScenarioDeps> = {}) {
                         .pop(),
                     model_id: MODEL,
                     status: "model_running",
-                    idempotency_key: body.idempotency_key,
+                    // The real service frees the key of a dry-run record.
+                    idempotency_key: body.dry_run
+                        ? `dry-run:${records.length + 1}`
+                        : body.idempotency_key,
                     created_at: `2026-11-0${records.length + 1}T00:00:00Z`
                 } as UnifiedExecutionRecord;
                 records.push(record);
@@ -77,7 +85,9 @@ function build(overrides: Partial<ScenarioDeps> = {}) {
         store: {
             findByIdempotencyKey: async (key) =>
                 records.find((record) => record.idempotency_key === key) || null,
-            listByThreads: async (ids) => records.filter((record) => ids.includes(record.thread_id))
+            listByThreads: jest.fn(async (ids: string[]) =>
+                records.filter((record) => ids.includes(record.thread_id))
+            )
         } as any,
         problemStatements: {
             createProblemStatement: jest.fn(async (ps: any, _auth: string, options: any = {}) => {
@@ -106,21 +116,30 @@ function build(overrides: Partial<ScenarioDeps> = {}) {
             })
         } as any,
         subTasks: {
-            createSubtask: jest.fn(async (psId: string, taskId: string, thread: any) => {
-                calls.push("thread");
-                threadCounter += 1;
-                const id = `thread-${threadCounter}`;
-                problemStatements.get(psId).tasks[taskId].threads[id] = {
-                    id,
-                    name: thread.name,
-                    regionid: undefined,
-                    dates: {
-                        start_date: new Date(`${thread.dates.start_date}T00:00:00Z`),
-                        end_date: new Date(`${thread.dates.end_date}T00:00:00Z`)
-                    }
-                };
-                return id;
-            }),
+            createSubtask: jest.fn(
+                async (
+                    psId: string,
+                    taskId: string,
+                    thread: any,
+                    _auth: string,
+                    options: any = {}
+                ) => {
+                    calls.push("thread");
+                    threadCounter += 1;
+                    const id = `thread-${threadCounter}`;
+                    problemStatements.get(psId).tasks[taskId].threads[id] = {
+                        id,
+                        name: thread.name,
+                        regionid: undefined,
+                        permissions: options.permissions,
+                        dates: {
+                            start_date: new Date(`${thread.dates.start_date}T00:00:00Z`),
+                            end_date: new Date(`${thread.dates.end_date}T00:00:00Z`)
+                        }
+                    };
+                    return id;
+                }
+            ),
             setupModelConfigurationAndBindings: jest.fn(async () => {
                 calls.push("bindings");
             })
@@ -299,13 +318,79 @@ describe("scenarioService.createScenario", () => {
         expect(calls.filter((call) => call === "thread")).toHaveLength(1);
     });
 
-    it("refuses an idempotency_key that belongs to another caller", async () => {
-        const { service } = build();
-        await service.createScenario(body(), alice);
-        await expect(service.createScenario(body(), bob)).rejects.toMatchObject({
-            statusCode: 409,
-            code: "IDEMPOTENCY_KEY_CONFLICT"
+    it("namespaces the stored key by caller, so another caller's key never matches", async () => {
+        const { service, deps } = build();
+        const mine = await service.createScenario(body(), alice);
+        const theirs = await service.createScenario(body(), bob);
+        expect(theirs.reused).toBe(false);
+        expect(theirs.run_id).not.toBe(mine.run_id);
+        const keys = (deps.unified.submit as jest.Mock).mock.calls.map(
+            ([call]) => call.idempotency_key
+        );
+        expect(keys).toEqual([scoped("alice", "key-1"), scoped("bob", "key-1")]);
+    });
+
+    it("does not leak server-side error text from a 5xx step", async () => {
+        const { service, deps } = build();
+        (deps.subTasks.createSubtask as jest.Mock).mockRejectedValueOnce(
+            Object.assign(new Error('violates foreign key constraint "thread_task_id_fkey"'), {
+                statusCode: 500
+            })
+        );
+        const error: any = await service.createScenario(body(), alice).catch((e) => e);
+        expect(error.statusCode).toBe(500);
+        expect(JSON.stringify(error.message) + JSON.stringify(error.details)).not.toMatch(
+            /constraint/
+        );
+        expect(error.code).toBe("SCENARIO_STEP_FAILED");
+        expect(error.details.step).toBe("thread");
+    });
+
+    it("refuses dry_run when the plan has no post-model adapter, before submitting", async () => {
+        const { service, deps } = build();
+        (deps.unified.createPlan as jest.Mock).mockResolvedValueOnce({
+            plan_id: "plan-legacy",
+            parameters: [],
+            post_model_adapter: null
         });
+        await expect(service.createScenario(body({ dry_run: true }), alice)).rejects.toMatchObject({
+            statusCode: 422,
+            code: "DRY_RUN_UNSUPPORTED",
+            details: { step: "plan" }
+        });
+        expect(deps.unified.submit).not.toHaveBeenCalled();
+    });
+
+    it("runs a real submit for the same key after a dry run (the dry run released it)", async () => {
+        const { service, deps } = build();
+        // The unified service frees the key of a dry-run record, so the lookup misses.
+        await service.createScenario(body({ dry_run: true }), alice);
+        const real = await service.createScenario(body(), alice);
+        expect(real.reused).toBe(false);
+        expect((deps.unified.submit as jest.Mock).mock.calls[1][0].dry_run).toBe(false);
+    });
+
+    it.each(["has space", "semi;colon", "a|b", "", "x".repeat(41)])(
+        "rejects app_label %p with 422",
+        async (label) => {
+            const { service, calls } = build();
+            await expect(
+                service.createScenario(body({ app_label: label }), alice)
+            ).rejects.toMatchObject({ statusCode: 422, code: "APP_LABEL_INVALID" });
+            expect(calls).toEqual([]);
+        }
+    );
+
+    it("does not let a separator in the label collide two (user, label) pairs", () => {
+        expect(standingProblemStatementId("a|b", "c")).not.toBe(
+            standingProblemStatementId("a", "b|c")
+        );
+    });
+
+    it("names the task after the region's name when only a region_id is given", async () => {
+        const { service, deps } = build();
+        await service.createScenario(body({ region: { region_id: "aoi-abc" } }), alice);
+        expect((deps.tasks.createTask as jest.Mock).mock.calls[0][1].name).toBe("Waco");
     });
 
     it("reports the failing step and the ids created so far", async () => {
@@ -316,7 +401,7 @@ describe("scenarioService.createScenario", () => {
         await expect(service.createScenario(body(), alice)).rejects.toMatchObject({
             statusCode: 500,
             code: "SCENARIO_STEP_FAILED",
-            message: "hasura said no",
+            message: "The thread step failed",
             details: {
                 step: "thread",
                 created: {
@@ -358,7 +443,7 @@ describe("scenarioService.createScenario", () => {
                 plan_id: "plan-1",
                 parameter_values: { ckan_dataset: "waco" },
                 max_minutes: 240,
-                idempotency_key: "key-1",
+                idempotency_key: scoped("alice", "key-1"),
                 dry_run: true
             },
             alice
@@ -467,6 +552,59 @@ describe("scenarioService.listRuns", () => {
         });
     });
 
+    it("passes limit to the store query", async () => {
+        const { service, deps } = build();
+        await service.createScenario(body(), alice);
+        await service.listRuns({ app_label: "SUBSIDE", limit: "7" }, alice);
+        expect((deps.store.listByThreads as jest.Mock).mock.calls[0][1]).toBe(7);
+    });
+
+    it("lists only threads the caller can read, not every thread of the statement", async () => {
+        const { service, problemStatements } = build();
+        const created = await service.createScenario(body(), alice);
+        const ps = problemStatements.get(created.problem_statement_id);
+        const task: any = Object.values(ps.tasks)[0];
+        task.threads["thread-foreign"] = {
+            id: "thread-foreign",
+            name: "someone else",
+            permissions: [{ userid: "carol", read: true }]
+        };
+        const { runs } = await service.listRuns({ app_label: "SUBSIDE" }, alice);
+        expect(runs.map((run) => run.thread_id)).toEqual([created.thread_id]);
+        // A thread with no permission rows is not readable either.
+        task.threads[created.thread_id].permissions = [];
+        const none = await service.listRuns({ app_label: "SUBSIDE" }, alice);
+        expect(none.runs).toEqual([]);
+    });
+
+    it("denies a problem statement whose permission list is empty", async () => {
+        const { service, problemStatements } = build();
+        const created = await service.createScenario(body(), alice);
+        problemStatements.get(created.problem_statement_id).permissions = [];
+        await expect(service.listRuns({ app_label: "SUBSIDE" }, alice)).rejects.toMatchObject({
+            statusCode: 403
+        });
+    });
+
+    it("rejects an invalid app_label in the list query", async () => {
+        const { service } = build();
+        await expect(service.listRuns({ app_label: "no spaces" }, alice)).rejects.toMatchObject({
+            statusCode: 422,
+            code: "APP_LABEL_INVALID"
+        });
+    });
+
+    it("reports a store failure generically", async () => {
+        const { service, deps } = build();
+        await service.createScenario(body(), alice);
+        (deps.store.listByThreads as jest.Mock).mockRejectedValueOnce(
+            new Error("hasura: secret detail")
+        );
+        const error: any = await service.listRuns({ app_label: "SUBSIDE" }, alice).catch((e) => e);
+        expect(error).toMatchObject({ statusCode: 500, code: "RUNS_LIST_FAILED" });
+        expect(error.message).not.toMatch(/secret detail/);
+    });
+
     it("honours limit", async () => {
         const { service } = build();
         await service.createScenario(body({ idempotency_key: "a" }), alice);
@@ -555,5 +693,48 @@ describe("route order", () => {
             code: "DATES_CONFLICT",
             details: { step: "validate" }
         });
+    });
+});
+
+describe("authentication on the new routes", () => {
+    const forged = `Bearer ${jwt.sign({ "tapis/username": "alice" }, "wrong-key", { algorithm: "HS256" })}`;
+
+    it("answers 401 to a forged JWT before reading the body or touching any dependency", async () => {
+        const { deps, service } = build();
+        const unified = { getPlan: jest.fn(), getRun: jest.fn() };
+        const app = express()
+            .use(express.json())
+            .use("/plans", unifiedExecutionRouter(unified, service));
+
+        const scenario = await request(app)
+            .post("/plans/scenario")
+            .set("Authorization", forged)
+            .send({ not: "even a valid request" });
+        const runs = await request(app)
+            .get("/plans/runs?app_label=SUBSIDE")
+            .set("Authorization", forged);
+
+        expect(scenario.status).toBe(401);
+        expect(runs.status).toBe(401);
+        for (const dep of [
+            deps.problemStatements.createProblemStatement,
+            deps.problemStatements.getProblemStatementById,
+            deps.store.listByThreads,
+            deps.unified.createPlan,
+            deps.unified.submit,
+            deps.regions.createRegion
+        ]) {
+            expect(dep).not.toHaveBeenCalled();
+        }
+    });
+
+    it("answers 401 to a missing or malformed Authorization header", async () => {
+        const { service } = build();
+        await expect(service.createScenario(body(), undefined)).rejects.toMatchObject({
+            statusCode: 401
+        });
+        await expect(service.listRuns({ app_label: "SUBSIDE" }, "Basic abc")).rejects.toMatchObject(
+            { statusCode: 401 }
+        );
     });
 });
