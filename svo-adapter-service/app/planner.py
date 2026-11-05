@@ -49,6 +49,32 @@ def _eq(a: str | None, b: str | None) -> bool:
     return a.strip().lower() == b.strip().lower()
 
 
+# One canonical name per file format. Contracts arrive spelled three ways: the
+# adapter's short names ("geotiff"), the MINT catalog's MIME types
+# ("image/tiff;application=geotiff") and CKAN's resource formats ("GeoTIFF").
+# The planner compares canonical names so a model output recorded by the
+# catalog sync can reach a hosted piece registered with the short name.
+FORMAT_ALIASES: dict[str, str] = {
+    "geotiff": "geotiff", "tif": "geotiff", "tiff": "geotiff", "cog": "geotiff",
+    "image/tiff": "geotiff", "image/tiff;application=geotiff": "geotiff",
+    "image/geotiff": "geotiff", "image/tiff; application=geotiff": "geotiff",
+    "netcdf": "netcdf", "nc": "netcdf", "application/x-netcdf": "netcdf",
+    "application/netcdf": "netcdf",
+    "geojson": "geojson", "application/geo+json": "geojson",
+    "json": "json", "application/json": "json",
+    "csv": "csv", "text/csv": "csv",
+    "png": "png", "image/png": "png",
+}
+
+
+def normalize_format(value: str | None) -> str | None:
+    """Canonical format name for comparisons; unknown formats are lower-cased."""
+    if value is None:
+        return None
+    key = "".join(value.split()).lower()
+    return FORMAT_ALIASES.get(key) or FORMAT_ALIASES.get(key.split(";", 1)[0]) or key
+
+
 # ---------------------------------------------------------------------------
 # Per-dimension checks. Each returns a DimensionResult; none short-circuits the
 # others, so the report always covers all six dimensions.
@@ -122,7 +148,7 @@ def _check_format(src: DataObjectContract, tgt: DataObjectContract) -> Dimension
     if tgt.format is None:
         ok = True
     else:
-        ok = src.format is not None and _eq(src.format, tgt.format)
+        ok = src.format is not None and normalize_format(src.format) == normalize_format(tgt.format)
     return DimensionResult(
         dimension=CompatibilityDimension.format,
         compatible=ok,
