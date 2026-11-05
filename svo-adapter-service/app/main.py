@@ -14,7 +14,8 @@ Endpoints:
   GET  /plans/{id}                fetch a stored plan
   POST /workflows/generate        emit a Tapis Workflows pipeline for a plan
   POST /workflows/submit          register + run the pipeline (emulates SUBSIDE)
-  GET  /runs/{id}                 fetch execution state of a run
+  GET  /runs/{id}                 fetch execution state of a run (with its publication)
+  GET  /publishers                catalog_register pieces a model configuration's output can use
   POST /runs/{id}/register-output register a transformed output as a new data object
 
 A bundled standalone UI (static/index.html) is served at / and drives this flow;
@@ -45,7 +46,7 @@ from fastapi.staticfiles import StaticFiles
 
 log = logging.getLogger(__name__)
 
-from . import input_plan, ntgam, qaqc, run_state, run_tokens, stac, tapis
+from . import input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
@@ -75,6 +76,8 @@ from .planner import (
     build_model_run_plan_json,
     build_plan_json,
     compatibility,
+    _catalogs,
+    _contract_from_registry,
     find_path,
     parameter_definitions,
     plan_model_run,
@@ -94,9 +97,11 @@ from .result_contract import task_result
 
 def _plan_with_parameters(plan_json: dict[str, Any]) -> dict[str, Any]:
     """Attach the public, plan-scoped parameter contract to a generated DAG."""
-    plan_json["parameters"] = parameter_definitions(
-        plan_json.get("steps") or [], tapis.STANDARD_PARAMS
-    )
+    steps = plan_json.get("steps") or []
+    standard = tapis.STANDARD_PARAMS
+    if tapis.plan_publishes(steps):
+        standard = {**standard, **tapis.publish_params()}
+    plan_json["parameters"] = parameter_definitions(steps, standard)
     # Use the backend-owned catalog as the final geometry default. Explicit
     # caller values and workflow-specific recommendations still take priority.
     transform_names = " ".join(
@@ -1305,6 +1310,38 @@ def _contract_payload(contract: DataObjectContract) -> dict[str, Any]:
     return contract.model_dump(exclude_none=True)
 
 
+def _publish_value_errors(values: dict[str, Any]) -> dict[str, str]:
+    """Reasons a requested collection or organisation is outside the deployment
+    allow-lists. An empty list allows nothing (fail closed)."""
+    errors: dict[str, str] = {}
+    for name, allowed in (("stac_collection", settings.publish_allowed_collection_list),
+                          ("ckan_org", settings.publish_allowed_org_list)):
+        value = values.get(name)
+        if value in (None, "") or str(value) in allowed:
+            continue
+        errors[name] = "must be one of " + (", ".join(allowed) if allowed else "(none allowed)")
+    return errors
+
+
+def _reject_publish_values(values: dict[str, Any]) -> None:
+    errors = _publish_value_errors(values)
+    if errors:
+        raise HTTPException(422, detail={
+            "code": "PUBLISH_VALUE_NOT_ALLOWED",
+            "message": "publication target is outside the deployment allow-list",
+            "parameters": errors,
+        })
+
+
+def _spec_output_catalog(spec: dict[str, Any]) -> str | None:
+    for contract in spec.get("contracts") or []:
+        if contract.get("role") == "output":
+            catalog = _contract_from_registry(contract).catalog
+            if catalog:
+                return catalog
+    return None
+
+
 @app.post("/plans/deferred", tags=["Core: Planning"])
 async def create_deferred_plan(
     body: DeferredPlanIn,
@@ -1325,6 +1362,11 @@ async def create_deferred_plan(
         planning_source = planning_source.model_copy(
             update={"resource_uri": "deferred-model-output"}
         )
+    if _catalogs(target.catalog) and not settings.publish_enabled:
+        raise HTTPException(422, detail={
+            "code": "PUBLISH_DISABLED",
+            "message": "publishing is disabled on this deployment",
+        })
     path = find_path(planning_source, target, registry, edge_map=edge_map)
     if path is None:
         raise HTTPException(422, detail={
@@ -1333,6 +1375,16 @@ async def create_deferred_plan(
         })
 
     plan_json = _plan_with_parameters(build_plan_json(path))
+    # A step whose output contract names a catalog publishes the run's output;
+    # the Ensemble Manager accepts such steps in an otherwise identity plan.
+    for step, spec in zip(plan_json["steps"], path):
+        step["publishes"] = bool(_catalogs(_spec_output_catalog(spec)))
+    if any(step["publishes"] for step in plan_json["steps"]):
+        _reject_publish_values({
+            "stac_collection": settings.publish_default_collection,
+            "ckan_org": settings.publish_default_org,
+            **(body.parameter_values or {}),
+        })
     plan_json.update({
         "deferred": True,
         "orchestration_mode": "em_deferred_post_model",
@@ -1474,6 +1526,106 @@ async def bind_deferred_plan(
         "plan_hash": body.plan_hash,
         "data_object_id": body.data_object_id,
     }
+
+
+def _cannot(reason: str) -> dict[str, Any]:
+    return {"ok": False, "reason": reason, "orgs_ok": []}
+
+
+def _can_publish(token: str | None) -> dict[str, Any]:
+    """Advisory precheck: may the caller create datasets in the default organisation?
+
+    Reads the settings CKAN only, with the caller's token, a timeout and no
+    redirects (the token must never follow a redirect). STAC accepts any Tapis
+    user, so this is a convenience, not the authorization. ``orgs_ok`` lists the
+    allowed organisations the caller may create datasets in.
+    """
+    org = settings.publish_default_org
+    if not settings.publish_enabled:
+        return _cannot("publishing is disabled on this deployment")
+    if not token:
+        return _cannot("no Tapis token supplied")
+    import requests  # noqa: PLC0415 — only this endpoint needs it
+
+    try:
+        response = requests.get(
+            settings.publish_ckan_url.rstrip("/") + "/api/3/action/organization_list_for_user",
+            params={"permission": "create_dataset"},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10, allow_redirects=False,
+        )
+    except requests.RequestException as exc:
+        return _cannot(f"CKAN could not be reached ({type(exc).__name__})")
+    if response.status_code == 401:
+        return _cannot("CKAN rejected your token (HTTP 401); log in again")
+    if response.status_code == 403:
+        return _cannot("CKAN denied the organisation check (HTTP 403)")
+    if response.status_code != 200:
+        return _cannot(f"CKAN returned HTTP {response.status_code}")
+    try:
+        orgs = response.json().get("result") or []
+    except ValueError:
+        return _cannot("CKAN returned an unreadable response")
+    names = {str(o.get("name")) for o in orgs if isinstance(o, dict)}
+    names |= {str(o.get("id")) for o in orgs if isinstance(o, dict)}
+    orgs_ok = [o for o in settings.publish_allowed_org_list if o in names]
+    if org in names:
+        return {"ok": True, "reason": None, "orgs_ok": orgs_ok}
+    return _cannot(f"you cannot create datasets in the {org} organisation")
+
+
+def _publisher_parameters(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    steps = build_plan_json([spec])["steps"]
+    definitions = parameter_definitions(steps, {**tapis.STANDARD_PARAMS, **tapis.publish_params()})
+    out = []
+    for definition in definitions:
+        if definition.get("managed") or definition["name"] in tapis._INPUT_SECRET_PARAMS:
+            continue
+        item = {k: definition.get(k) for k in ("name", "type", "required", "default")}
+        for key in ("allowed_values", "description"):
+            if definition.get(key) is not None:
+                item[key] = definition[key]
+        out.append(item)
+    return out
+
+
+@app.get("/publishers", tags=["Core: Planning"])
+async def list_publishers(
+    configuration_id: str = Query(...),
+    authorization: str | None = Header(None),
+):
+    """Catalog publishers a model configuration's output can be routed through."""
+    token = _bearer(authorization)
+    h = get_client(token)
+    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    model = next((s for s in registry if s.get("mint_model_config_id") == configuration_id), None)
+    if model is None:
+        raise HTTPException(404, detail={"code": "CONFIGURATION_NOT_FOUND",
+                                         "message": "the configuration is not in the adapter registry"})
+    publishers = [s for s in registry if str(s.get("transform_type") or "").lower() == tapis.PUBLISH_STEP_TYPE]
+    found: dict[str, dict[str, Any]] = {}
+    for contract in (c for c in model.get("contracts") or [] if c.get("role") == "output"):
+        source = _contract_from_registry(contract).model_copy(
+            update={"resource_uri": "deferred-model-output", "catalog": None})
+        for spec in publishers:
+            catalog = _spec_output_catalog(spec)
+            if not catalog or spec.get("id") in found:
+                continue
+            # The piece plus the ordinary ETL pieces, so no other publisher can stand in for it.
+            usable = [s for s in registry if s is spec or s not in publishers]
+            path = find_path(source, source.model_copy(update={"catalog": catalog}), usable)
+            if path and any(step.get("id") == spec.get("id") for step in path):
+                found[spec["id"]] = {
+                    "transform_spec_id": spec["id"],
+                    "name": spec.get("name"),
+                    "catalog_tokens": sorted(_catalogs(catalog)),
+                    "parameters": _publisher_parameters(spec),
+                }
+    if not found:
+        return {"configuration_id": configuration_id, "publishers": []}
+    can_publish = await run_in_threadpool(_can_publish, token)
+    return {"configuration_id": configuration_id,
+            "publishers": [{**item, "can_publish": can_publish} for item in found.values()]}
 
 
 @app.post("/readiness/check", response_model=ReadinessResult, tags=["Core: Planning"])
@@ -2135,6 +2287,79 @@ def _resolve_bound_plan_id(plan_id: str) -> tuple[str, str | None]:
     return parts[1], plan_id
 
 
+GET_PARENT_RUNS = """
+query GetParentRuns($execution_id: String!) {
+  adapter_workflow_run(where: {execution_id: {_eq: $execution_id}}, order_by: {created_at: asc}) {
+    id submitted_by model_job_name
+  }
+}
+"""
+
+
+async def _enforce_run_owner(execution_id: str | None, token: str | None) -> None:
+    """A bound post-model submission runs as the user who submitted the parent run.
+
+    Whoever's poll observed the model finish may dispatch it, so the adapter
+    refuses any other caller before it writes a row. It fails closed: a parent it
+    cannot find, or one with no recorded owner, is a refusal. The lookup uses the
+    adapter's own client so row-level permissions cannot hide the parent and let
+    the check pass. Without an execution_id there is no parent to look up; that
+    case is refused for publish plans by _validate_deferred_execution_id.
+    """
+    if not execution_id:
+        return
+    rows = (await get_client(None).execute(
+        GET_PARENT_RUNS, {"execution_id": execution_id})).get("adapter_workflow_run") or []
+    if not rows:
+        raise HTTPException(409, detail={
+            "code": "PARENT_RUN_UNKNOWN",
+            "message": "no parent run is recorded for this execution; it cannot be dispatched",
+        })
+    owner = rows[0].get("submitted_by")
+    caller = None
+    if owner and token:
+        caller = await run_in_threadpool(tapis.userinfo_username, token) if token else None
+    if not owner or caller != owner:
+        raise HTTPException(403, detail={
+            "code": "RUN_OWNER_MISMATCH",
+            "message": "this post-model step runs as the user who submitted the run; "
+                       "it is dispatched on that user's next poll",
+        })
+
+
+def _bind_publish_args(
+    service_args: dict[str, Any], execution_id: str | None, plan_json: dict[str, Any],
+) -> None:
+    """Validate a publish step's user values and bind its managed arguments.
+
+    Managed values come from settings and the run and replace anything the
+    caller sent; the collection and organisation are checked against the
+    allow-lists now, because a stored plan's values are immutable but args are not.
+    """
+    if not execution_id:
+        raise HTTPException(422, detail={
+            "code": "PUBLISH_EXECUTION_ID_REQUIRED",
+            "message": "a publish step needs the execution_id of the run it publishes",
+        })
+    supplied = normalize_args(_wrap_args(service_args))
+    # An absent value falls back to the plan's default (else the configured one);
+    # that effective value is checked too, since the stored default may be stale.
+    defaults = {d.get("name"): d.get("default") for d in plan_json.get("parameters") or []}
+    fallback = {"stac_collection": settings.publish_default_collection,
+                "ckan_org": settings.publish_default_org}
+    _reject_publish_values({
+        name: (supplied.get(name) or {}).get("value") or defaults.get(name) or fallback[name]
+        for name in ("stac_collection", "ckan_org")})
+    managed = set(tapis.PUBLISH_MANAGED_ARGS)
+    for key in [k for k in service_args if (canonical_key(str(k)) or str(k)) in managed]:
+        del service_args[key]
+    service_args["tapis_base_url"] = settings.tapis_base_url
+    service_args["stac_url"] = settings.stac_api_url
+    service_args["ckan_url"] = settings.publish_ckan_url
+    service_args["stac_item_id"] = execution_id
+    service_args["execution_id"] = execution_id
+
+
 def _validate_deferred_execution_id(
     bound_plan_id: str | None,
     request_execution_id: str | None,
@@ -2296,6 +2521,8 @@ async def submit_workflow(
         bound = (plan.get("plan_json") or {}).get("bound") or {}
         if bound.get("bound_plan_id") != bound_plan_id:
             raise HTTPException(409, detail={"code": "BOUND_PLAN_INVALID"})
+        if tapis.plan_publishes((plan.get("plan_json") or {}).get("steps") or []):
+            await _enforce_run_owner(body.execution_id, token)
 
     if idempotency_key:
         existing_rows = (await h.execute(
@@ -2349,6 +2576,8 @@ async def submit_workflow(
                 service_args["geo_actor_id"] = configured_geo_actor_id
 
     _validate_deferred_execution_id(bound_plan_id, body.execution_id, service_args)
+    if tapis.plan_publishes((plan.get("plan_json") or {}).get("steps") or []):
+        _bind_publish_args(service_args, body.execution_id, plan.get("plan_json") or {})
 
     derived: dict[str, Any] | None = None
     if body.model_task is not None:
@@ -2634,7 +2863,28 @@ async def get_run(run_id: str, authorization: str | None = Header(None)):
     run = (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"]
     if not run:
         raise HTTPException(404, "run not found")
-    return run
+    return {**run, "publication": await _run_publication(h, run, _bearer(authorization))}
+
+
+async def _run_publication(h, run: dict[str, Any], token: str | None) -> dict[str, Any] | None:
+    """The run's publication outcome, or None when it has no publish step or no
+    outcome yet. Prefers the recorded provenance event; otherwise reads the
+    publish task's result from the live run detail."""
+    plan = (await h.execute(GET_PLAN, {"id": run.get("workflow_plan_id")}))["adapter_workflow_plan_by_pk"] \
+        if run.get("workflow_plan_id") else None
+    if not tapis.plan_publishes(((plan or {}).get("plan_json") or {}).get("steps") or []):
+        return None
+    recorded = await publication.recorded_publication(h, run["id"])
+    if recorded:
+        return recorded
+    if not (token and run.get("tapis_workflow_id") and run.get("tapis_run_id")):
+        return None
+    try:
+        detail = await run_in_threadpool(
+            tapis.get_run_detail, run["tapis_workflow_id"], run["tapis_run_id"], token=token)
+    except Exception:  # noqa: BLE001 — status read only; no outcome is not an error
+        return None
+    return publication.publication_from_detail(detail)
 
 
 @app.post("/runs/{run_id}/poll", tags=["Core: Runs"])
@@ -2694,6 +2944,9 @@ async def poll_run(run_id: str, authorization: str | None = Header(None)):
             )
             run = {**run, "auto_bind": bind_result}
     response = {**run, **detail}
+    outcome = await _record_run_publication(h, run, detail)
+    if outcome:
+        response["publication"] = outcome
     safe_result, result_error = task_result(detail)
     if safe_result:
         response["result"] = safe_result
@@ -2704,8 +2957,11 @@ async def poll_run(run_id: str, authorization: str | None = Header(None)):
     # from the task execution while that detail is already available so the
     # Ensemble Manager can register the final adapter artifact explicitly.
     if adapter_status == "completed":
+        # A publish run's output is the model output it published, not the last URL
+        # its publish task printed (the STAC Item); those stay in `publication`.
+        output_uri = await _published_model_output(h, run)
         try:
-            output_uri = await run_in_threadpool(
+            output_uri = output_uri or await run_in_threadpool(
                 tapis.get_output_uri, pipeline_id, run_uuid, token=token,
             )
         except Exception:  # noqa: BLE001 — output discovery is best effort
@@ -2713,6 +2969,31 @@ async def poll_run(run_id: str, authorization: str | None = Header(None)):
         if output_uri:
             response["output_uri"] = output_uri
     return response
+
+
+async def _published_model_output(h, run: dict[str, Any]) -> str | None:
+    """The bound source_uri of a run whose plan publishes, else None."""
+    plan = (await h.execute(GET_PLAN, {"id": run.get("workflow_plan_id")}))["adapter_workflow_plan_by_pk"] \
+        if run.get("workflow_plan_id") else None
+    plan_json = (plan or {}).get("plan_json") or {}
+    if not tapis.plan_publishes(plan_json.get("steps") or []):
+        return None
+    data_object_id = (plan_json.get("bound") or {}).get("data_object_id")
+    if not data_object_id:
+        return None
+    row = (await h.execute(GET_DATA_OBJECT, {"id": data_object_id})).get("adapter_data_object_by_pk")
+    return (row or {}).get("resource_uri") or None
+
+
+async def _record_run_publication(h, run: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | None:
+    """Derive the publish task's outcome from a poll's task detail and record it once."""
+    outcome = publication.publication_from_detail(detail)
+    if outcome:
+        try:
+            await publication.record_publication(h, run["id"], outcome)
+        except Exception:  # noqa: BLE001 — the poll must still answer
+            log.warning("could not record publication for run %s", run.get("id"))
+    return outcome
 
 
 async def _verify_model_job(run: dict[str, Any], token: str | None) -> dict[str, Any]:

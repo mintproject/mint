@@ -98,6 +98,45 @@ STANDARD_PARAMS: dict[str, dict[str, Any]] = {
     "ckan_token": {"type": "string", "default": "", "required": False},
 }
 
+# Output-side publication (design 2026-11-05-output-publish-etl.md). The arguments of
+# a catalog_register step. The first group is bound by the adapter from settings and
+# the run, never from user args; the second is the user-facing configuration, with
+# allowed_values from the deployment allow-lists.
+PUBLISH_STEP_TYPE = "catalog_register"
+PUBLISH_MANAGED_ARGS = ("tapis_base_url", "stac_url", "ckan_url", "stac_item_id", "execution_id", "product_pattern")
+PUBLISH_USER_ARGS = ("stac_collection", "ckan_org", "public")
+
+
+def publish_params() -> dict[str, dict[str, Any]]:
+    """Pipeline-param definitions of a publish step, from the current settings."""
+    collections = list(getattr(settings, "publish_allowed_collection_list", []) or [])
+    orgs = list(getattr(settings, "publish_allowed_org_list", []) or [])
+    default_collection = getattr(settings, "publish_default_collection", "subsidence-rates-dev")
+    default_org = getattr(settings, "publish_default_org", "dso-internal")
+    return {
+        "stac_url": {"type": "string", "default": "", "required": False},
+        "ckan_url": {"type": "string", "default": "", "required": False},
+        "stac_item_id": {"type": "string", "default": "", "required": False},
+        "execution_id": {"type": "string", "required": False,
+                         "description": "Ensemble Manager logical workflow execution"},
+        # No default here: the piece's own parameters_schema_json carries the model's
+        # filename patterns, and the task falls back to *.tif when it is empty.
+        "product_pattern": {"type": "string", "required": False},
+        "stac_collection": {"type": "string", "default": default_collection, "required": False,
+                            "description": "STAC collection to publish into",
+                            **({"allowed_values": collections} if collections else {})},
+        "ckan_org": {"type": "string", "default": default_org, "required": False,
+                     "description": "CKAN organisation that owns the dataset",
+                     **({"allowed_values": orgs} if orgs else {})},
+        "public": {"type": "boolean", "default": False, "required": False,
+                   "description": "Make the CKAN dataset public"},
+    }
+
+
+def plan_publishes(steps: list[dict[str, Any]]) -> bool:
+    return any(str(s.get("transform_type") or "").lower() == PUBLISH_STEP_TYPE for s in steps)
+
+
 # Staging of input-side ETL results (design 2026-11-05-aoi-etl-piece.md, section 3).
 # Spliced into the (dedented) model task source only when a run has input steps.
 _INPUT_STAGING_DEFS = textwrap.dedent(
@@ -771,6 +810,9 @@ def generate_tapis_workflow(
     # in the immutable plan snapshot.  Declare them in the workflow alongside
     # the standard runtime params so task env bindings resolve for new plans;
     # old plans remain supported by the task-code fallback candidates.
+    if plan_publishes(steps):
+        # Publish arguments are declared even when the stored plan predates them.
+        params.update({name: dict(d) for name, d in publish_params().items()})
     for definition in plan_json.get("parameters") or []:
         name = definition.get("name") if isinstance(definition, dict) else None
         if name and name not in params:
@@ -975,6 +1017,13 @@ def generate_tapis_workflow(
                 }
             if inputs:
                 task["input"] = inputs
+            if str(transform_type or "").lower() == PUBLISH_STEP_TYPE:
+                # Downloads, uploads and upserts the whole product set; a retry
+                # would only repeat a refusal, so none.
+                task["execution_profile"] = {
+                    "max_retries": 0,
+                    "max_exec_time": getattr(settings, "publish_max_exec_seconds", 1800),
+                }
         if dependency_ids:
             if (
                 model_task

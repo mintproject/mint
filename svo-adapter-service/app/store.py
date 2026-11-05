@@ -138,6 +138,16 @@ class InMemoryHasura:
         ][:limit]
         return {"adapter_provenance_event": events}
 
+    def _op_GetParentRuns(self, v):
+        rows = [r for r in STORE.run.values() if r.get("execution_id") == v.get("execution_id")]
+        return {"adapter_workflow_run": rows}
+
+    def _op_GetPublishedEvent(self, v):
+        events = [e for e in STORE.provenance
+                  if e.get("workflow_run_id") == v.get("run_id")
+                  and e.get("event_type") == "run.output.published"]
+        return {"adapter_provenance_event": events[-1:]}
+
     def _op_ListActiveRuns(self, v):
         active = [r for r in STORE.run.values()
                   if r.get("status") in ("running", "submitting")]
@@ -190,6 +200,12 @@ class InMemoryHasura:
     def _op_InsertPlan(self, v):
         row = _insert(STORE.plan, v["obj"])
         return {"insert_adapter_workflow_plan_one": row}
+
+    def _op_BindDeferredPlan(self, v):
+        row = STORE.plan.get(v["id"])
+        if row:
+            row.update(source_data_object_id=v["source_id"], plan_json=v["plan_json"], status="ready")
+        return {"update_adapter_workflow_plan_by_pk": row}
 
     def _op_SetWorkflowDef(self, v):
         row = STORE.plan.get(v["id"])

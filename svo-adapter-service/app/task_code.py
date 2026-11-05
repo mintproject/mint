@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import textwrap
 
 _INPUT_HELPER = """\
@@ -1052,6 +1053,417 @@ print("sha256=%s bytes=%d" % (hashlib.sha256(_text.encode()).hexdigest(), len(_t
 """
 
 
+# Publishes a model output archive to CKAN + the STAC API as the submitting user
+# (design 2026-11-05-output-publish-etl.md, section 2). Ported from SUBSIDE's
+# `publish` + `stac-publish` function tasks (werc-opera.yaml): it inventories the
+# products itself, writes <execution_id>-manifest.json beside them, then calls
+# stacmap.publish.publish_from_dir. stac-platform is pip-installed at a pinned commit.
+# Exit 2 = refused or failed; nothing it prints may carry a token.
+_CATALOG_REGISTER_SNIPPET = _INPUT_HELPER + r"""
+import base64, fnmatch, re, struct, subprocess, sys, tempfile, time
+import urllib.error as _ue
+import urllib.parse as _up
+import urllib.request as _ur
+
+_STAC_PLATFORM_REF = "__STAC_PLATFORM_REF__"
+_TOKEN_RE = re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+_SECRETS = []
+_RETRY_DELAYS = (2, 5, 10)
+
+
+def _scrub(text):
+    text = _TOKEN_RE.sub("[token]", str(text))
+    for secret in _SECRETS:
+        if secret:
+            text = text.replace(secret, "[token]")
+    return text
+
+
+class _Scrubbed:
+    # Everything this task (or a library it calls) prints passes through _scrub.
+    def __init__(self, inner):
+        self._inner = inner
+
+    def write(self, text):
+        return self._inner.write(_scrub(text))
+
+    def flush(self):
+        self._inner.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+sys.stdout = _Scrubbed(sys.stdout)
+sys.stderr = _Scrubbed(sys.stderr)
+
+
+def _fail(message):
+    text = json.dumps({"schema_version": 1, "status": "error", "message": _scrub(message)[:600]})
+    if _ctx is not None:
+        try:
+            _ctx.set_output("result", text)
+        except Exception:
+            pass
+    print(text)
+    raise SystemExit(2)
+
+
+def _describe(exc):
+    # Class, HTTP status and a short body only: never a header, URL query or token.
+    status = None
+    body = ""
+    response = getattr(exc, "response", None)
+    if response is not None:
+        status = getattr(response, "status_code", None)
+        try:
+            body = response.text
+        except Exception:
+            body = ""
+    elif isinstance(exc, _ue.HTTPError):
+        status = exc.code
+        try:
+            body = exc.read().decode("utf-8", "replace")
+        except Exception:
+            body = ""
+    if not body:
+        body = str(exc)
+    if status is None:
+        found = re.search(r"HTTP (\d{3})", body)
+        status = int(found.group(1)) if found else None
+    return "%s%s: %s" % (type(exc).__name__, " HTTP %s" % status if status else "",
+                         " ".join(_scrub(body).split())[:300])
+
+
+def _claims(token):
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload))
+    except Exception:
+        return {}
+
+
+def _flag(value):
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def _http_url(name, value):
+    parsed = _up.urlparse(value)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
+        _fail("%s is empty or not an http(s) URL" % name)
+    return value.rstrip("/")
+
+
+# 1. Refuse before any request: token, URLs and identifiers must be well formed.
+_token = _input("TAPIS_TOKEN", "").strip()
+_SECRETS.append(_token)
+if _token.lower().startswith("bearer "):
+    _token = _token[7:].strip()
+    _SECRETS.append(_token)
+_claim = _claims(_token)
+if _token.count(".") != 2 or not _claim:
+    _fail("TAPIS_TOKEN is missing or malformed; refusing to publish")
+if _claim.get("exp") and int(_claim["exp"]) <= time.time():
+    _fail("TAPIS_TOKEN has expired; refusing to publish")
+_username = str(_claim.get("tapis/username") or "").strip()
+if not _username:
+    _fail("TAPIS_TOKEN names no user; refusing to publish")
+_stac_url = _http_url("STAC_URL", _input("STAC_URL", "").strip())
+_ckan_url = _http_url("CKAN_URL", _input("CKAN_URL", "").strip())
+_base = _http_url("TAPIS_BASE_URL", _input("TAPIS_BASE_URL", "https://portals.tapis.io").strip())
+_source = _input("SOURCE_URI", "").strip()
+if not _source.startswith("tapis://") or "/" not in _source[len("tapis://"):]:
+    _fail("SOURCE_URI must be a tapis://<system>/<path> archive directory")
+_id_re = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_collection = _input("STAC_COLLECTION", "").strip()
+_org = _input("CKAN_ORG", "").strip()
+_item_id = _input("STAC_ITEM_ID", "").strip()
+_execution_id = _input("EXECUTION_ID", "").strip()
+for _name, _value in (("STAC_COLLECTION", _collection), ("CKAN_ORG", _org),
+                      ("STAC_ITEM_ID", _item_id), ("EXECUTION_ID", _execution_id)):
+    if not _id_re.match(_value):
+        _fail("%s is empty or not a plain identifier" % _name)
+_public = _flag(_input("PUBLIC", "false"))
+_patterns = [p.strip() for p in _input("PRODUCT_PATTERN", "*.tif").split(",") if p.strip()] or ["*.tif"]
+_system, _, _dir = _source[len("tapis://"):].partition("/")
+_dir = _dir.strip("/")
+_system = _up.unquote(_system)
+
+
+# Tapis Files API (stdlib only; the function runtime has no tapipy).
+class _NoRedirect(_ur.HTTPRedirectHandler):
+    # urllib would replay X-Tapis-Token to wherever a redirect points; refuse instead.
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_opener = _ur.build_opener(_NoRedirect)
+
+
+def _files_request(method, path, data=None, content_type=None, params=None):
+    url = _base + "/v3/files/" + _up.quote(path, safe="/")
+    if params:
+        url += "?" + _up.urlencode(params)
+    headers = {"X-Tapis-Token": _token}
+    if content_type:
+        headers["Content-Type"] = content_type
+    last = None
+    for delay in (0,) + _RETRY_DELAYS:
+        if delay:
+            time.sleep(delay)
+        try:
+            request = _ur.Request(url, data=data, method=method, headers=headers)
+            return _opener.open(request, timeout=300)
+        except _ue.HTTPError as exc:
+            if exc.code not in (500, 502, 503, 504, 429):
+                raise
+            last = exc
+        except _ue.URLError as exc:
+            last = exc
+    raise last
+
+
+def _list_files(system, directory):
+    with _files_request("GET", "ops/%s/%s" % (system, directory),
+                        params={"recurse": "true", "limit": "1000"}) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    rows = payload.get("result") or []
+    return [r for r in rows if isinstance(r, dict) and str(r.get("type") or "file").lower() != "dir"]
+
+
+def _download(system, path, dest):
+    with _files_request("GET", "content/%s/%s" % (system, path.strip("/"))) as response, \
+            open(dest, "wb") as out:
+        while True:
+            chunk = response.read(1 << 20)
+            if not chunk:
+                break
+            out.write(chunk)
+
+
+def _read_json(system, path):
+    with _files_request("GET", "content/%s/%s" % (system, path.strip("/"))) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _upload(system, directory, name, payload):
+    boundary = "----svoadapter%x" % int(time.time() * 1000)
+    body = (("--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
+             "Content-Type: application/json\r\n\r\n" % (boundary, name)).encode()
+            + payload + ("\r\n--%s--\r\n" % boundary).encode())
+    _files_request("POST", "ops/%s/%s/%s" % (system, directory.strip("/"), name), data=body,
+                   content_type="multipart/form-data; boundary=" + boundary).close()
+
+
+# Bounds of a geographic (EPSG:4326) GeoTIFF from its tags, so the function runtime
+# needs no GDAL. A projected raster is refused unless the run manifest carries bounds.
+def _tiff_bounds(path):
+    with open(path, "rb") as fh:
+        head = fh.read(16)
+        order = {b"II": "<", b"MM": ">"}.get(head[:2])
+        if not order:
+            raise ValueError("%s is not a TIFF" % os.path.basename(path))
+        magic = struct.unpack(order + "H", head[2:4])[0]
+        big = magic == 43
+        if magic not in (42, 43):
+            raise ValueError("%s is not a TIFF" % os.path.basename(path))
+        fh.seek(struct.unpack(order + ("Q" if big else "I"), head[8:16] if big else head[4:8])[0])
+        count = struct.unpack(order + ("Q" if big else "H"), fh.read(8 if big else 2))[0]
+        tags = {}
+        for _ in range(count):
+            entry = fh.read(20 if big else 12)
+            tag, kind = struct.unpack(order + "HH", entry[:4])
+            n = struct.unpack(order + ("Q" if big else "I"), entry[4:12] if big else entry[4:8])[0]
+            tags[tag] = (kind, n, entry[12:20] if big else entry[8:12])
+        sizes = {3: ("H", 2), 4: ("I", 4), 12: ("d", 8), 16: ("Q", 8)}
+
+        def values(tag):
+            if tag not in tags:
+                return None
+            kind, n, raw = tags[tag]
+            code, width = sizes[kind]
+            if n * width > (8 if big else 4):
+                fh.seek(struct.unpack(order + ("Q" if big else "I"), raw)[0])
+                raw = fh.read(n * width)
+            return list(struct.unpack(order + "%d%s" % (n, code), raw[: n * width]))
+
+        width_px, height_px = values(256)[0], values(257)[0]
+        scale, tie, keys = values(33550), values(33922), values(34735)
+    if not (scale and tie and keys):
+        raise ValueError("%s has no georeferencing" % os.path.basename(path))
+    key_map = {keys[i]: keys[i + 3] for i in range(4, len(keys) - 3, 4)}
+    if key_map.get(2048) != 4326 or 3072 in key_map:
+        raise ValueError("%s is not EPSG:4326; run manifest bounds are needed" % os.path.basename(path))
+    left = tie[3] - tie[0] * scale[0]
+    top = tie[4] + tie[1] * scale[1]
+    return [left, top - height_px * scale[1], left + width_px * scale[0], top]
+
+
+def _is_tif(name):
+    return name.lower().endswith((".tif", ".tiff"))
+
+
+def _manifest_for(archive_manifest, files, modified):
+    # The run's own manifest (werc-run-manifest.json / run-manifest.json) already has
+    # the bounds, dates and display ranges; reuse it. Otherwise derive bbox from the
+    # GeoTIFFs and the date from the products' last-modified time.
+    manifest = dict(archive_manifest) if isinstance(archive_manifest, dict) else {}
+    manifest.setdefault("config", {})
+    names = sorted(files)
+    artifacts = manifest.setdefault("artifacts", {})
+    if not archive_manifest:
+        cumulative = next((n for n in names if _is_tif(n) and "cumulative" in n.lower()), None)
+        velocity = next((n for n in names if _is_tif(n) and "velocity" in n.lower()), None)
+        if cumulative or velocity:
+            if cumulative:
+                artifacts["cumulative_displacement_geotiff"] = {
+                    "path": cumulative, "bounds": _tiff_bounds(files[cumulative])}
+            if velocity:
+                artifacts["velocity_geotiff"] = {"path": velocity, "bounds": _tiff_bounds(files[velocity])}
+        else:
+            cog = next((n for n in names if _is_tif(n)), None)
+            if not cog:
+                _fail("no GeoTIFF product to derive a bounding box from")
+            west, south, east, north = _tiff_bounds(files[cog])
+            manifest["bbox"] = {"lon_min": west, "lat_min": south, "lon_max": east, "lat_max": north}
+            artifacts["cog_tif"] = cog
+    config = manifest["config"]
+    if not (config.get("start_date") and config.get("end_date")):
+        stamp = max(modified.values() or [""])[:10]
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", stamp):
+            stamp = time.strftime("%Y-%m-%d", time.gmtime())
+        config["start_date"] = config.get("start_date") or stamp
+        config["end_date"] = config.get("end_date") or stamp
+        manifest["datetime_source"] = "product_last_modified"
+    manifest["execution_id"] = _execution_id
+    return manifest
+
+
+def _ensure_stacmap():
+    try:
+        import stacmap  # noqa: F401
+        return
+    except ImportError:
+        pass
+    target = tempfile.mkdtemp(prefix="stacmap-libs-")
+    spec = "stac-platform @ https://github.com/wmobley/stac-platform/archive/%s.zip" % _STAC_PLATFORM_REF
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "--target", target, spec],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as exc:
+        _fail("could not install stac-platform at the pinned commit: %s" % type(exc).__name__)
+    sys.path.insert(0, target)
+
+
+def _publish():
+    _ensure_stacmap()
+    from stacmap.ckan import COLLECTION_FIELD, ITEM_ID_FIELD, CkanClient, dataset_name
+    from stacmap.publish import publish_from_dir
+    from stacmap.stac_client import StacClient
+
+    private = not _public
+    dataset_names = []
+
+    class _OwnedStac(StacClient):
+        def upsert_item(self, collection_id, item):
+            props = item.setdefault("properties", {})
+            props["published_by"] = _username
+            props["execution_id"] = _execution_id
+            return super().upsert_item(collection_id, item)
+
+    class _OwnedCkan(CkanClient):
+        # The library creates run datasets private to the organisation; PUBLIC opens one.
+        def ensure_run_dataset(self, collection_id, item_id, *, title=None, notes=None):
+            name = dataset_name(collection_id, item_id)
+            existing = self.get_dataset(name)
+            if existing:
+                # Only touch a dataset this user published for this run.
+                extras = {e.get("key"): e.get("value") for e in existing.get("extras") or []}
+                if extras.get(ITEM_ID_FIELD) != _item_id or extras.get("published_by") != _username:
+                    _fail("CKAN dataset %s exists and does not belong to this run and user" % name)
+                if bool(existing.get("private")) != private:
+                    self._action_json("package_patch", {"id": name, "private": private})
+                dataset_names.append(existing.get("name") or name)
+                return existing
+            created = self.ensure_dataset(
+                name, title=title or item_id, notes=notes,
+                extras={COLLECTION_FIELD: collection_id, ITEM_ID_FIELD: item_id,
+                        "published_by": _username},
+                fields={"private": private})
+            dataset_names.append(created.get("name") or name)
+            return created
+
+    stac = _OwnedStac(url=_stac_url, token=_token)
+    ckan = _OwnedCkan(url=_ckan_url, token=_token, org=_org)
+    try:
+        # Best-effort guard: never overwrite an Item another user published.
+        existing = stac.get_item(_collection, _item_id)
+        if existing is not None:
+            owner = (existing.get("properties") or {}).get("published_by")
+            if owner != _username:
+                _fail("STAC Item %s/%s exists and was not published by this user" % (_collection, _item_id))
+
+        listing = _list_files(_system, _dir)
+        by_name = {}
+        modified = {}
+        for row in sorted(listing, key=lambda r: str(r.get("path") or "").count("/")):
+            name = str(row.get("name") or str(row.get("path") or "").rsplit("/", 1)[-1])
+            if name and name not in by_name:
+                by_name[name] = str(row.get("path") or "").strip("/")
+                modified[name] = str(row.get("lastModified") or "")
+        wanted = sorted(n for n in by_name if any(fnmatch.fnmatchcase(n, p) for p in _patterns))
+        if not wanted:
+            _fail("no products matching %s under %s" % (",".join(_patterns), _source))
+        archive_manifest = None
+        for manifest_name in ("werc-run-manifest.json", "run-manifest.json"):
+            if manifest_name in by_name:
+                try:
+                    archive_manifest = _read_json(_system, by_name[manifest_name])
+                except Exception:
+                    archive_manifest = None
+                break
+
+        with tempfile.TemporaryDirectory() as tmp:
+            files = {}
+            for name in wanted:
+                files[name] = os.path.join(tmp, name)
+                _download(_system, by_name[name], files[name])
+            manifest = _manifest_for(archive_manifest, files, modified)
+            manifest_name = "%s-manifest.json" % _execution_id
+            manifest_path = os.path.join(tmp, manifest_name)
+            payload = json.dumps(manifest, indent=2, sort_keys=True, default=str).encode()
+            with open(manifest_path, "wb") as out:
+                out.write(payload)
+            try:
+                _upload(_system, _dir, manifest_name, payload)
+            except Exception as exc:
+                print("manifest write-back skipped: " + _describe(exc))
+            publish_from_dir(collection_id=_collection, manifest_path=manifest_path,
+                             item_id=_item_id, files_dir=tmp, ckan=ckan, stac_client=stac)
+    finally:
+        stac.close()
+        ckan.close()
+    return dataset_names[-1] if dataset_names else None
+
+
+try:
+    _dataset = _publish()
+except SystemExit:
+    raise
+except BaseException as exc:
+    _fail(_describe(exc))
+
+_emit_result({
+    "catalog": "ckan+stac",
+    # The name CKAN reported for the dataset it created or found, not one rebuilt here.
+    "ckan_dataset": "%s/dataset/%s" % (_ckan_url, _up.quote(_dataset or "", safe="")),
+    "stac_item": "%s/collections/%s/items/%s" % (_stac_url, _collection, _item_id),
+    "public": _public,
+})
+"""
+
+
 def _json_b64(value: object) -> str:
     return base64.b64encode(json.dumps(value).encode()).decode()
 
@@ -1076,6 +1488,19 @@ def get_fused_dfc_chain_code(steps: list[dict]) -> str:
     steps_b64 = _json_b64(serializable)
     code = f"_DFC_STEPS_B64 = {steps_b64!r}\n" + _FUSED_DFC_CHAIN_SNIPPET
     return textwrap.dedent(code)
+
+
+def _catalog_register_code() -> str | None:
+    """The publish task, or None (fail closed) when publication is off or the
+    stac-platform pin is not a commit SHA."""
+    try:
+        from .config import settings
+    except ImportError:  # pydantic-settings absent
+        return None
+    ref = str(settings.stac_platform_ref or "")
+    if not settings.publish_enabled or not re.fullmatch(r"[0-9a-f]{40}", ref):
+        return None
+    return _CATALOG_REGISTER_SNIPPET.replace("__STAC_PLATFORM_REF__", ref)
 
 
 def get_code(transform_type: str | None) -> str:
@@ -1121,6 +1546,10 @@ def get_code(transform_type: str | None) -> str:
         return textwrap.dedent(_DIS_TOP_TO_GEOTIFF_SNIPPET)
     if t == "aoi_from_boundary":
         return textwrap.dedent(_AOI_FROM_BOUNDARY_SNIPPET)
+    if t == "catalog_register":
+        code = _catalog_register_code()
+        if code is not None:
+            return code
     # Unknown transform code must fail closed. Returning a successful stub makes
     # a generated workflow look complete even though no real transform ran.
     return (

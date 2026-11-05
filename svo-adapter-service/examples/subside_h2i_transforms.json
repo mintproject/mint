@@ -67,10 +67,28 @@
       "tapis_app_id": null,
       "stage": "stac-publish",
       "env_from_args": {
+        "SOURCE_URI": "source_uri",
+        "TAPIS_BASE_URL": "tapis_base_url",
+        "TAPIS_TOKEN": "tapis_token",
+        "STAC_TOKEN": "tapis_token",
         "STAC_URL": "stac_url",
         "STAC_COLLECTION": "stac_collection",
         "CKAN_URL": "ckan_url",
-        "CKAN_TOKEN": "ckan_token"
+        "CKAN_ORG": "ckan_org",
+        "PUBLIC": "public",
+        "STAC_ITEM_ID": "stac_item_id",
+        "EXECUTION_ID": "execution_id",
+        "PRODUCT_PATTERN": "product_pattern"
+      },
+      "parameters_schema_json": {
+        "type": "object",
+        "properties": {
+          "product_pattern": {
+            "type": "string",
+            "description": "Comma-separated filename patterns of the products to publish: the WERC cumulative and velocity GeoTIFFs, or the H2I displacement COG with its overlay. The piece is shared by both pipelines, so one default covers both.",
+            "default": "opera_disp_s1_cumulative.tif,opera_disp_s1_velocity.tif,disp_displacement.tif,disp_overlay.png"
+          }
+        }
       },
       "contracts": [
         {"id": "c-stac-in-cog", "role": "input", "format": "geotiff"},

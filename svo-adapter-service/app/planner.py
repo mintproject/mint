@@ -426,6 +426,12 @@ def parameter_definitions(
         "budget_river_package_candidates": "adapter_service",
         "geo_actor_id": "adapter_service",
         "source_uri": "execution_handoff",
+        # A catalog_register step: bound by the adapter from settings and the run.
+        "stac_url": "adapter_service",
+        "ckan_url": "adapter_service",
+        "stac_item_id": "execution_handoff",
+        "execution_id": "execution_handoff",
+        "product_pattern": "adapter_service",
         "tapis_base_url": "adapter_service",
         "tapis_token": "authorization",
     }
@@ -485,7 +491,8 @@ def parameter_definitions(
         if name in definitions:
             definitions[name].update({
                 k: v for k, v in definition.items()
-                if k in {"type", "required", "default", "description"} and v is not None
+                if k in {"type", "required", "default", "description", "allowed_values"}
+                and v is not None
             })
         elif name == "allocation":
             add(name, definition, {"name": "workflow"})
