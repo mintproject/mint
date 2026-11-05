@@ -1307,36 +1307,61 @@ def userinfo_username(token: str) -> str | None:
 
 _SCRATCH_ROOTS: dict[tuple[str, str], str] = {}
 
+# Job records read in full (one request each) when a listing row lacks the exec dir.
+_SCRATCH_DETAIL_READS = 3
+
+
+def _scratch_root_from_exec_dir(exec_dir: Any) -> str:
+    """``<scratch root>`` from a job's ``execSystemExecDir``, or '' without a ``/tapis/`` segment."""
+    text = str(exec_dir or "")
+    root = text.split("/tapis/", 1)[0] if "/tapis/" in text else ""
+    return root.rstrip("/") if root.startswith("/") else ""
+
 
 def resolve_scratch_root(token: str, username: str, system: str) -> str | None:
     """The submitter's ``$SCRATCH`` on ``system``, or None when it cannot be known.
 
     Tapis Files cannot expand ``$SCRATCH``, so read it off the user's most recent
     job there: ls6's ``jobWorkingDir`` is ``HOST_EVAL($SCRATCH)/tapis/${JobUUID}``,
-    so ``execSystemExecDir`` is ``<scratch root>/tapis/<uuid>``. Cached per
-    (user, system) for the life of the process.
+    so ``execSystemExecDir`` is ``<scratch root>/tapis/<uuid>``. Only the Jobs
+    search endpoint returns that field, and only when ``select`` asks for it;
+    ``/v3/jobs/list`` is a fixed summary that names the system but not the
+    directory, so it serves as the fallback and any row still missing the
+    directory is read in full. Cached per (user, system) for the life of the
+    process.
     """
     cached = _SCRATCH_ROOTS.get((username, system))
     if cached:
         return cached
     import requests
-    try:
-        resp = requests.get(
-            f"{settings.tapis_base_url.rstrip('/')}/v3/jobs/list",
-            params={"search": f"execSystemId.eq.{system}", "select": "uuid,execSystemExecDir",
-                    "orderBy": "created(desc)", "limit": "20"},
-            headers={"X-Tapis-Token": token, "Accept": "application/json"},
-            timeout=settings.request_timeout_seconds,
-        )
-        rows = (resp.json() or {}).get("result") or [] if resp.ok else []
-    except (requests.RequestException, ValueError):
-        return None
+    base = settings.tapis_base_url.rstrip("/")
+    headers = {"X-Tapis-Token": token, "Accept": "application/json"}
+
+    def rows_from(path: str, params: dict[str, str]) -> list[dict[str, Any]]:
+        try:
+            resp = requests.get(f"{base}{path}", params=params, headers=headers,
+                                timeout=settings.request_timeout_seconds)
+            return ((resp.json() or {}).get("result") or []) if resp.ok else []
+        except (requests.RequestException, ValueError):
+            return []
+
+    rows = rows_from("/v3/jobs/search", {
+        "execSystemId.eq": system, "select": "uuid,execSystemExecDir",
+        "orderBy": "created(desc)", "limit": "20"})
+    if not rows:
+        rows = [row for row in rows_from("/v3/jobs/list", {"orderBy": "created(desc)", "limit": "50"})
+                if (row or {}).get("execSystemId") == system]
+    detail_reads = 0
     for row in rows:
-        exec_dir = str((row or {}).get("execSystemExecDir") or "")
-        root = exec_dir.split("/tapis/", 1)[0] if "/tapis/" in exec_dir else ""
-        if root.startswith("/"):
-            _SCRATCH_ROOTS[(username, system)] = root.rstrip("/")
-            return _SCRATCH_ROOTS[(username, system)]
+        row = row or {}
+        exec_dir = row.get("execSystemExecDir")
+        if not exec_dir and row.get("uuid") and detail_reads < _SCRATCH_DETAIL_READS:
+            detail_reads += 1
+            exec_dir = (get_job(token, str(row["uuid"])) or {}).get("execSystemExecDir")
+        root = _scratch_root_from_exec_dir(exec_dir)
+        if root:
+            _SCRATCH_ROOTS[(username, system)] = root
+            return root
     return None
 
 
