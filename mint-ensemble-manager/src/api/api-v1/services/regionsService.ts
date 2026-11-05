@@ -19,6 +19,7 @@ export const DEFAULT_CATEGORY_ID = "subsidence_aoi";
 const DEFAULT_MAX_VERTICES = 10000;
 const DEFAULT_MAX_BYTES = 1024 * 1024;
 const MAX_NAME_LENGTH = 200;
+const DEFAULT_MAX_SPAN_DEGREES = 25;
 const COORDINATE_DECIMALS = 1e6;
 
 type Position = [number, number];
@@ -27,9 +28,8 @@ type Polygon = Ring[];
 
 export interface CreateRegionRequest {
     name: string;
+    /** A Polygon or MultiPolygon, or a Feature/FeatureCollection holding them. */
     geojson: unknown;
-    category_id?: string;
-    parent_region_id?: string | null;
 }
 
 export interface CreateRegionResult {
@@ -146,6 +146,37 @@ const canonicalPolygon = (rings: unknown): Polygon => {
 const closeRing = (ring: Ring): Ring => [...ring, ring[0]];
 
 /**
+ * The polygon parts of a geometry, Feature or FeatureCollection, as a single
+ * Polygon or MultiPolygon geometry. Features that are not polygons are
+ * ignored; no polygon at all is invalid. Parts are collected, not merged.
+ */
+const polygonGeometryOf = (geojson: unknown): unknown => {
+    const parts: unknown[] = [];
+    const collect = (node: any, depth = 0) => {
+        if (!node || typeof node !== "object" || depth > 4) return;
+        if (node.type === "FeatureCollection" && Array.isArray(node.features)) {
+            node.features.forEach((feature: unknown) => collect(feature, depth + 1));
+        } else if (node.type === "Feature") {
+            collect(node.geometry, depth + 1);
+        } else if (node.type === "Polygon" && Array.isArray(node.coordinates)) {
+            parts.push(node.coordinates);
+        } else if (node.type === "MultiPolygon" && Array.isArray(node.coordinates)) {
+            parts.push(...node.coordinates);
+        }
+    };
+    const type = (geojson as { type?: unknown } | null)?.type;
+    if (type === "Polygon" || type === "MultiPolygon") return geojson;
+    if (type !== "Feature" && type !== "FeatureCollection") {
+        throw invalid("geojson must be a Polygon, MultiPolygon, Feature or FeatureCollection");
+    }
+    collect(geojson);
+    if (parts.length === 0) throw invalid("geojson contains no Polygon or MultiPolygon");
+    return parts.length === 1
+        ? { type: "Polygon", coordinates: parts[0] }
+        : { type: "MultiPolygon", coordinates: parts };
+};
+
+/**
  * Validate a GeoJSON Polygon or MultiPolygon and reduce it to its canonical
  * form: coordinates rounded to six decimals, outer rings counter-clockwise and
  * holes clockwise, each ring starting at its smallest vertex, no closing
@@ -155,11 +186,11 @@ export const canonicalizeGeometry = (geojson: unknown): CanonicalRegion => {
     if (!geojson || typeof geojson !== "object" || Array.isArray(geojson)) {
         throw invalid("geojson must be a GeoJSON geometry object");
     }
-    const geometry = geojson as { type?: unknown; coordinates?: unknown };
     const maxBytes = envNumber("REGION_MAX_BYTES", DEFAULT_MAX_BYTES);
     if (Buffer.byteLength(JSON.stringify(geojson), "utf8") > maxBytes) {
         throw invalid(`geojson exceeds the ${maxBytes} byte limit`);
     }
+    const geometry = polygonGeometryOf(geojson) as { type?: unknown; coordinates?: unknown };
     let parts: unknown[];
     if (geometry.type === "Polygon") {
         parts = [geometry.coordinates];
@@ -181,6 +212,16 @@ export const canonicalizeGeometry = (geojson: unknown): CanonicalRegion => {
     }
 
     const polygons = parts.map(canonicalPolygon).sort(byJson);
+    const maxSpan = envNumber("REGION_MAX_SPAN_DEGREES", DEFAULT_MAX_SPAN_DEGREES);
+    const positions = polygons.flat(2);
+    const lons = positions.map(([lon]) => lon);
+    const lats = positions.map(([, lat]) => lat);
+    if (
+        Math.max(...lons) - Math.min(...lons) > maxSpan ||
+        Math.max(...lats) - Math.min(...lats) > maxSpan
+    ) {
+        throw invalid(`region too large (more than ${maxSpan} degrees across)`);
+    }
     const hash = createHash("sha256").update(JSON.stringify(polygons)).digest("hex");
     const closed = polygons.map((polygon) => polygon.map(closeRing));
     return {
@@ -192,20 +233,17 @@ export const canonicalizeGeometry = (geojson: unknown): CanonicalRegion => {
     };
 };
 
-const validateRequest = (
-    body: any
-): Required<Pick<CreateRegionRequest, "name">> & CreateRegionRequest => {
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
+// Control characters are removed rather than rejected: a pasted name should not fail.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+const validateName = (body: any): string => {
+    const name =
+        typeof body?.name === "string" ? body.name.replace(CONTROL_CHARACTERS, "").trim() : "";
     if (!name || name.length > MAX_NAME_LENGTH) {
         throw invalid(`name is required (at most ${MAX_NAME_LENGTH} characters)`);
     }
-    for (const field of ["category_id", "parent_region_id"]) {
-        const value = body[field];
-        if (value !== undefined && value !== null && (typeof value !== "string" || !value.trim())) {
-            throw invalid(`${field} must be a non-empty string`);
-        }
-    }
-    return { ...body, name };
+    return name;
 };
 
 export interface RegionsService {
@@ -219,13 +257,16 @@ export interface RegionsService {
 const regionsService: RegionsService = {
     async createRegion(body, authorizationHeader) {
         usernameFromToken(getTokenFromAuthorizationHeader(authorizationHeader));
-        const request = validateRequest(body);
-        const { id, geometry } = canonicalizeGeometry(request.geojson);
+        const name = validateName(body);
+        const { id, geometry } = canonicalizeGeometry(body?.geojson);
+        // The row is written with service credentials, so the caller does not
+        // choose its category or parent: category_id and parent_region_id in
+        // the request are ignored.
         const created = await insertRegionIfAbsent({
             id,
-            name: request.name,
-            category_id: request.category_id || DEFAULT_CATEGORY_ID,
-            parent_region_id: request.parent_region_id || null,
+            name,
+            category_id: DEFAULT_CATEGORY_ID,
+            parent_region_id: null,
             // region-import stores each geometry as a JSON string.
             geometries: { data: [{ geometry: JSON.stringify(geometry) }] }
         });

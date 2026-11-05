@@ -911,11 +911,11 @@ export interface InsertOptions {
     ifAbsent?: boolean;
 }
 
-// A GraphQL write that fails is reported with Hasura's message, not as a null id.
+// A GraphQL write that fails is logged in full; the caller gets a generic
+// message, because Hasura's text names tables, constraints and columns.
 const graphqlWriteError = (what: string, error: unknown): InternalServerError => {
     console.error(`Error adding ${what}:`, error);
-    const message = error instanceof Error ? error.message : String(error);
-    return new InternalServerError(`Error adding ${what}: ${message}`);
+    return new InternalServerError(`Error adding ${what}`);
 };
 
 // Add ProblemStatement

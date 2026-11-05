@@ -169,6 +169,62 @@ describe("canonicalizeGeometry", () => {
     });
 });
 
+describe("canonicalizeGeometry with Features", () => {
+    const bare = {
+        type: "Polygon",
+        coordinates: [
+            [
+                [-97.35, 31.4],
+                [-96.95, 31.4],
+                [-96.95, 31.7],
+                [-97.35, 31.7],
+                [-97.35, 31.4]
+            ]
+        ]
+    };
+    const collection = {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: {}, geometry: bare }]
+    };
+
+    it("gives a FeatureCollection and a Feature the same id as the bare Polygon", () => {
+        const id = canonicalizeGeometry(bare).id;
+        expect(canonicalizeGeometry(collection).id).toBe(id);
+        expect(canonicalizeGeometry(collection.features[0]).id).toBe(id);
+    });
+
+    it("collects polygon parts into a MultiPolygon and ignores other features", () => {
+        const far = [
+            [
+                [-96, 31],
+                [-95, 31],
+                [-95, 32],
+                [-96, 32],
+                [-96, 31]
+            ]
+        ];
+        const result = canonicalizeGeometry({
+            type: "FeatureCollection",
+            features: [
+                { type: "Feature", geometry: bare },
+                { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] } },
+                { type: "Feature", geometry: { type: "MultiPolygon", coordinates: [far] } }
+            ]
+        });
+        expect(result.geometry.type).toBe("MultiPolygon");
+        expect((result.geometry.coordinates as unknown[]).length).toBe(2);
+    });
+
+    it("rejects a collection with no polygon", () => {
+        expect(() =>
+            canonicalizeGeometry({
+                type: "FeatureCollection",
+                features: [{ type: "Feature", geometry: { type: "Point", coordinates: [0, 0] } }]
+            })
+        ).toThrow(expect.objectContaining({ statusCode: 422, code: "REGION_INVALID" }));
+    });
+});
+
 describe("regionsService.createRegion and POST /regions", () => {
     const insert = insertRegionIfAbsent as jest.Mock;
     const app = express().use(express.json()).use("/regions", regionsRouter(regionsService));
@@ -216,21 +272,77 @@ describe("regionsService.createRegion and POST /regions", () => {
         expect(JSON.parse(object.geometries.data[0].geometry).type).toBe("Polygon");
     });
 
-    it("passes an optional parent and category through", async () => {
+    it("ignores a caller-supplied category and parent", async () => {
         insert.mockResolvedValue(true);
         await request(app)
             .post("/regions")
             .set("Authorization", bearer)
             .send({
                 name: "Waco",
-                category_id: "custom",
+                category_id: "curated_reference",
                 parent_region_id: "texas",
                 geojson: { type: "Polygon", coordinates: [square] }
             });
         expect(insert.mock.calls[0][0]).toMatchObject({
-            category_id: "custom",
-            parent_region_id: "texas"
+            category_id: "subsidence_aoi",
+            parent_region_id: null
         });
+    });
+
+    it("strips control characters from the name and rejects an overlong one", async () => {
+        insert.mockResolvedValue(true);
+        const geojson = { type: "Polygon", coordinates: [square] };
+        await request(app)
+            .post("/regions")
+            .set("Authorization", bearer)
+            .send({ name: "Wa\u0000co\n\u001b[31m", geojson });
+        expect(insert.mock.calls[0][0].name).toBe("Waco[31m");
+        const long = await request(app)
+            .post("/regions")
+            .set("Authorization", bearer)
+            .send({ name: "x".repeat(201), geojson });
+        expect(long.status).toBe(422);
+    });
+
+    it("rejects a region wider or taller than the span cap", async () => {
+        const big = [
+            [0, 0],
+            [26, 0],
+            [26, 1],
+            [0, 1],
+            [0, 0]
+        ];
+        const response = await request(app)
+            .post("/regions")
+            .set("Authorization", bearer)
+            .send({ name: "Huge", geojson: { type: "Polygon", coordinates: [big] } });
+        expect(response.status).toBe(422);
+        expect(response.body.code).toBe("REGION_INVALID");
+        expect(response.body.message).toMatch(/too large/);
+        expect(insert).not.toHaveBeenCalled();
+    });
+
+    it("reports a write failure generically", async () => {
+        insert.mockRejectedValue(new Error('violates foreign key constraint "region_parent_fkey"'));
+        const response = await request(app)
+            .post("/regions")
+            .set("Authorization", bearer)
+            .send({ name: "Waco", geojson: { type: "Polygon", coordinates: [square] } });
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({
+            message: "The region could not be saved",
+            code: "REGION_WRITE_FAILED"
+        });
+    });
+
+    it("answers 401 to a forged JWT before validating the body", async () => {
+        const forged = `Bearer ${jwt.sign({ "tapis/username": "alice" }, "wrong-key", { algorithm: "HS256" })}`;
+        const response = await request(app)
+            .post("/regions")
+            .set("Authorization", forged)
+            .send({ geojson: "not even geojson" });
+        expect(response.status).toBe(401);
+        expect(insert).not.toHaveBeenCalled();
     });
 
     it("answers 422 REGION_INVALID for a bad geometry and writes nothing", async () => {
