@@ -525,6 +525,18 @@ production rows stay unless the user asks.
   Consequence noted: the subsidence forecast (json outputs) and MODFLOW
   (hds/cbc) models cannot publish through the stac-publish piece as its
   input contracts stand; that is a piece-contract decision, not a bug.
+- 2026-11-05 (deviation, second live attempt): after the stac-publish piece
+  was re-registered with its twelve documented arguments, publish plan creation
+  failed with 500 PLAN_TOO_LARGE (4643 characters; the plan id is the encoded
+  plan and a uniquely indexed column, budget 2400). The EM had encoded the
+  adapter's full parameter definitions into the id. It now encodes only the
+  compact user-facing contract submit validates (name, type, required, default,
+  allowed_values); descriptions and managed arguments stay on the adapter's
+  stored plan, and the plan response still returns the full definitions. Also
+  fixed by hand on dev the same day: the pod's organisation allow-list typo
+  (`dso_internal`), the Ensemble Manager ingress CORS list (SUBSIDE UI origins),
+  and the stale catalog registration of the piece (all 56 pieces re-upserted,
+  adapter synced; startup sync is off on the pod).
 
 ## User feedback / decisions
 
