@@ -1319,8 +1319,8 @@ describe("unifiedExecutionService", () => {
         it("uses the bounding box and records it when the geometry is too large", async () => {
             stubAdapter();
             const ring = Array.from({ length: 3000 }, (_, i) => [
-                100 + Math.cos(i / 3000) * 10,
-                30 + Math.sin(i / 3000) * 10
+                100 + Math.cos(i / 3000) * 0.5,
+                30 + Math.sin(i / 3000) * 0.5
             ]);
             ring.push(ring[0]);
             legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
@@ -1375,21 +1375,86 @@ describe("unifiedExecutionService", () => {
             ).not.toHaveProperty("input_steps");
         });
 
-        it("skips with a warning when more than one input is typed as the area of interest", async () => {
+        it("rejects more than one input typed as the area of interest", async () => {
             stubAdapter();
-            const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
             legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
                 found([square(0)], [aoiInput, { app_input_name: "aoi-b", model_input_id: "in/b" }])
             );
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
+            const request = service.createPlan(
                 { ...baseRequest, post_model_adapter: postModel },
                 "Bearer user-token"
-            )) as any;
-            expect(plan.input_steps).toBeUndefined();
+            );
+            await expect(request).rejects.toMatchObject({
+                statusCode: 422,
+                code: "AOI_MULTIPLE_INPUTS_UNSUPPORTED",
+                message: expect.stringContaining("aoi-geojson, aoi-b")
+            });
             expect(adapterCalls("/plans/input")).toHaveLength(0);
-            expect(warn).toHaveBeenCalledWith(expect.stringContaining("aoi-geojson, aoi-b"));
-            warn.mockRestore();
+        });
+
+        it("rejects a region over the area cap", async () => {
+            stubAdapter();
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([
+                    {
+                        type: "Polygon",
+                        coordinates: [
+                            [
+                                [-110, 20],
+                                [-90, 20],
+                                [-90, 40],
+                                [-110, 40],
+                                [-110, 20]
+                            ]
+                        ]
+                    }
+                ])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(
+                service.createPlan({ ...baseRequest }, "Bearer user-token")
+            ).rejects.toMatchObject({ statusCode: 422, code: "AOI_REGION_TOO_LARGE" });
+        });
+
+        it("derives automatically for a plain Tapis plan with no flag or post-model adapter", async () => {
+            stubAdapter([]);
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([square(0)])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan({ ...baseRequest }, "Bearer user-token")) as any;
+            expect(plan.status).toBe("post_model_ready");
+            expect(plan.input_steps).toHaveLength(1);
+            expect(plan.post_model_adapter).toMatchObject({ adapter_plan_id: "deferred-plan-1" });
+        });
+
+        it("does not derive when input_etl is false", async () => {
+            stubAdapter([]);
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([square(0)])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan(
+                { ...baseRequest, input_etl: false },
+                "Bearer user-token"
+            )) as any;
+            expect(legacy.tapis.findUnboundInputsByStandardVariable).not.toHaveBeenCalled();
+            expect(plan.input_steps).toBeUndefined();
+            expect(plan.status).toBe("ready");
+        });
+
+        it("leaves a plan with no AOI-typed input (e.g. MODFLOW) unchanged", async () => {
+            stubAdapter();
+            legacy.tapis.findUnboundInputsByStandardVariable.mockResolvedValue(
+                found([square(0)], [])
+            );
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = (await service.createPlan({ ...baseRequest }, "Bearer user-token")) as any;
+            expect(plan.status).toBe("ready");
+            expect(plan.input_steps).toBeUndefined();
+            expect(plan.post_model_adapter).toBeNull();
+            expect(adapterCalls("/plans/deferred")).toHaveLength(0);
         });
 
         it("builds an input-only composite from an identity deferred plan", async () => {

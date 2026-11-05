@@ -1498,12 +1498,13 @@ export function createUnifiedExecutionService(
         );
         if (found.inputs.length === 0) return { steps: [], outputs: found.outputs };
         if (found.inputs.length > 1) {
-            console.warn(
-                `Skipping area-of-interest derivation for model ${plan.model_id}: ` +
-                    `${found.inputs.length} unbound inputs are typed ${AOI_STANDARD_VARIABLE_URI} ` +
-                    `(${found.inputs.map((input) => input.app_input_name).join(", ")}); v1 derives only one`
+            throw new UnifiedExecutionError(
+                422,
+                `${found.inputs.length} unbound inputs are typed ${AOI_STANDARD_VARIABLE_URI} ` +
+                    `(${found.inputs.map((input) => input.app_input_name).join(", ")}); ` +
+                    "only one area-of-interest input is supported",
+                "AOI_MULTIPLE_INPUTS_UNSUPPORTED"
             );
-            return { steps: [], outputs: found.outputs };
         }
         if (!found.region) {
             throw new UnifiedExecutionError(
@@ -1638,10 +1639,17 @@ export function createUnifiedExecutionService(
                 execution_engine:
                     body.execution_engine || getConfiguration().execution_engine || "localex"
             };
-            // Composite path: an explicit post-model adapter, or `input_etl` to
-            // ask for input-only ETL (see "input-only composites" below).
+            // Composite path: an explicit post-model adapter, or input-only ETL.
+            // Input ETL is automatic for Tapis plans (the finder returns early
+            // when no model input is AOI-typed); `input_etl: false` opts out.
             let adapter = body.post_model_adapter;
             let identityPostModel = false;
+            // Automatic derivation steps aside for pre-model adapter_steps plans
+            // (mixed stages are unsupported); an explicit `input_etl: true` does not.
+            const inputEtl =
+                plan.execution_engine === "tapis" &&
+                body.input_etl !== false &&
+                (body.input_etl === true || !body.adapter_steps?.length);
             if (adapter !== undefined || body.input_etl === true) {
                 if (plan.execution_engine !== "tapis") {
                     throw new UnifiedExecutionError(
@@ -1671,9 +1679,11 @@ export function createUnifiedExecutionService(
                         "POST_MODEL_ADAPTER_INVALID"
                     );
                 }
-                const derived = await deriveInputSteps(plan, authorization);
-                if (derived.steps.length) plan.input_steps = derived.steps;
-            } else if (body.input_etl === true) {
+                if (body.input_etl !== false) {
+                    const derived = await deriveInputSteps(plan, authorization);
+                    if (derived.steps.length) plan.input_steps = derived.steps;
+                }
+            } else if (inputEtl) {
                 // Input-only composite. Everything downstream of the model (the
                 // submit, the output handoff, reconciliation) keys on a stored
                 // post-model plan, so a model that needs input ETL but no

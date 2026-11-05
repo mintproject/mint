@@ -17,14 +17,34 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *           schema:
  *             type: object
  *             additionalProperties: true
+ *             properties:
+ *               input_etl:
+ *                 type: boolean
+ *                 description: >
+ *                   Tapis plans automatically derive input-side ETL for model inputs
+ *                   typed as an area of interest (from the thread region). Set to
+ *                   false to opt out; true forces the composite path. Ignored for
+ *                   non-Tapis engines unless true (which is rejected).
  *     responses:
  *       200:
- *         description: Unified plan created.
+ *         description: >
+ *           Unified plan created. When input ETL was derived, the plan carries
+ *           `input_steps`, an array of derived steps (name, app_input_name, steps,
+ *           source, params, derivation incl. method, region_id, vertices_in, bytes,
+ *           area_km2). 422 codes include AOI_REGION_TOO_LARGE,
+ *           AOI_MULTIPLE_INPUTS_UNSUPPORTED, AOI_REGION_UNAVAILABLE and
+ *           AOI_REGION_GEOMETRY_INVALID.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               additionalProperties: true
+ *               properties:
+ *                 input_steps:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     additionalProperties: true
  *       400:
  *         description: Invalid plan request.
  *         content:

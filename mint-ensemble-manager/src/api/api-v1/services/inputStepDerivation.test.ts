@@ -53,8 +53,8 @@ describe("inputStepDerivation", () => {
 
     test("a geometry over the byte budget falls back to the bounding box", () => {
         const ring = Array.from({ length: 3000 }, (_, i) => [
-            Math.cos(i / 3000) * 10 + 100,
-            Math.sin(i / 3000) * 10 + 30
+            Math.cos(i / 3000) * 0.5 + 100,
+            Math.sin(i / 3000) * 0.5 + 30
         ]);
         ring.push(ring[0]);
         const { source, derivation } = deriveRegionSource(
@@ -67,5 +67,15 @@ describe("inputStepDerivation", () => {
             vertices_in: 3001
         });
         expect(derivation.bytes).toBeLessThan(MAX_INLINE_GEOMETRY_BYTES);
+    });
+
+    test("records the approximate bbox area and rejects regions over the cap", () => {
+        const { derivation } = deriveRegionSource(region([square(0, 0)]));
+        expect(derivation.area_km2).toBeGreaterThan(12000);
+        expect(derivation.area_km2).toBeLessThan(12500);
+        const big = { type: "Polygon", coordinates: [[[0, 0], [20, 0], [20, 20], [0, 20], [0, 0]]] };
+        expect(() => deriveRegionSource(region([big]))).toThrow(
+            expect.objectContaining({ statusCode: 422, code: "AOI_REGION_TOO_LARGE" })
+        );
     });
 });
