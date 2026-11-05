@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -110,13 +110,13 @@ class DeferredPlanIn(BaseModel):
     model_output_key: str
 
 
-class PlanInputIn(BaseModel):
-    """Plan an input-side ETL chain that produces one model file input."""
+class PlanModelInputsIn(BaseModel):
+    """Plan the input-side ETL steps for a model's unfilled, bound file inputs."""
 
-    source_kind: Literal["region", "bbox", "geojson"]
-    target_standard_variable_uri: str
-    app_input_name: str
-    params: dict[str, Any] | None = None
+    configuration_id: str
+    # Source objects are validated by app.input_plan so errors carry a code.
+    sources: list[dict[str, Any]] = Field(min_length=1, max_length=4)
+    filled_app_inputs: list[str] = Field(default_factory=list)
 
 
 class BindDeferredPlanIn(BaseModel):

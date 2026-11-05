@@ -213,6 +213,7 @@ query ListMintConfigurations($limit: Int!, $offset: Int!) {
     tapis_app_version
     inputs {
       is_optional
+      app_input_name
       input {
         id
         label

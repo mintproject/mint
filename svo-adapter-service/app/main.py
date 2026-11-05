@@ -10,6 +10,7 @@ Endpoints:
   POST /data-objects              register a data object + its variable contract(s)
   POST /readiness/check           assess a data object vs a model-input requirement
   POST /plans                     generate (and persist) an ETL plan to close gaps
+  POST /plans/model-inputs        preview the input-side ETL steps of a model's bound inputs
   GET  /plans/{id}                fetch a stored plan
   POST /workflows/generate        emit a Tapis Workflows pipeline for a plan
   POST /workflows/submit          register + run the pipeline (emulates SUBSIDE)
@@ -44,7 +45,7 @@ from fastapi.staticfiles import StaticFiles
 
 log = logging.getLogger(__name__)
 
-from . import ntgam, qaqc, run_state, run_tokens, stac, tapis
+from . import input_plan, ntgam, qaqc, run_state, run_tokens, stac, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
@@ -61,8 +62,8 @@ from .models import (
     DeferredPlanIn,
     GenerateWorkflowIn,
     ModelRunIn,
-    PlanInputIn,
     PlanIn,
+    PlanModelInputsIn,
     ReadinessCheckIn,
     ReadinessResult,
     ReadinessStatus,
@@ -1363,40 +1364,31 @@ async def create_deferred_plan(
     }
 
 
-@app.post("/plans/input", tags=["Core: Planning"])
-async def plan_input_chain(body: PlanInputIn, authorization: str | None = Header(None)):
-    """Plan the input-side ETL chain for one model file input (no plan row).
+def _input_plan_error(exc: "input_plan.InputPlanError") -> HTTPException:
+    return HTTPException(422, detail={"code": exc.code, "message": exc.message})
 
-    The result is the ``steps``/``parameters`` a composite submit carries in
-    ``model_task.input_steps``. All source kinds start from a polygon-shaped
-    GeoJSON-compatible contract; the AOI piece also accepts a bbox string.
-    """
-    h = get_client(_bearer(authorization))
+
+async def _derive_input_plan(
+    h, configuration_id: str, sources: list[dict[str, Any]], filled: "set[str] | list[str]",
+) -> dict[str, Any]:
     registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
     edge_map = await _load_edge_map(registry)
-    source = DataObjectContract(
-        format="geojson", spatial_type="polygon", resource_uri=f"input-source:{body.source_kind}")
-    target = DataObjectContract(standard_variable_uri=body.target_standard_variable_uri)
-    path = find_path(source, target, registry, edge_map=edge_map)
-    if not path:
-        raise HTTPException(422, detail={
-            "code": "NO_INPUT_TRANSFORM_PATH",
-            "message": "no ETL piece produces %s from a %s source"
-                       % (body.target_standard_variable_uri, body.source_kind),
-        })
-    plan = build_plan_json(path)
-    defaults = {d["name"]: d.get("default") for d in plan["parameters"]
-                if d.get("default") is not None and not d.get("managed")}
-    unknown = sorted(set(body.params or {}) - {d["name"] for d in plan["parameters"]})
-    if unknown:
-        raise HTTPException(422, detail={"code": "UNKNOWN_PARAMETERS", "parameters": unknown})
-    return {
-        "source_kind": body.source_kind,
-        "app_input_name": body.app_input_name,
-        "steps": plan["steps"],
-        "parameters": plan["parameters"],
-        "params": {**defaults, **(body.params or {})},
-    }
+    try:
+        return input_plan.plan_model_inputs(registry, edge_map, configuration_id, sources, filled)
+    except input_plan.InputPlanError as exc:
+        raise _input_plan_error(exc)
+
+
+@app.post("/plans/model-inputs", tags=["Core: Planning"])
+async def plan_model_inputs(body: PlanModelInputsIn, authorization: str | None = Header(None)):
+    """Preview the input-side ETL steps for a model's bound, unfilled file inputs.
+
+    Nothing is written. The same derivation runs inside ``/workflows/submit``
+    from ``model_task.input_sources``; ``steps_digest`` lets a submit detect a
+    registry change since this preview.
+    """
+    h = get_client(_bearer(authorization))
+    return await _derive_input_plan(h, body.configuration_id, body.sources, body.filled_app_inputs)
 
 
 @app.post("/plans/deferred/{plan_id}/bind", tags=["Core: Planning"])
@@ -2102,82 +2094,13 @@ _RESERVED_INPUT_ARGS = re.compile(r"^(in\d+_.*|input_staging_dir)$")
 _EXECUTION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
-def _input_source_text(source: Any, k: int, bad) -> str:
-    """The `in<k>_source` arg text: a source object ({kind, geometry|bbox}) as
-    JSON, or a plain GeoJSON / 'minx miny maxx maxy' string."""
-    if isinstance(source, dict):
-        kind = source.get("kind")
-        if kind == "geojson" and isinstance(source.get("geometry"), dict):
-            source = {"kind": kind, "geometry": source["geometry"]}
-        elif (kind == "bbox" and isinstance(source.get("bbox"), list) and len(source["bbox"]) == 4
-              and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in source["bbox"])):
-            source = {"kind": kind, "bbox": source["bbox"]}
-        else:
-            raise bad(f"input_steps[{k}].source must be {{kind: geojson, geometry}} or {{kind: bbox, bbox: [4 numbers]}}")
-        source = json.dumps(source, sort_keys=True, separators=(",", ":"))
-    if not isinstance(source, str) or not source.strip() or len(source) > 200_000:
-        raise bad(f"input_steps[{k}].source must be non-empty (at most 200000 characters)")
-    return source
+def _input_source_arg(source: dict[str, Any]) -> str:
+    """The `in<k>_source` arg text: the normalized source object as compact JSON."""
+    return json.dumps(source, sort_keys=True, separators=(",", ":"))
 
 
-# Transform types a caller may run as an input-side ETL step.
-INPUT_STEP_TRANSFORM_TYPES = {"aoi_from_boundary"}
-
-
-def _validate_input_steps(
-    input_steps: Any, registry: list[dict[str, Any]] | None = None,
-) -> list[dict[str, Any]]:
-    """Check ``model_task.input_steps``, re-resolve each step from the registry, return it.
-
-    A request step is only a reference: its ``transform_spec_id`` selects a
-    registry spec and the step is rebuilt with ``build_plan_json``, so code,
-    entrypoint, env bindings and transform type never come from the request.
-    """
-    def bad(message: str) -> HTTPException:
-        return HTTPException(422, detail={"code": "INVALID_INPUT_STEPS", "message": message})
-
-    by_id = {str(spec.get("id")): spec for spec in registry or [] if spec.get("id")}
-    if not isinstance(input_steps, list) or not 0 < len(input_steps) <= 4:
-        raise bad("input_steps must be a list of 1 to 4 entries")
-    names: set[str] = set()
-    app_inputs: set[str] = set()
-    for k, item in enumerate(input_steps):
-        if not isinstance(item, dict):
-            raise bad(f"input_steps[{k}] must be an object")
-        steps = item.get("steps")
-        if not (isinstance(steps, list) and 0 < len(steps) <= 8
-                and all(isinstance(st, dict) and st.get("transform_type") for st in steps)):
-            raise bad(f"input_steps[{k}].steps must be 1 to 8 plan steps with a transform_type")
-        resolved = []
-        for n, st in enumerate(steps):
-            spec = by_id.get(str(st.get("transform_spec_id") or ""))
-            if spec is None:
-                raise bad(f"input_steps[{k}].steps[{n}] has an unknown transform_spec_id")
-            if spec.get("transform_type") not in INPUT_STEP_TRANSFORM_TYPES:
-                raise bad(f"input_steps[{k}].steps[{n}] transform_type is not allowed as an input step")
-            resolved.append(build_plan_json([spec])["steps"][0])
-        item["steps"] = resolved
-        item["source"] = _input_source_text(item.get("source"), k, bad)
-        derivation = item.get("derivation")
-        if derivation is not None and not isinstance(derivation, dict):
-            raise bad(f"input_steps[{k}].derivation must be an object")
-        for key in ("name", "app_input_name"):
-            if not isinstance(item.get(key), str) or not item[key]:
-                raise bad(f"input_steps[{k}].{key} is required")
-        names.add(item["name"])
-        app_inputs.add(item["app_input_name"])
-        allowed = {d["name"] for d in tapis._input_param_definitions(item)}
-        params = item.get("params") or {}
-        if not isinstance(params, dict) or set(params) - allowed or not all(
-                isinstance(v, (str, int, float, bool)) for v in params.values()):
-            raise bad(f"input_steps[{k}].params must be scalar values for: {', '.join(sorted(allowed)) or 'none'}")
-    if len(names) != len(input_steps) or len(app_inputs) != len(input_steps):
-        raise bad("input step names and app_input_name values must be unique")
-    try:  # name/extension safety is enforced where the pipeline is generated
-        tapis._input_stage_tasks(input_steps, {})
-    except ValueError as exc:
-        raise bad(str(exc))
-    return input_steps
+# Transform types a run may execute as an input-side ETL step.
+INPUT_STEP_TRANSFORM_TYPES = input_plan.INPUT_STEP_TRANSFORM_TYPES
 
 
 async def _resolve_input_staging(
@@ -2427,6 +2350,7 @@ async def submit_workflow(
 
     _validate_deferred_execution_id(bound_plan_id, body.execution_id, service_args)
 
+    derived: dict[str, Any] | None = None
     if body.model_task is not None:
         if not _internal_service_authorized(internal_secret):
             raise HTTPException(403, detail={
@@ -2444,20 +2368,57 @@ async def submit_workflow(
                 "message": "composite model submissions require execution_id metadata",
             })
         service_args.setdefault("execution_id", body.execution_id)
-        if body.model_task.get("input_steps"):
-            input_steps = _validate_input_steps(
-                body.model_task["input_steps"],
-                (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"])
+        if "input_steps" in body.model_task:
+            raise HTTPException(422, detail={
+                "code": "INPUT_STEPS_UNSUPPORTED",
+                "message": "model_task.input_steps is no longer accepted; send "
+                           "model_task.input_sources and the adapter plans the steps",
+            })
+        input_sources = body.model_task.pop("input_sources", None)
+        expected_digest = body.model_task.pop("expected_steps_digest", None)
+        client_filled = body.model_task.pop("filled_app_inputs", None) or []
+        if input_sources:
             # Server-owned: a caller may not set these through args.
             for key in [k for k in service_args if _RESERVED_INPUT_ARGS.match(str(k))]:
                 del service_args[key]
-            for k, item in enumerate(input_steps):
-                service_args[f"in{k}_source"] = item["source"]
-                for name, value in (item.get("params") or {}).items():
-                    service_args[f"in{k}_{name}"] = value
-            if not body.dry_run:
-                service_args["input_staging_dir"] = await _resolve_input_staging(
-                    input_steps, body.model_task, token, body.execution_id)
+            job = body.model_task.get("job_definition") or {}
+            filled = set(map(str, client_filled)) | {
+                str(f.get("name")) for f in job.get("fileInputs") or [] if isinstance(f, dict)}
+            derived = await _derive_input_plan(
+                h, str(body.model_task.get("configuration_id") or ""), input_sources, filled)
+            if derived["registry"] == "missing":
+                raise HTTPException(422, detail={
+                    "code": "MODEL_NOT_IN_REGISTRY",
+                    "message": "the model is not in the adapter registry; run sync-from-mint "
+                               "after registering its typed inputs",
+                })
+            if derived.get("tapis_app_id") != job.get("appId"):
+                raise HTTPException(422, detail={
+                    "code": "MODEL_APP_MISMATCH",
+                    "message": "the registry's Tapis app for this configuration differs from the job's appId",
+                })
+            if any(row["blocking"] for row in derived["considered"]):
+                raise HTTPException(422, detail={
+                    "code": "NO_INPUT_TRANSFORM_PATH",
+                    "message": "no ETL path produces a required model input from the supplied sources",
+                    "considered": derived["considered"],
+                })
+            if expected_digest and expected_digest != derived["steps_digest"]:
+                raise HTTPException(409, detail={
+                    "code": "INPUT_PLAN_CHANGED",
+                    "message": "the input plan changed since it was previewed; plan again",
+                    "steps_digest": derived["steps_digest"],
+                })
+            input_steps = derived["input_steps"]
+            if input_steps:
+                body.model_task["input_steps"] = input_steps
+                for k, item in enumerate(input_steps):
+                    service_args[f"in{k}_source"] = _input_source_arg(item["source"])
+                    for name, value in (item.get("params") or {}).items():
+                        service_args[f"in{k}_{name}"] = value
+                if not body.dry_run:
+                    service_args["input_staging_dir"] = await _resolve_input_staging(
+                        input_steps, body.model_task, token, body.execution_id)
 
     # The model descriptor is server-generated and intentionally request-local:
     # it is part of this composite run, not mutable plan state.  The adapter
@@ -2518,7 +2479,8 @@ async def submit_workflow(
         "payload_json": {"plan_id": body.plan_id, "dry_run": body.dry_run},
     }})
     if body.model_task is not None and body.model_task.get("input_steps"):
-        # Names and step ids only; the produced content is never recorded here.
+        # Names, step ids and the planner's decisions; the produced content is
+        # never recorded here.
         await h.execute(INSERT_PROVENANCE, {"obj": {
             "workflow_run_id": run["id"], "event_type": "run.input.planned",
             "payload_json": {"inputs": [
@@ -2526,7 +2488,9 @@ async def submit_workflow(
                  **({"derivation": item["derivation"]} if item.get("derivation") else {}),
                  "step_ids": [f"in{k}-step-{n}-{st.get('transform_type')}"
                               for n, st in enumerate(item["steps"])]}
-                for k, item in enumerate(body.model_task["input_steps"])]},
+                for k, item in enumerate(body.model_task["input_steps"])],
+                "considered": derived["considered"] if derived else [],
+                "steps_digest": derived["steps_digest"] if derived else None},
         }})
 
     if body.dry_run:

@@ -24,7 +24,7 @@ from app.main import app  # noqa: E402
 from app.planner import build_plan_json  # noqa: E402
 from app.store import STORE  # noqa: E402
 from app.task_code import get_code  # noqa: E402
-from input_stage_fixtures import GOLDEN_PLAN  # noqa: E402
+from input_stage_fixtures import GOLDEN_PLAN, model_row  # noqa: E402
 
 client = TestClient(app)
 AOI_VAR = "https://w3id.org/okn/i/mint/area_of_interest__boundary"
@@ -316,9 +316,10 @@ def test_the_piece_registers_without_conflict_and_declares_the_aoi_contract():
     assert contracts[1]["standard_variable_uri"] == AOI_VAR and contracts[1]["crs_requirement"] == "EPSG:4326"
 
 
-# --- /plans/input and composite submit -----------------------------------------------
+# --- /plans/model-inputs and composite submit ---------------------------------------
 EM = {"X-Ensemble-Manager-Secret": "em-secret"}
 BEARER = {"Authorization": "Bearer caller.jwt.token"}
+BBOX = {"kind": "bbox", "bbox": [-97.3, 31.4, -96.9, 31.7]}
 
 
 @pytest.fixture(autouse=True)
@@ -328,36 +329,41 @@ def _configured(monkeypatch):
     client.post("/admin/reset")
 
 
-def register_aoi_piece():
+def register_aoi_piece(model=True):
     assert client.post("/transform-specs", headers=BEARER, json=AOI_SPEC).status_code == 200
+    if model:
+        STORE.transform_spec["model-row"] = model_row()
 
 
-def plan_input(**over):
-    return client.post("/plans/input", headers=BEARER, json={
-        "source_kind": "region", "target_standard_variable_uri": AOI_VAR,
-        "app_input_name": "aoi-geojson", **over})
+def plan_inputs(**over):
+    return client.post("/plans/model-inputs", headers=BEARER, json={
+        "configuration_id": "cfg-1", "sources": [BBOX], "filled_app_inputs": [], **over})
 
 
-def test_plans_input_returns_the_chain_without_writing_a_plan_row():
+def test_plans_model_inputs_returns_the_step_without_writing_a_plan_row():
     register_aoi_piece()
-    response = plan_input()
+    response = plan_inputs()
     assert response.status_code == 200, response.text
     body = response.json()
-    assert [s["transform_type"] for s in body["steps"]] == ["aoi_from_boundary"]
-    assert {p["name"] for p in body["parameters"]} == {"buffer_m", "simplify_m", "dissolve", "bbox_only", "max_area_km2"}
-    assert body["params"]["max_area_km2"] == 160000
+    assert body["registry"] == "ok" and len(body["steps_digest"]) == 64
+    [item] = body["input_steps"]
+    assert item["name"] == item["app_input_name"] == "aoi-geojson" and item["extension"] == "geojson"
+    assert [s["transform_type"] for s in item["steps"]] == ["aoi_from_boundary"]
+    assert item["source"] == BBOX and item["params"]["max_area_km2"] == 160000
+    assert item["derivation"]["method"] == "bbox" and item["derivation"]["vertices_in"] == 4
+    assert [(c["app_input_name"], c["outcome"]) for c in body["considered"]] == [("aoi-geojson", "planned")]
     assert not STORE.plan
-    for kind in ("bbox", "geojson"):
-        assert plan_input(source_kind=kind).status_code == 200
+    assert plan_inputs(sources=[{"kind": "geojson", "geometry": SQUARE}]).status_code == 200
 
 
-def test_plans_input_without_a_path_is_422():
-    assert plan_input().status_code == 422
+def test_plans_model_inputs_errors_are_422_with_code_and_message():
     register_aoi_piece()
-    response = plan_input(target_standard_variable_uri="https://w3id.org/okn/i/mint/county__boundary")
+    response = plan_inputs(sources=[{"kind": "bbox", "bbox": [-120, 20, -80, 45]}])
     assert response.status_code == 422
-    assert response.json()["detail"]["code"] == "NO_INPUT_TRANSFORM_PATH"
-    assert plan_input(params={"nope": 1}).json()["detail"]["code"] == "UNKNOWN_PARAMETERS"
+    assert response.json()["detail"]["code"] == "AOI_REGION_TOO_LARGE"
+    assert response.json()["detail"]["message"]
+    assert plan_inputs(sources=[{"kind": "wkt"}]).json()["detail"]["code"] == "INPUT_SOURCE_INVALID"
+    assert plan_inputs(sources=[]).status_code == 422
 
 
 @pytest.fixture
@@ -384,16 +390,15 @@ def submit(monkeypatch):
         "data_object_id": seed["data_object"]["id"],
         "target_contract": seed["target_contract"]}).json()["plan_id"]
 
-    def do(input_steps="default", dry_run=False, args=None, **job):
-        if input_steps == "default":
-            steps = plan_input().json()["steps"]
-            input_steps = [{"name": "aoi", "app_input_name": "aoi-geojson", "steps": steps,
-                            "source": "-97.3 31.4 -96.9 31.7", "params": {"buffer_m": 0}}]
+    def do(input_sources="default", dry_run=False, args=None, task=None, **job):
+        if input_sources == "default":
+            input_sources = [{**BBOX, "derivation": {"region_id": "waco"}}]
         model_task = {"stage_id": "model", "output_name": "o", "output_format": "tif", "max_minutes": 5,
+                      "configuration_id": "cfg-1",
                       "job_definition": {"name": "mint-workflow-model-x", "appId": "app", "appVersion": "1",
                                          "execSystemId": "ls6", "fileInputs": [], "parameterSet": {"appArgs": []},
                                          **job},
-                      "input_steps": input_steps}
+                      "input_sources": input_sources, **(task or {})}
         return client.post("/workflows/submit", headers={**BEARER, **EM}, json={
             "plan_id": plan_id, "execution_id": "ue-test-1", "dry_run": dry_run,
             "args": {"start_date": "2024-01-01", "end_date": "2025-01-01", "allocation": "A",
@@ -405,19 +410,65 @@ def submit(monkeypatch):
     return captured
 
 
-def test_submit_with_input_steps_resolves_staging_from_job_history(submit):
+def test_submit_with_input_sources_resolves_staging_from_job_history(submit):
     response = submit["submit"](args={"input_staging_dir": "/etc", "in0_source": "evil"})
     assert response.status_code == 200, response.text
     sent = submit["submits"][0]
     assert sent["args"]["input_staging_dir"]["value"] == STAGING
-    assert sent["args"]["in0_source"]["value"] == "-97.3 31.4 -96.9 31.7"
-    assert sent["args"]["in0_buffer_m"]["value"] == 0
+    assert json.loads(sent["args"]["in0_source"]["value"]) == BBOX
+    assert sent["args"]["in0_max_area_km2"]["value"] == 160000
     assert submit["roots"] == [("alice", "ls6")]
     assert "in0-step-0-aoi_from_boundary" in [t["id"] for t in sent["pipeline"]["tasks"]]
     event = next(e for e in STORE.provenance if e["event_type"] == "run.input.planned")
-    assert event["payload_json"]["inputs"] == [{
-        "name": "aoi", "app_input_name": "aoi-geojson", "step_ids": ["in0-step-0-aoi_from_boundary"]}]
-    assert "31.4" not in json.dumps(STORE.provenance)
+    payload = event["payload_json"]
+    assert [(i["name"], i["app_input_name"], i["step_ids"]) for i in payload["inputs"]] == [
+        ("aoi-geojson", "aoi-geojson", ["in0-step-0-aoi_from_boundary"])]
+    assert payload["inputs"][0]["derivation"]["region_id"] == "waco"
+    assert payload["considered"][0]["outcome"] == "planned" and len(payload["steps_digest"]) == 64
+    assert "31.4" not in json.dumps(STORE.provenance)  # the source lives in args, not provenance
+    assert "region_id" not in json.dumps(sent["pipeline"]) and "region_id" not in json.dumps(sent["args"])
+
+
+def test_submit_matches_the_preview_digest_and_rejects_a_changed_plan(submit):
+    digest = plan_inputs(sources=[{**BBOX, "derivation": {"region_id": "waco"}}]).json()["steps_digest"]
+    assert submit["submit"](task={"expected_steps_digest": digest}).status_code == 200
+    changed = submit["submit"](task={"expected_steps_digest": "0" * 64})
+    assert changed.status_code == 409 and changed.json()["detail"]["code"] == "INPUT_PLAN_CHANGED"
+
+
+def test_a_filled_input_is_skipped_and_the_pipeline_has_no_input_tasks(submit):
+    bound = {"name": "aoi-geojson", "sourceUrl": "tapis://ls6/some/dataset.geojson"}
+    for kwargs in ({"fileInputs": [bound]}, {"task": {"filled_app_inputs": ["aoi-geojson"]}}):
+        response = submit["submit"](dry_run=True, **kwargs)
+        assert response.status_code == 200, response.text
+        assert "in0_source" not in response.json()["args"]
+    assert submit["roots"] == []
+
+
+def test_submit_with_input_steps_is_unsupported(submit):
+    response = submit["submit"](task={"input_steps": [{"name": "aoi"}]})
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "INPUT_STEPS_UNSUPPORTED"
+    assert "input_sources" in response.json()["detail"]["message"]
+    assert not STORE.run and not submit["submits"]
+
+
+def test_submit_rejects_a_model_missing_from_the_registry_or_on_another_app(submit):
+    missing = submit["submit"](task={"configuration_id": "cfg-unknown"})
+    assert missing.status_code == 422 and missing.json()["detail"]["code"] == "MODEL_NOT_IN_REGISTRY"
+    mismatch = submit["submit"](appId="other-app")
+    assert mismatch.status_code == 422 and mismatch.json()["detail"]["code"] == "MODEL_APP_MISMATCH"
+    assert not STORE.run and not submit["submits"]
+
+
+def test_submit_with_a_required_input_and_no_path_is_422_with_considered(submit):
+    STORE.transform_spec["model-row"] = model_row(inputs=[
+        ("needed", False, "ds-x", "https://w3id.org/okn/i/mint/county__boundary", "geojson")])
+    response = submit["submit"]()
+    detail = response.json()["detail"]
+    assert response.status_code == 422 and detail["code"] == "NO_INPUT_TRANSFORM_PATH"
+    assert detail["considered"][0]["outcome"] == "no_path" and detail["considered"][0]["blocking"] is True
+    assert not STORE.run
 
 
 def test_submit_without_job_history_is_a_structured_422_and_queues_nothing(submit):
@@ -431,24 +482,20 @@ def test_submit_without_job_history_is_a_structured_422_and_queues_nothing(submi
 
 
 def test_object_sources_become_json_args_and_derivation_is_provenance_only(submit):
-    steps = plan_input(source_kind="geojson").json()["steps"]
     derivation = {"method": "region_geometry", "region_id": "waco", "vertices_in": 5, "bytes": 120}
-    chain = {"name": "aoi-geojson", "app_input_name": "aoi-geojson", "steps": steps, "params": {},
-             "source": {"kind": "geojson", "geometry": SQUARE}, "derivation": derivation}
-    response = submit["submit"](input_steps=[chain])
+    source = {"kind": "geojson", "geometry": SQUARE, "derivation": derivation}
+    response = submit["submit"](input_sources=[source])
     assert response.status_code == 200, response.text
     sent = submit["submits"][0]
     assert json.loads(sent["args"]["in0_source"]["value"]) == {"kind": "geojson", "geometry": SQUARE}
     assert "derivation" not in json.dumps(sent["pipeline"]) and "region_id" not in json.dumps(sent["args"])
     event = next(e for e in STORE.provenance if e["event_type"] == "run.input.planned")
-    assert event["payload_json"]["inputs"][0]["derivation"] == derivation
-
-    bbox = {**chain, "source": {"kind": "bbox", "bbox": [-97.3, 31.4, -96.9, 31.7]}, "derivation": None}
-    assert submit["submit"](input_steps=[bbox]).status_code == 200
-    assert json.loads(submit["submits"][1]["args"]["in0_source"]["value"])["bbox"] == [-97.3, 31.4, -96.9, 31.7]
-    for source in ({"kind": "wkt", "wkt": "POINT(0 0)"}, {"kind": "bbox", "bbox": [1, 2]}, {"kind": "geojson"}):
-        rejected = submit["submit"](input_steps=[{**chain, "source": source}])
-        assert rejected.status_code == 422 and rejected.json()["detail"]["code"] == "INVALID_INPUT_STEPS"
+    recorded = event["payload_json"]["inputs"][0]["derivation"]
+    assert recorded["method"] == "region_geometry" and recorded["region_id"] == "waco"
+    assert recorded["vertices_in"] == 5 and recorded["area_km2"] > 0
+    for bad in ({"kind": "wkt", "wkt": "POINT(0 0)"}, {"kind": "bbox", "bbox": [1, 2]}, {"kind": "geojson"}):
+        rejected = submit["submit"](input_sources=[bad])
+        assert rejected.status_code == 422 and rejected.json()["detail"]["code"] == "INPUT_SOURCE_INVALID"
 
 
 def test_deferred_plan_accepts_format_only_contracts_and_plans_zero_steps():
@@ -466,20 +513,13 @@ def test_submit_dry_run_does_not_resolve_staging(submit):
     assert "in0_source" in response.json()["args"]
 
 
-def test_submit_rejects_secrets_and_malformed_input_steps(submit):
-    good = plan_input().json()["steps"]
-    base = {"name": "aoi", "app_input_name": "aoi-geojson", "steps": good, "source": "-97.3 31.4 -96.9 31.7"}
+def test_submit_rejects_secrets_in_the_model_task(submit):
     cases = [
-        ([{**base, "source": "Bearer abc.def"}], "COMPOSITE_MODEL_TASK_SECRET"),
-        ([{**base, "params": {"tapis_token": "abc"}}], "COMPOSITE_MODEL_TASK_SECRET"),
-        ([{**base, "params": {"password": "x"}}], "INVALID_INPUT_STEPS"),
-        ([{**base, "name": "../escape"}], "INVALID_INPUT_STEPS"),
-        ([{**base, "source": ""}], "INVALID_INPUT_STEPS"),
-        ([{**base, "steps": []}], "INVALID_INPUT_STEPS"),
-        ([base, base], "INVALID_INPUT_STEPS"),
+        ([{**BBOX, "derivation": {"note": "Bearer abc.def"}}], "COMPOSITE_MODEL_TASK_SECRET"),
+        ([{**BBOX, "tapis_token": "abc"}], "COMPOSITE_MODEL_TASK_SECRET"),
     ]
-    for steps, code in cases:
-        response = submit["submit"](input_steps=steps)
+    for sources, code in cases:
+        response = submit["submit"](input_sources=sources)
         assert response.status_code == 422 and response.json()["detail"]["code"] == code, (code, response.text)
     assert not STORE.run and not submit["submits"]
 
