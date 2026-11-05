@@ -223,6 +223,31 @@ Resolved in rev 2/3 against code: identity (tapis/username), region storage and 
 - **D7 (user, 2026-11-05).** Pre-cutover Tapis Workflows runs are dropped from the SUBSIDE run list; their published products stay on the map through STAC. No legacy list. "dropping them is fine."
 - 2026-11-05 (rev 3, architect + skeptic): services gain an optional `permissions` override (they hard-code `"*"` today); cancel maps from `failed` + `CANCELLED_BY_USER`; `GET /plans/runs` built on a new `listByThreads` store query with per-row reconciliation by the UI; region creation reuses region-import validation and uses hash-derived ids instead of a hash column; idempotency key required; dates single-sourced with `DATES_CONFLICT`; frame-id contradiction removed (blank); results bbox/dates sourced from region and thread; polling backoff; E2E split into asserted/stubbed/not-verifiable with an OPERA fixture loader as a deliverable; "no schema change" holds via deterministic ids.
 
+- 2026-11-05 (implementation deviations, EM): the region is created before the
+  standing problem statement because `problem_statement.region_id` is NOT NULL;
+  the standing statement and the per-region task take the first run's region and
+  dates. Parameters are bound by catalog parameter id with defaults filled from
+  the catalog (422 `UNKNOWN_PARAMETER` for names neither the model nor the plan
+  declares). The task carries the model's response variable; the thread's is left
+  empty. The three services take an options object `{permissions, id, ifAbsent}`.
+  `unifiedExecutionService.submit` now forwards `dry_run` on the composite path
+  (it previously ignored it and would have started a real job) and leaves the
+  record `planned`. `useModelParameterService` skips `parameter_type: "secret"`
+  rows. `addProblemStatement`/`addTask`/`addThread` throw GraphQL errors instead
+  of returning null. An unreadable explicit `problem_statement_id` → 403; an
+  idempotency key already used by another user → 409 `IDEMPOTENCY_KEY_CONFLICT`.
+  Run rows and the scenario response carry `region {id, name, bbox}` and
+  `thread {start_date, end_date}`. Live check: the regions route's error
+  responses needed JSON schemas in the OpenAPI JSDoc, or response validation
+  turned every 401/422 into a 500.
+- 2026-11-05 (implementation deviations, SUBSIDE): the UI had no test
+  infrastructure, so Vitest + Testing Library were added; the form never showed
+  Earthdata fields (the API used a service account), so D4 was already true; the
+  results bbox falls back to a per-run cache and the live drawing when the run
+  row has no region; `NUM_WORKERS` defaults to 4 (legacy parity) rather than the
+  catalog's 2; the contract test depends on the catalog YAML's uncommitted
+  `tapisEnvKey`/`hasSecret` declarations in the subside repo.
+
 ## User feedback / decisions
 
 - 2026-11-05: "we want to use DYNAMO instead of the API to submit workflows"; "lets build it. don't deploy anything we'll have to test it locally". Test plan is local; nothing is deployed.

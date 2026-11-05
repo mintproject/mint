@@ -52,10 +52,22 @@ import { RegionsService } from "@/api/api-v1/services/regionsService";
  *                   type: boolean
  *       401:
  *         description: Missing or invalid bearer token.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UnifiedExecutionError'
  *       422:
  *         description: The geometry or request was rejected (code REGION_INVALID).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UnifiedExecutionError'
  *       default:
  *         description: Region creation failed.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UnifiedExecutionError'
  */
 export default function (service: RegionsService) {
     const router = Router();
