@@ -269,6 +269,18 @@ None for v1.
   configuration-input junction, carried by the sync onto the bridge's input
   contracts, and input ETL planned by the bridge from `input_sources`.
 
+- 2026-11-05 (QA fix): the first live submit with an input step failed with
+  `INPUT_STAGING_UNRESOLVED`. `resolve_scratch_root` asked `GET /v3/jobs/list`
+  for `execSystemExecDir`, but that endpoint takes neither search conditions
+  nor `select` and returns a fixed summary without the directory, so the
+  `$SCRATCH` root could never be read. Confirmed against the user's own jobs:
+  `GET /v3/jobs/search?execSystemId.eq=ls6&select=uuid,execSystemExecDir`
+  returns `/scratch/<alloc>/<user>/tapis/<uuid>` rows in one call. The resolver
+  now uses the search endpoint, falls back to the summary listing filtered by
+  `execSystemId`, and reads a row in full (up to three) when the directory is
+  still missing. The path had no live coverage because every earlier run had
+  no input step.
+
 ## User feedback / decisions
 
 - 2026-11-05: "test that it runs through DYNAMO first then move to SUBSIDE";

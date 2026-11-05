@@ -524,23 +524,60 @@ def test_submit_rejects_secrets_in_the_model_task(submit):
     assert not STORE.run and not submit["submits"]
 
 
-def test_resolve_scratch_root_reads_the_prefix_before_tapis_and_caches(monkeypatch):
-    calls = []
+def _fake_jobs_api(monkeypatch, search_rows=None, list_rows=None, details=None):
+    """Patch requests.get for /v3/jobs/search|list and tapis.get_job; return the call log."""
+    calls = {"get": [], "detail": []}
 
     class Resp:
         ok = True
-        def json(self):
-            return {"result": [{"uuid": "a"}, {"uuid": "b", "execSystemExecDir": f"{SCRATCH}/tapis/abc-123"}]}
+        def __init__(self, rows): self.rows = rows
+        def json(self): return {"result": self.rows}
 
     def fake_get(url, params=None, headers=None, timeout=None):
-        calls.append((url, params, headers))
-        return Resp()
+        calls["get"].append((url, params, headers))
+        return Resp(search_rows if url.endswith("/v3/jobs/search") else list_rows or [])
+
+    def fake_get_job(token, uuid):
+        calls["detail"].append((token, uuid))
+        return (details or {}).get(uuid)
 
     monkeypatch.setattr("requests.get", fake_get)
+    monkeypatch.setattr(tapis, "get_job", fake_get_job)
     monkeypatch.setattr(tapis, "_SCRATCH_ROOTS", {})
+    return calls
+
+
+def test_resolve_scratch_root_searches_jobs_on_the_system_and_caches(monkeypatch):
+    calls = _fake_jobs_api(monkeypatch, search_rows=[
+        {"uuid": "a"}, {"uuid": "b", "execSystemExecDir": f"{SCRATCH}/tapis/abc-123"}], details={})
     assert tapis.resolve_scratch_root("tok", "wmobley", "ls6") == SCRATCH
     assert tapis.resolve_scratch_root("tok", "wmobley", "ls6") == SCRATCH
-    assert len(calls) == 1
-    assert calls[0][1]["search"] == "execSystemId.eq.ls6" and calls[0][2]["X-Tapis-Token"] == "tok"
-    monkeypatch.setattr(Resp, "json", lambda self: {"result": []})
+    url, params, headers = calls["get"][0]
+    assert len(calls["get"]) == 1 and url.endswith("/v3/jobs/search")
+    assert params["execSystemId.eq"] == "ls6" and "execSystemExecDir" in params["select"]
+    assert headers["X-Tapis-Token"] == "tok"
+    # The row without the directory was read in full before the one that had it.
+    assert calls["detail"] == [("tok", "a")]
+
+
+def test_resolve_scratch_root_reads_job_details_when_search_omits_the_dir(monkeypatch):
+    calls = _fake_jobs_api(monkeypatch, search_rows=[{"uuid": "j1"}, {"uuid": "j2"}],
+                           details={"j2": {"execSystemExecDir": f"{SCRATCH}/tapis/j2"}})
+    assert tapis.resolve_scratch_root("tok", "wmobley", "ls6") == SCRATCH
+    assert [u for _, u in calls["detail"]] == ["j1", "j2"]
+
+
+def test_resolve_scratch_root_falls_back_to_the_summary_listing(monkeypatch):
+    calls = _fake_jobs_api(monkeypatch, search_rows=[], list_rows=[
+        {"uuid": "f1", "execSystemId": "frontera"}, {"uuid": "l1", "execSystemId": "ls6"}],
+        details={"l1": {"execSystemExecDir": f"{SCRATCH}/tapis/l1"}})
+    assert tapis.resolve_scratch_root("tok", "wmobley", "ls6") == SCRATCH
+    assert [u.rsplit("/v3/", 1)[1] for u, _, _ in calls["get"]] == ["jobs/search", "jobs/list"]
+    assert calls["detail"] == [("tok", "l1")]  # the frontera job is never read
+
+
+def test_resolve_scratch_root_is_none_without_a_usable_job(monkeypatch):
+    calls = _fake_jobs_api(monkeypatch, search_rows=[{"uuid": str(i)} for i in range(6)], details={})
     assert tapis.resolve_scratch_root("tok", "other", "ls6") is None
+    assert len(calls["detail"]) == tapis._SCRATCH_DETAIL_READS
+    assert tapis._scratch_root_from_exec_dir("relative/tapis/x") == ""
