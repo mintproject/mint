@@ -663,6 +663,12 @@ def input_stage_arg_names(input_steps: list[dict[str, Any]] | None) -> set[str]:
     return names
 
 
+# Server-injected, secret-bearing standard params an input step may never bind.
+_INPUT_SECRET_PARAMS = frozenset({
+    "credentials_url", "signal_url", "signal_token", "signal_expires", "token_url",
+    "token_fetch_token", "token_fetch_expires", "ckan_token", "stac_token", "tapis_token"})
+
+
 def _input_stage_tasks(
     input_steps: list[dict[str, Any]],
     params: dict[str, dict[str, Any]],
@@ -699,10 +705,13 @@ def _input_stage_tasks(
             if step.get("tapis_app_id"):
                 raise ValueError("input steps must be hosted function pieces")
             task_id = f"in{k}-step-{n}-{step.get('transform_type') or 'transform'}"
+            env_map = normalize_env_from_args(step.get("env_from_args") or {}) or {}
+            if secret := sorted(set(map(str, env_map.values())) & _INPUT_SECRET_PARAMS):
+                raise ValueError(f"input steps may not bind secret params: {', '.join(secret)}")
             inputs: dict[str, Any] = {
                 key: {"type": "string", "value_from": {
                     "args": arg if arg in STANDARD_PARAMS else f"in{k}_{arg}"}}
-                for key, arg in (normalize_env_from_args(step.get("env_from_args") or {}) or {}).items()
+                for key, arg in env_map.items()
             }
             inputs["SOURCE"] = {"type": "string", "value_from": (
                 {"args": f"in{k}_source"} if previous is None else

@@ -39,9 +39,21 @@ def run_aoi(source, **env):
     child_env = {k: v for k, v in os.environ.items() if k not in {"BUFFER_M", "SIMPLIFY_M", "DISSOLVE"}}
     child_env.update({"SOURCE": source if isinstance(source, str) else json.dumps(source),
                       **{k.upper(): str(v) for k, v in env.items()}})
-    proc = subprocess.run([sys.executable, "-I", "-c", get_code("aoi_from_boundary")],
+    # The task hands its GeoJSON to the workflow engine via ctx.set_output (stdout carries only
+    # a digest), so stub the SDK context and print what it receives.
+    stub = (
+        "import sys, types\n"
+        "_m = types.ModuleType('owe_python_sdk.runtime.execution_context')\n"
+        "_m.get_input = lambda name: None\n"
+        "_m.set_output = lambda k, v: print('RESULT:' + v)\n"
+        "for _n in ('owe_python_sdk', 'owe_python_sdk.runtime'):\n"
+        "    sys.modules[_n] = types.ModuleType(_n)\n"
+        "sys.modules['owe_python_sdk.runtime'].execution_context = _m\n"
+        "sys.modules['owe_python_sdk.runtime.execution_context'] = _m\n")
+    proc = subprocess.run([sys.executable, "-I", "-c", stub + get_code("aoi_from_boundary")],
                           env=child_env, capture_output=True, text=True, timeout=60)
-    return proc.returncode, proc.stdout.strip()
+    result = [ln[7:] for ln in proc.stdout.splitlines() if ln.startswith("RESULT:")]
+    return proc.returncode, (result[0] if result else proc.stdout.strip())
 
 
 def only_feature(out):

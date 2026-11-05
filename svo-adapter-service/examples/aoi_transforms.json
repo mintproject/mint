@@ -28,7 +28,7 @@
         "properties": {
           "buffer_m": {"type": "number", "default": 0, "minimum": 0, "description": "Buffer distance in metres (0 = none)."},
           "simplify_m": {"type": "number", "default": 0, "minimum": 0, "description": "Simplify tolerance in metres (0 = none)."},
-          "dissolve": {"type": "boolean", "default": true, "description": "Union all polygons into one feature."},
+          "dissolve": {"type": "boolean", "default": true, "description": "Merge all polygons into one MultiPolygon feature (concatenated; a true union only when buffer_m or simplify_m > 0)."},
           "bbox_only": {"type": "boolean", "default": false, "description": "Replace the geometry with its bounding box."},
           "max_area_km2": {"type": "number", "default": 160000, "minimum": 1, "description": "Fail when the AOI bounding box is larger than this (km2)."}
         }

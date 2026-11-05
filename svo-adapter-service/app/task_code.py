@@ -838,7 +838,9 @@ print(json.dumps({
 # Coordinates must already be lon/lat (EPSG:4326). Output: ctx.set_output("result",
 # <FeatureCollection text>) with exactly one (Multi)Polygon feature, sorted keys,
 # 7-decimal coordinates. Stdlib only unless buffer_m/simplify_m > 0, when shapely and
-# pyproj are pip-installed at task start.
+# pyproj are pip-installed at task start. dissolve=true only merges several polygons
+# into one MultiPolygon feature (concatenation, no union); a true union happens only
+# on the shapely path (buffer_m/simplify_m > 0). Overlapping parts are not unioned otherwise.
 _AOI_FROM_BOUNDARY_SNIPPET = _INPUT_HELPER + """\
 import math, subprocess, sys, tempfile
 
@@ -1045,7 +1047,8 @@ if _ctx is not None:
         _ctx.set_output("result", _text)
     except Exception:
         pass
-print(_text)
+import hashlib
+print("sha256=%s bytes=%d" % (hashlib.sha256(_text.encode()).hexdigest(), len(_text.encode())))
 """
 
 

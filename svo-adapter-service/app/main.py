@@ -2120,11 +2120,23 @@ def _input_source_text(source: Any, k: int, bad) -> str:
     return source
 
 
-def _validate_input_steps(input_steps: Any) -> list[dict[str, Any]]:
-    """Check the shape of ``model_task.input_steps`` and return it."""
+# Transform types a caller may run as an input-side ETL step.
+INPUT_STEP_TRANSFORM_TYPES = {"aoi_from_boundary"}
+
+
+def _validate_input_steps(
+    input_steps: Any, registry: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Check ``model_task.input_steps``, re-resolve each step from the registry, return it.
+
+    A request step is only a reference: its ``transform_spec_id`` selects a
+    registry spec and the step is rebuilt with ``build_plan_json``, so code,
+    entrypoint, env bindings and transform type never come from the request.
+    """
     def bad(message: str) -> HTTPException:
         return HTTPException(422, detail={"code": "INVALID_INPUT_STEPS", "message": message})
 
+    by_id = {str(spec.get("id")): spec for spec in registry or [] if spec.get("id")}
     if not isinstance(input_steps, list) or not 0 < len(input_steps) <= 4:
         raise bad("input_steps must be a list of 1 to 4 entries")
     names: set[str] = set()
@@ -2136,6 +2148,15 @@ def _validate_input_steps(input_steps: Any) -> list[dict[str, Any]]:
         if not (isinstance(steps, list) and 0 < len(steps) <= 8
                 and all(isinstance(st, dict) and st.get("transform_type") for st in steps)):
             raise bad(f"input_steps[{k}].steps must be 1 to 8 plan steps with a transform_type")
+        resolved = []
+        for n, st in enumerate(steps):
+            spec = by_id.get(str(st.get("transform_spec_id") or ""))
+            if spec is None:
+                raise bad(f"input_steps[{k}].steps[{n}] has an unknown transform_spec_id")
+            if spec.get("transform_type") not in INPUT_STEP_TRANSFORM_TYPES:
+                raise bad(f"input_steps[{k}].steps[{n}] transform_type is not allowed as an input step")
+            resolved.append(build_plan_json([spec])["steps"][0])
+        item["steps"] = resolved
         item["source"] = _input_source_text(item.get("source"), k, bad)
         derivation = item.get("derivation")
         if derivation is not None and not isinstance(derivation, dict):
@@ -2424,7 +2445,9 @@ async def submit_workflow(
             })
         service_args.setdefault("execution_id", body.execution_id)
         if body.model_task.get("input_steps"):
-            input_steps = _validate_input_steps(body.model_task["input_steps"])
+            input_steps = _validate_input_steps(
+                body.model_task["input_steps"],
+                (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"])
             # Server-owned: a caller may not set these through args.
             for key in [k for k in service_args if _RESERVED_INPUT_ARGS.match(str(k))]:
                 del service_args[key]
