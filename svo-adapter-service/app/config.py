@@ -6,8 +6,10 @@ Hasura endpoint + auth.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # …/modflow-suite (app/ -> svo-adapter-service/ -> monorepo/ -> modflow-suite/)
@@ -155,6 +157,14 @@ class Settings(BaseSettings):
     @property
     def run_signal_secret_list(self) -> list[str]:
         return [s.strip() for s in self.run_signal_secrets.split(",") if s.strip()]
+
+    @field_validator("stac_platform_ref")
+    @classmethod
+    def _stac_platform_ref_is_a_commit(cls, value: str) -> str:
+        # A branch or short ref can move; the publish task installs exactly one commit.
+        if not re.fullmatch(r"[0-9a-f]{40}", value):
+            raise ValueError("SVO_ADAPTER_STAC_PLATFORM_REF must be a full 40-character commit SHA")
+        return value
 
     @property
     def publish_allowed_collection_list(self) -> list[str]:

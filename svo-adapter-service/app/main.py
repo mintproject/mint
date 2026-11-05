@@ -2283,22 +2283,30 @@ query GetParentRuns($execution_id: String!) {
 """
 
 
-async def _enforce_run_owner(h, execution_id: str | None, token: str | None) -> None:
+async def _enforce_run_owner(execution_id: str | None, token: str | None) -> None:
     """A bound post-model submission runs as the user who submitted the parent run.
 
     Whoever's poll observed the model finish may dispatch it, so the adapter
-    refuses any other caller before it writes a row. A parent the adapter cannot
-    find (a standalone bound plan) has no owner to enforce.
+    refuses any other caller before it writes a row. It fails closed: a parent it
+    cannot find, or one with no recorded owner, is a refusal. The lookup uses the
+    adapter's own client so row-level permissions cannot hide the parent and let
+    the check pass. Without an execution_id there is no parent to look up; that
+    case is refused for publish plans by _validate_deferred_execution_id.
     """
     if not execution_id:
         return
-    rows = (await h.execute(GET_PARENT_RUNS, {"execution_id": execution_id})).get("adapter_workflow_run") or []
-    parent = next((r for r in rows if r.get("model_job_name")), None)
-    owner = (parent or {}).get("submitted_by")
-    if not owner:
-        return
-    caller = await run_in_threadpool(tapis.userinfo_username, token) if token else None
-    if caller != owner:
+    rows = (await get_client(None).execute(
+        GET_PARENT_RUNS, {"execution_id": execution_id})).get("adapter_workflow_run") or []
+    if not rows:
+        raise HTTPException(409, detail={
+            "code": "PARENT_RUN_UNKNOWN",
+            "message": "no parent run is recorded for this execution; it cannot be dispatched",
+        })
+    owner = rows[0].get("submitted_by")
+    caller = None
+    if owner and token:
+        caller = await run_in_threadpool(tapis.userinfo_username, token) if token else None
+    if not owner or caller != owner:
         raise HTTPException(403, detail={
             "code": "RUN_OWNER_MISMATCH",
             "message": "this post-model step runs as the user who submitted the run; "
@@ -2306,7 +2314,9 @@ async def _enforce_run_owner(h, execution_id: str | None, token: str | None) -> 
         })
 
 
-def _bind_publish_args(service_args: dict[str, Any], execution_id: str | None) -> None:
+def _bind_publish_args(
+    service_args: dict[str, Any], execution_id: str | None, plan_json: dict[str, Any],
+) -> None:
     """Validate a publish step's user values and bind its managed arguments.
 
     Managed values come from settings and the run and replace anything the
@@ -2319,11 +2329,18 @@ def _bind_publish_args(service_args: dict[str, Any], execution_id: str | None) -
             "message": "a publish step needs the execution_id of the run it publishes",
         })
     supplied = normalize_args(_wrap_args(service_args))
-    _reject_publish_values({name: (supplied.get(name) or {}).get("value")
-                            for name in ("stac_collection", "ckan_org")})
+    # An absent value falls back to the plan's default (else the configured one);
+    # that effective value is checked too, since the stored default may be stale.
+    defaults = {d.get("name"): d.get("default") for d in plan_json.get("parameters") or []}
+    fallback = {"stac_collection": settings.publish_default_collection,
+                "ckan_org": settings.publish_default_org}
+    _reject_publish_values({
+        name: (supplied.get(name) or {}).get("value") or defaults.get(name) or fallback[name]
+        for name in ("stac_collection", "ckan_org")})
     managed = set(tapis.PUBLISH_MANAGED_ARGS)
     for key in [k for k in service_args if (canonical_key(str(k)) or str(k)) in managed]:
         del service_args[key]
+    service_args["tapis_base_url"] = settings.tapis_base_url
     service_args["stac_url"] = settings.stac_api_url
     service_args["ckan_url"] = settings.publish_ckan_url
     service_args["stac_item_id"] = execution_id
@@ -2491,7 +2508,7 @@ async def submit_workflow(
         bound = (plan.get("plan_json") or {}).get("bound") or {}
         if bound.get("bound_plan_id") != bound_plan_id:
             raise HTTPException(409, detail={"code": "BOUND_PLAN_INVALID"})
-        await _enforce_run_owner(h, body.execution_id, token)
+        await _enforce_run_owner(body.execution_id, token)
 
     if idempotency_key:
         existing_rows = (await h.execute(
@@ -2546,7 +2563,7 @@ async def submit_workflow(
 
     _validate_deferred_execution_id(bound_plan_id, body.execution_id, service_args)
     if tapis.plan_publishes((plan.get("plan_json") or {}).get("steps") or []):
-        _bind_publish_args(service_args, body.execution_id)
+        _bind_publish_args(service_args, body.execution_id, plan.get("plan_json") or {})
 
     derived: dict[str, Any] | None = None
     if body.model_task is not None:

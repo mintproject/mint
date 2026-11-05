@@ -77,6 +77,8 @@ class Fake:
         self.requests: list[tuple[str, str]] = []
         self.payloads: list[tuple[str, dict]] = []
         self.echo_auth_on_ckan_create = False
+        self.redirect_listing = False
+        self.auth_seen: list[tuple[str, str | None]] = []
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -98,6 +100,7 @@ class Fake:
                 path = unquote(url.path)
                 body = self._body()
                 fake.requests.append((method, path))
+                fake.auth_seen.append((path, self.headers.get("X-Tapis-Token")))
                 if path.startswith("/tapis/"):
                     return fake.tapis(self, method, path[len("/tapis"):], url, body)
                 if path.startswith("/ckan/"):
@@ -123,6 +126,12 @@ class Fake:
     def tapis(self, h, method, path, url, body):
         _, _, _, kind, system, rest = (path.split("/", 5) + [""])[:6]
         prefix = rest.strip("/")
+        if kind == "ops" and method == "GET" and self.redirect_listing:
+            h.send_response(302)
+            h.send_header("Location", "/capture/elsewhere")
+            h.send_header("Content-Length", "0")
+            h.end_headers()
+            return
         if kind == "ops" and method == "GET":
             rows = [{"name": p.rsplit("/", 1)[-1], "path": "/" + p, "type": "file", "size": len(b),
                      "lastModified": "2025-06-01T12:00:00Z"}
@@ -332,6 +341,27 @@ def test_second_run_can_open_a_private_dataset(fake):
     run_task(fake, PUBLIC="true")
     patch = [f for a, f in fake.payloads if a == "package_patch"]
     assert patch and patch[0]["private"] is False
+
+
+@needs_stacmap
+def test_a_dataset_that_is_not_this_users_run_is_never_touched(fake):
+    name = "subsidence-rates-dev--ue_1"
+    for extras in ([{"key": "stac_item_id", "value": "ue_1"}, {"key": "published_by", "value": "bob"}],
+                   [{"key": "stac_item_id", "value": "other"}, {"key": "published_by", "value": "alice"}],
+                   []):
+        fake.datasets[name] = {"name": name, "id": "x", "private": True, "extras": extras, "resources": []}
+        fake.payloads.clear()
+        proc, result = run_task(fake, PUBLIC="true")
+        assert proc.returncode == 2 and "does not belong to this run and user" in result["message"]
+        assert counts(fake).keys() <= {"package_show"}, counts(fake)
+        assert fake.datasets[name]["private"] is True
+
+
+def test_a_redirect_is_refused_and_the_token_is_not_replayed(fake):
+    fake.redirect_listing = True
+    proc, result = run_task(fake)
+    assert proc.returncode == 2 and "HTTP 302" in result["message"]
+    assert not [p for p, _ in fake.auth_seen if p.startswith("/capture")]
 
 
 @needs_stacmap

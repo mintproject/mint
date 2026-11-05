@@ -103,7 +103,7 @@ STANDARD_PARAMS: dict[str, dict[str, Any]] = {
 # the run, never from user args; the second is the user-facing configuration, with
 # allowed_values from the deployment allow-lists.
 PUBLISH_STEP_TYPE = "catalog_register"
-PUBLISH_MANAGED_ARGS = ("stac_url", "ckan_url", "stac_item_id", "execution_id", "product_pattern")
+PUBLISH_MANAGED_ARGS = ("tapis_base_url", "stac_url", "ckan_url", "stac_item_id", "execution_id", "product_pattern")
 PUBLISH_USER_ARGS = ("stac_collection", "ckan_org", "public")
 
 

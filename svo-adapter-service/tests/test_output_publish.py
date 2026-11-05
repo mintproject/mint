@@ -131,9 +131,17 @@ def test_kill_switch_fails_the_task_closed(monkeypatch):
     assert settings.stac_platform_ref in live and "__STAC_PLATFORM_REF__" not in live
 
 
-def test_a_branch_name_is_not_a_valid_platform_pin(monkeypatch):
-    monkeypatch.setattr(settings, "stac_platform_ref", "main")
+@pytest.mark.parametrize("ref", ["main", "9e61fce", "9E61FCE6E534C84062CC0E742310A30D83CAB4D7", "g" * 40])
+def test_only_a_full_lowercase_commit_sha_is_a_valid_platform_pin(monkeypatch, ref):
+    monkeypatch.setattr(settings, "stac_platform_ref", ref)
     assert "no code builder" in get_code("catalog_register")
+
+
+def test_the_platform_ref_setting_rejects_anything_but_a_full_sha():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        type(settings)(stac_platform_ref="main")
+    assert type(settings)(stac_platform_ref="a" * 40).stac_platform_ref == "a" * 40
 
 
 def test_publish_task_gets_its_own_time_limit_and_no_retries(monkeypatch):
@@ -171,6 +179,50 @@ def _submit(bound_id, token=ALICE, args=None, dry_run=True, execution_id="ue_1")
         "args": {"execution_id": execution_id, "source_uri": "tapis://ls6/work/runs/ue_1", **(args or {})}})
 
 
+def test_owner_lookup_uses_the_adapters_own_client_not_the_callers_token(monkeypatch):
+    bound_id = _bound_plan()
+    _parent_run()
+    seen = []
+    real = main_module.get_client
+
+    def spy(token=None):
+        client_ = real(token)
+        original = client_.execute
+
+        async def execute(query, variables=None):
+            if query is main_module.GET_PARENT_RUNS:
+                seen.append(token)
+            return await original(query, variables)
+        client_.execute = execute
+        return client_
+    monkeypatch.setattr(main_module, "get_client", spy)
+    assert _submit(bound_id).status_code == 200
+    assert seen == [None]
+
+
+def test_a_bound_submit_with_no_parent_run_is_refused_without_a_row():
+    bound_id = _bound_plan()
+    response = _submit(bound_id)
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "PARENT_RUN_UNKNOWN"
+    assert STORE.run == {}
+
+
+def test_a_parent_with_no_recorded_owner_is_refused():
+    bound_id = _bound_plan()
+    _parent_run(owner=None)
+    response = _submit(bound_id)
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "RUN_OWNER_MISMATCH"
+
+
+def test_any_parent_row_with_an_owner_counts_even_without_a_model_job_name():
+    bound_id = _bound_plan()
+    STORE.run["parent"] = {"id": "parent", "execution_id": "ue_1", "submitted_by": "alice"}
+    assert _submit(bound_id, token=BOB).status_code == 403
+    assert _submit(bound_id, token=ALICE).status_code == 200
+
+
 def test_non_owner_is_refused_before_any_run_row_is_written():
     bound_id = _bound_plan()
     _parent_run(owner="alice")
@@ -186,11 +238,12 @@ def test_owner_submit_binds_managed_args_and_ignores_user_overrides(monkeypatch)
     _parent_run(owner="alice")
     response = _submit(bound_id, args={
         "stac_url": "https://evil.example", "ckan_url": "https://evil.example",
-        "stac_item_id": "someone-elses-item", "product_pattern": "*",
+        "stac_item_id": "someone-elses-item", "product_pattern": "*", "tapis_base_url": "https://evil.example",
         "stac_collection": "subsidence-rates-dev", "ckan_org": settings.publish_default_org, "public": True})
     assert response.status_code == 200, response.text
     args = {k: v["value"] for k, v in response.json()["args"].items()}
     assert args["stac_url"] == settings.stac_api_url
+    assert args["tapis_base_url"] == settings.tapis_base_url
     assert args["ckan_url"] == settings.publish_ckan_url
     assert args["stac_item_id"] == "ue_1" and args["execution_id"] == "ue_1"
     assert args["product_pattern"] != "*"
@@ -207,8 +260,19 @@ def test_submit_allow_list_rejects_values_the_plan_once_allowed(monkeypatch):
     assert response.json()["detail"]["code"] == "PUBLISH_VALUE_NOT_ALLOWED"
     assert response.json()["detail"]["parameters"] == {
         "stac_collection": "must be one of something-else"}
+    monkeypatch.setattr(settings, "publish_allowed_collections", "subsidence-rates-dev")
     response = _submit(bound_id, args={"ckan_org": "not-allowed"})
     assert response.json()["detail"]["parameters"] == {"ckan_org": f"must be one of {settings.publish_default_org}"}
+
+
+def test_absent_collection_and_org_are_checked_against_the_allow_lists_at_submit(monkeypatch):
+    bound_id = _bound_plan()
+    _parent_run()
+    monkeypatch.setattr(settings, "publish_allowed_collections", "something-else")
+    monkeypatch.setattr(settings, "publish_allowed_orgs", "another-org")
+    response = _submit(bound_id)  # no stac_collection / ckan_org supplied
+    assert response.status_code == 422
+    assert set(response.json()["detail"]["parameters"]) == {"stac_collection", "ckan_org"}
 
 
 def test_a_publish_submit_without_an_execution_id_is_refused():

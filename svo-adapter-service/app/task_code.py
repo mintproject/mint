@@ -1192,6 +1192,15 @@ _system = _up.unquote(_system)
 
 
 # Tapis Files API (stdlib only; the function runtime has no tapipy).
+class _NoRedirect(_ur.HTTPRedirectHandler):
+    # urllib would replay X-Tapis-Token to wherever a redirect points; refuse instead.
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_opener = _ur.build_opener(_NoRedirect)
+
+
 def _files_request(method, path, data=None, content_type=None, params=None):
     url = _base + "/v3/files/" + _up.quote(path, safe="/")
     if params:
@@ -1205,7 +1214,7 @@ def _files_request(method, path, data=None, content_type=None, params=None):
             time.sleep(delay)
         try:
             request = _ur.Request(url, data=data, method=method, headers=headers)
-            return _ur.urlopen(request, timeout=300)
+            return _opener.open(request, timeout=300)
         except _ue.HTTPError as exc:
             if exc.code not in (500, 502, 503, 504, 429):
                 raise
@@ -1368,12 +1377,17 @@ def _publish():
             name = dataset_name(collection_id, item_id)
             existing = self.get_dataset(name)
             if existing:
+                # Only touch a dataset this user published for this run.
+                extras = {e.get("key"): e.get("value") for e in existing.get("extras") or []}
+                if extras.get(ITEM_ID_FIELD) != _item_id or extras.get("published_by") != _username:
+                    _fail("CKAN dataset %s exists and does not belong to this run and user" % name)
                 if bool(existing.get("private")) != private:
                     self._action_json("package_patch", {"id": name, "private": private})
                 return existing
             return self.ensure_dataset(
                 name, title=title or item_id, notes=notes,
-                extras={COLLECTION_FIELD: collection_id, ITEM_ID_FIELD: item_id},
+                extras={COLLECTION_FIELD: collection_id, ITEM_ID_FIELD: item_id,
+                        "published_by": _username},
                 fields={"private": private})
 
     stac = _OwnedStac(url=_stac_url, token=_token)
@@ -1478,7 +1492,7 @@ def _catalog_register_code() -> str | None:
     except ImportError:  # pydantic-settings absent
         return None
     ref = str(settings.stac_platform_ref or "")
-    if not settings.publish_enabled or not re.fullmatch(r"[0-9a-f]{7,40}", ref):
+    if not settings.publish_enabled or not re.fullmatch(r"[0-9a-f]{40}", ref):
         return None
     return _CATALOG_REGISTER_SNIPPET.replace("__STAC_PLATFORM_REF__", ref)
 
