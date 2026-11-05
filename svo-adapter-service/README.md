@@ -105,6 +105,17 @@ a target that must be cataloged sets `catalog` itself (`_check_catalog`). The
 `stac-publish` contract then closes the gap in the plan. This is the convention
 until MINT adds a column (revisit 2026-12).
 
+A publish target may ask for a subset of the piece's catalogs: `catalog: "ckan"`
+publishes to CKAN only. `GET /publishers` lists the choices as `catalog_options`
+(the full set, then the set without each optional catalog; `stac` is optional,
+`ckan` is not, because STAC assets are CKAN resource URLs). The adapter binds the
+managed `catalogs` argument from the plan's target contract at submit and the
+generator wires it into the `catalog_register` task as `CATALOGS`, so a
+registered piece that predates it needs no re-registration. A CKAN-only dataset
+carries no `stac_collection` extra (the reconcile bridge would otherwise adopt
+it into STAC) and a `catalogs=ckan` extra instead. The same endpoint narrows the
+`ckan_org` parameter to the caller's allow-listed CKAN organisations (`orgs_ok`).
+
 SUBSIDE displacement uses one standard variable, `land_surface__displacement`,
 with different units: H2I in metres, WERC cumulative in millimetres.
 `examples/subside_units_transforms.json` adds `ts-displacement-m-to-mm` and

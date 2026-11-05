@@ -2,17 +2,21 @@
  * PublishOutputsControl — optional "Publish outputs" section of the run form.
  *
  * Shown only when the Ensemble Manager offers at least one publisher for the
- * model. The user picks a catalog (one option per publisher), the model output
- * to publish when the publisher can take more than one, and the publisher's
+ * model. The user picks a catalog (one option per publisher and catalog
+ * combination it offers, e.g. "ckan + stac" or "ckan"), the model output to
+ * publish when the publisher can take more than one, and the publisher's
  * user-facing parameters; the parent sends the tokens as `publish` and the
  * output as `model_output_key` on plan creation and the values as
  * `parameter_values` on submit.
  */
 import type { PlanPublisher, UnifiedParameterDefinition } from '@/lib/ensemble-manager';
 import {
+  catalogOptionKey,
   publishableOutputs,
+  publisherCatalogOptions,
   publisherDefaults,
   publisherLabel,
+  selectedTokens,
   type PublishableOutput,
   type PublishSelection,
 } from '@/lib/publish-outputs';
@@ -122,14 +126,27 @@ export function PublishOutputsControl({
   const enabled = Boolean(selection);
   const eligibleOutputs = selected ? publishableOutputs(selected, outputs) : [];
 
-  const choose = (publisher: PlanPublisher) => {
+  const choose = (publisher: PlanPublisher, tokens?: string[]) => {
     const first = publishableOutputs(publisher, outputs)[0];
     onChange({
       transformSpecId: publisher.transform_spec_id,
       values: publisherDefaults(publisher),
+      ...(tokens ? { tokens } : {}),
       ...(first ? { outputId: first.id } : {}),
     });
   };
+  /** Every (publisher, catalog combination) the select offers. */
+  const catalogChoices = publishers.flatMap((publisher) =>
+    publisherCatalogOptions(publisher).map((tokens) => ({
+      key: catalogOptionKey(publisher, tokens),
+      publisher,
+      tokens,
+    })),
+  );
+  const keep = (selection: PublishSelection | null | undefined) => ({
+    ...(selection?.tokens ? { tokens: selection.tokens } : {}),
+    ...(selection?.outputId ? { outputId: selection.outputId } : {}),
+  });
 
   return (
     <fieldset
@@ -162,23 +179,17 @@ export function PublishOutputsControl({
             <select
               data-testid={`publish-catalog-${modelId}`}
               aria-label="Catalog"
-              value={selected.transform_spec_id}
+              value={catalogOptionKey(selected, selectedTokens(selected, selection))}
               disabled={disabled}
               onChange={(event) => {
-                const next = publishers.find(
-                  (item) => item.transform_spec_id === event.target.value,
-                );
-                if (next) choose(next);
+                const next = catalogChoices.find((choice) => choice.key === event.target.value);
+                if (next) choose(next.publisher, next.tokens);
               }}
               className="rounded border border-gray-300 px-2 py-1.5 text-sm"
             >
-              {publishers.map((publisher) => (
-                <option
-                  key={publisher.transform_spec_id}
-                  value={publisher.transform_spec_id}
-                  disabled={!publisher.can_publish.ok}
-                >
-                  {publisherLabel(publisher)}
+              {catalogChoices.map(({ key, publisher, tokens }) => (
+                <option key={key} value={key} disabled={!publisher.can_publish.ok}>
+                  {publisherLabel(publisher, tokens)}
                   {publisher.can_publish.ok
                     ? ''
                     : ` (unavailable: ${publisher.can_publish.reason ?? 'not permitted'})`}
@@ -198,6 +209,7 @@ export function PublishOutputsControl({
                   onChange({
                     transformSpecId: selected.transform_spec_id,
                     values: selection?.values ?? {},
+                    ...keep(selection),
                     outputId: event.target.value,
                   })
                 }
@@ -222,7 +234,7 @@ export function PublishOutputsControl({
                 onChange({
                   transformSpecId: selected.transform_spec_id,
                   values: { ...selection?.values, [parameter.name]: value },
-                  ...(selection?.outputId ? { outputId: selection.outputId } : {}),
+                  ...keep(selection),
                 })
               }
             />

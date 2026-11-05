@@ -135,6 +135,41 @@ describe('PublishOutputsControl', () => {
     });
   });
 
+  it('offers each catalog combination the adapter lists and sends the chosen tokens', () => {
+    const withOptions = {
+      ...publisher,
+      catalog_options: [['ckan', 'stac'], ['ckan']],
+    };
+    render(<Harness publishers={[withOptions]} />);
+    fireEvent.click(screen.getByTestId('publish-toggle-m1'));
+    const select = screen.getByTestId('publish-catalog-m1') as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
+      'ckan + stac',
+      'ckan',
+    ]);
+    expect(JSON.parse(screen.getByTestId('request').textContent ?? 'null')).toMatchObject({
+      tokens: ['ckan', 'stac'],
+    });
+    fireEvent.change(select, { target: { value: 'ts-stac::ckan' } });
+    expect(select).toHaveValue('ts-stac::ckan');
+    expect(JSON.parse(screen.getByTestId('request').textContent ?? 'null')).toMatchObject({
+      tokens: ['ckan'],
+    });
+    // Changing a parameter keeps the CKAN-only choice.
+    fireEvent.click(screen.getByTestId('publish-param-m1-public'));
+    expect(JSON.parse(screen.getByTestId('request').textContent ?? 'null')).toEqual({
+      tokens: ['ckan'],
+      values: { stac_collection: 'subsidence-rates-dev', ckan_org: 'tacc-water', public: true },
+    });
+  });
+
+  it('offers only the full token set when the adapter lists no catalog options', () => {
+    render(<Harness publishers={[publisher]} />);
+    fireEvent.click(screen.getByTestId('publish-toggle-m1'));
+    const select = screen.getByTestId('publish-catalog-m1') as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual(['ckan + stac']);
+  });
+
   it('hides the output choice and sends no output key when the adapter lists no formats', () => {
     render(<Harness publishers={[publisher]} outputs={outputs} />);
     fireEvent.click(screen.getByTestId('publish-toggle-m1'));

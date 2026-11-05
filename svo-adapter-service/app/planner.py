@@ -458,6 +458,7 @@ def parameter_definitions(
         "stac_item_id": "execution_handoff",
         "execution_id": "execution_handoff",
         "product_pattern": "adapter_service",
+        "catalogs": "adapter_service",
         "tapis_base_url": "adapter_service",
         "tapis_token": "authorization",
     }

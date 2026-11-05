@@ -7,6 +7,11 @@ export interface PublishSelection {
   values: Record<string, unknown>;
   /** The declared model output to publish, when the user could choose one. */
   outputId?: string;
+  /**
+   * The catalogs to write, one of the publisher's `catalog_options`
+   * (e.g. `['ckan']` for CKAN only). Absent means all of its `catalog_tokens`.
+   */
+  tokens?: string[];
 }
 
 /** What a submit carries: catalog tokens and output for the plan, values for the run. */
@@ -37,6 +42,30 @@ export function publishableOutputs<T extends PublishableOutput>(
   return outputs.filter((output) => formats.has((output.format ?? '').trim()));
 }
 
+/**
+ * The catalog token sets the user may pick for a publisher, the adapter's
+ * `catalog_options` first; an older adapter offers only the full set.
+ */
+export function publisherCatalogOptions(publisher: PlanPublisher): string[][] {
+  const options = (publisher.catalog_options ?? []).filter((option) => option.length > 0);
+  return options.length > 0 ? options : [publisher.catalog_tokens];
+}
+
+/** One option's key in the Catalog select: `<transform_spec_id>::<tokens>`. */
+export function catalogOptionKey(publisher: PlanPublisher, tokens: readonly string[]): string {
+  return `${publisher.transform_spec_id}::${[...tokens].sort().join('+')}`;
+}
+
+/** The tokens a selection publishes to: its own choice, else the publisher's full set. */
+export function selectedTokens(
+  publisher: PlanPublisher,
+  selection: Pick<PublishSelection, 'tokens'> | null | undefined,
+): string[] {
+  return selection?.tokens && selection.tokens.length > 0
+    ? selection.tokens
+    : publisher.catalog_tokens;
+}
+
 export function publishRequestFor(
   publishers: PlanPublisher[],
   selection: PublishSelection | null | undefined,
@@ -49,14 +78,15 @@ export function publishRequestFor(
     Object.entries(selection.values).filter(([, value]) => value !== undefined && value !== ''),
   );
   return {
-    tokens: publisher.catalog_tokens,
+    tokens: selectedTokens(publisher, selection),
     values,
     ...(selection.outputId ? { model_output_key: selection.outputId } : {}),
   };
 }
 
-export function publisherLabel(publisher: PlanPublisher): string {
-  return publisher.catalog_tokens.join(' + ') || publisher.name;
+/** `ckan + stac`, or `ckan` for a CKAN-only choice; the piece's name when it has no tokens. */
+export function publisherLabel(publisher: PlanPublisher, tokens?: readonly string[]): string {
+  return (tokens ?? publisher.catalog_tokens).join(' + ') || publisher.name;
 }
 
 /** Initial values for a freshly chosen publisher: each parameter's default. */

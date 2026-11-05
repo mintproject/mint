@@ -75,9 +75,16 @@ def test_geotiff_to_cataloged_geotiff_plans_exactly_the_catalog_register_piece()
     assert [(s["transform_type"], s["publishes"]) for s in steps] == [("catalog_register", True)]
 
 
-def test_a_single_catalog_token_is_satisfied_by_the_ckan_stac_piece():
-    steps = _deferred("stac").json()["plan_json"]["steps"]
+def test_a_ckan_only_target_is_satisfied_by_the_ckan_stac_piece():
+    steps = _deferred("ckan").json()["plan_json"]["steps"]
     assert [s["transform_type"] for s in steps] == ["catalog_register"]
+
+
+def test_stac_without_ckan_is_refused_because_stac_assets_are_ckan_resources():
+    response = _deferred("stac")
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "PUBLISH_CATALOG_UNSUPPORTED" and detail["catalogs"] == ["stac"]
 
 
 def test_an_unknown_catalog_has_no_path():
@@ -98,7 +105,7 @@ def test_plan_parameters_expose_user_values_and_hide_managed_ones():
     assert params["stac_collection"]["default"] == "subsidence-rates-dev"
     assert params["ckan_org"]["allowed_values"] == [settings.publish_default_org]
     assert params["public"]["default"] is False and params["public"]["type"] == "boolean"
-    for name in ("stac_url", "ckan_url", "stac_item_id", "execution_id", "product_pattern"):
+    for name in ("stac_url", "ckan_url", "stac_item_id", "execution_id", "product_pattern", "catalogs"):
         assert params[name]["managed"] is True
     assert "tapis_token" not in params and "ckan_token" not in params
     assert "opera_disp_s1_cumulative.tif" in params["product_pattern"]["default"]
@@ -152,7 +159,17 @@ def test_publish_task_gets_its_own_time_limit_and_no_retries(monkeypatch):
     assert task["execution_profile"] == {"max_retries": 0, "max_exec_time": 777}
     assert task["input"]["TAPIS_TOKEN"] == {"type": "string", "value_from": {"args": "tapis_token"}}
     assert "CKAN_TOKEN" not in task["input"]
-    assert {"stac_item_id", "execution_id", "ckan_org", "public", "product_pattern"} <= set(pipeline["params"])
+    assert {"stac_item_id", "execution_id", "ckan_org", "public", "product_pattern", "catalogs"} <= set(pipeline["params"])
+
+
+def test_the_catalog_choice_is_wired_even_when_the_registered_piece_predates_it():
+    """The live piece's env mapping may lack CATALOGS; the generator adds it."""
+    tapis_block = STORE.transform_spec["ts-subside-stac-publish"]["parameters_schema_json"]["tapis"]
+    tapis_block["env_from_args"] = {k: v for k, v in tapis_block["env_from_args"].items() if k != "CATALOGS"}
+    plan = _deferred().json()
+    pipeline = tapis.generate_tapis_workflow({"id": "p", "plan_json": plan["plan_json"]})
+    task = next(t for t in pipeline["tasks"] if t["id"].endswith("catalog_register"))
+    assert task["input"]["CATALOGS"] == {"type": "string", "value_from": {"args": "catalogs"}}
 
 
 # --- bound submit ---------------------------------------------------------------------
@@ -250,6 +267,7 @@ def test_owner_submit_binds_managed_args_and_ignores_user_overrides(monkeypatch)
     response = _submit(bound_id, args={
         "stac_url": "https://evil.example", "ckan_url": "https://evil.example",
         "stac_item_id": "someone-elses-item", "product_pattern": "*", "tapis_base_url": "https://evil.example",
+        "catalogs": "stac",
         "stac_collection": "subsidence-rates-dev", "ckan_org": settings.publish_default_org, "public": True})
     assert response.status_code == 200, response.text
     args = {k: v["value"] for k, v in response.json()["args"].items()}
@@ -258,8 +276,22 @@ def test_owner_submit_binds_managed_args_and_ignores_user_overrides(monkeypatch)
     assert args["ckan_url"] == settings.publish_ckan_url
     assert args["stac_item_id"] == "ue_1" and args["execution_id"] == "ue_1"
     assert args["product_pattern"] != "*"
+    assert args["catalogs"] == "ckan+stac"  # the plan's target, not the caller's say-so
     assert args["public"] is True
     assert "tapis_token" not in args
+
+
+def test_a_ckan_only_plan_binds_ckan_as_the_catalogs_arg():
+    bound_id = _bound_plan(plan=_deferred("ckan").json())
+    _parent_run()
+    response = _submit(bound_id)
+    assert response.status_code == 200, response.text
+    assert response.json()["args"]["catalogs"]["value"] == "ckan"
+
+
+def test_a_plan_from_before_the_catalog_choice_binds_every_catalog():
+    assert main_module._plan_catalogs({"steps": [{"transform_type": "catalog_register"}]}) == "ckan+stac"
+    assert main_module._plan_catalogs({"target_contract": {"catalog": "stac+ckan"}}) == "ckan+stac"
 
 
 def test_submit_allow_list_rejects_values_the_plan_once_allowed(monkeypatch):
@@ -331,6 +363,7 @@ def test_publishers_lists_the_piece_with_user_parameters_and_membership(monkeypa
     assert publisher["transform_spec_id"] == "ts-subside-stac-publish"
     assert publisher["catalog_tokens"] == ["ckan", "stac"]
     assert publisher["can_publish"] == {"ok": True, "reason": None, "orgs_ok": [settings.publish_default_org]}
+    assert publisher["catalog_options"] == [["ckan", "stac"], ["ckan"]]
     names = {p["name"] for p in publisher["parameters"]}
     assert names == {"stac_collection", "ckan_org", "public"}
     collection = next(p for p in publisher["parameters"] if p["name"] == "stac_collection")
@@ -356,12 +389,46 @@ def test_publishers_can_publish_reports_why_not(monkeypatch, werc_config, status
     assert fragment in publisher["can_publish"]["reason"]
 
 
+def _org_parameter(publisher):
+    return next(p for p in publisher["parameters"] if p["name"] == "ckan_org")
+
+
 def test_publishers_orgs_ok_lists_only_allowed_orgs_the_caller_belongs_to(monkeypatch, werc_config):
     import requests
     monkeypatch.setattr(settings, "publish_allowed_orgs", "dso-internal,stac-datasets,other")
     monkeypatch.setattr(requests, "get", _Ckan(orgs=("dso-internal", "stac-datasets", "unrelated")))
     [publisher] = _publishers(werc_config).json()["publishers"]
     assert publisher["can_publish"]["orgs_ok"] == ["dso-internal", "stac-datasets"]
+    # The organisation dropdown offers the caller's own allowed organisations, not
+    # the whole allow-list, and keeps the configured default when they belong to it.
+    assert _org_parameter(publisher)["allowed_values"] == ["dso-internal", "stac-datasets"]
+    assert _org_parameter(publisher)["default"] == settings.publish_default_org
+
+
+def test_a_member_of_a_non_default_allowed_org_may_publish_there(monkeypatch, werc_config):
+    import requests
+    monkeypatch.setattr(settings, "publish_allowed_orgs", "dso-internal,stac-datasets")
+    monkeypatch.setattr(requests, "get", _Ckan(orgs=("stac-datasets",)))
+    [publisher] = _publishers(werc_config).json()["publishers"]
+    assert publisher["can_publish"] == {"ok": True, "reason": None, "orgs_ok": ["stac-datasets"]}
+    assert _org_parameter(publisher)["allowed_values"] == ["stac-datasets"]
+    assert _org_parameter(publisher)["default"] == "stac-datasets"
+
+
+def test_a_caller_in_no_allowed_org_sees_the_allow_list_and_cannot_publish(monkeypatch, werc_config):
+    import requests
+    monkeypatch.setattr(settings, "publish_allowed_orgs", "dso-internal,stac-datasets")
+    monkeypatch.setattr(requests, "get", _Ckan(orgs=("their-own-org",)))
+    [publisher] = _publishers(werc_config).json()["publishers"]
+    assert publisher["can_publish"]["ok"] is False
+    assert "dso-internal, stac-datasets" in publisher["can_publish"]["reason"]
+    assert _org_parameter(publisher)["allowed_values"] == ["dso-internal", "stac-datasets"]
+
+
+def test_catalog_options_keep_ckan_and_make_stac_optional():
+    assert tapis.publish_catalog_options(["stac", "ckan"]) == [["ckan", "stac"], ["ckan"]]
+    assert tapis.publish_catalog_options(["ckan"]) == [["ckan"]]
+    assert tapis.publish_catalog_options(["stac"]) == [["stac"]]
 
 
 def test_kill_switch_disables_publishers_and_publish_plans(monkeypatch, werc_config):
@@ -410,6 +477,12 @@ def _task(stdout, status="SUCCEEDED", message=None):
 def test_publication_published_from_the_task_result():
     result = {"catalog": "ckan+stac", "ckan_dataset": "https://ckan/dataset/d", "stac_item": "https://stac/i",
               "public": True}
+    assert publication.publication_from_detail({"tasks": [_task(json.dumps(result))]}) == {
+        "status": "published", **result}
+
+
+def test_a_ckan_only_result_is_published_without_a_stac_item():
+    result = {"catalog": "ckan", "ckan_dataset": "https://ckan/dataset/d", "stac_item": None, "public": False}
     assert publication.publication_from_detail({"tasks": [_task(json.dumps(result))]}) == {
         "status": "published", **result}
 
