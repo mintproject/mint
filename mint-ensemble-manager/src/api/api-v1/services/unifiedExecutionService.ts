@@ -79,6 +79,9 @@ interface PostModelAdapter {
     source_contract: Record<string, unknown>;
     target_contract: Record<string, unknown>;
     plan_hash: string;
+    // The compact parameter contract (compactParameters), not the adapter's
+    // full definitions: plan_id is the encoded plan and a uniquely indexed
+    // column, so it has to stay small (see MAX_PLAN_ID_LENGTH).
     parameters: UnifiedParameterDefinition[];
 }
 
@@ -357,6 +360,36 @@ function parameterValuesHash(values: Record<string, unknown>): string {
         .createHash("sha256")
         .update(JSON.stringify(values, Object.keys(values).sort()))
         .digest("hex");
+}
+
+/**
+ * What the plan id keeps of the post-model parameter contract: the user-facing
+ * parameters only, with just the fields submit validates (name, type, required,
+ * default, allowed_values). Descriptions, and the managed arguments the adapter
+ * binds from its own settings and the run, stay on the adapter's stored plan.
+ * Encoded whole, the stac-publish piece's twelve documented arguments took the
+ * id to 4643 characters (2026-11-05), past MAX_PLAN_ID_LENGTH; this keeps the
+ * size bounded by the deployment allow-lists, which are short by design.
+ */
+function compactParameters(
+    definitions: UnifiedParameterDefinition[]
+): UnifiedParameterDefinition[] {
+    return definitions
+        .filter((definition) => !definition.managed)
+        .map((definition) => {
+            const compact: UnifiedParameterDefinition = {
+                name: definition.name,
+                type: definition.type,
+                required: definition.required
+            };
+            if (definition.default !== undefined && definition.default !== null) {
+                compact.default = definition.default;
+            }
+            if (Array.isArray(definition.allowed_values) && definition.allowed_values.length) {
+                compact.allowed_values = definition.allowed_values;
+            }
+            return compact;
+        });
 }
 
 function adapterParameterValues(
@@ -1985,6 +2018,9 @@ export function createUnifiedExecutionService(
                 body.model_id,
                 authorization
             );
+            // The adapter's full definitions, returned with the plan for the
+            // caller; the plan id keeps only compactParameters of them.
+            let plannedParameters: UnifiedParameterDefinition[] = [];
             const plan: LegacyPlan = {
                 executor,
                 thread_id: body.thread_id,
@@ -2174,6 +2210,8 @@ export function createUnifiedExecutionService(
                         "INPUT_ONLY_PLAN_NOT_IDENTITY"
                     );
                 }
+                plannedParameters = (result.plan_json?.parameters ||
+                    []) as UnifiedParameterDefinition[];
                 plan.post_model_adapter = {
                     adapter_plan_id: result.plan_id,
                     model_io_id: adapter.model_io_id,
@@ -2181,7 +2219,7 @@ export function createUnifiedExecutionService(
                     source_contract: adapter.source_contract,
                     target_contract: adapter.target_contract,
                     plan_hash: result.plan_hash,
-                    parameters: result.plan_json?.parameters || []
+                    parameters: compactParameters(plannedParameters)
                 };
             }
             if (body.adapter_steps !== undefined) {
@@ -2211,7 +2249,7 @@ export function createUnifiedExecutionService(
                 executor,
                 version: 1,
                 plan_id: encodePlan(plan),
-                parameters: plan.post_model_adapter?.parameters || [],
+                parameters: plannedParameters,
                 parameter_values: {},
                 status: plan.post_model_adapter
                     ? "post_model_ready"
