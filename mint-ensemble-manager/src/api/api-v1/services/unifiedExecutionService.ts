@@ -423,7 +423,7 @@ function adapterParameterValues(
     return { values: withDefaults, hash: parameterValuesHash(withDefaults) };
 }
 
-function parentRunId(id: string): string {
+export function parentRunId(id: string): string {
     return `ue_${id}`;
 }
 
@@ -2418,6 +2418,7 @@ export function createUnifiedExecutionService(
                                 },
                                 execution_id: parentRunId(parent.id),
                                 idempotency_key: submitKey,
+                                ...(body.dry_run ? { dry_run: true } : {}),
                                 model_task: {
                                     stage_id: "model",
                                     configuration_id: modelTask.configuration_id,
@@ -2440,6 +2441,29 @@ export function createUnifiedExecutionService(
                         },
                         authorization
                     );
+                    if (body.dry_run) {
+                        // The adapter only generated the pipeline; nothing runs.
+                        const generated = await store.update(parent.id, {
+                            status: "planned",
+                            adapter_run_ids: [
+                                {
+                                    adapter_plan_id: adapter.adapter_plan_id,
+                                    model_io_id: adapter.model_io_id,
+                                    stage: "composite",
+                                    run_id: submitted.run_id,
+                                    status: submitted.status || "generated",
+                                    execution_kind: "composite_workflow"
+                                }
+                            ],
+                            error_message: null,
+                            failure_code: null
+                        });
+                        return {
+                            ...parentResponse(generated || { ...parent, status: "planned" }),
+                            dry_run: true,
+                            tapis_workflow_definition: submitted.tapis_workflow_definition || null
+                        };
+                    }
                     const modelChildId = modelTask.execution_id;
                     const updated = await store.update(parent.id, {
                         status: "model_running",

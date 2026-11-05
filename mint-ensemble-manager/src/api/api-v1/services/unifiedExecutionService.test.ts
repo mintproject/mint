@@ -1173,6 +1173,46 @@ describe("unifiedExecutionService", () => {
             ]);
         });
 
+        it("sends dry_run to the adapter and leaves the run planned, not running", async () => {
+            const { service, plan, store } = await submitComposite();
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    run_id: "generated-run-1",
+                    status: "generated",
+                    tapis_workflow_definition: { id: "pipeline" }
+                })
+            });
+            const response = await service.submit(
+                { plan_id: plan.plan_id, dry_run: true },
+                "Bearer user-token"
+            );
+
+            const call = (global.fetch as jest.Mock).mock.calls.find(([url]) =>
+                String(url).endsWith("/workflows/submit")
+            );
+            expect(JSON.parse(call[1].body).dry_run).toBe(true);
+            expect(response).toMatchObject({
+                status: "planned",
+                dry_run: true,
+                tapis_workflow_definition: { id: "pipeline" }
+            });
+            await expect(store.getById("parent-1")).resolves.toMatchObject({ status: "planned" });
+        });
+
+        it("does not send dry_run on a normal submit", async () => {
+            const { service, plan } = await submitComposite();
+            (global.fetch as jest.Mock).mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ run_id: "post-model-run-1", status: "running" })
+            });
+            await service.submit({ plan_id: plan.plan_id }, "Bearer user-token");
+            const call = (global.fetch as jest.Mock).mock.calls.find(([url]) =>
+                String(url).endsWith("/workflows/submit")
+            );
+            expect(JSON.parse(call[1].body)).not.toHaveProperty("dry_run");
+        });
+
         it.each([["SIGNALS_REQUIRED"], ["SECRETS_NOT_CONFIGURED"], ["SECRET_UNREADABLE"]])(
             "surfaces an adapter 503 %s to the client",
             async (code) => {
