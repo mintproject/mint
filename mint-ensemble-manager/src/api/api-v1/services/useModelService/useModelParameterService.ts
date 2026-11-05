@@ -4,6 +4,7 @@ import { BadRequestError, NotFoundError } from "@/classes/common/errors";
 import { convertApiUrlToW3Id } from "@/classes/mint/model-catalog-graphql-adapter";
 import { GraphQL } from "@/config/graphql";
 import { KeycloakAdapter } from "@/config/keycloak-adapter";
+import { SECRET_PARAMETER_TYPE } from "@/classes/graphql/graphql_adapter";
 import getModelcatalogConfigurationGQL from "@/classes/graphql/queries/model/get-modelcatalog-configuration.graphql";
 
 // Local types for catalog model data from unified modelcatalog_configuration table
@@ -75,10 +76,14 @@ const fetchModelByW3Id = async (
 const catalogModelToModelWithParameters = (
     model: CatalogModelConfiguration | CatalogModelConfigurationSetup
 ): ModelWithParameters => {
-    const parameters = ((model as any).parameters || []).map((row: any) => ({
-        id: row.parameter.id,
-        has_fixed_value: row.parameter.has_fixed_value
-    }));
+    // Secret parameters carry the owner-provided credentials a model declares;
+    // they are never bound by the thread, so the binder must not demand them.
+    const parameters = ((model as any).parameters || [])
+        .filter((row: any) => row.parameter.parameter_type !== SECRET_PARAMETER_TYPE)
+        .map((row: any) => ({
+            id: row.parameter.id,
+            has_fixed_value: row.parameter.has_fixed_value
+        }));
     return {
         id: model.id,
         hasParameter: parameters

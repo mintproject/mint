@@ -1,0 +1,10 @@
+mutation new_problem_statement_if_absent ($object: problem_statement_insert_input!) {
+    insert_problem_statement (
+        objects: [$object]
+        on_conflict: { constraint: problem_statement_pkey, update_columns: [] }
+    ) {
+        returning {
+            id
+        }
+    }
+}

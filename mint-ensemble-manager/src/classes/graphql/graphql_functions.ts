@@ -26,7 +26,10 @@ import getThreadGQL from "./queries/thread/get.graphql";
 import listProblemStatementsGQL from "./queries/problem-statement/list.graphql";
 
 import newProblemStatementGQL from "./queries/problem-statement/new.graphql";
+import newProblemStatementIfAbsentGQL from "./queries/problem-statement/new-if-absent.graphql";
 import newTaskGQL from "./queries/task/new.graphql";
+import newTaskIfAbsentGQL from "./queries/task/new-if-absent.graphql";
+import insertRegionIfAbsentGQL from "./queries/region/insert-if-absent.graphql";
 import newThreadGQL from "./queries/thread/new.graphql";
 import handleFailedConnectionEnsembleGQL from "./queries/execution/handle-failed-connection-ensemble.graphql";
 
@@ -897,67 +900,73 @@ export const incrementThreadModelRegisteredRunsByExecutionId = (
 };
 
 /* Update Functions */
+
+/**
+ * Options for creating a problem statement or task with a caller-chosen id.
+ * With `ifAbsent` the insert is `ON CONFLICT DO NOTHING` on the primary key, so
+ * a repeat (or a concurrent twin) returns the same id and writes nothing.
+ */
+export interface InsertOptions {
+    id?: string;
+    ifAbsent?: boolean;
+}
+
+// A GraphQL write that fails is reported with Hasura's message, not as a null id.
+const graphqlWriteError = (what: string, error: unknown): InternalServerError => {
+    console.error(`Error adding ${what}:`, error);
+    const message = error instanceof Error ? error.message : String(error);
+    return new InternalServerError(`Error adding ${what}: ${message}`);
+};
+
 // Add ProblemStatement
-export const addProblemStatement = (
+export const addProblemStatement = async (
     problem_statement: ProblemStatementInfo,
-    access_token?: string
+    access_token?: string,
+    options: InsertOptions = {}
 ): Promise<string> => {
     const APOLLO_CLIENT = access_token
         ? GraphQL.instanceUsingAccessToken(access_token)
         : GraphQL.instance(KeycloakAdapter.getUser());
     const problemobj = problemStatementToGQL(problem_statement);
-    return APOLLO_CLIENT.mutate({
-        mutation: newProblemStatementGQL,
-        variables: {
-            object: problemobj
-        }
-    })
-        .then((result) => {
-            if (!result || (result.errors && result.errors.length > 0)) {
-                console.log("ERROR");
-                console.log(result);
-            } else {
-                return result.data.insert_problem_statement.returning[0].id;
-            }
-            return null;
-        })
-        .catch((e) => {
-            console.log("ERROR");
-            console.log(e);
-            return null;
+    if (options.id) problemobj.id = options.id;
+    try {
+        const result = await APOLLO_CLIENT.mutate({
+            mutation: options.ifAbsent ? newProblemStatementIfAbsentGQL : newProblemStatementGQL,
+            variables: { object: problemobj }
         });
+        if (!result || (result.errors && result.errors.length > 0)) {
+            throw new Error(result?.errors?.[0]?.message || "empty GraphQL result");
+        }
+        return result.data.insert_problem_statement.returning[0]?.id ?? options.id ?? null;
+    } catch (e) {
+        throw graphqlWriteError("problem statement", e);
+    }
 };
 
 // Add Task
-export const addTask = (
+export const addTask = async (
     problem_statement: ProblemStatementInfo,
     task: Task,
-    access_token?: string
+    access_token?: string,
+    options: InsertOptions = {}
 ): Promise<string> => {
     const APOLLO_CLIENT = access_token
         ? GraphQL.instanceUsingAccessToken(access_token)
         : GraphQL.instance(KeycloakAdapter.getUser());
     const taskobj = taskToGQL(task, problem_statement);
-    return APOLLO_CLIENT.mutate({
-        mutation: newTaskGQL,
-        variables: {
-            object: taskobj
-        }
-    })
-        .then((result) => {
-            if (!result || (result.errors && result.errors.length > 0)) {
-                console.log("ERROR");
-                console.log(result);
-            } else {
-                return result.data.insert_task.returning[0].id;
-            }
-            return null;
-        })
-        .catch((e) => {
-            console.log("ERROR");
-            console.log(e);
-            return null;
+    if (options.id) taskobj.id = options.id;
+    try {
+        const result = await APOLLO_CLIENT.mutate({
+            mutation: options.ifAbsent ? newTaskIfAbsentGQL : newTaskGQL,
+            variables: { object: taskobj }
         });
+        if (!result || (result.errors && result.errors.length > 0)) {
+            throw new Error(result?.errors?.[0]?.message || "empty GraphQL result");
+        }
+        return result.data.insert_task.returning[0]?.id ?? options.id ?? null;
+    } catch (e) {
+        throw graphqlWriteError("task", e);
+    }
 };
 
 // Add Task
@@ -998,7 +1007,7 @@ export const addTaskWithThread = (
 };
 
 // Add Thread
-export const addThread = (
+export const addThread = async (
     task: Task,
     thread: ThreadInfo,
     access_token?: string
@@ -1007,27 +1016,39 @@ export const addThread = (
         ? GraphQL.instanceUsingAccessToken(access_token)
         : GraphQL.instance(KeycloakAdapter.getUser());
     const threadobj = threadInfoToGQL(thread, task.id, task.regionid);
-    //console.log(threadobj);
-    return APOLLO_CLIENT.mutate({
-        mutation: newThreadGQL,
-        variables: {
-            object: threadobj
-        }
-    })
-        .then((result) => {
-            if (!result || (result.errors && result.errors.length > 0)) {
-                console.log("ERROR");
-                console.log(result);
-            } else {
-                return result.data.insert_thread.returning[0].id;
-            }
-            return null;
-        })
-        .catch((e) => {
-            console.log("ERROR");
-            console.log(e);
-            return null;
+    try {
+        const result = await APOLLO_CLIENT.mutate({
+            mutation: newThreadGQL,
+            variables: { object: threadobj }
         });
+        if (!result || (result.errors && result.errors.length > 0)) {
+            throw new Error(result?.errors?.[0]?.message || "empty GraphQL result");
+        }
+        return result.data.insert_thread.returning[0].id;
+    } catch (e) {
+        throw graphqlWriteError("thread", e);
+    }
+};
+
+/**
+ * Insert a region (with its geometries) unless a region with this id exists.
+ * Returns true when a row was written. Uses the service credentials: region
+ * writes are not granted to user sessions.
+ */
+export const insertRegionIfAbsent = async (regionObject: Record<string, unknown>) => {
+    const APOLLO_CLIENT = GraphQL.instance(KeycloakAdapter.getUser());
+    try {
+        const result = await APOLLO_CLIENT.mutate({
+            mutation: insertRegionIfAbsentGQL,
+            variables: { object: regionObject }
+        });
+        if (!result || (result.errors && result.errors.length > 0)) {
+            throw new Error(result?.errors?.[0]?.message || "empty GraphQL result");
+        }
+        return (result.data.insert_region.affected_rows as number) > 0;
+    } catch (e) {
+        throw graphqlWriteError("region", e);
+    }
 };
 
 // Update ProblemStatement
@@ -1065,11 +1086,7 @@ export const updateThreadInformation = (threadinfo: ThreadInfo) => {
     });
 };
 
-export const setThreadModels = (
-    models: Array<{ id: string }>,
-    notes: string,
-    thread: Thread
-) => {
+export const setThreadModels = (models: Array<{ id: string }>, notes: string, thread: Thread) => {
     const APOLLO_CLIENT = GraphQL.instance(KeycloakAdapter.getUser());
     const threadmodelsobj = models.map((model) => {
         return {
@@ -1194,8 +1211,11 @@ export const mapHasuraOutputsToModelOutputs = (
     if (!Array.isArray(outputs)) return [];
     return outputs
         .filter(
-            (entry): entry is HasuraConfigurationOutputEntry & { output: NonNullable<HasuraConfigurationOutputEntry["output"]> } =>
-                !!entry && !!entry.output
+            (
+                entry
+            ): entry is HasuraConfigurationOutputEntry & {
+                output: NonNullable<HasuraConfigurationOutputEntry["output"]>;
+            } => !!entry && !!entry.output
         )
         .map((entry, index) => ({
             position: index + 1,

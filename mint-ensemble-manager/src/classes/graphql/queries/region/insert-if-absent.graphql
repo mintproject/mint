@@ -1,0 +1,8 @@
+mutation insert_region_if_absent ($object: region_insert_input!) {
+    insert_region (
+        objects: [$object]
+        on_conflict: { constraint: region_pkey, update_columns: [] }
+    ) {
+        affected_rows
+    }
+}

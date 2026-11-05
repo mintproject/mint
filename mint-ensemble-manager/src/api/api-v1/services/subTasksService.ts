@@ -15,7 +15,10 @@ import {
     NotFoundError,
     BadRequestError
 } from "@/classes/common/errors";
-import problemStatementsService from "./problemStatementsService";
+import problemStatementsService, {
+    CreateOptions,
+    sharedPermissions
+} from "./problemStatementsService";
 import { convertApiUrlToW3Id } from "@/classes/mint/model-catalog-graphql-adapter";
 import {
     AddDataRequest,
@@ -83,7 +86,8 @@ export interface SubTasksService {
         problemStatementId: string,
         taskId: string,
         subtask: ThreadInfo,
-        authorizationHeader: string
+        authorizationHeader: string,
+        options?: CreateOptions
     ): Promise<string>;
     addModels(subtaskId: string, modelIds: string[], authorizationHeader: string): Promise<Thread>;
     addData(subtaskId: string, data: AddDataRequest, authorizationHeader: string): Promise<Thread>;
@@ -97,10 +101,7 @@ export interface SubTasksService {
         request: SetupModelConfigurationAndBindingsRequest,
         authorizationHeader: string
     ): Promise<Thread>;
-    getModelDataBindings(
-        model_id: string,
-        authorizationHeader: string
-    ): Promise<any[]>;
+    getModelDataBindings(model_id: string, authorizationHeader: string): Promise<any[]>;
     getBlueprint(
         subtaskId: string,
         authorizationHeader: string,
@@ -178,7 +179,8 @@ const subTasksService: SubTasksService = {
         problemStatementId: string,
         taskId: string,
         subtask: ThreadInfo,
-        authorizationHeader: string
+        authorizationHeader: string,
+        options: CreateOptions = {}
     ) {
         const access_token = getTokenFromAuthorizationHeader(authorizationHeader);
         if (!access_token) {
@@ -239,9 +241,7 @@ const subTasksService: SubTasksService = {
                 notes: "Added subtask from API"
             }
         ];
-        subtask.permissions = [
-            { read: true, write: true, execute: true, owner: false, userid: "*" }
-        ];
+        subtask.permissions = options.permissions ?? sharedPermissions();
         const subtaskId = await addThread(task, subtask);
         if (!subtaskId) {
             throw new InternalServerError("Failed to create subtask");
@@ -540,7 +540,10 @@ const subTasksService: SubTasksService = {
                     );
                     // Log detailed error information for each failed execution
                     submissionResult.failedExecutions.forEach((failedExecution) => {
-                        console.error(`Execution ${failedExecution.execution.id} failed:`, failedExecution.error.message);
+                        console.error(
+                            `Execution ${failedExecution.execution.id} failed:`,
+                            failedExecution.error.message
+                        );
                         console.error("Full error details:", failedExecution.error);
                     });
                 }
@@ -549,9 +552,14 @@ const subTasksService: SubTasksService = {
                     submissionResult.submittedExecutions.length
                 );
             } catch (error) {
-                console.error("Error during execution submission:", error instanceof Error ? error.message : String(error));
+                console.error(
+                    "Error during execution submission:",
+                    error instanceof Error ? error.message : String(error)
+                );
                 console.error("Full error details:", error);
-                throw new InternalServerError(`Failed to submit executions: ${error instanceof Error ? error.message : String(error)}`);
+                throw new InternalServerError(
+                    `Failed to submit executions: ${error instanceof Error ? error.message : String(error)}`
+                );
             }
         } else {
             console.log("No executions to run");
