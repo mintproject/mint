@@ -147,6 +147,33 @@ describe('compilePost', () => {
     expect(row.is_optional).toBe(true);
   });
 
+  it('junction insert carries app_input_name', () => {
+    const tree: WriteNode = {
+      table: 'modelcatalog_configuration',
+      id: 'cfg-3',
+      columns: {},
+      junctions: [
+        {
+          apiFieldName: 'hasInput',
+          junctionTable: 'modelcatalog_configuration_input',
+          hasuraRelName: 'inputs',
+          junctionRelName: 'input',
+          parentFkColumn: 'configuration_id',
+          targetFkColumn: 'input_id',
+          junctionColumns: [{ is_optional: true, app_input_name: 'aoi-geojson' }],
+          children: [
+            { table: 'modelcatalog_dataset_specification', id: 'ds', columns: {}, junctions: [], childFks: [] },
+          ],
+        },
+      ],
+      childFks: [],
+    };
+    const { variables } = compilePost(tree);
+    const row = (variables.object as any).inputs.data[0];
+    expect(row.is_optional).toBe(true);
+    expect(row.app_input_name).toBe('aoi-geojson');
+  });
+
   it('emits childFk nested-array insert with FK column set on each child', () => {
     const tree: WriteNode = {
       table: 'modelcatalog_software_version',

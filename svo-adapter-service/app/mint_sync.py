@@ -179,8 +179,14 @@ def _build_contracts(
     config_id: str,
     warnings: list[str],
 ) -> list[dict[str, Any]]:
-    """One contract per (DatasetSpecification, VariablePresentation) pair (D6)."""
+    """One contract per (DatasetSpecification, VariablePresentation) pair (D6).
+
+    Input contracts carry the junction's binding in ``metadata_json`` so the
+    bridge can plan which Tapis file input each dataset specification feeds.
+    Every presentation of one specification gets the same binding.
+    """
     contracts: list[dict[str, Any]] = []
+    bound_by: dict[str, str] = {}
     for spec_wrapper in io_specs:
         spec = spec_wrapper.get("input") or spec_wrapper.get("output") or spec_wrapper
         spec_id = spec.get("id", "")
@@ -191,18 +197,36 @@ def _build_contracts(
                 f"{config_id}: spec {spec_id!r} has no presentations — skipped."
             )
             continue
+        metadata: dict[str, Any] | None = None
+        if role == "input":
+            app_input_name = spec_wrapper.get("app_input_name") or None
+            metadata = {
+                "app_input_name": app_input_name,
+                "is_optional": bool(spec_wrapper.get("is_optional")),
+                "dataset_specification_id": spec_id,
+            }
+            if app_input_name:
+                other = bound_by.setdefault(app_input_name, spec_id)
+                if other != spec_id:
+                    warnings.append(
+                        f"{config_id}: dataset specifications {other!r} and {spec_id!r} "
+                        f"both bind app input {app_input_name!r}."
+                    )
         for pres_wrapper in presentations:
             pres = pres_wrapper.get("presentation") or pres_wrapper
             sv = pres.get("standard_variable") or {}
             sv_uri = _normalise_uri(sv.get("id") or pres.get("has_standard_variable"))
             unit_obj = pres.get("unit") or {}
             unit = unit_obj.get("id") or pres.get("uses_unit")
-            contracts.append({
+            contract: dict[str, Any] = {
                 "role": role,
                 "standard_variable_uri": sv_uri,
                 "format": has_format,
                 "unit": unit,
-            })
+            }
+            if metadata is not None:
+                contract["metadata_json"] = dict(metadata)
+            contracts.append(contract)
     return contracts
 
 

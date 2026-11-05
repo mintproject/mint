@@ -3320,6 +3320,7 @@
       - configuration_id
       - input_id
       - is_optional
+      - app_input_name
   select_permissions:
   - role: anonymous
     permission:
@@ -3327,6 +3328,7 @@
       - configuration_id
       - input_id
       - is_optional
+      - app_input_name
       filter: {}
   - role: user
     permission:

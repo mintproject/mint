@@ -229,7 +229,7 @@ export const RESOURCE_REGISTRY: Record<string, ResourceConfig> = {
         junctionRelName: 'input',
         parentFkColumn: 'configuration_id',
         targetResource: 'datasetspecifications',
-        junctionColumns: { is_optional: 'isOptional' },
+        junctionColumns: { is_optional: 'isOptional', app_input_name: 'appInputName' },
       },
       hasOutput: {
         hasuraRelName: 'outputs',
@@ -314,7 +314,7 @@ export const RESOURCE_REGISTRY: Record<string, ResourceConfig> = {
         junctionRelName: 'input',
         parentFkColumn: 'configuration_id',
         targetResource: 'datasetspecifications',
-        junctionColumns: { is_optional: 'isOptional' },
+        junctionColumns: { is_optional: 'isOptional', app_input_name: 'appInputName' },
       },
       hasOutput: {
         hasuraRelName: 'outputs',
@@ -392,7 +392,7 @@ export const RESOURCE_REGISTRY: Record<string, ResourceConfig> = {
         junctionRelName: 'input',
         parentFkColumn: 'configuration_id',
         targetResource: 'datasetspecifications',
-        junctionColumns: { is_optional: 'isOptional' },
+        junctionColumns: { is_optional: 'isOptional', app_input_name: 'appInputName' },
       },
       hasOutput: {
         hasuraRelName: 'outputs',

@@ -218,6 +218,7 @@ child_configurations {
 }
 inputs {
   is_optional
+  app_input_name
   input {
     id
     label
@@ -619,6 +620,7 @@ child_configurations {
 }
 inputs {
   is_optional
+  app_input_name
   input {
     id
     label
