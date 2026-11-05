@@ -558,6 +558,14 @@ export const modelFromGQL = (config: any): Model => {
     } as Model;
 };
 
+// Distinct standard variable IRIs of a dataset specification's presentations.
+const standardVariablesFromPresentations = (presentations: any): string[] => {
+    const uris = (Array.isArray(presentations) ? presentations : [])
+        .map((row: any) => row?.presentation?.has_standard_variable)
+        .filter((uri: unknown): uri is string => typeof uri === "string" && uri.length > 0);
+    return Array.from(new Set(uris));
+};
+
 // Maps a catalog input/output junction row.
 // junctionRow has shape { input: {...}, is_optional: boolean } for inputs,
 // or { output: {...} } for outputs (is_optional not present on output junction).
@@ -573,6 +581,7 @@ export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): Mod
         position: io.position || 0,
         variables: [],
         is_optional: junctionRow.is_optional ?? false,
+        standard_variables: standardVariablesFromPresentations(io.presentations)
     } as ModelIO;
 };
 

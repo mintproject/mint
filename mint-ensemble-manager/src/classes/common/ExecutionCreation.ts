@@ -79,6 +79,35 @@ export class ExecutionCreation {
     }
 
     public async prepareModelExecutions(modelid: string): Promise<boolean> {
+        const { modelEnsembleId, configs, inputIds } = await this.resolveModelConfigurations(
+            modelid
+        );
+        if (configs !== null) {
+            await this.createThreadModelExecutionSummary(configs, modelEnsembleId);
+            await deleteThreadModelExecutionIds(modelEnsembleId);
+            await this.createExecutions(configs, modelEnsembleId, inputIds, modelid);
+        }
+        return true;
+    }
+
+    /**
+     * Resolve this model's component and its first execution in memory, with no
+     * database writes (no execution summary, no execution rows). Used to inspect
+     * the job a submit would build while planning. `executionToBeRun` holds at
+     * most the first two configurations: enough to tell a fan-out from a single run.
+     */
+    public async previewExecutions(): Promise<void> {
+        const { configs, inputIds } = await this.resolveModelConfigurations(this.modelid);
+        if (configs === null) return;
+        this.component = await this.getModelDetails(this.model);
+        this.executionToBeRun = this.createExecutionsBatch(
+            configs.slice(0, 2),
+            inputIds,
+            this.modelid
+        );
+    }
+
+    private async resolveModelConfigurations(modelid: string) {
         if (!this.thread.execution_summary) this.thread.execution_summary = {};
         console.log("Thread", JSON.stringify(this.thread));
         this.model = this.thread.models[modelid];
@@ -95,12 +124,7 @@ export class ExecutionCreation {
             threadModel.bindings,
             inputIds
         );
-        if (configs !== null) {
-            await this.createThreadModelExecutionSummary(configs, modelEnsembleId);
-            await deleteThreadModelExecutionIds(modelEnsembleId);
-            await this.createExecutions(configs, modelEnsembleId, inputIds, modelid);
-        }
-        return true;
+        return { modelEnsembleId, configs, inputIds };
     }
 
     private async createExecutions(

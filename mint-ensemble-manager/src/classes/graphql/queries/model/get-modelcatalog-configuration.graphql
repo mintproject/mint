@@ -29,6 +29,12 @@ query get_modelcatalog_configuration($id: String!) {
         has_format
         position
         description
+        presentations {
+          presentation {
+            id
+            has_standard_variable
+          }
+        }
       }
     }
     outputs {
