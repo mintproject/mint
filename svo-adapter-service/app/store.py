@@ -138,6 +138,16 @@ class InMemoryHasura:
         ][:limit]
         return {"adapter_provenance_event": events}
 
+    def _op_GetParentRuns(self, v):
+        rows = [r for r in STORE.run.values() if r.get("execution_id") == v.get("execution_id")]
+        return {"adapter_workflow_run": rows}
+
+    def _op_GetPublishedEvent(self, v):
+        events = [e for e in STORE.provenance
+                  if e.get("workflow_run_id") == v.get("run_id")
+                  and e.get("event_type") == "run.output.published"]
+        return {"adapter_provenance_event": events[-1:]}
+
     def _op_ListActiveRuns(self, v):
         active = [r for r in STORE.run.values()
                   if r.get("status") in ("running", "submitting")]

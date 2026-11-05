@@ -108,6 +108,9 @@ class DeferredPlanIn(BaseModel):
     target_dataset_specification_id: str | None = None
     target_contract: DataObjectContract | None = None
     model_output_key: str
+    # Values the caller intends for the plan's publish step (stac_collection,
+    # ckan_org), checked against the deployment allow-lists at plan time.
+    parameter_values: dict[str, Any] | None = None
 
 
 class PlanModelInputsIn(BaseModel):
