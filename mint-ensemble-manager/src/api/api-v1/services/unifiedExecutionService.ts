@@ -1994,8 +1994,8 @@ export function createUnifiedExecutionService(
                 // post-model plan, so a model that needs input ETL but no
                 // post-model ETL gets an identity deferred plan: source and target
                 // contract are the model output's own, which the adapter plans as
-                // zero steps. If nothing needs deriving the plan stays an ordinary
-                // non-composite plan.
+                // zero steps. If nothing needs deriving and nothing is published
+                // the plan stays an ordinary non-composite plan.
                 const derived = await deriveInputSteps(
                     plan,
                     body.strict_inputs === true,
@@ -2003,7 +2003,9 @@ export function createUnifiedExecutionService(
                 );
                 inputPlan = derived;
                 applyInputPlan(plan, derived);
-                if (derived.steps.length) {
+                // Publication is independent of input ETL: a request to publish
+                // builds the identity plan even when no input steps were derived.
+                if (derived.steps.length || publish.length) {
                     const requested =
                         typeof body.model_output_key === "string"
                             ? body.model_output_key.trim()
@@ -2038,7 +2040,7 @@ export function createUnifiedExecutionService(
             if (publish.length && adapter === undefined) {
                 throw new UnifiedExecutionError(
                     422,
-                    "publish needs a post-model stage: use the Tapis engine with planned input ETL or supply post_model_adapter",
+                    "publish needs a post-model stage: use the Tapis engine with input_etl enabled or supply post_model_adapter",
                     "PUBLISH_REQUIRES_POST_MODEL"
                 );
             }

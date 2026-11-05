@@ -2007,6 +2007,44 @@ describe("unifiedExecutionService", () => {
             expect(((await service.getPlan(plan.plan_id)) as any).publish).toBeUndefined();
         });
 
+        it("builds the publish plan for a model that derives no input steps and dispatches it as usual", async () => {
+            stubAdapter();
+            legacy.tapis.compositeModelContext.mockResolvedValue({
+                configuration_id: "config/subside",
+                region: null,
+                has_bound_inputs: false,
+                filled_app_inputs: [],
+                unmatched_optional_inputs: [],
+                outputs: [{ id: "out-io", name: "displacement", format: "geotiff" }]
+            });
+            legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue({
+                execution_id: "model-child-1",
+                output_uri: "tapis://ls6/mint-workflow-output/ue_parent-1/model/displacement",
+                output_name: "displacement",
+                job_definition: { name: "j", appId: "a", appVersion: "1" }
+            });
+            const store = fakeStore();
+            const service = createUnifiedExecutionService(legacy, { store });
+            const plan = (await service.createPlan(
+                { ...baseRequest, publish: ["ckan", "stac"] },
+                "Bearer user-token"
+            )) as any;
+            expect(plan.status).toBe("post_model_ready");
+            expect(plan.input_steps).toBeUndefined();
+            expect(plan.post_model_adapter.target_contract).toEqual({
+                format: "geotiff",
+                catalog: "ckan+stac"
+            });
+            expect(plan.parameters).toHaveLength(2);
+
+            await service.submit({ plan_id: plan.plan_id }, "Bearer user-token");
+            const submit = JSON.parse(calls("/workflows/submit")[0][1].body);
+            expect(submit.model_task).toMatchObject({ output_name: "displacement" });
+            expect(submit.expected_steps_digest).toBeUndefined();
+            expect(submit.input_sources).toBeUndefined();
+            expect(submit.plan_id).toBe("deferred-plan-1");
+        });
+
         it("refuses publish when the plan has no post-model stage", async () => {
             stubAdapter();
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
