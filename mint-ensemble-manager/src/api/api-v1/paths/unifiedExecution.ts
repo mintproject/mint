@@ -31,6 +31,23 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *                 description: >
  *                   When true, any input warning (see `input_warnings` in the
  *                   response) fails plan creation with 422 INPUT_WARNINGS.
+ *               publish:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: >
+ *                   Catalog tokens (for example `ckan`, `stac`) the run's model
+ *                   output is published to after the model finishes. The tokens
+ *                   must be offered by GET /plans/publishers for the model, else
+ *                   422 PUBLISH_CATALOG_UNKNOWN (details list `requested` and
+ *                   `available`). The post-model target contract gets
+ *                   `catalog` set to the tokens joined with `+`, and the plan's
+ *                   `parameters` list the publisher's arguments. Needs a
+ *                   post-model stage (422 PUBLISH_REQUIRES_POST_MODEL
+ *                   otherwise). Publication runs as the submitting user; the
+ *                   outcome is `output_handoff.publication` on the run (status
+ *                   `published`, `failed` or `awaiting_owner`) and a failed
+ *                   publication does not fail the run.
  *     responses:
  *       200:
  *         description: >
@@ -81,6 +98,48 @@ import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionSer
  *               $ref: '#/components/schemas/UnifiedExecutionError'
  *       default:
  *         description: Plan creation failed.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UnifiedExecutionError'
+ */
+
+/**
+ * @openapi
+ * /plans/publishers:
+ *   get:
+ *     summary: List the catalogs a model's output can be published to.
+ *     description: Proxies the SVO adapter's GET /publishers for the model configuration.
+ *     operationId: listUnifiedPlanPublishers
+ *     security:
+ *       - BearerAuth: []
+ *       - oauth2: []
+ *     parameters:
+ *       - in: query
+ *         name: model_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The model configuration id (the plan's model_id).
+ *     responses:
+ *       200:
+ *         description: >
+ *           Publishers reachable from the model output, each with its
+ *           `transform_spec_id`, `name`, `catalog_tokens`, user-facing
+ *           `parameters` and `can_publish` (`ok`, `reason`).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties: true
+ *       400:
+ *         description: model_id is missing.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UnifiedExecutionError'
+ *       default:
+ *         description: The adapter could not list publishers.
  *         content:
  *           application/json:
  *             schema:
@@ -245,6 +304,18 @@ export default function (service: any) {
     router.post("/", async (req, res) => {
         try {
             const result = await service.createPlan(req.body, req.headers.authorization);
+            return res.status(200).json(result);
+        } catch (error) {
+            return sendError(res, error);
+        }
+    });
+
+    router.get("/publishers", async (req, res) => {
+        try {
+            const result = await service.listPublishers(
+                req.query.model_id,
+                req.headers.authorization
+            );
             return res.status(200).json(result);
         } catch (error) {
             return sendError(res, error);
