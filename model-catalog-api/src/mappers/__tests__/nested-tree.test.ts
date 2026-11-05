@@ -109,6 +109,19 @@ describe('buildTree — single-level junction', () => {
     expect(tree.junctions[0].children[0].columns).toEqual({});
   });
 
+  it('captures junction extra column app_input_name (appInputName)', () => {
+    const cfg = getResourceConfig('modelconfigurations')!;
+    const body = {
+      id: 'cfg-3b',
+      hasInput: [{ id: 'ds-3b', isOptional: true, appInputName: 'aoi-geojson' }],
+    };
+    const tree = buildTree(body, cfg);
+    expect(tree.junctions[0].junctionColumns).toEqual([
+      { is_optional: true, app_input_name: 'aoi-geojson' },
+    ]);
+    expect(tree.junctions[0].children[0].columns).toEqual({});
+  });
+
   it('auto-generates id when nested entity lacks one', () => {
     const cfg = getResourceConfig('modelconfigurations')!;
     const body = {

@@ -246,6 +246,39 @@ describe('transformRow - junction column hoist (D-21 round-trip)', () => {
     const hasInput = result['hasInput'] as Array<Record<string, unknown>>;
     expect(hasInput[0]).not.toHaveProperty('isOptional');
   });
+
+  it('hoists app_input_name from junction row onto nested DSpec as scalar', () => {
+    const row = {
+      id: 'https://w3id.org/okn/i/mint/Cfg1',
+      inputs: [
+        {
+          is_optional: false,
+          app_input_name: 'aoi-geojson',
+          input: { id: 'https://w3id.org/okn/i/mint/Dspec1' },
+        },
+      ],
+    };
+    const result = transformRow(row, configurationConfig);
+    const hasInput = result['hasInput'] as Array<Record<string, unknown>>;
+    expect(hasInput[0]!['appInputName']).toBe('aoi-geojson');
+    expect(Array.isArray(hasInput[0]!['appInputName'])).toBe(false);
+  });
+
+  it('omits appInputName when junction column is null', () => {
+    const row = {
+      id: 'https://w3id.org/okn/i/mint/Cfg1',
+      inputs: [
+        {
+          is_optional: false,
+          app_input_name: null,
+          input: { id: 'https://w3id.org/okn/i/mint/Dspec1' },
+        },
+      ],
+    };
+    const result = transformRow(row, configurationConfig);
+    const hasInput = result['hasInput'] as Array<Record<string, unknown>>;
+    expect(hasInput[0]).not.toHaveProperty('appInputName');
+  });
 });
 
 describe('transformList', () => {

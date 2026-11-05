@@ -14226,6 +14226,13 @@ components:
             is bound, rather than failing with an error.
           nullable: true
           type: boolean
+        appInputName:
+          description: >-
+            Name of the Tapis app file input this dataset specification feeds in
+            the configuration that lists it; set by registration from the app
+            definition.
+          nullable: true
+          type: string
         id:
           description: identifier
           nullable: false
