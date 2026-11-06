@@ -289,6 +289,20 @@ def test_a_ckan_only_plan_binds_ckan_as_the_catalogs_arg():
     assert response.json()["args"]["catalogs"]["value"] == "ckan"
 
 
+def test_a_plan_stored_before_the_catalog_choice_still_submits():
+    """Regression: the adapter bound `catalogs` and then refused it as an unknown
+    parameter (422 UNKNOWN_PARAMETERS) on plans whose immutable parameter list
+    predates the argument. Seen on dev right after the 2026-11-05 deploy."""
+    bound_id = _bound_plan()
+    _parent_run()
+    for plan in STORE.plan.values():
+        plan["plan_json"]["parameters"] = [
+            p for p in plan["plan_json"].get("parameters") or [] if p.get("name") != "catalogs"]
+    response = _submit(bound_id)
+    assert response.status_code == 200, response.text
+    assert response.json()["args"]["catalogs"]["value"] == "ckan+stac"
+
+
 def test_a_plan_from_before_the_catalog_choice_binds_every_catalog():
     assert main_module._plan_catalogs({"steps": [{"transform_type": "catalog_register"}]}) == "ckan+stac"
     assert main_module._plan_catalogs({"target_contract": {"catalog": "stac+ckan"}}) == "ckan+stac"

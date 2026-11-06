@@ -285,11 +285,23 @@ async function adapterRequest(
             detail && typeof detail === "object" && typeof detail.message === "string"
                 ? detail.message
                 : undefined;
+        const code = typeof detail === "object" ? detail?.code : body?.code;
+        // A coded refusal without prose (UNKNOWN_PARAMETERS, INVALID_PARAMETERS,
+        // OUTPUT_CONTRACT_MISMATCH) must still tell the user what was refused.
+        const coded =
+            typeof code === "string"
+                ? `SVO adapter returned ${response.status} ${code}` +
+                  (detail && typeof detail === "object" && detail.parameters !== undefined
+                      ? `: ${JSON.stringify(detail.parameters)}`
+                      : "")
+                : undefined;
         const message =
             typeof detail === "string"
                 ? detail
-                : detailMessage || body?.message || `SVO adapter returned ${response.status}`;
-        const code = typeof detail === "object" ? detail?.code : body?.code;
+                : detailMessage ||
+                  body?.message ||
+                  coded ||
+                  `SVO adapter returned ${response.status}`;
         const details = detail && typeof detail === "object" ? detail : (body?.details ?? detail);
         throw new UnifiedExecutionError(response.status, message, code, details);
     }

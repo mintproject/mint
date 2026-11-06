@@ -2475,6 +2475,12 @@ def _validate_plan_args(
     # when a particular deferred plan does not consume them directly.
     allowed.update(accepted_aliases(tapis.STANDARD_PARAMS))
     allowed.add("tapis_token")
+    if tapis.plan_publishes(plan_json.get("steps") or []):
+        # A publish step's arguments are bound by the adapter itself
+        # (_bind_publish_args) and declared on the generated pipeline even when
+        # the stored plan predates one of them (catalogs, 2026-11-05); a plan
+        # must not refuse the values the adapter just bound to it.
+        allowed.update(accepted_aliases(tapis.publish_params()))
     if plan_json.get("model_task") or "execution_id" in normalized or "source_uri" in normalized:
         # These are coordinator-owned values for a composite model stage, not
         # user-entered adapter parameters.  Deferred post-model workflows also
