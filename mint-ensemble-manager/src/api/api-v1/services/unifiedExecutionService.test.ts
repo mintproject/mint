@@ -2063,6 +2063,38 @@ describe("unifiedExecutionService", () => {
             expect(calls("/plans/deferred")).toHaveLength(1);
         });
 
+        it("names a coded adapter refusal that carries no message", async () => {
+            stubAdapter();
+            const base = global.fetch as jest.Mock;
+            const stubbed = base.getMockImplementation() as (
+                url: string,
+                init?: RequestInit
+            ) => Promise<unknown>;
+            base.mockImplementation(async (url: string, init?: RequestInit) => {
+                if (String(url).endsWith("/plans/deferred")) {
+                    return {
+                        ok: false,
+                        status: 422,
+                        json: async () => ({
+                            detail: { code: "UNKNOWN_PARAMETERS", parameters: ["catalogs"] }
+                        })
+                    };
+                }
+                return stubbed(url, init);
+            });
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            await expect(
+                service.createPlan(
+                    { ...baseRequest, publish: ["ckan", "stac"] },
+                    "Bearer user-token"
+                )
+            ).rejects.toMatchObject({
+                statusCode: 422,
+                code: "UNKNOWN_PARAMETERS",
+                message: 'SVO adapter returned 422 UNKNOWN_PARAMETERS: ["catalogs"]'
+            });
+        });
+
         it("does not consult the adapter publishers when publish is empty or absent", async () => {
             stubAdapter([]);
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });

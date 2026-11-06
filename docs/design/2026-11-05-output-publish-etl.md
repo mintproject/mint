@@ -564,6 +564,18 @@ production rows stay unless the user asks.
   STAC client surface, explicit default for old plans, EM-side validation of
   token sets, spec JSON updated alongside the generator.
 
+- 2026-11-05 (hotfix after the per-user/CKAN-only deploy): the first publish
+  on dev failed with "SVO adapter returned 422". The adapter bound the new
+  managed `catalogs` argument at submit and then refused it as
+  `UNKNOWN_PARAMETERS`, because the submit validator allow-lists only the
+  stored plan's parameters plus the standard ones, and plans created before
+  the deploy carry no `catalogs` definition. `_validate_plan_args` now also
+  accepts the publish arguments on a publishing plan, mirroring the generator,
+  which already declares them when a stored plan predates them. The EM's
+  fallback message now names a coded refusal that has no prose
+  (`SVO adapter returned 422 UNKNOWN_PARAMETERS: ["catalogs"]`), so the next
+  one is not anonymous.
+
 ## User feedback / decisions
 
 - 2026-11-05: "approve" on rev 3. Open questions 1 and 3 proceed on the
