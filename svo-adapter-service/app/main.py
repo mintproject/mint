@@ -2668,6 +2668,14 @@ async def submit_workflow(
                 "message": "model_task.input_steps is no longer accepted; send "
                            "model_task.input_sources and the adapter plans the steps",
             })
+        if body.model_task.get("output_file") not in (None, ""):
+            output_file_problem = tapis.output_file_error(body.model_task["output_file"])
+            if output_file_problem:
+                raise HTTPException(422, detail={
+                    "code": "MODEL_OUTPUT_FILE_INVALID",
+                    "message": output_file_problem,
+                    "output_file": str(body.model_task["output_file"])[:300],
+                })
         input_sources = body.model_task.pop("input_sources", None)
         expected_digest = body.model_task.pop("expected_steps_digest", None)
         client_filled = body.model_task.pop("filled_app_inputs", None) or []

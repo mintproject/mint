@@ -73,3 +73,13 @@ def test_task_result_preserves_output_discovery_diagnostics():
         "attempts: files_archive=404, candidates=0, jobs_list=200, candidates=0; "
         "details: job_name=mint-workflow-model-test"
     )
+
+
+def test_task_result_reports_the_missing_output_binding():
+    result, error = task_result({"tasks": [{"task_id": "model", "stdout": (
+        '{"status":"error","code":"MODEL_OUTPUT_MISSING","message":"not found","details":'
+        '{"output_file":"a.tif","candidates":["b.tif","c.tif"],"hint":"re-register the binding"}}')}]})
+    assert result is None
+    assert "[MODEL_OUTPUT_MISSING]" in error
+    assert "output_file=a.tif" in error and "candidates=b.tif,c.tif" in error
+    assert "hint=re-register the binding" in error

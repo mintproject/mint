@@ -241,7 +241,9 @@ class FakeTapis:
         elif path.startswith("/v3/jobs/job-1/status"):
             payload = {"result": {"status": "FINISHED"}}
         elif path.startswith("/v3/jobs/job-1/output/list"):
-            payload = {"result": [{"name": "model.cbb", "path": "/out/model.cbb"}]}
+            # One page; the task pages until an empty one.
+            first_page = "skip=0" in request.full_url
+            payload = {"result": [{"name": "model.cbb", "path": "/out/model.cbb"}] if first_page else []}
         elif path.startswith("/v3/jobs/job-1"):
             payload = {"result": {"archiveSystemId": "ls6"}}
         elif path.startswith("/v3/jobs/list"):

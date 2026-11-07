@@ -174,6 +174,32 @@ describe('compilePost', () => {
     expect(row.app_input_name).toBe('aoi-geojson');
   });
 
+  it('junction insert carries archived_file', () => {
+    const tree: WriteNode = {
+      table: 'modelcatalog_configuration',
+      id: 'cfg-4',
+      columns: {},
+      junctions: [
+        {
+          apiFieldName: 'hasOutput',
+          junctionTable: 'modelcatalog_configuration_output',
+          hasuraRelName: 'outputs',
+          junctionRelName: 'output',
+          parentFkColumn: 'configuration_id',
+          targetFkColumn: 'output_id',
+          junctionColumns: [{ archived_file: 'head*.tif' }],
+          children: [
+            { table: 'modelcatalog_dataset_specification', id: 'ds', columns: {}, junctions: [], childFks: [] },
+          ],
+        },
+      ],
+      childFks: [],
+    };
+    const { variables } = compilePost(tree);
+    const row = (variables.object as any).outputs.data[0];
+    expect(row.archived_file).toBe('head*.tif');
+  });
+
   it('emits childFk nested-array insert with FK column set on each child', () => {
     const tree: WriteNode = {
       table: 'modelcatalog_software_version',

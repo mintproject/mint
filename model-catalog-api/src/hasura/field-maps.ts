@@ -229,6 +229,7 @@ inputs {
   }
 }
 outputs {
+  archived_file
   output {
     id
     label
@@ -640,6 +641,7 @@ inputs {
   }
 }
 outputs {
+  archived_file
   output {
     id
     label

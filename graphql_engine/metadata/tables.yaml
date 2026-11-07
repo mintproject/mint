@@ -3370,12 +3370,14 @@
       columns: &id008
       - configuration_id
       - output_id
+      - archived_file
   select_permissions:
   - role: anonymous
     permission:
       columns:
       - configuration_id
       - output_id
+      - archived_file
       filter: {}
   - role: user
     permission:

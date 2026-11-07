@@ -398,3 +398,27 @@ def test_composite_submit_failure_releases_the_stored_token(monkeypatch, composi
     assert row["run_token_enc"] is None and row["run_token_expires_at"] is None
     assert revoked == ["RUN.JWT.TOKEN"]
     assert _events(run_id, "run.token.cleared")[0]["payload_json"]["reason"] == "submit_failed"
+
+
+# --- model_task.output_file validation (design 2026-11-07-output-file-binding.md) ---------
+@pytest.mark.parametrize("bad", ["a/b", "..", ".", "/abs", "tapisjob.out", "TapisJob.err", "{param:x}",
+                                 "x" * 256, "it's.tif", 'a"b.tif', "a\nb.tif", "a b.tif", "", 5])
+def test_composite_submit_rejects_an_invalid_output_file(bad, monkeypatch, composite_submit):
+    monkeypatch.setitem(MODEL_TASK, "output_file", bad)
+    response = composite_submit["submit"]()
+    if bad == "":
+        assert response.status_code == 200  # empty means unbound
+        return
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "MODEL_OUTPUT_FILE_INVALID" and "output_file" in detail
+    assert composite_submit["submits"] == []
+
+
+@pytest.mark.parametrize("good", ["opera_disp_s1_cumulative.tif", "*_cumulative.tif", "run[1].tif", "*.cb[bc]"])
+def test_composite_submit_embeds_a_valid_output_file(good, monkeypatch, composite_submit):
+    monkeypatch.setitem(MODEL_TASK, "output_file", good)
+    response = composite_submit["submit"]()
+    assert response.status_code == 200, response.text
+    code = composite_submit["submits"][0]["pipeline"]["tasks"][0]["code"]
+    assert "_output_file = %r" % good in code

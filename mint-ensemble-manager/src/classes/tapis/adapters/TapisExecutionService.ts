@@ -3,6 +3,8 @@ import {
     Execution,
     Execution_Result,
     Model,
+    ModelIO,
+    ModelParameter,
     ModelSecretDeclaration,
     Region
 } from "@/classes/mint/mint-types";
@@ -51,6 +53,71 @@ import { matchTapisOutputsToMintOutputs } from "@/classes/tapis/jobs";
 import { Status } from "@/interfaces/IExecutionService";
 import { getConfiguration } from "@/classes/mint/mint-functions";
 import { TACC_CKAN_DataCatalog } from "@/classes/mint/data-catalog/TACC_CKAN_Datacatalog";
+
+// Value rules for a model output's archived file (design 2026-11-07-output-file-binding):
+// a base name or glob in the archive root, never a path and never a Tapis job service file.
+const OUTPUT_FILE_PATTERN = /^[A-Za-z0-9._\-*?[\]{}:]{1,255}$/;
+const OUTPUT_FILE_PARAM_REF = /^\{param:([^}]+)\}$/;
+
+const outputFileUnresolved = (message: string) =>
+    new UnifiedExecutionError(422, message, "MODEL_OUTPUT_FILE_UNRESOLVED");
+
+const isValidOutputFile = (value: string) =>
+    OUTPUT_FILE_PATTERN.test(value) &&
+    value !== "." &&
+    value !== ".." &&
+    !value.toLowerCase().startsWith("tapisjob") &&
+    // A reference is the whole value or nothing; anything else with {param: is malformed.
+    !value.includes("{param:");
+
+/**
+ * The archived file the bridge should select for a model output: the junction's
+ * `archived_file`, with a `{param:<id>}` reference replaced by that parameter's
+ * effective value for this run (the seed execution's value, else the default).
+ * Undefined when the output is not bound.
+ *
+ * @param seedParameters the per-execution parameter map the job is built from
+ */
+export function resolveOutputFile(
+    output: ModelIO,
+    parameters: ModelParameter[],
+    seedParameters: Record<string, unknown>
+): string | undefined {
+    const bound = output.archived_file?.trim();
+    if (!bound) return undefined;
+    let value = bound;
+    const reference = OUTPUT_FILE_PARAM_REF.exec(bound);
+    if (reference) {
+        const wanted = reference[1];
+        const parameter = parameters.find(
+            (candidate) =>
+                candidate.id === wanted ||
+                candidate.id.split(/[/#]/).pop() === wanted.split(/[/#]/).pop()
+        );
+        if (!parameter) {
+            throw outputFileUnresolved(
+                `output ${output.name || output.id} is bound to unknown parameter ${wanted}`
+            );
+        }
+        const seeded = seedParameters[parameter.id];
+        const effective =
+            seeded !== undefined && seeded !== null && String(seeded).trim() !== ""
+                ? String(seeded)
+                : parameter.default;
+        value = effective === undefined || effective === null ? "" : String(effective).trim();
+        if (!value) {
+            throw outputFileUnresolved(
+                `parameter ${parameter.id} bound to output ${output.name || output.id} has no value`
+            );
+        }
+    }
+    if (!isValidOutputFile(value)) {
+        throw outputFileUnresolved(
+            `output ${output.name || output.id} resolves to an invalid archived file "${value}"`
+        );
+    }
+    return value;
+}
 
 export class TapisExecutionService implements IExecutionService {
     private readonly LOG_PATH = "tapisjob.out";
@@ -161,10 +228,11 @@ export class TapisExecutionService implements IExecutionService {
         output_uri: string;
         output_name: string;
         output_format?: string;
+        output_file?: string;
         job_definition: Jobs.ReqSubmitJob;
     }> {
         const thread = await this.loadCompositeThread(threadmodel);
-        const { executionCreation, requiredSecrets, execution, jobDefinition } =
+        const { executionCreation, requiredSecrets, execution, jobDefinition, seed } =
             await this.buildCompositeJob(thread, threadmodel, true, maxMinutes, logicalQueue);
 
         // A deterministic, run-owned archive path gives downstream workflow
@@ -192,6 +260,11 @@ export class TapisExecutionService implements IExecutionService {
             throw error;
         }
         const outputName = output.name || output.id;
+        const outputFile = resolveOutputFile(
+            output,
+            executionCreation.model.input_parameters || [],
+            seed.parameters
+        );
         return {
             execution_id: execution.id,
             // Catalog configuration id (modelcatalog_configuration.id): the
@@ -204,6 +277,7 @@ export class TapisExecutionService implements IExecutionService {
             })),
             output_name: outputName,
             output_format: output.format || "",
+            ...(outputFile === undefined ? {} : { output_file: outputFile }),
             output_uri: `tapis://${jobDefinition.archiveSystemId}/${archivePath}/${outputName}`,
             job_definition: jobDefinition
         };
@@ -287,7 +361,7 @@ export class TapisExecutionService implements IExecutionService {
             maxMinutes,
             logicalQueue
         );
-        return { executionCreation, app, requiredSecrets, execution, jobDefinition };
+        return { executionCreation, app, requiredSecrets, execution, jobDefinition, seed };
     }
 
     /**

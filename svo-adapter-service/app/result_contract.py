@@ -97,11 +97,12 @@ def _structured_error_message(task_id: str, payload: dict[str, Any]) -> str:
     details = payload.get("details")
     if isinstance(details, dict):
         safe_details = []
-        for key in ("job_name", "source_uri", "output_name", "archived_files"):
+        for key in ("job_name", "source_uri", "output_name", "output_file", "archived_files",
+                    "candidates", "hint"):
             value = details.get(key)
             if value is None:
                 continue
-            if key == "archived_files" and isinstance(value, list):
+            if key in ("archived_files", "candidates") and isinstance(value, list):
                 value = ",".join(str(item)[:120] for item in value[:8])
             safe_details.append(f"{key}={str(value)[:240]}")
         if safe_details:

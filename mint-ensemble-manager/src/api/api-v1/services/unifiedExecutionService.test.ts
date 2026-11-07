@@ -827,6 +827,7 @@ describe("unifiedExecutionService", () => {
             output_uri: "tapis://ls6/mint-workflow-output/ue_parent-1/model/cbb",
             output_name: "cbb",
             output_format: "cbc",
+            output_file: "*.cb[bc]",
             job_definition: {
                 name: "mint-workflow-model-model-child-1",
                 appId: "modflow6",
@@ -974,6 +975,7 @@ describe("unifiedExecutionService", () => {
             model_task: expect.objectContaining({
                 stage_id: "model",
                 output_name: "cbb",
+                output_file: "*.cb[bc]",
                 output_uri: "tapis://ls6/mint-workflow-output/ue_parent-1/model/cbb"
             })
         });

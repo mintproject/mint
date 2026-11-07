@@ -238,6 +238,7 @@ export const RESOURCE_REGISTRY: Record<string, ResourceConfig> = {
         junctionRelName: 'output',
         parentFkColumn: 'configuration_id',
         targetResource: 'datasetspecifications',
+        junctionColumns: { archived_file: 'archivedFile' },
       },
       hasParameter: {
         hasuraRelName: 'parameters',
@@ -323,6 +324,7 @@ export const RESOURCE_REGISTRY: Record<string, ResourceConfig> = {
         junctionRelName: 'output',
         parentFkColumn: 'configuration_id',
         targetResource: 'datasetspecifications',
+        junctionColumns: { archived_file: 'archivedFile' },
       },
       hasParameter: {
         hasuraRelName: 'parameters',
@@ -401,6 +403,7 @@ export const RESOURCE_REGISTRY: Record<string, ResourceConfig> = {
         junctionRelName: 'output',
         parentFkColumn: 'configuration_id',
         targetResource: 'datasetspecifications',
+        junctionColumns: { archived_file: 'archivedFile' },
       },
       hasParameter: {
         hasuraRelName: 'parameters',

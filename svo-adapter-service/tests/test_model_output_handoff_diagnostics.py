@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import base64
 import json
 import io
 import time
+import urllib.parse
 import urllib.request
 import urllib.error
 
@@ -11,15 +14,16 @@ from app.config import settings
 from app.tapis import generate_tapis_workflow
 
 
-def _model_code() -> str:
+def _model_code(output_file: str | None = None, output_name: str = "cbb") -> str:
     workflow = generate_tapis_workflow({
         "id": "diagnostic-plan",
         "plan_json": {
             "steps": [],
             "model_task": {
                 "stage_id": "model",
-                "output_name": "cbb",
+                "output_name": output_name,
                 "output_format": "cbc",
+                **({"output_file": output_file} if output_file is not None else {}),
                 "max_minutes": 1,
                 "job_definition": {
                     "name": "mint-workflow-model-test",
@@ -65,6 +69,13 @@ def _run(code, monkeypatch, capsys, responder, token="diagnostic-token", existin
         if "/v3/jobs/list" in request.full_url:
             lookups.append(request.full_url)
             return _Response({"result": list(existing_jobs)})
+        # The task pages the archive listing until an empty page. Responders that
+        # serve one fixed listing (not ``_listing_responder``) get that page at
+        # skip=0 and an empty page afterwards, as Tapis would answer.
+        if "/output/list/" in request.full_url and not getattr(responder, "paged", False):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(request.full_url).query)
+            if int((query.get("skip") or ["0"])[0]) > 0:
+                return _Response({"result": []})
         return responder(request, timeout)
 
     monkeypatch.setattr(urllib.request, "urlopen", urlopen)
@@ -83,7 +94,7 @@ def test_model_stage_captures_exact_job_uuid_and_discovers_declared_output(
             return _Response({"result": {"status": "FINISHED"}})
         if request.full_url.endswith("/v3/jobs/provider-job-1"):
             return _Response({"result": {"uuid": "provider-job-1", "archiveSystemId": "ls6"}})
-        if request.full_url.endswith("/v3/jobs/provider-job-1/output/list/"):
+        if request.full_url.split("?")[0].endswith("/v3/jobs/provider-job-1/output/list/"):
             return _Response({"result": [{
                 "type": "file",
                 "name": "model.cbb",
@@ -107,7 +118,7 @@ def test_model_stage_fails_closed_when_declared_output_is_ambiguous(monkeypatch,
             return _Response({"result": {"status": "COMPLETED"}})
         if request.full_url.endswith("/v3/jobs/provider-job-2"):
             return _Response({"result": {"archiveSystemId": "ls6"}})
-        if request.full_url.endswith("/output/list/"):
+        if request.full_url.split("?")[0].endswith("/output/list/"):
             return _Response({"result": [
                 {"type": "file", "name": "a.cbb", "path": "/a.cbb"},
                 {"type": "file", "name": "b.cbb", "path": "/b.cbb"},
@@ -131,7 +142,7 @@ def test_model_stage_stops_on_tapis_normal_completion(monkeypatch, capsys):
             return _Response({"result": {"status": "NORMAL_COMPLETION"}})
         if request.full_url.endswith("/v3/jobs/provider-job-normal"):
             return _Response({"result": {"uuid": "provider-job-normal", "archiveSystemId": "ls6"}})
-        if request.full_url.endswith("/v3/jobs/provider-job-normal/output/list/"):
+        if request.full_url.split("?")[0].endswith("/v3/jobs/provider-job-normal/output/list/"):
             return _Response({"result": [{
                 "type": "file",
                 "name": "model.cbb",
@@ -195,7 +206,7 @@ def _job_responder(statuses, seen_tokens, mint=None):
             return _Response({"result": {"status": next(polls)}})
         if request.full_url.endswith("/v3/jobs/long-job"):
             return _Response({"result": {"uuid": "long-job", "archiveSystemId": "ls6"}})
-        if request.full_url.endswith("/v3/jobs/long-job/output/list/"):
+        if request.full_url.split("?")[0].endswith("/v3/jobs/long-job/output/list/"):
             return _Response({"result": [{"type": "file", "name": "model.cbb", "path": "/m/model.cbb"}]})
         raise AssertionError(request.full_url)
 
@@ -271,7 +282,7 @@ def _flaky_responder(poll_failures, finish_after=1):
             return _Response({"result": {"status": "FINISHED" if state["polls"] >= finish_after else "QUEUED"}})
         if url.endswith("/v3/jobs/flaky-job"):
             return _Response({"result": {"uuid": "flaky-job", "archiveSystemId": "ls6"}})
-        if url.endswith("/v3/jobs/flaky-job/output/list/"):
+        if url.split("?")[0].endswith("/v3/jobs/flaky-job/output/list/"):
             return _Response({"result": [{"type": "file", "name": "model.cbb", "path": "/m/model.cbb"}]})
         raise AssertionError(url)
 
@@ -327,7 +338,7 @@ def test_model_stage_retries_the_reads_made_after_the_job_finishes(monkeypatch, 
             if calls["detail"] < 3:
                 raise urllib.error.URLError("timed out")
             return _Response({"result": {"uuid": "late-job", "archiveSystemId": "ls6"}})
-        if url.endswith("/output/list/"):
+        if url.split("?")[0].endswith("/output/list/"):
             return _Response({"result": [{"type": "file", "name": "model.cbb", "path": "/m/model.cbb"}]})
         raise AssertionError(url)
 
@@ -346,7 +357,7 @@ def _attach_responder(submitted):
         if url.endswith("/status"):
             return _Response({"result": {"status": "FINISHED"}})
         job = url.split("/v3/jobs/")[1].split("/")[0]
-        if url.endswith("/output/list/"):
+        if url.split("?")[0].endswith("/output/list/"):
             return _Response({"result": [{"type": "file", "name": "model.cbb", "path": "/m/model.cbb"}]})
         return _Response({"result": {"uuid": job, "archiveSystemId": "ls6"}})
 
@@ -388,3 +399,159 @@ def test_model_stage_submits_when_no_job_exists_yet(monkeypatch, capsys):
     result = _run(_model_code(), monkeypatch, capsys, _attach_responder(submitted))
 
     assert result["model_job_uuid"] == "new-job" and submitted == [True]
+
+
+# --- explicit output file binding (design 2026-11-07-output-file-binding.md) ---------------
+def _listing_responder(pages, uuid="bind-job", seen=None):
+    """Serve a finished job whose archive listing is ``pages`` (a list of entry lists)."""
+    def responder(request, _timeout):
+        url = request.full_url
+        if url.endswith("/v3/jobs/submit"):
+            return _Response({"result": {"uuid": uuid}})
+        if url.endswith("/status"):
+            return _Response({"result": {"status": "FINISHED"}})
+        if "/output/list/" in url:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+            if seen is not None:
+                seen.append(query)
+            index = int(query["skip"][0]) // int(query["limit"][0])
+            return _Response({"result": pages[index] if index < len(pages) else []})
+        return _Response({"result": {"uuid": uuid, "archiveSystemId": "ls6"}})
+
+    responder.paged = True  # serves its own pages; the harness must not short-circuit skip>0
+    return responder
+
+
+def _files(*names):
+    return [{"type": "file", "name": n, "path": "/scratch/" + n} for n in names]
+
+
+OPERA = ["disp_displacement.tif", "disp_overlay.png", "opera_disp_s1_cumulative.tif",
+         "opera_disp_s1_velocity.tif", "run-manifest.json", "tapisjob.out"]
+
+
+def _bound_ok(monkeypatch, capsys, output_file, names=OPERA, output_name="Cumulative displacement GeoTIFF"):
+    return _run(_model_code(output_file, output_name), monkeypatch, capsys,
+                _listing_responder([_files(*names)]))
+
+
+def _bound_error(monkeypatch, capsys, output_file, pages=None, output_name="Cumulative displacement GeoTIFF"):
+    pages = pages if pages is not None else [_files(*OPERA)]
+    with pytest.raises(RuntimeError) as exc:
+        _run(_model_code(output_file, output_name), monkeypatch, capsys, _listing_responder(pages))
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert str(exc.value).startswith(payload["code"])
+    return payload
+
+
+def test_literal_binding_selects_one_tif_among_several(monkeypatch, capsys):
+    result = _bound_ok(monkeypatch, capsys, "opera_disp_s1_cumulative.tif")
+    assert result["resource_uri"] == "tapis://ls6/scratch/opera_disp_s1_cumulative.tif"
+    assert result["selected_by"] == "binding"
+    assert result["output_file"] == "opera_disp_s1_cumulative.tif"
+    assert result["archived_name"] == "opera_disp_s1_cumulative.tif"
+    assert "diagnostic-token" not in json.dumps(result)
+
+
+def test_glob_binding_selects_the_single_match(monkeypatch, capsys):
+    result = _bound_ok(monkeypatch, capsys, "*_cumulative.tif")
+    assert result["archived_name"] == "opera_disp_s1_cumulative.tif"
+    assert result["selected_by"] == "binding"
+
+
+def test_literal_binding_may_contain_a_bracket(monkeypatch, capsys):
+    result = _bound_ok(monkeypatch, capsys, "run[1].tif", names=["run[1].tif", "run1.tif"])
+    assert result["archived_name"] == "run[1].tif"
+
+
+def test_binding_is_case_sensitive(monkeypatch, capsys):
+    payload = _bound_error(monkeypatch, capsys, "OPERA_DISP_S1_CUMULATIVE.TIF")
+    assert payload["code"] == "MODEL_OUTPUT_MISSING"
+
+
+def test_a_bound_output_never_falls_back_to_the_name_rule(monkeypatch, capsys):
+    # The name rule would pick model.cbb; the binding names a file that is absent.
+    payload = _bound_error(monkeypatch, capsys, "heads.hds",
+                           pages=[_files("model.cbb", "model.hds")], output_name="cbb")
+    assert payload["code"] == "MODEL_OUTPUT_MISSING"
+
+
+def test_missing_binding_reports_candidates_and_a_hint(monkeypatch, capsys):
+    payload = _bound_error(monkeypatch, capsys, "cumulative.tif")
+    assert payload["code"] == "MODEL_OUTPUT_MISSING"
+    details = payload["details"]
+    assert details["output_file"] == "cumulative.tif"
+    assert details["output_name"] == "cumulative displacement geotiff"
+    assert details["candidates"] == ["disp_displacement.tif", "opera_disp_s1_cumulative.tif",
+                                     "opera_disp_s1_velocity.tif"]
+    assert details["hint"] == "re-register the configuration's output binding"
+    assert details["job_uuid"] == "bind-job" and details["truncated"] is False
+    assert details["listed"] == 5  # tapisjob.out is not a candidate
+    assert "tapisjob.out" not in details["archived_files"]
+    assert "diagnostic-token" not in json.dumps(payload)
+
+
+def test_glob_matching_many_files_is_ambiguous(monkeypatch, capsys):
+    payload = _bound_error(monkeypatch, capsys, "*.tif")
+    assert payload["code"] == "MODEL_OUTPUT_AMBIGUOUS"
+    assert "candidates" not in payload["details"] and payload["details"]["output_file"] == "*.tif"
+
+
+def test_tapisjob_files_are_never_candidates(monkeypatch, capsys):
+    payload = _bound_error(monkeypatch, capsys, "*.out")
+    assert payload["code"] == "MODEL_OUTPUT_MISSING"
+    result = _run(_model_code(output_name="result.out"), monkeypatch, capsys,
+                  _listing_responder([_files("tapisjob.out", "result.out")]))
+    assert result["archived_name"] == "result.out" and result["selected_by"] == "name"
+
+
+def test_unbound_output_records_the_name_rule_in_the_manifest(monkeypatch, capsys):
+    result = _run(_model_code(), monkeypatch, capsys, _listing_responder([_files("model.cbb")]))
+    assert result["selected_by"] == "name" and result["output_file"] is None
+
+
+def test_listing_is_paged_until_an_empty_page(monkeypatch, capsys):
+    # A short page is not the end: Tapis may cap ``limit`` below what was asked.
+    seen = []
+    first = _files(*["f%04d.txt" % i for i in range(1000)])
+    pages = [first, _files("late.tif")]
+    result = _run(_model_code("late.tif"), monkeypatch, capsys, _listing_responder(pages, seen=seen))
+    assert result["archived_name"] == "late.tif"
+    assert [(q["limit"], q["skip"]) for q in seen] == [
+        (["1000"], ["0"]), (["1000"], ["1000"]), (["1000"], ["2000"])]
+    assert result["selected_by"] == "binding"
+
+
+def test_missing_glob_binding_lists_no_extension_candidates(monkeypatch, capsys):
+    with pytest.raises(RuntimeError, match="MODEL_OUTPUT_MISSING"):
+        _run(_model_code("*.cb[bc]"), monkeypatch, capsys,
+             _listing_responder([_files("a.cbz", "b.tif")]))
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["details"]["candidates"] == []
+    assert payload["details"]["archived_files"] == ["a.cbz", "b.tif"]
+
+
+def test_listing_stops_after_five_full_pages_and_flags_truncation(monkeypatch, capsys):
+    seen = []
+    pages = [_files(*["p%d_%04d.txt" % (p, i) for i in range(1000)]) for p in range(6)]
+    with pytest.raises(RuntimeError, match="MODEL_OUTPUT_MISSING"):
+        _run(_model_code("gone.tif"), monkeypatch, capsys, _listing_responder(pages, seen=seen))
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert len(seen) == 5
+    assert payload["details"]["truncated"] is True and payload["details"]["listed"] == 5000
+    assert len(payload["details"]["archived_files"]) == 40
+
+
+@pytest.mark.parametrize("bad", ["a/b", "..", "/abs", "tapisjob.out", "{param:x}", "x" * 256,
+                                 "it's.tif", "a\nb.tif"])
+def test_the_task_itself_rejects_an_invalid_binding(bad, monkeypatch, capsys):
+    code = _model_code("placeholder.tif").replace("'placeholder.tif'", repr(bad))
+    with pytest.raises(RuntimeError, match="MODEL_OUTPUT_FILE_INVALID"):
+        _run(code, monkeypatch, capsys, _listing_responder([_files("a.tif")]))
+    capsys.readouterr()
+
+
+def test_output_file_is_substituted_last_so_it_cannot_inject_a_placeholder():
+    # Rejected at submit, but the generator must still be inert for any string.
+    code = _model_code("__OUTPUT_NAME__")
+    assert "_output_file = '__OUTPUT_NAME__'" in code

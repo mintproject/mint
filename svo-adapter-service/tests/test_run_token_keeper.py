@@ -423,7 +423,10 @@ def _run_generated_model_task(monkeypatch, *, baked_token: str, fresh_token: str
             return _FakeResponse({"result": {"uuid": job_uuid}})
         if url.endswith(f"/v3/jobs/{job_uuid}/status"):
             return _FakeResponse({"result": {"status": "FINISHED"}})
-        if url.endswith("/output/list/"):
+        if url.split("?")[0].endswith("/output/list/"):
+            # One page of results; the task keeps paging until an empty page.
+            if "skip=0" not in url:
+                return _FakeResponse({"result": []})
             return _FakeResponse({"result": [{"name": "model.cbb", "type": "file",
                                               "url": "tapis://ls6/out/model.cbb"}]})
         if url.endswith(f"/v3/jobs/{job_uuid}"):

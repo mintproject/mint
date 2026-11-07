@@ -536,6 +536,13 @@ export const modelSecretFromCatalogGQL = (p: any): ModelSecretDeclaration => {
     return declaration;
 };
 
+// Catalog declaration order: position ascending, ties broken by id, so "the first
+// output" does not depend on the row order Hasura happens to return. Returns a copy.
+const sortByPosition = (ios: ModelIO[]): ModelIO[] =>
+    [...ios].sort(
+        (a, b) => (a.position ?? 0) - (b.position ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    );
+
 export const modelFromGQL = (config: any): Model => {
     // Secret rows are removed from the parameter stream here, once, so no
     // downstream consumer (bindings, seeds, job args) ever sees them.
@@ -549,8 +556,12 @@ export const modelFromGQL = (config: any): Model => {
         model_configuration: config.model_configuration_id || null,
         software_image: config.has_software_image || "",
         code_url: config.has_component_location || "",
-        input_files: (config.inputs || []).map((row: any) => modelIOFromCatalogGQL(row)),
-        output_files: (config.outputs || []).map((row: any) => modelIOFromCatalogGQL(row, 'output')),
+        input_files: sortByPosition(
+            (config.inputs || []).map((row: any) => modelIOFromCatalogGQL(row))
+        ),
+        output_files: sortByPosition(
+            (config.outputs || []).map((row: any) => modelIOFromCatalogGQL(row, "output"))
+        ),
         input_parameters: parameterRows
             .filter((p: any) => !isSecretParameterRow(p))
             .map((p: any) => modelParameterFromCatalogGQL(p)),
@@ -583,6 +594,8 @@ export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): Mod
         is_optional: junctionRow.is_optional ?? false,
         // Name of the Tapis app file input this input feeds; null before the binding was recorded.
         app_input_name: junctionRow.app_input_name ?? undefined,
+        // Output junction binding to an archived file; null before it was recorded.
+        archived_file: junctionRow.archived_file ?? undefined,
         standard_variables: standardVariablesFromPresentations(io.presentations)
     } as ModelIO;
 };
