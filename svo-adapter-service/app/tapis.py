@@ -654,7 +654,7 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
 
         _detail = _request_retry("/v3/jobs/%s" % _up.quote(_job_uuid, safe=""))
         _job = (_detail.get("result") if isinstance(_detail, dict) else None) or {}
-        # Tapis pages the listing (default 100 entries), so walk it explicitly.
+        # Tapis pages the listing (default 100 entries), so walk it until an empty page.
         _page_size, _max_pages = 1000, 5
         _listed = []
         _truncated = False
@@ -666,7 +666,9 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 _files_result = (_files_result.get("files") or _files_result.get("items") or
                                  _files_result.get("results") or [])
             _listed.extend(_files_result)
-            if len(_files_result) < _page_size:
+            # Stop on an empty page, not a short one: Tapis may cap ``limit``
+            # below what was asked, and a short page would then hide the rest.
+            if not _files_result:
                 break
         else:
             _truncated = True
@@ -689,7 +691,8 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
                 fnmatch.fnmatchcase(str(entry.get("name") or ""), _output_file) if _is_glob
                 else str(entry.get("name") or "") == _output_file)]
             if not _matches:
-                _ext = _output_file.rsplit(".", 1)[1] if "." in _output_file else ""
+                # Near misses share a literal binding's extension; a glob has none to share.
+                _ext = "" if _is_glob else (_output_file.rsplit(".", 1)[1] if "." in _output_file else "")
                 _candidates = [n for n in _names if _ext and n.endswith("." + _ext)]
                 _die("model output file %s was not found in the job archive" % _output_file,
                      "MODEL_OUTPUT_MISSING",

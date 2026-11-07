@@ -69,6 +69,13 @@ def _run(code, monkeypatch, capsys, responder, token="diagnostic-token", existin
         if "/v3/jobs/list" in request.full_url:
             lookups.append(request.full_url)
             return _Response({"result": list(existing_jobs)})
+        # The task pages the archive listing until an empty page. Responders that
+        # serve one fixed listing (not ``_listing_responder``) get that page at
+        # skip=0 and an empty page afterwards, as Tapis would answer.
+        if "/output/list/" in request.full_url and not getattr(responder, "paged", False):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(request.full_url).query)
+            if int((query.get("skip") or ["0"])[0]) > 0:
+                return _Response({"result": []})
         return responder(request, timeout)
 
     monkeypatch.setattr(urllib.request, "urlopen", urlopen)
@@ -411,6 +418,7 @@ def _listing_responder(pages, uuid="bind-job", seen=None):
             return _Response({"result": pages[index] if index < len(pages) else []})
         return _Response({"result": {"uuid": uuid, "archiveSystemId": "ls6"}})
 
+    responder.paged = True  # serves its own pages; the harness must not short-circuit skip>0
     return responder
 
 
@@ -502,13 +510,25 @@ def test_unbound_output_records_the_name_rule_in_the_manifest(monkeypatch, capsy
     assert result["selected_by"] == "name" and result["output_file"] is None
 
 
-def test_listing_is_paged_until_a_short_page(monkeypatch, capsys):
+def test_listing_is_paged_until_an_empty_page(monkeypatch, capsys):
+    # A short page is not the end: Tapis may cap ``limit`` below what was asked.
     seen = []
     first = _files(*["f%04d.txt" % i for i in range(1000)])
     pages = [first, _files("late.tif")]
     result = _run(_model_code("late.tif"), monkeypatch, capsys, _listing_responder(pages, seen=seen))
     assert result["archived_name"] == "late.tif"
-    assert [(q["limit"], q["skip"]) for q in seen] == [(["1000"], ["0"]), (["1000"], ["1000"])]
+    assert [(q["limit"], q["skip"]) for q in seen] == [
+        (["1000"], ["0"]), (["1000"], ["1000"]), (["1000"], ["2000"])]
+    assert result["selected_by"] == "binding"
+
+
+def test_missing_glob_binding_lists_no_extension_candidates(monkeypatch, capsys):
+    with pytest.raises(RuntimeError, match="MODEL_OUTPUT_MISSING"):
+        _run(_model_code("*.cb[bc]"), monkeypatch, capsys,
+             _listing_responder([_files("a.cbz", "b.tif")]))
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["details"]["candidates"] == []
+    assert payload["details"]["archived_files"] == ["a.cbz", "b.tif"]
 
 
 def test_listing_stops_after_five_full_pages_and_flags_truncation(monkeypatch, capsys):

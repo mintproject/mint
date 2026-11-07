@@ -66,7 +66,9 @@ const isValidOutputFile = (value: string) =>
     OUTPUT_FILE_PATTERN.test(value) &&
     value !== "." &&
     value !== ".." &&
-    !value.toLowerCase().startsWith("tapisjob");
+    !value.toLowerCase().startsWith("tapisjob") &&
+    // A reference is the whole value or nothing; anything else with {param: is malformed.
+    !value.includes("{param:");
 
 /**
  * The archived file the bridge should select for a model output: the junction's

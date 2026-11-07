@@ -130,8 +130,10 @@ the previous one):
   `OPERA_L3_DISP-S1.zip`; WERC `{param:werc-param-displacement-geotiff-name}` and
   `{param:werc-param-velocity-geotiff-name}` (the parameters behind
   `DISPLACEMENT_GEOTIFF_NAME` / `VELOCITY_GEOTIFF_NAME`, YAML lines ~580-596, defaults
-  `opera_disp_s1_cumulative.tif` / `opera_disp_s1_velocity.tif`),
-  `werc-run-manifest.json`. Outputs that are a directory or a
+  `opera_disp_s1_cumulative.tif` / `opera_disp_s1_velocity.tif`). The WERC manifest
+  stays unbound: the finished run `ue_3a5901b2` archived no
+  `werc-run-manifest.json`, so binding it would fail every request for that output
+  until the app's archive is confirmed. Outputs that are a directory or a
   set (cropped NetCDFs, anchors under `output/anchors/`, H2I artifacts) stay
   unbound; an unbound output keeps today's behaviour. The loader PUTs
   `hasOutput: [{id, archivedFile}]`, omitting the key when the YAML has none, checks
@@ -370,6 +372,15 @@ treat a missing binding as unbound and behave as today.
   into this spec as section 3b because it sits in the same EM code and the SUBSIDE
   scenario path depends on it.
 
+- 2026-11-07 (QA should-fix items applied): a `{param:…}` reference must be the whole
+  value in the registrar and the EM (a malformed or embedded reference is rejected
+  where it is written, not at the adapter); the registrar uses `fullmatch`; the
+  model task pages until an empty page rather than a short one (Tapis may cap
+  `limit`), so `truncated` means five non-empty pages; `MODEL_OUTPUT_MISSING`
+  `candidates` are computed for literal bindings only. Not applied: single-pass
+  placeholder substitution (a `__OUTPUT_FILE__` literal inside a caller string would
+  only break the generated source, and the whitelist excludes it from the one
+  caller-controlled value).
 - 2026-11-07 (implementation deviations, all four halves coded and tested):
   - EM raises `UnifiedExecutionError(422, …, "MODEL_OUTPUT_FILE_UNRESOLVED")`
     rather than a plain `Error` with `.code`: only that type fails the submit fast

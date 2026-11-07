@@ -146,6 +146,8 @@ describe("buildCompositeWorkflowModelTask output_file", () => {
         ["an empty value", `{param:${werc}}`, [parameter({ default: "" })], undefined],
         ["a path in the resolved value", `{param:${werc}}`, [parameter()], "a/b"],
         ["a tapisjob file in the resolved value", `{param:${werc}}`, [parameter()], "tapisjob.out"],
+        ["a malformed reference", "{param:}", [], undefined],
+        ["an embedded reference", "x{param:p}.tif", [], undefined],
         ["a plain value with a path", "a/b", [], undefined],
         ["a plain Tapis job file", "TapisJob.log", [], undefined],
         ["a plain dot-dot", "..", [], undefined]
