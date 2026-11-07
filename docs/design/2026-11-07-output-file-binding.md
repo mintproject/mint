@@ -1,6 +1,6 @@
 # Explicit output file binding for composite model runs
 
-Status: Implementing (rev 2 approved 2026-11-07)
+Status: Implemented (rev 2 approved 2026-11-07; live on dev 2026-11-07, PR mintproject/mint#404, modflow-executables#4)
 
 Base: `origin/develop` at 67f8d35 (PR #400) plus #402/#403. Mirrors
 [2026-11-05-app-input-binding.md](2026-11-05-app-input-binding.md), whose section 1
@@ -404,6 +404,17 @@ treat a missing binding as unbound and behave as today.
     carry the AOI typing and `appInputName`; it was rebased onto `origin/main`
     (no overlapping files) before `archivedFile` was added, so one YAML now holds
     both bindings. EM GraphQL types were hand-edited (codegen needs a live Hasura).
+
+- 2026-11-07 (live verification): merged as 384ebd4 and deployed to dev; six bindings
+  re-registered with `--only-output-binding`; run `ue_c09de4f2` (WERC Waco, submitted
+  through SUBSIDE-through-DYNAMO) finished on ls6, the model task selected
+  `opera_disp_s1_cumulative.tif` and the publish step produced STAC item
+  `subsidence-rates-dev/ue_c09de4f2-…` (asset `cumulative`) and CKAN dataset
+  `subsidence-rates-dev--ue_c09de4f2-…` in `dso-internal`. Follow-ups seen on that
+  run, outside this spec: the STAC item's start/end datetime is the publish date,
+  not the analysis window; only the requested output is published (no velocity
+  asset); the dataset came out public although the `public` parameter defaults to
+  false (cause under investigation).
 
 ## User feedback / decisions
 
