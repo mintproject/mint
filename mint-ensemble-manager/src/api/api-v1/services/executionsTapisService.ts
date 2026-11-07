@@ -34,6 +34,7 @@ export interface ExecutionsTapisService {
         output_uri: string;
         output_name: string;
         output_format?: string;
+        output_file?: string;
         job_definition: unknown;
     }>;
     compositeModelContext(

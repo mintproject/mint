@@ -23,6 +23,7 @@ fragment model_info on modelcatalog_configuration {
         }
     }
     outputs {
+        archived_file
         output {
             id
             label

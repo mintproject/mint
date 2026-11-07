@@ -2,7 +2,8 @@ import {
     executionToGQL,
     executionFromGQL,
     executionResultsToGQL,
-    modelIOFromCatalogGQL
+    modelIOFromCatalogGQL,
+    modelFromGQL
 } from "@/classes/graphql/graphql_adapter";
 import { Execution } from "@/classes/mint/mint-types";
 
@@ -111,5 +112,37 @@ describe("executionResultsToGQL", () => {
                 }
             }
         }]);
+    });
+});
+
+describe("output junction archived_file and declaration order", () => {
+    const outputRow = (id: string, position: number, archived_file?: string | null) => ({
+        archived_file,
+        output: { id, label: id, has_format: "tif", position }
+    });
+
+    it("reads archived_file from the output junction row", () => {
+        expect(modelIOFromCatalogGQL(outputRow("o1", 1, "*.tif"), "output").archived_file).toBe(
+            "*.tif"
+        );
+        expect(
+            modelIOFromCatalogGQL(outputRow("o2", 1, null), "output").archived_file
+        ).toBeUndefined();
+    });
+
+    it("orders outputs by position regardless of row order, ties by id", () => {
+        const rows = [outputRow("d", 4), outputRow("c", 2), outputRow("b", 2), outputRow("a", 1)];
+        const model = modelFromGQL({ id: "cfg", label: "Cfg", outputs: rows });
+        expect(model.output_files.map((o) => o.id)).toEqual(["a", "b", "c", "d"]);
+        expect(rows.map((r) => r.output.id)).toEqual(["d", "c", "b", "a"]);
+    });
+
+    it("orders inputs by position without mutating the rows", () => {
+        const rows = [
+            { input: { id: "i2", label: "i2", position: 3 } },
+            { input: { id: "i1", label: "i1", position: 1 } }
+        ];
+        const model = modelFromGQL({ id: "cfg", label: "Cfg", inputs: rows });
+        expect(model.input_files.map((i) => i.id)).toEqual(["i1", "i2"]);
     });
 });

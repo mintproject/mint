@@ -741,6 +741,7 @@ export function createUnifiedExecutionService(
                 output_uri: string;
                 output_name: string;
                 output_format?: string;
+                output_file?: string;
                 job_definition: unknown;
             }>;
             compositeModelContext?(
@@ -2553,6 +2554,9 @@ export function createUnifiedExecutionService(
                                     output_uri: modelTask.output_uri,
                                     output_name: modelTask.output_name,
                                     output_format: modelTask.output_format || "",
+                                    ...(modelTask.output_file === undefined
+                                        ? {}
+                                        : { output_file: modelTask.output_file }),
                                     max_minutes: requestedMaxMinutes,
                                     job_definition: modelTask.job_definition,
                                     ...(inputs

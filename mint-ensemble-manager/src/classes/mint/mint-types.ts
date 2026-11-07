@@ -355,6 +355,9 @@ export interface ModelIO extends IdNameObject {
     is_optional?: boolean;
     // Tapis app file input this input feeds (catalog junction binding).
     app_input_name?: string;
+    // Outputs only: file name or fnmatch glob of this output in the job archive
+    // (catalog junction binding), or a "{param:<parameter id>}" reference.
+    archived_file?: string;
     // Standard variable IRIs from the catalog presentations of this input's
     // dataset specification (has_standard_variable). Empty when untyped.
     standard_variables?: string[];

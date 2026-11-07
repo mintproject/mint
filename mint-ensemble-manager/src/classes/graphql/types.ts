@@ -4440,6 +4440,7 @@ export type Modelcatalog_Configuration_Order_By = {
 /** columns and relationships of "modelcatalog_configuration_output" */
 export type Modelcatalog_Configuration_Output = {
   __typename?: 'modelcatalog_configuration_output';
+  archived_file?: Maybe<Scalars['String']['output']>;
   /** An object relationship */
   configuration: Modelcatalog_Configuration;
   configuration_id: Scalars['String']['output'];
