@@ -370,6 +370,30 @@ treat a missing binding as unbound and behave as today.
   into this spec as section 3b because it sits in the same EM code and the SUBSIDE
   scenario path depends on it.
 
+- 2026-11-07 (implementation deviations, all four halves coded and tested):
+  - EM raises `UnifiedExecutionError(422, …, "MODEL_OUTPUT_FILE_UNRESOLVED")`
+    rather than a plain `Error` with `.code`: only that type fails the submit fast
+    with a 4xx (the `SECRET_ENV_UNDECLARED` pattern); a plain error would be stored
+    as an unknown-status run. The `{param:…}` lookup accepts the parameter's full id
+    or its last `/`/`#` segment; two parameters sharing a last segment resolve to the
+    first found.
+  - The registrar's `{param:…}` accepts the bare parameter id only (the whitelist has
+    no `/`); it must name a parameter of the same configuration.
+  - MODFLOW: outputs that share an extension within a variant (MODFLOW-96 `.dat`
+    heads/budget/drawdown) stay unbound rather than aborting registration;
+    `cbc-mf2005` maps to `*.cb[bc]` like `cbc`.
+  - Adapter: the generated task re-validates the embedded value and dies
+    `MODEL_OUTPUT_FILE_INVALID`; an empty `output_file` is unbound; any `{param:`
+    substring is rejected at submit; the paging query changed existing test
+    responders from `endswith("/output/list/")` to a `split("?")` match.
+  - Pre-existing failures left alone: 4 `test_demo_api.py` tests (adapter) and
+    `test_hydraulic_head_inference_metadata.py::test_public_inference_relationships_are_readable_anonymously`
+    (graphql_engine) fail identically on `origin/develop`.
+  - SUBSIDE: `feat/runs-through-dynamo` had branched before the 12 commits that
+    carry the AOI typing and `appInputName`; it was rebased onto `origin/main`
+    (no overlapping files) before `archivedFile` was added, so one YAML now holds
+    both bindings. EM GraphQL types were hand-edited (codegen needs a live Hasura).
+
 ## User feedback / decisions
 
 - 2026-11-07: user approved rev 2 ("approve"). Earlier ls6 failures were the user's own
