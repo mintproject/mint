@@ -279,6 +279,27 @@ describe('transformRow - junction column hoist (D-21 round-trip)', () => {
     const hasInput = result['hasInput'] as Array<Record<string, unknown>>;
     expect(hasInput[0]).not.toHaveProperty('appInputName');
   });
+  it('hoists archived_file from junction row onto nested output DSpec as scalar', () => {
+    const row = {
+      id: 'https://w3id.org/okn/i/mint/Cfg1',
+      outputs: [
+        { archived_file: 'head*.tif', output: { id: 'https://w3id.org/okn/i/mint/Dspec1' } },
+      ],
+    };
+    const result = transformRow(row, configurationConfig);
+    const hasOutput = result['hasOutput'] as Array<Record<string, unknown>>;
+    expect(hasOutput[0]!['archivedFile']).toBe('head*.tif');
+  });
+
+  it('omits archivedFile when junction column is null', () => {
+    const row = {
+      id: 'https://w3id.org/okn/i/mint/Cfg1',
+      outputs: [{ archived_file: null, output: { id: 'https://w3id.org/okn/i/mint/Dspec1' } }],
+    };
+    const result = transformRow(row, configurationConfig);
+    const hasOutput = result['hasOutput'] as Array<Record<string, unknown>>;
+    expect(hasOutput[0]).not.toHaveProperty('archivedFile');
+  });
 });
 
 describe('transformList', () => {

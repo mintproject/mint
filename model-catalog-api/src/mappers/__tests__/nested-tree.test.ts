@@ -122,6 +122,17 @@ describe('buildTree — single-level junction', () => {
     expect(tree.junctions[0].children[0].columns).toEqual({});
   });
 
+  it('captures junction extra column archived_file (archivedFile) on hasOutput', () => {
+    const cfg = getResourceConfig('modelconfigurations')!;
+    const body = {
+      id: 'cfg-3c',
+      hasOutput: [{ id: 'ds-3c', archivedFile: 'head_{param:p1}.tif' }],
+    };
+    const tree = buildTree(body, cfg);
+    expect(tree.junctions[0].junctionColumns).toEqual([{ archived_file: 'head_{param:p1}.tif' }]);
+    expect(tree.junctions[0].children[0].columns).toEqual({});
+  });
+
   it('auto-generates id when nested entity lacks one', () => {
     const cfg = getResourceConfig('modelconfigurations')!;
     const body = {

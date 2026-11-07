@@ -14233,6 +14233,14 @@ components:
             definition.
           nullable: true
           type: string
+        archivedFile:
+          description: >-
+            File name, or fnmatch glob, of this output in the job's archive
+            directory for the configuration that lists it; a {param:<parameter id>}
+            reference stands for that parameter's value. Absent when the output is
+            not bound to a file.
+          nullable: true
+          type: string
         id:
           description: identifier
           nullable: false
