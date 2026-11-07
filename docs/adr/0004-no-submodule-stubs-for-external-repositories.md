@@ -4,14 +4,14 @@
 - **Deciders:** MetaLearn engineering
 - **Related:** refines [ADR-0003](0003-single-repo-over-submodule-superproject.md) § 3;
   [ADR-0002](0002-react-frontend-replaces-litelement-ui.md); issue
-  [#81](https://github.com/mintproject/monorepo/issues/81)
+  [#81](https://github.com/mintproject/mint/issues/81)
 
 ---
 
 ## Context
 
 [ADR-0003](0003-single-repo-over-submodule-superproject.md) imported three services and
-left two gitlinks in place: the MINT chart (`mintproject/mint`, at `helm-charts/`) and
+left two gitlinks in place: the MINT chart (`mintproject/mint-chart-archive`, at `helm-charts/`) and
 `ui` (`mint-ui-lit`, at `ui/`). It gave a reason for each. Both reasons said why the
 content must not be **imported**. Neither said why a **gitlink** must stay.
 
@@ -36,7 +36,7 @@ nothing. A pointer that constrains nothing is not a dependency.
 reads like a dependency update in `git log`. It is a note to a human saying which chart
 version is deployed. That note was true, and it was in the wrong place.
 
-**The chart is already distributed properly.** `mintproject/mint` publishes an
+**The chart is already distributed properly.** `mintproject/mint-chart-archive` publishes an
 `index.yaml` and packaged releases to `https://mintproject.github.io/mint`. ADR-0003
 cited that publication as the reason not to import the chart. It is equally the reason
 not to vendor a pointer to it: a Helm repository is the supported way to consume a chart,
@@ -92,14 +92,14 @@ remember it, and no CI job has to configure it.
 
 **The chart's history leaves this repository's reach.** `git log helm-charts` returned 11
 pointer moves, never a chart change, so no reader loses anything real. To read the chart's
-history, read `mintproject/mint`.
+history, read `mintproject/mint-chart-archive`.
 
 **Nothing in this repository states the deployed chart version any more.** That is
 correct — `dynamo` states it — but a reader who expected to find it here will not. This
 ADR and `CONTEXT.md` are where that reader is sent.
 
 **`ui` loses its countdown marker.** The stub was a visible reminder that
-[#81](https://github.com/mintproject/monorepo/issues/81) is open. #81 tracks it now, and
+[#81](https://github.com/mintproject/mint/issues/81) is open. #81 tracks it now, and
 `CONTEXT.md` still defines the term.
 
 ## Traps for anyone working here

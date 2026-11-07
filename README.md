@@ -1,6 +1,6 @@
 # MINT - Model INTegration
 
-![Last Commit](https://img.shields.io/github/last-commit/mintproject/monorepo/main)
+![Last Commit](https://img.shields.io/github/last-commit/mintproject/mint/main)
 
 ## Build Status
 
@@ -12,12 +12,12 @@ branch — see `CLAUDE.md` § Branch model.
 
 | Component | Build |
 |-----------|-------|
-| Model Catalog API | [![Model Catalog API](https://github.com/mintproject/monorepo/actions/workflows/model-catalog-api.yml/badge.svg?branch=main)](https://github.com/mintproject/monorepo/actions/workflows/model-catalog-api.yml) |
-| Ensemble Manager | [![Ensemble Manager](https://github.com/mintproject/monorepo/actions/workflows/mint-ensemble-manager.yml/badge.svg?branch=main)](https://github.com/mintproject/monorepo/actions/workflows/mint-ensemble-manager.yml) |
-| UI (React) | [![UI React](https://github.com/mintproject/monorepo/actions/workflows/ui-react.yml/badge.svg?branch=main)](https://github.com/mintproject/monorepo/actions/workflows/ui-react.yml) |
-| Hasura GraphQL engine | [![GraphQL Engine](https://github.com/mintproject/monorepo/actions/workflows/graphql_engine.yml/badge.svg?branch=main)](https://github.com/mintproject/monorepo/actions/workflows/graphql_engine.yml) |
+| Model Catalog API | [![Model Catalog API](https://github.com/mintproject/mint/actions/workflows/model-catalog-api.yml/badge.svg?branch=main)](https://github.com/mintproject/mint/actions/workflows/model-catalog-api.yml) |
+| Ensemble Manager | [![Ensemble Manager](https://github.com/mintproject/mint/actions/workflows/mint-ensemble-manager.yml/badge.svg?branch=main)](https://github.com/mintproject/mint/actions/workflows/mint-ensemble-manager.yml) |
+| UI (React) | [![UI React](https://github.com/mintproject/mint/actions/workflows/ui-react.yml/badge.svg?branch=main)](https://github.com/mintproject/mint/actions/workflows/ui-react.yml) |
+| Hasura GraphQL engine | [![GraphQL Engine](https://github.com/mintproject/mint/actions/workflows/graphql_engine.yml/badge.svg?branch=main)](https://github.com/mintproject/mint/actions/workflows/graphql_engine.yml) |
 | UI (LitElement, external repo [mint-ui-lit](https://github.com/mintproject/mint-ui-lit)) | [![ui](https://github.com/mintproject/mint-ui-lit/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/mintproject/mint-ui-lit/actions/workflows/docker-publish.yml) |
-| The MINT chart (`charts/mint/`) | [![Lint and Test Charts](https://github.com/mintproject/monorepo/actions/workflows/linter.yaml/badge.svg)](https://github.com/mintproject/monorepo/actions/workflows/linter.yaml) |
+| The MINT chart (`charts/mint/`) | [![Lint and Test Charts](https://github.com/mintproject/mint/actions/workflows/linter.yaml/badge.svg)](https://github.com/mintproject/mint/actions/workflows/linter.yaml) |
 
 MINT is a scientific modeling platform that enables researchers to discover, configure, and execute computational models. It provides a unified catalog of models, datasets, and variables, allowing scientists to set up and run model ensembles for complex scenarios such as climate impact analysis, hydrology, and agriculture.
 
@@ -98,10 +98,10 @@ One thing MINT deploys is not in this repository. Read it where it lives:
 
 - **`ui`**, the deprecated LitElement frontend —
   [`mintproject/mint-ui-lit`](https://github.com/mintproject/mint-ui-lit). It is being
-  removed from TACC by [#81](https://github.com/mintproject/monorepo/issues/81).
+  removed from TACC by [#81](https://github.com/mintproject/mint/issues/81).
 
 > **Four repositories left this checkout in the single-repo cutover**
-> ([#146](https://github.com/mintproject/monorepo/issues/146)):
+> ([#146](https://github.com/mintproject/mint/issues/146)):
 > `model-catalog-ontology/`, `MINT_USERGUIDE/`, `model-catalog-fetch-api-client/` and
 > `dynamo-experiment-may/`. Two stay maintained in their own repositories:
 >
@@ -143,7 +143,7 @@ Then open `http://localhost:3000`.
 Each component can be developed independently. See the README in each directory for detailed instructions.
 
 ```bash
-git clone https://github.com/mintproject/monorepo.git
+git clone https://github.com/mintproject/mint.git
 
 # Model Catalog API
 cd model-catalog-api

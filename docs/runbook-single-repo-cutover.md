@@ -24,7 +24,7 @@ This runbook converts the **superproject** into the **single-repo**. It brings
 directories, and it archives their source repositories.
 
 It is the output of wayfinder map
-[#138](https://github.com/mintproject/monorepo/issues/138). Every decision below
+[#138](https://github.com/mintproject/mint/issues/138). Every decision below
 has a ticket. Read the ticket for the evidence. Do not re-open a decision here.
 
 See [ADR-0003](./adr/0003-single-repo-over-submodule-superproject.md) for why.
@@ -33,7 +33,7 @@ See [`CONTEXT.md`](../CONTEXT.md) for **superproject**, **single-repo**,
 
 ## Before you start: seven facts that will bite you
 
-1. **Squash merge destroys the import.** `mintproject/monorepo` allows squash and
+1. **Squash merge destroys the import.** `mintproject/mint` allows squash and
    rebase. A squash of an import branch flattens 138 to 726 commits into one. Use
    a merge commit. Phase 0 disables the other two buttons.
 2. **A GHCR package is created private.** The chart then fails to pull. Phase 7
@@ -44,7 +44,7 @@ See [`CONTEXT.md`](../CONTEXT.md) for **superproject**, **single-repo**,
 3. **Most failures here are silent.** `scripts/deploy-hasura.sh` keeps running and
    reports the wrong branch. The old bump skills keep running and return a stale
    SHA. Each phase has assertions, not a checklist.
-   ([#141](https://github.com/mintproject/monorepo/issues/141))
+   ([#141](https://github.com/mintproject/mint/issues/141))
    Three more turned up during execution, all of the same shape: `global.imageTag`
    was ignored by the chart while appearing to be set (Phase 2), the release
    re-tag workflow never ran while the release looked correct (Phase 8), and a
@@ -54,7 +54,7 @@ See [`CONTEXT.md`](../CONTEXT.md) for **superproject**, **single-repo**,
    The one-way steps are the issue transfers (Phase 10.1) and the first `dynamo`
    pin (Phase 11).
 5. **A Helm upgrade does not run Hasura migrations.**
-   ([#117](https://github.com/mintproject/monorepo/issues/117)) Phase 0.5 exists
+   ([#117](https://github.com/mintproject/mint/issues/117)) Phase 0.5 exists
    because of this. It did not bite in Phase 9 — the deployed image and
    `origin/main` held the same 26 migrations and the same 36 metadata and seed
    files, byte for byte. Re-check rather than assume; the next release may differ.
@@ -100,17 +100,17 @@ brew install git-filter-repo
 git filter-repo --version
 ```
 
-**0.2 Disable squash and rebase merge** on `mintproject/monorepo`, for the
+**0.2 Disable squash and rebase merge** on `mintproject/mint`, for the
 duration of the cutover.
 
 ```bash
-gh api -X PATCH repos/mintproject/monorepo \
+gh api -X PATCH repos/mintproject/mint \
   -F allow_squash_merge=false -F allow_rebase_merge=false -F allow_merge_commit=true
 ```
 
 **0.3 Merge `develop` into `main`.** `main` is 84 commits behind and has not
 moved since 2026-05-20.
-([#142](https://github.com/mintproject/monorepo/issues/142) decision 4 makes
+([#142](https://github.com/mintproject/mint/issues/142) decision 4 makes
 `main` the release branch. `latest` and `release-please` both key off it.)
 
 Do this before any import. Then the first `latest` and the first release come
@@ -123,11 +123,11 @@ test "$(git rev-list --count origin/main..origin/develop)" -eq 0
 ```
 
 Side effect: `ui-react` publishes `latest` for the first time. This closes
-[#151](https://github.com/mintproject/monorepo/issues/151).
+[#151](https://github.com/mintproject/mint/issues/151).
 
 **0.4 Land the `mint-ensemble-manager` preconditions in the source repository**,
 before the `filter-repo` run, so the import carries them.
-([#145](https://github.com/mintproject/monorepo/issues/145))
+([#145](https://github.com/mintproject/mint/issues/145))
 
 - Commit `package-lock.json`. Remove line 30 from `.gitignore`.
 - Add `"skipLibCheck": true` to `tsconfig.json`.
@@ -144,7 +144,7 @@ npm ci && npx tsc --noEmit && npm test
 
 Husky, `lint-staged`, `.release-it.json` and `VERSION` are **not** touched here.
 They are deleted in the single-repo, in Phase 5.
-([#149](https://github.com/mintproject/monorepo/issues/149) decision 11)
+([#149](https://github.com/mintproject/mint/issues/149) decision 11)
 
 **0.5 Check the content advance.** The import takes each service's `main`. The
 superproject pins a commit that may be behind it.
@@ -177,7 +177,7 @@ One pull request into `develop`.
 - Add an agent note naming `mintproject/Mint-ModelCatalog-Ontology` and
   `mintproject/MINT_USERGUIDE`. Both stay maintained and both keep outside forks.
   Without the note the content becomes invisible when the directory disappears.
-  ([#146](https://github.com/mintproject/monorepo/issues/146))
+  ([#146](https://github.com/mintproject/mint/issues/146))
 
 `dynamo-experiment-may` gets no note. It belongs to `In-For-Disaster-Analytics`.
 
@@ -207,7 +207,7 @@ Do this **before** 2.2. Flipping the chart key first points production at an
 image that does not exist.
 
 **2.2 Add `global.imageTag` to the MINT chart.** One pull request in
-`mintproject/mint`.
+`mintproject/mint-chart-archive`.
 
 The key is consumed by **exactly four** services:
 
@@ -221,7 +221,7 @@ or `postgis`. Those images do not come from the single-repo.
 `tag`. Only its `repository:` key changes, to GHCR.
 
 A per-service `tag` still overrides `global.imageTag`. The change is additive, so
-`dynamo` needs no change on cutover day, and the 2 forks of `mintproject/mint` do
+`dynamo` needs no change on cutover day, and the 2 forks of `mintproject/mint-chart-archive` do
 not break.
 
 Package it as `9.0.0-beta.7`. The chart is at `9.0.0-beta.6` today, and
@@ -249,7 +249,7 @@ helm template mint charts/mint --set global.imageTag=0.1.0 \
   | grep -E '^\s+image:' | sort -u
 ```
 
-Fixed in [`mintproject/mint#110`](https://github.com/mintproject/mint/pull/110),
+Fixed in [`mintproject/mint-chart-archive#110`](https://github.com/mintproject/mint-chart-archive/pull/110),
 packaged as `9.0.0-beta.8`. That change clears the four default tags, moves
 `ui_react` and `ensemble_manager` from Docker Hub to GHCR, and defaults
 `global.imageTag` to `0.1.0`. An empty default falls through to
@@ -278,7 +278,7 @@ whether an import completed.
 
 ### The import procedure, identical for all three
 
-([#143](https://github.com/mintproject/monorepo/issues/143))
+([#143](https://github.com/mintproject/mint/issues/143))
 
 A path cannot be a gitlink and a tree at the same time. Remove the gitlink first,
 or the merge hits a directory/file conflict.
@@ -325,7 +325,7 @@ can pin.
 
 ### The CI workflow, added with each import
 
-([#145](https://github.com/mintproject/monorepo/issues/145)) One file per
+([#145](https://github.com/mintproject/mint/issues/145)) One file per
 service, at `.github/workflows/<service>.yml`. **No path filter.**
 
 GitHub path filters are workflow-level, not job-level. A filtered `test` job and
@@ -420,8 +420,8 @@ Import as above, plus, in the same pull request:
   `git ls-remote` against a per-service repository. From this merge on, that
   repository still answers and returns a **stale SHA with no error**. A missing
   skill is loud. A stale pin is the failure class this whole map exists to
-  remove ([#70](https://github.com/mintproject/monorepo/issues/70),
-  [#148](https://github.com/mintproject/monorepo/issues/148)).
+  remove ([#70](https://github.com/mintproject/mint/issues/70),
+  [#148](https://github.com/mintproject/mint/issues/148)).
 
 There is no bump skill between Phase 3 and Phase 5. Set pins by hand in that
 window. It is short.
@@ -446,7 +446,7 @@ Import as above. Then, as **separate commits in the same pull request**, so each
 reverts on its own:
 
 **5a. The cleanup commit.**
-([#149](https://github.com/mintproject/monorepo/issues/149))
+([#149](https://github.com/mintproject/mint/issues/149))
 
 - Delete `.husky/` and the `"prepare"` script. `core.hooksPath` holds one value
   for the whole repository, and `ui-react` holds it. Two services cannot both
@@ -465,7 +465,7 @@ reverts on its own:
 **5b. The skills commit.**
 
 - Add the merged bump skill. It resolves one SHA or version from
-  `mintproject/monorepo` and writes it to `global.imageTag`. Flags select the
+  `mintproject/mint` and writes it to `global.imageTag`. Flags select the
   values file, the branch, and whether to open a pull request. The
   `component_key|owner/repo|branch` table disappears. That table is wrong in both
   old scripts today.
@@ -496,8 +496,8 @@ Root skills end at **two**, plus one directory-scoped skill under
 ## Phase 6 — Documentation cleanup
 
 One pull request into `develop`.
-([#141](https://github.com/mintproject/monorepo/issues/141),
-[#146](https://github.com/mintproject/monorepo/issues/146))
+([#141](https://github.com/mintproject/mint/issues/141),
+[#146](https://github.com/mintproject/mint/issues/146))
 
 **No agent instruction file moves.** Nested `CLAUDE.md` and directory-scoped
 skills are path-based, not repository-based. Paths do not change. State this in
@@ -525,10 +525,10 @@ Also delete:
 
 `README.md`:
 
-- Re-point the CI badges at `mintproject/monorepo`. They pin `branch=master` for
+- Re-point the CI badges at `mintproject/mint`. They pin `branch=master` for
   `mint-ui-lit` and `graphql_engine`; both default to `main`.
 - Fix `:109`. It says
-  `git clone --recurse-submodules https://github.com/mintproject/mint.git` — the
+  `git clone --recurse-submodules https://github.com/mintproject/mint-chart-archive.git` — the
   wrong repository, and the flag is now meaningless.
 - Delete the same two phantom directory rows.
 
@@ -556,7 +556,7 @@ done
 Measured 2026-08-29: `model-catalog-api` was public; `graphql_engine`,
 `mint-ui-lit` and `mint-ui-react` were not. A `ghcr.io/mintproject/mint-ui-react`
 package already exists and is private, although
-[#142](https://github.com/mintproject/monorepo/issues/142) records `ui-react` as
+[#142](https://github.com/mintproject/mint/issues/142) records `ui-react` as
 publishing to Docker Hub. Check what publishes there. Do not assume the package
 is new.
 
@@ -587,13 +587,13 @@ done
 4. ~~**Then** delete the `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets.~~
 
    **Correction: do not do this.** The secrets are **org-level**, and 18 other
-   repositories in the organisation still use them. `mintproject/monorepo` has
+   repositories in the organisation still use them. `mintproject/mint` has
    no repository-level secrets and no workflow that names `DOCKERHUB`, so there
    is nothing to delete here and deleting the org secrets breaks those 18 repos.
    Verify and move on:
 
    ```bash
-   gh secret list --repo mintproject/monorepo   # expect: empty
+   gh secret list --repo mintproject/mint   # expect: empty
    grep -rl DOCKERHUB .github/                  # expect: no matches
    ```
 
@@ -606,7 +606,7 @@ while its checks are pending.
 
 ## Phase 8 — The first release
 
-([#149](https://github.com/mintproject/monorepo/issues/149))
+([#149](https://github.com/mintproject/mint/issues/149))
 
 `release-please` opens a release pull request. Merge it. The version is
 **`0.1.0`**. `ui-react` sets that floor — it is `0.1.0` in the repository today
@@ -712,7 +712,7 @@ but only `:latest` and `:main` exist there; the per-commit SHA tags live only on
 Docker Hub. The cluster pinned a SHA, so `mint-ui` goes `ImagePullBackOff` while
 the old ReplicaSet keeps serving — the UI looks alive and the failure surfaces
 elsewhere. Disable the component, or pin `:latest`.
-[`mintproject/mint#111`](https://github.com/mintproject/mint/pull/111) makes
+[`mintproject/mint-chart-archive#111`](https://github.com/mintproject/mint-chart-archive/pull/111) makes
 `ui` disabled by default, in `9.0.0-beta.9`.
 
 Assert more than `Running`. `ensemble_manager` has **no readiness probe**, so
@@ -733,7 +733,7 @@ bare base path.
 A TACC deployment is **not** required. `dynamo` overrides every tag per service,
 so TACC does not consume `global.imageTag` until Phase 11. A TACC deploy would
 prove nothing extra about the repo move, and it costs an MFA-gated session and
-carries the [#117](https://github.com/mintproject/monorepo/issues/117) migration
+carries the [#117](https://github.com/mintproject/mint/issues/117) migration
 hazard.
 
 There is no waiting period. The gate is evidence, not the calendar. Archiving is
@@ -743,13 +743,13 @@ reversible, so a soak buys nothing.
 
 ## Phase 10 — Archive the source repositories
 
-([#144](https://github.com/mintproject/monorepo/issues/144)) An archived
+([#144](https://github.com/mintproject/mint/issues/144)) An archived
 repository is read-only. **Do every write first, in this order.**
 
 Steps 1, 2, 3 and 6 ran on 2026-08-30. Steps 4 and 5 were dropped — see the
 correction after step 6.
 
-1. **Transfer the 12 open issues to `mintproject/monorepo`.** 11 from
+1. **Transfer the 12 open issues to `mintproject/mint`.** 11 from
    `mint-ensemble-manager`, 1 from `graphql_engine`, 0 from `model-catalog-api`.
    Two are live work: `graphql_engine#13`, a grant bug on the junction tables,
    and `mint-ensemble-manager#108`, the model catalog GraphQL migration.
@@ -758,7 +758,7 @@ correction after step 6.
 
    **A transfer silently drops a label the target repository does not have.**
    `tapis` existed only in `mint-ensemble-manager` and carried 2 of the 12
-   issues. Create every missing label in `mintproject/monorepo` **before** the
+   issues. Create every missing label in `mintproject/mint` **before** the
    transfer. Afterwards you cannot tell from the moved issue that a label was
    lost.
 
@@ -766,7 +766,7 @@ correction after step 6.
    # Compare before transferring.
    gh issue list --repo mintproject/<source> --state open --limit 100 \
      --json labels --jq '[.[].labels[].name] | unique[]' | sort -u
-   gh label list --repo mintproject/monorepo --limit 100 --json name --jq '.[].name' | sort
+   gh label list --repo mintproject/mint --limit 100 --json name --jq '.[].name' | sort
    ```
 
    Done: `mint-ensemble-manager` 110, 109, 108, 105, 102, 101, 52, 40, 22, 14, 1
@@ -780,7 +780,7 @@ correction after step 6.
    show it, but `gh issue view 106` does — which reads as a missing issue unless
    you check `.pull_request`. Close it with `gh pr close`.
 3. Commit one README line per source repository: the code moved to
-   `mintproject/monorepo`, and this repository is read-only history. The GitHub
+   `mintproject/mint`, and this repository is read-only history. The GitHub
    archive banner says "archived", not "moved here".
 
    `model-catalog-fetch-api-client` needs different wording. Its code did **not**
@@ -804,7 +804,7 @@ Nothing breaks. Both artifacts keep working exactly as before:
   so no deployment reads them.
 - `@mintproject/modelcatalog_client` stays published, which is what
   `ui/package.json:30` needs while
-  [#81](https://github.com/mintproject/monorepo/issues/81) is open. The original
+  [#81](https://github.com/mintproject/mint/issues/81) is open. The original
   step said "do not unpublish" for that reason; not deprecating is strictly
   safer than deprecating.
 
@@ -838,7 +838,7 @@ Two defaults changed under that pin, so read `dynamo` before it ships.
 
 - `components.ui.enabled` is `false` from `9.0.0-beta.9`. If `dynamo` relies on
   the old `true`, the bump silently removes the legacy UI at TACC.
-  [#81](https://github.com/mintproject/monorepo/issues/81) is still open.
+  [#81](https://github.com/mintproject/mint/issues/81) is still open.
 - `components.ui_react` is enabled from `9.0.0-beta.10`, at host `mint.local`
   with `client_id: mint-local`. If `dynamo` does not set its own
   `components.ui_react.ingress.hosts` and `config.client_id`, the bump points the
@@ -886,7 +886,7 @@ State these plainly. Do not let a reader assume otherwise.
 - **`graphql_engine` has no `CLAUDE.md` and no version file.** Both are content,
   and content is out of scope.
 - **The chart pins `mint-ui-lit` at `tag: latest`.** That is
-  [#148](https://github.com/mintproject/monorepo/issues/148), live today and
+  [#148](https://github.com/mintproject/mint/issues/148), live today and
   unrelated to this cutover. `ensemble_manager` no longer does: `9.0.0-beta.8`
   clears its tag so `global.imageTag` applies. `mint-ui-lit` keeps `latest`
   because its GHCR repository has no SHA tags to pin instead.
@@ -898,11 +898,11 @@ State these plainly. Do not let a reader assume otherwise.
   default and `ui_react` could not be on by default, because it hard-failed to
   render without a `client_id`. `9.0.0-beta.10` closes this: `client_id` defaults
   to `mint-local` and `ui_react` is on, at host `mint.local`.
-  [`mintproject/mint#113`](https://github.com/mintproject/mint/pull/113).
+  [`mintproject/mint-chart-archive#113`](https://github.com/mintproject/mint-chart-archive/pull/113).
 - **`model-catalog-api/package.json` has no `"private": true`.** release-please
   rewrites its version downwards. Nothing publishes it today.
 - **`ui` stays a submodule** until
-  [#81](https://github.com/mintproject/monorepo/issues/81) removes Lit from TACC.
+  [#81](https://github.com/mintproject/mint/issues/81) removes Lit from TACC.
 - **The Docker Hub and npm deprecation notes are not posted, by decision.**
   Phase 10 steps 4 and 5, dropped on 2026-08-30. The Docker Hub images are
   unreferenced from chart `9.0.0-beta.8` on, and

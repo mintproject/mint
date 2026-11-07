@@ -7,8 +7,8 @@ set -euo pipefail
 #
 # The fixture is the catalog data that `docker compose up` loads on a laptop. It
 # keeps the whole controlled vocabulary and a subset of the catalog. See
-# https://github.com/mintproject/monorepo/issues/189 for the selection rule and
-# https://github.com/mintproject/monorepo/issues/190 for the file format.
+# https://github.com/mintproject/mint/issues/189 for the selection rule and
+# https://github.com/mintproject/mint/issues/190 for the file format.
 #
 # The script starts a throwaway Postgres container, restores the dump, deletes
 # the rows the fixture does not want, writes the fixture and removes the
