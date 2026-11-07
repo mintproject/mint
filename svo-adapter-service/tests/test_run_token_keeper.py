@@ -423,7 +423,7 @@ def _run_generated_model_task(monkeypatch, *, baked_token: str, fresh_token: str
             return _FakeResponse({"result": {"uuid": job_uuid}})
         if url.endswith(f"/v3/jobs/{job_uuid}/status"):
             return _FakeResponse({"result": {"status": "FINISHED"}})
-        if url.endswith("/output/list/"):
+        if url.split("?")[0].endswith("/output/list/"):
             return _FakeResponse({"result": [{"name": "model.cbb", "type": "file",
                                               "url": "tapis://ls6/out/model.cbb"}]})
         if url.endswith(f"/v3/jobs/{job_uuid}"):

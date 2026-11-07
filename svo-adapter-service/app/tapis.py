@@ -222,6 +222,26 @@ _INPUT_STAGING_DEFS = textwrap.dedent(
             _list.append({"name": _stage["app_input"], "sourceUrl": _uri})
 
     """).lstrip("\n")
+OUTPUT_FILE_PATTERN = r"^[A-Za-z0-9._\-*?\[\]{}:]{1,255}$"
+
+
+def output_file_error(value: Any) -> str | None:
+    """Why ``value`` is not an acceptable ``model_task.output_file``, or None.
+
+    A base name or glob in the job archive root. The generated model task
+    applies the same pattern, so no layer trusts the previous one.
+    """
+    if not isinstance(value, str) or not re.fullmatch(OUTPUT_FILE_PATTERN, value):
+        return "output_file must be a file name or glob of 1-255 characters from A-Za-z0-9._-*?[]{}:"
+    if value in (".", ".."):
+        return "output_file must not be . or .."
+    if value.lower().startswith("tapisjob"):
+        return "output_file must not name a Tapis job service file (tapisjob*)"
+    if "{param:" in value:
+        return "output_file is an unresolved {param:...} reference; the Ensemble Manager must resolve it"
+    return None
+
+
 _INPUT_STAGING_CALL = "    _stage_inputs(_definition)\n"
 
 
@@ -235,12 +255,13 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
     job_definition = model_task.get("job_definition") or {}
     output_name = model_task.get("output_name") or ""
     output_format = model_task.get("output_format") or ""
+    output_file = model_task.get("output_file") or ""
     # Renewal only when per-run tokens are on; otherwise the stage keeps the
     # token it was given for the whole wait, as before.
     renew_ttl = run_token_ttl() if settings.run_token_enabled else 0
     source = textwrap.dedent(
         """
-        import base64, http.client, json, socket, time, urllib.error as _ue, urllib.parse as _up, urllib.request as _ur
+        import base64, fnmatch, http.client, json, re, socket, time, urllib.error as _ue, urllib.parse as _up, urllib.request as _ur
         try:
             from owe_python_sdk.runtime import execution_context as _ctx
         except Exception:
@@ -325,7 +346,13 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         _job_name = __JOB_NAME__
         _output_name = __OUTPUT_NAME__.lower()
         _output_format = __OUTPUT_FORMAT__.lower()
+        _output_file = __OUTPUT_FILE__
         _renew_ttl = __RENEW_TTL__
+        if _output_file and (not re.fullmatch(__OUTPUT_FILE_PATTERN__, _output_file)
+                             or _output_file in (".", "..") or "{param:" in _output_file
+                             or _output_file.lower().startswith("tapisjob")):
+            _die("model output file binding is not a valid archive file name",
+                 "MODEL_OUTPUT_FILE_INVALID", {"output_file": _output_file[:255]})
         if not _token:
             _die("TAPIS_TOKEN is required for the composite model stage", "MODEL_SUBMISSION_AUTH_REQUIRED")
         # The live token sits in a dict so renewal can swap it without rebinding a global.
@@ -627,26 +654,65 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
 
         _detail = _request_retry("/v3/jobs/%s" % _up.quote(_job_uuid, safe=""))
         _job = (_detail.get("result") if isinstance(_detail, dict) else None) or {}
-        _files_payload = _request_retry("/v3/jobs/%s/output/list/" % _up.quote(_job_uuid, safe=""))
-        _files_result = (_files_payload or {}).get("result") or []
-        if isinstance(_files_result, dict):
-            _files_result = (_files_result.get("files") or _files_result.get("items") or
-                             _files_result.get("results") or [])
-        _files = [entry for entry in _files_result if isinstance(entry, dict) and entry.get("type") != "dir"]
-        _wanted = _output_name
-        _exact = [entry for entry in _files if str(entry.get("name") or "").lower() == _wanted]
-        if len(_exact) == 1:
-            _selected = _exact[0]
+        # Tapis pages the listing (default 100 entries), so walk it explicitly.
+        _page_size, _max_pages = 1000, 5
+        _listed = []
+        _truncated = False
+        for _page in range(_max_pages):
+            _files_payload = _request_retry("/v3/jobs/%s/output/list/?limit=%d&skip=%d" % (
+                _up.quote(_job_uuid, safe=""), _page_size, _page * _page_size))
+            _files_result = (_files_payload or {}).get("result") or []
+            if isinstance(_files_result, dict):
+                _files_result = (_files_result.get("files") or _files_result.get("items") or
+                                 _files_result.get("results") or [])
+            _listed.extend(_files_result)
+            if len(_files_result) < _page_size:
+                break
         else:
-            _extensions = ([".cbc", ".cbb"] if _wanted in {"cbc", "cbb"} or "cbc" in _output_format
-                           else (["." + _wanted] if _wanted else []))
-            _matches = [entry for entry in _files if any(
-                str(entry.get("name") or "").lower().endswith(ext) for ext in _extensions)]
-            if len(_matches) != 1:
-                _die("model output %s was not uniquely matched" % _output_name,
-                     "MODEL_OUTPUT_AMBIGUOUS",
-                     {"job_uuid": _job_uuid, "archived_files": [str(e.get("name") or "") for e in _files[:40]]})
+            _truncated = True
+        _files = [entry for entry in _listed if isinstance(entry, dict) and entry.get("type") != "dir"
+                  and not str(entry.get("name") or "").lower().startswith("tapisjob")]
+        _names = [str(entry.get("name") or "") for entry in _files]
+
+        def _output_details(**extra):
+            details = {"job_uuid": _job_uuid, "output_file": _output_file or None,
+                       "output_name": _output_name, "archived_files": _names[:40],
+                       "listed": len(_files), "truncated": _truncated}
+            details.update(extra)
+            return details
+
+        _selected_by = "name"
+        if _output_file:
+            _selected_by = "binding"
+            _is_glob = "*" in _output_file or "?" in _output_file
+            _matches = [entry for entry in _files if (
+                fnmatch.fnmatchcase(str(entry.get("name") or ""), _output_file) if _is_glob
+                else str(entry.get("name") or "") == _output_file)]
+            if not _matches:
+                _ext = _output_file.rsplit(".", 1)[1] if "." in _output_file else ""
+                _candidates = [n for n in _names if _ext and n.endswith("." + _ext)]
+                _die("model output file %s was not found in the job archive" % _output_file,
+                     "MODEL_OUTPUT_MISSING",
+                     _output_details(candidates=_candidates[:20],
+                                     hint="re-register the configuration's output binding"))
+            if len(_matches) > 1:
+                _die("model output file %s matched %d archived files" % (_output_file, len(_matches)),
+                     "MODEL_OUTPUT_AMBIGUOUS", _output_details())
             _selected = _matches[0]
+        else:
+            _wanted = _output_name
+            _exact = [entry for entry in _files if str(entry.get("name") or "").lower() == _wanted]
+            if len(_exact) == 1:
+                _selected = _exact[0]
+            else:
+                _extensions = ([".cbc", ".cbb"] if _wanted in {"cbc", "cbb"} or "cbc" in _output_format
+                               else (["." + _wanted] if _wanted else []))
+                _matches = [entry for entry in _files if any(
+                    str(entry.get("name") or "").lower().endswith(ext) for ext in _extensions)]
+                if len(_matches) != 1:
+                    _die("model output %s was not uniquely matched" % _output_name,
+                         "MODEL_OUTPUT_AMBIGUOUS", _output_details())
+                _selected = _matches[0]
 
         _url = str(_selected.get("url") or _selected.get("uri") or "")
         _parsed = _up.urlparse(_url)
@@ -662,7 +728,8 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
             _resource_uri = "tapis://%s/%s" % (_system, _path)
         _manifest = {"schema_version": 1, "status": "ok", "resource_uri": _resource_uri,
                      "model_output_key": _output_name, "model_job_name": _job_name,
-                     "model_job_uuid": _job_uuid, "archived_name": _selected.get("name")}
+                     "model_job_uuid": _job_uuid, "archived_name": _selected.get("name"),
+                     "output_file": _output_file or None, "selected_by": _selected_by}
         # Later stages run after this wait, possibly past the lifetime of the token
         # the run was submitted with, so hand them this stage's live token. A failed
         # mint keeps the current token, which Tapis may still accept.
@@ -696,6 +763,10 @@ def _model_execution_code(model_task: dict[str, Any]) -> str:
         .replace("__RENEW_TTL__", str(renew_ttl))
         .replace("__OUTAGE_SECONDS__", str(max(0, int(settings.model_poll_outage_seconds))))
         .replace("__TARGET_PREFIX__", settings.run_token_target_prefix)
+        .replace("__OUTPUT_FILE_PATTERN__", repr(OUTPUT_FILE_PATTERN))
+        # Last: the value is caller-controlled and must never be re-scanned
+        # for another placeholder.
+        .replace("__OUTPUT_FILE__", repr(output_file))
     )
 
 
