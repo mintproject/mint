@@ -9,9 +9,10 @@ deleted, no PVC is touched, no seeds are run.
 **Ticket**: [monorepo#116](https://github.com/mintproject/monorepo/issues/116).
 Evidence and the dev-cluster rehearsal are on [#99](https://github.com/mintproject/monorepo/issues/99).
 
-**Why by hand**: `charts/mint/templates/post-install-hasura.yaml` carries
-`"helm.sh/hook": post-install` only. A `helm upgrade` never runs `hasura migrate apply`. The
-image ships the migration files; nothing runs them.
+**Why by hand**: at the time, the chart job (now
+`charts/mint/templates/hasura-migrate-job.yaml`) carried `"helm.sh/hook": post-install` only.
+A `helm upgrade` never ran `hasura migrate apply`. The image shipped the migration files;
+nothing ran them. The values key `jobs.hasura.run_on_upgrade` now adds `post-upgrade`.
 
 ---
 
