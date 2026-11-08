@@ -437,7 +437,7 @@ export function createScenarioService(deps: ScenarioDeps) {
     return {
         async createScenario(body: any, authorization?: string) {
             const token = getTokenFromAuthorizationHeader(authorization);
-            const username = usernameFromToken(token);
+            const username = await usernameFromToken(token);
             const created: CreatedIds = {};
             let step = "validate";
             try {
@@ -606,7 +606,7 @@ export function createScenarioService(deps: ScenarioDeps) {
             authorization?: string
         ) {
             const token = getTokenFromAuthorizationHeader(authorization);
-            const username = usernameFromToken(token);
+            const username = await usernameFromToken(token);
             const { listByThreads } = requireStore();
 
             const explicitId =

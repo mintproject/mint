@@ -256,7 +256,7 @@ export interface RegionsService {
 
 const regionsService: RegionsService = {
     async createRegion(body, authorizationHeader) {
-        usernameFromToken(getTokenFromAuthorizationHeader(authorizationHeader));
+        await usernameFromToken(getTokenFromAuthorizationHeader(authorizationHeader));
         const name = validateName(body);
         const { id, geometry } = canonicalizeGeometry(body?.geojson);
         // The row is written with service credentials, so the caller does not
