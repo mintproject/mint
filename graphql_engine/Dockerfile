@@ -1,7 +1,7 @@
 FROM hasura/graphql-engine:v2.10.2
 
 LABEL org.opencontainers.image.title="MINT Hasura GraphQL engine" \
-      org.opencontainers.image.source="https://github.com/mintproject/monorepo" \
+      org.opencontainers.image.source="https://github.com/mintproject/mint" \
       org.opencontainers.image.licenses="MIT"
 
 RUN rm -f /etc/apt/sources.list.d/pgdg.list \

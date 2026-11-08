@@ -7,9 +7,9 @@ Apply migration `1771200018000_response_variable_standard_variable_fk` against T
 **Scope**: TACC production. Four `ALTER TABLE` pairs and eight `UPDATE`s inside one
 transaction, plus a metadata apply. No data is deleted, no PVC is touched, no seeds are run.
 
-**Ticket**: [monorepo#136](https://github.com/mintproject/monorepo/issues/136).
+**Ticket**: [monorepo#136](https://github.com/mintproject/mint/issues/136).
 Dev-cluster rehearsal and the decision behind it are on
-[#106](https://github.com/mintproject/monorepo/issues/106).
+[#106](https://github.com/mintproject/mint/issues/106).
 
 **Runbook this copies**: `docs/runbook-116-cascade-migration.md`. Read its
 "What happened on 2026-08-10" section — the lock-wait trap is the same here.
@@ -170,7 +170,7 @@ This reading must agree with 1a. If it does not, stop.
 
 ### 1c. Long-lived transactions — do not skip this
 
-**This is what went wrong on 2026-08-10** ([#119](https://github.com/mintproject/monorepo/issues/119)).
+**This is what went wrong on 2026-08-10** ([#119](https://github.com/mintproject/mint/issues/119)).
 `idle_in_transaction_session_timeout` is unset on that database, so an abandoned transaction
 can hold a lock for months.
 
@@ -360,12 +360,12 @@ dev cluster, and once under a real Tapis token on the dev cluster. Neither was T
 4. Reload. The choice must still be there, rendered as a label and not a URI.
 
 This needs `ui-react` at the host, so it happens after the flip
-([#77](https://github.com/mintproject/monorepo/issues/77)) unless you run a local client
+([#77](https://github.com/mintproject/mint/issues/77)) unless you run a local client
 against TACC's Hasura. If you do that, start it with `--strictPort` and read the request body
 before believing the result — a stale dev server from another worktree produced a confident
 wrong diagnosis on #116.
 
-Record the result on [#136](https://github.com/mintproject/monorepo/issues/136).
+Record the result on [#136](https://github.com/mintproject/mint/issues/136).
 
 ---
 
