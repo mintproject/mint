@@ -911,6 +911,23 @@ export interface InsertOptions {
     ifAbsent?: boolean;
 }
 
+/**
+ * Hasura cannot insert the nested events and permission rows of a parent whose
+ * own insert hit `ON CONFLICT DO NOTHING`: it fails with "cannot proceed to
+ * insert array relations since insert to table ... affects zero rows". For an
+ * `ifAbsent` insert that error means the row is already there, which is the
+ * outcome the caller asked for, so it is not a failure.
+ */
+export const isAlreadyPresent = (error: unknown): boolean => {
+    const messages = [
+        (error as any)?.message,
+        ...(((error as any)?.graphQLErrors as { message?: string }[]) || []).map((e) => e?.message)
+    ];
+    return messages.some(
+        (message) => typeof message === "string" && /affects\s*zero\s*rows/i.test(message)
+    );
+};
+
 // A GraphQL write that fails is logged in full; the caller gets a generic
 // message, because Hasura's text names tables, constraints and columns.
 const graphqlWriteError = (what: string, error: unknown): InternalServerError => {
@@ -939,6 +956,7 @@ export const addProblemStatement = async (
         }
         return result.data.insert_problem_statement.returning[0]?.id ?? options.id ?? null;
     } catch (e) {
+        if (options.ifAbsent && options.id && isAlreadyPresent(e)) return options.id;
         throw graphqlWriteError("problem statement", e);
     }
 };
@@ -965,6 +983,7 @@ export const addTask = async (
         }
         return result.data.insert_task.returning[0]?.id ?? options.id ?? null;
     } catch (e) {
+        if (options.ifAbsent && options.id && isAlreadyPresent(e)) return options.id;
         throw graphqlWriteError("task", e);
     }
 };
