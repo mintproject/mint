@@ -1066,6 +1066,8 @@ export const insertRegionIfAbsent = async (regionObject: Record<string, unknown>
         }
         return (result.data.insert_region.affected_rows as number) > 0;
     } catch (e) {
+        // The region (and its geometry row) already exists: nothing to write.
+        if (isAlreadyPresent(e)) return false;
         throw graphqlWriteError("region", e);
     }
 };
