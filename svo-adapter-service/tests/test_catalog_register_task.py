@@ -48,9 +48,9 @@ def _jwt(username="alice", **claims) -> str:
 TOKEN = _jwt("alice")
 
 
-def make_geotiff(west=-97.5, north=31.8, pixel=0.01, size=10) -> bytes:
-    """A minimal EPSG:4326 GeoTIFF header (no pixel data): all the task reads."""
-    geokeys = struct.pack("<16H", 1, 1, 0, 3, 1024, 0, 1, 2, 1025, 0, 1, 1, 2048, 0, 1, 4326)
+def make_geotiff(west=-97.5, north=31.8, pixel=0.01, size=10, epsg=4326) -> bytes:
+    """A minimal GeoTIFF header (no pixel data): all the task reads. EPSG:4326 unless told."""
+    geokeys = struct.pack("<16H", 1, 1, 0, 3, 1024, 0, 1, 2, 1025, 0, 1, 1, 2048, 0, 1, epsg)
     scale = struct.pack("<3d", pixel, pixel, 0)
     tie = struct.pack("<6d", 0, 0, 0, west, north, 0)
     data_at = 8 + 2 + 5 * 12 + 4
@@ -133,6 +133,12 @@ class Fake:
             h.send_header("Content-Length", "0")
             h.end_headers()
             return
+        if kind == "ops" and method == "GET" and prefix in self.files:
+            # Like Tapis Files, listing a file path answers with that one file.
+            data = self.files[prefix]
+            return h._send(200, {"result": [{"name": prefix.rsplit("/", 1)[-1], "path": "/" + prefix,
+                                             "type": "file", "size": len(data),
+                                             "lastModified": "2025-06-01T12:00:00Z"}]})
         if kind == "ops" and method == "GET":
             rows = [{"name": p.rsplit("/", 1)[-1], "path": "/" + p, "type": "file", "size": len(b),
                      "lastModified": "2025-06-01T12:00:00Z"}
@@ -422,3 +428,39 @@ def test_an_echoing_server_leaves_no_token_in_the_output(fake):
     assert "HTTP 403" in result["message"]
     assert TOKEN not in proc.stdout + proc.stderr
     assert not re.search(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", proc.stdout + proc.stderr)
+
+
+# --- the source is the selected output FILE, as the model stage hands it over ----------------
+@needs_stacmap
+def test_a_file_source_publishes_every_product_beside_it(fake):
+    proc, _ = run_task(fake, SOURCE_URI="tapis://ls6/work/archive/opera_disp_s1_velocity.tif")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    item = fake.items["subsidence-rates-dev/ue_1"]
+    assert set(item["assets"]) >= {"cumulative", "velocity", "metadata"}
+    assert "work/archive/ue_1-manifest.json" in fake.files  # written beside the products, not under the file
+
+
+@needs_stacmap
+def test_a_projected_raster_uses_the_run_manifest_found_beside_the_selected_file(fake):
+    fake.files = {
+        "work/h2i/disp_displacement.tif": make_geotiff(epsg=32614),
+        "work/h2i/run-manifest.json": json.dumps({
+            "bbox": {"lon_min": -98.0, "lat_min": 29.8, "lon_max": -97.8, "lat_max": 29.9},
+            "config": {"start_date": "2020-06-01", "end_date": "2024-09-01"},
+            "artifacts": {"cog_tif": "output/disp_displacement.tif"},
+        }).encode(),
+    }
+    proc, _ = run_task(fake, SOURCE_URI="tapis://ls6/work/h2i/disp_displacement.tif",
+                       PRODUCT_PATTERN="disp_displacement.tif")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    item = fake.items["subsidence-rates-dev/ue_1"]
+    assert [round(v, 1) for v in item["bbox"]] == [-98.0, 29.8, -97.8, 29.9]
+    assert item["properties"]["start_datetime"].startswith("2020-06-01")
+
+
+@needs_stacmap
+def test_a_projected_raster_with_no_manifest_still_fails_clearly(fake):
+    fake.files = {"work/h2i/disp_displacement.tif": make_geotiff(epsg=32614)}
+    proc, result = run_task(fake, SOURCE_URI="tapis://ls6/work/h2i/disp_displacement.tif",
+                            PRODUCT_PATTERN="disp_displacement.tif")
+    assert proc.returncode == 2 and "run manifest bounds are needed" in result["message"]

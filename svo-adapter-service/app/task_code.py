@@ -1435,7 +1435,14 @@ def _publish():
             if owner != _username:
                 _fail("STAC Item %s/%s exists and was not published by this user" % (_collection, _item_id))
 
-        listing = _list_files(_system, _dir)
+        # The source is normally the archive directory, but the model stage hands over the
+        # URI of the output FILE it selected. Listing a file returns only that file, which
+        # hides the run manifest and every sibling product; list its directory instead.
+        source_dir = _dir
+        listing = _list_files(_system, source_dir)
+        if len(listing) == 1 and str(listing[0].get("path") or "").strip("/") == source_dir:
+            source_dir = source_dir.rpartition("/")[0]
+            listing = _list_files(_system, source_dir)
         by_name = {}
         modified = {}
         for row in sorted(listing, key=lambda r: str(r.get("path") or "").count("/")):
@@ -1467,7 +1474,7 @@ def _publish():
             with open(manifest_path, "wb") as out:
                 out.write(payload)
             try:
-                _upload(_system, _dir, manifest_name, payload)
+                _upload(_system, source_dir, manifest_name, payload)
             except Exception as exc:
                 print("manifest write-back skipped: " + _describe(exc))
             publish_from_dir(collection_id=_collection, manifest_path=manifest_path,
