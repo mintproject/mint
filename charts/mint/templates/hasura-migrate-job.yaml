@@ -1,0 +1,107 @@
+{{- if and .Values.components.hasura.enabled .Values.jobs.hasura.enabled }}
+{{- $job := .Values.jobs.hasura }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mint.prefix" . }}-hasura-migrate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+  annotations:
+    # The job applies migrations and metadata. With `jobs.hasura.run_on_upgrade`
+    # it also runs on `helm upgrade`. The seeds are not idempotent, so they run
+    # on install only.
+    "helm.sh/hook": post-install{{ if $job.run_on_upgrade }},post-upgrade{{ end }}
+    "helm.sh/hook-weight": "-5"
+    # `hook-succeeded` alone keeps a failed job, and the next run then fails
+    # with "already exists".
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ $job.active_deadline_seconds }}
+  template:
+    metadata:
+      name: "{{ include "mint.prefix" . }}-hasura-migrate"
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: wait-for-db
+        image: postgres:13-alpine
+        command: ['sh', '-c',
+          'until pg_isready -h {{ include "mint.prefix" . }}-hasura-db -U $POSTGRES_USER; do echo waiting for database; sleep 2; done;']
+        env:
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: username
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 110m
+            memory: 110Mi
+      # A migration waits for each lock holder, and it has no timeout of its
+      # own. Fail before the migration starts if a transaction is already old.
+      # Do not terminate the session: a person decides.
+      - name: check-transactions
+        image: postgres:13-alpine
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -eu
+            FILTER="datname = current_database()
+              AND pid <> pg_backend_pid()
+              AND backend_type = 'client backend'
+              AND state IN ('active', 'idle in transaction', 'idle in transaction (aborted)')
+              AND xact_start < now() - make_interval(secs => $MAX_AGE_SECONDS)"
+            COUNT=$(psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+              -c "SELECT count(*) FROM pg_stat_activity WHERE $FILTER")
+            if [ "$COUNT" != "0" ]; then
+              echo "$COUNT transaction(s) are older than $MAX_AGE_SECONDS seconds. The migration does not start."
+              psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+                -c "SELECT pid, application_name, state, now() - xact_start AS age, left(query, 200) AS query
+                    FROM pg_stat_activity WHERE $FILTER ORDER BY xact_start"
+              echo "End a session with: SELECT pg_terminate_backend(<pid>);"
+              exit 1
+            fi
+            echo "No transaction is older than $MAX_AGE_SECONDS seconds."
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: database_url
+          - name: MAX_AGE_SECONDS
+            value: {{ $job.guard.max_transaction_age_seconds | quote }}
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 110m
+            memory: 110Mi
+      containers:
+      - name: hasura-migrate
+        command: ["/bin/bash"]
+        # Without `--wait` the hook can start while Hasura still rolls out.
+        args: ["-c", "until curl -sf $HASURA_GRAPHQL_ENDPOINT/healthz; do echo waiting for hasura; sleep 2; done; pushd /hasura && hasura migrate apply && hasura metadata apply{{ if .Release.IsInstall }} && hasura seeds apply{{ end }}"]
+        {{- with .Values.components.hasura  }}
+        image: "{{ .image.repository }}:{{ .image.tag | default $.Values.global.imageTag | default $.Chart.AppVersion }}"
+        {{ end }}
+        resources:
+          {{- toYaml $job.resources | nindent 12 }}
+        env:
+          - name: HASURA_GRAPHQL_ENDPOINT
+            value: http://{{ include "mint.prefix" $ }}-hasura
+          - name: HASURA_GRAPHQL_ADMIN_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mint.prefix" . }}-hasura-secrets
+                key: admin_secret
+{{- end }}

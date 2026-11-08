@@ -630,6 +630,16 @@ jobs:
     enabled: true
     # -- Resource specifications for MINT Database initialization
     resources: {}
+    # -- Also apply Hasura migrations and metadata on `helm upgrade`. Seeds run
+    # on install only. A failed `--wait` skips the hook. Give `helm upgrade` a
+    # `--timeout` longer than `active_deadline_seconds`.
+    run_on_upgrade: false
+    # -- Time limit of the job, in seconds. The job does not retry.
+    active_deadline_seconds: 900
+    guard:
+      # -- The job fails before the migration if a transaction in the
+      # database is older than this, in seconds
+      max_transaction_age_seconds: 60
 
 google:
   maps:
