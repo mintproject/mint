@@ -91,4 +91,55 @@ describe("permissions on problem statements, tasks and threads", () => {
         });
         expect((addThread as jest.Mock).mock.calls[1][1].permissions).toEqual(CALLER);
     });
+
+    it("names the caller in the CREATE event when createdBy is given, else system", async () => {
+        await problemStatementsService.createProblemStatement(
+            { name: "ps", regionid: "region-1", dates } as any,
+            AUTH
+        );
+        expect((addProblemStatement as jest.Mock).mock.calls[0][0].events[0]).toMatchObject({
+            event: "CREATE",
+            userid: "system"
+        });
+        await problemStatementsService.createProblemStatement(
+            { name: "ps", regionid: "region-1", dates } as any,
+            AUTH,
+            { permissions: CALLER, createdBy: "alice" }
+        );
+        expect((addProblemStatement as jest.Mock).mock.calls[1][0].events[0]).toMatchObject({
+            event: "CREATE",
+            userid: "alice"
+        });
+        await tasksService.createTask(
+            "ps-1",
+            {
+                name: "t",
+                problem_statement_id: "ps-1",
+                dates,
+                driving_variables: [],
+                response_variables: []
+            } as any,
+            AUTH,
+            { permissions: CALLER, createdBy: "alice" }
+        );
+        expect((addTask as jest.Mock).mock.calls[0][1].events[0]).toMatchObject({
+            userid: "alice"
+        });
+        await subTasksService.createSubtask(
+            "ps-1",
+            "task-1",
+            {
+                name: "th",
+                task_id: "task-1",
+                driving_variables: [],
+                response_variables: [],
+                dates
+            } as any,
+            AUTH,
+            { permissions: CALLER, createdBy: "alice" }
+        );
+        expect((addThread as jest.Mock).mock.calls[0][1].events[0]).toMatchObject({
+            userid: "alice"
+        });
+    });
 });

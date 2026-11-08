@@ -132,6 +132,7 @@ function build(overrides: Partial<ScenarioDeps> = {}) {
                         name: thread.name,
                         regionid: undefined,
                         permissions: options.permissions,
+                        events: [{ event: "CREATE", userid: options.createdBy ?? "system" }],
                         dates: {
                             start_date: new Date(`${thread.dates.start_date}T00:00:00Z`),
                             end_date: new Date(`${thread.dates.end_date}T00:00:00Z`)
@@ -203,7 +204,7 @@ describe("scenarioService.createScenario", () => {
             "submit"
         ]);
         expect(result).toMatchObject({
-            problem_statement_id: standingProblemStatementId("alice", "SUBSIDE"),
+            problem_statement_id: standingProblemStatementId("SUBSIDE"),
             thread_id: "thread-1",
             plan_id: "plan-1",
             run_id: "ue_exec-1",
@@ -213,12 +214,10 @@ describe("scenarioService.createScenario", () => {
         expect(result.task_id).toMatch(/^task-[0-9a-f]{16}$/);
     });
 
-    it("gives the standing statement, task and thread the caller only", async () => {
+    it("shares the standing statement, task and thread with every user and stamps the caller as creator", async () => {
         const { service, deps } = build();
         await service.createScenario(body(), alice);
-        const permissions = [
-            { userid: "alice", read: true, write: true, execute: true, owner: true }
-        ];
+        const permissions = [{ userid: "*", read: true, write: true, execute: true, owner: false }];
         expect(
             (deps.problemStatements.createProblemStatement as jest.Mock).mock.calls[0][2]
         ).toMatchObject({
@@ -230,7 +229,16 @@ describe("scenarioService.createScenario", () => {
             permissions
         });
         expect((deps.subTasks.createSubtask as jest.Mock).mock.calls[0][4]).toEqual({
-            permissions
+            permissions,
+            createdBy: "alice"
+        });
+        // Hasura shows a row to its creator through the CREATE event, so every
+        // level names the caller (the per-user permission row alone is not enough).
+        expect(
+            (deps.problemStatements.createProblemStatement as jest.Mock).mock.calls[0][2]
+        ).toMatchObject({ createdBy: "alice" });
+        expect((deps.tasks.createTask as jest.Mock).mock.calls[0][3]).toMatchObject({
+            createdBy: "alice"
         });
     });
 
@@ -246,13 +254,9 @@ describe("scenarioService.createScenario", () => {
         expect(first.thread_id).not.toBe(second.thread_id);
     });
 
-    it("keeps each user's standing problem statement separate", async () => {
-        expect(standingProblemStatementId("alice", "SUBSIDE")).not.toBe(
-            standingProblemStatementId("bob", "SUBSIDE")
-        );
-        expect(standingProblemStatementId("alice", "SUBSIDE")).not.toBe(
-            standingProblemStatementId("alice", "OTHER")
-        );
+    it("shares one standing problem statement per app label", async () => {
+        expect(standingProblemStatementId("SUBSIDE")).toBe(standingProblemStatementId("SUBSIDE"));
+        expect(standingProblemStatementId("SUBSIDE")).not.toBe(standingProblemStatementId("OTHER"));
     });
 
     it("rejects parameter_values dates that differ from the request dates, creating nothing", async () => {
@@ -381,10 +385,8 @@ describe("scenarioService.createScenario", () => {
         }
     );
 
-    it("does not let a separator in the label collide two (user, label) pairs", () => {
-        expect(standingProblemStatementId("a|b", "c")).not.toBe(
-            standingProblemStatementId("a", "b|c")
-        );
+    it("derives the standing id from the label alone, not from any user", () => {
+        expect(standingProblemStatementId("a|b")).not.toBe(standingProblemStatementId("a"));
     });
 
     it("names the task after the region's name when only a region_id is given", async () => {
@@ -406,7 +408,7 @@ describe("scenarioService.createScenario", () => {
                 step: "thread",
                 created: {
                     region_id: "aoi-abc",
-                    problem_statement_id: standingProblemStatementId("alice", "SUBSIDE"),
+                    problem_statement_id: standingProblemStatementId("SUBSIDE"),
                     task_id: expect.stringMatching(/^task-/)
                 }
             }
@@ -536,7 +538,7 @@ describe("scenarioService.listRuns", () => {
             { app_label: "SUBSIDE" },
             alice
         );
-        expect(problem_statement_id).toBe(standingProblemStatementId("alice", "SUBSIDE"));
+        expect(problem_statement_id).toBe(standingProblemStatementId("SUBSIDE"));
         expect(runs.map((run) => run.name)).toEqual(["second", "first"]);
         expect(runs[0]).toEqual({
             run_id: "ue_exec-2",
@@ -559,20 +561,22 @@ describe("scenarioService.listRuns", () => {
         expect((deps.store.listByThreads as jest.Mock).mock.calls[0][1]).toBe(7);
     });
 
-    it("lists only threads the caller can read, not every thread of the statement", async () => {
+    it("lists only the threads the caller created, not every thread of the shared statement", async () => {
         const { service, problemStatements } = build();
         const created = await service.createScenario(body(), alice);
         const ps = problemStatements.get(created.problem_statement_id);
         const task: any = Object.values(ps.tasks)[0];
+        // Everyone can read every thread (shared permissions); ownership is the CREATE event.
         task.threads["thread-foreign"] = {
             id: "thread-foreign",
             name: "someone else",
-            permissions: [{ userid: "carol", read: true }]
+            permissions: [{ userid: "*", read: true }],
+            events: [{ event: "CREATE", userid: "carol" }]
         };
         const { runs } = await service.listRuns({ app_label: "SUBSIDE" }, alice);
         expect(runs.map((run) => run.thread_id)).toEqual([created.thread_id]);
-        // A thread with no permission rows is not readable either.
-        task.threads[created.thread_id].permissions = [];
+        // A thread with no CREATE event belongs to nobody.
+        task.threads[created.thread_id].events = [];
         const none = await service.listRuns({ app_label: "SUBSIDE" }, alice);
         expect(none.runs).toEqual([]);
     });
@@ -613,12 +617,14 @@ describe("scenarioService.listRuns", () => {
         expect(runs).toHaveLength(1);
     });
 
-    it("answers 403 when the caller may not read the problem statement", async () => {
+    it("shows another user an empty list for the shared statement: runs are listed by creator", async () => {
         const { service } = build();
         const created = await service.createScenario(body(), alice);
         await expect(
             service.listRuns({ problem_statement_id: created.problem_statement_id }, bob)
-        ).rejects.toMatchObject({ statusCode: 403 });
+        ).resolves.toMatchObject({ runs: [] });
+        const mine = await service.listRuns({ app_label: "SUBSIDE" }, alice);
+        expect(mine.runs).toHaveLength(1);
     });
 
     it("answers 403 for an explicit id that is not readable or not there", async () => {

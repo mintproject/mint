@@ -237,7 +237,7 @@ const subTasksService: SubTasksService = {
             {
                 event: "CREATE",
                 timestamp: new Date(),
-                userid: "system",
+                userid: options.createdBy ?? "system",
                 notes: "Added subtask from API"
             }
         ];

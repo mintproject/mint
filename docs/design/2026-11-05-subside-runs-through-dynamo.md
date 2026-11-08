@@ -252,3 +252,9 @@ Resolved in rev 2/3 against code: identity (tapis/username), region storage and 
 
 - 2026-11-05: "we want to use DYNAMO instead of the API to submit workflows"; "lets build it. don't deploy anything we'll have to test it locally". Test plan is local; nothing is deployed.
 - 2026-11-05: Q1 → per-user standing problem statement; Q8 → drop pre-cutover runs. Spec approved; implementation started.
+- 2026-11-08 (D6 revised, user): public like the DYNAMO path. One shared standing problem statement per app label
+  (`ps-` + sha256(["shared", app_label])), permissions `*` on statement, task and thread. Per-user permission rows never
+  granted access on dev (the user-role filters put X-Hasura-User-Id inside an `_in` list), which made a user's own standing
+  statement invisible to them. Ownership is now the CREATE event: the scenario path stamps the caller on the statement, task
+  and thread, and `GET /plans/runs` and idempotency reuse list only threads whose CREATE event names the caller. Everyone can
+  read every run in the MINT UI; SUBSIDE's "Your past runs" still shows only the caller's.
