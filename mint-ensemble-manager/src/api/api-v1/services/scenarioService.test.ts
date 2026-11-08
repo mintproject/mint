@@ -4,9 +4,12 @@ import jwt from "jsonwebtoken";
 import { createHash } from "crypto";
 import unifiedExecutionRouter from "@/api/api-v1/paths/unifiedExecution";
 import { NotFoundError, UnifiedExecutionError } from "@/classes/common/errors";
+import { getProblemStatement } from "@/classes/graphql/graphql_functions";
+import { problemStatementFromGQL } from "@/classes/graphql/graphql_adapter";
 import {
     bboxOfGeometries,
     createScenarioService,
+    problemStatementReader,
     ScenarioDeps,
     standingProblemStatementId
 } from "./scenarioService";
@@ -17,7 +20,7 @@ jest.mock("@/classes/mint/mint-functions", () => ({
         auth: { public_key: "test-key", algorithms: ["HS256"] }
     })
 }));
-jest.mock("@/classes/graphql/graphql_functions", () => ({}));
+jest.mock("@/classes/graphql/graphql_functions", () => ({ getProblemStatement: jest.fn() }));
 jest.mock("@/classes/graphql/graphql_functions_v2", () => ({}));
 
 const tokenFor = (username: string) =>
@@ -741,6 +744,127 @@ describe("authentication on the new routes", () => {
         });
         await expect(service.listRuns({ app_label: "SUBSIDE" }, "Basic abc")).rejects.toMatchObject(
             { statusCode: 401 }
+        );
+    });
+});
+
+// What dev Hasura returned for a real SUBSIDE run (2026-11-08), run through the
+// real mapper and the production reader. The other tests fake the reader with
+// an already-rich shape, which is how a reader that dropped threads went unseen.
+describe("scenarioService.listRuns against the production reader", () => {
+    const hasuraStatement = {
+        id: "ps-shared",
+        name: "SUBSIDE runs",
+        start_date: "2020-06-01",
+        end_date: "2024-09-01",
+        region_id: "aoi-1",
+        events: [
+            { event: "CREATE", timestamp: "2026-11-08T15:30:10Z", userid: "alice", notes: "" }
+        ],
+        permissions: [{ user_id: "*", read: true, write: true }],
+        tasks: [
+            {
+                id: "task-1",
+                name: "Waco",
+                problem_statement_id: "ps-shared",
+                start_date: "2020-06-01",
+                end_date: "2024-09-01",
+                region_id: "aoi-1",
+                driving_variable_id: null,
+                response_variable_id: null,
+                events: [],
+                threads: [
+                    {
+                        id: "thread-mine",
+                        name: "H2I",
+                        task_id: "task-1",
+                        start_date: "2020-06-01",
+                        end_date: "2024-09-01",
+                        region_id: "aoi-1",
+                        driving_variable_id: null,
+                        response_variable_id: null,
+                        dataset_id: null,
+                        events: [
+                            {
+                                event: "CREATE",
+                                timestamp: "2026-11-08T15:30:10Z",
+                                userid: "alice",
+                                notes: ""
+                            },
+                            {
+                                event: "SELECT_MODELS",
+                                timestamp: "2026-11-08T15:30:11Z",
+                                userid: "mint@isi.edu",
+                                notes: ""
+                            }
+                        ],
+                        permissions: [{ user_id: "*", read: true, write: true }]
+                    },
+                    {
+                        id: "thread-theirs",
+                        name: "WERC",
+                        task_id: "task-1",
+                        start_date: "2020-06-01",
+                        end_date: "2024-09-01",
+                        region_id: "aoi-1",
+                        driving_variable_id: null,
+                        response_variable_id: null,
+                        dataset_id: null,
+                        events: [
+                            {
+                                event: "CREATE",
+                                timestamp: "2026-11-08T16:00:00Z",
+                                userid: "bob",
+                                notes: ""
+                            }
+                        ],
+                        permissions: [{ user_id: "*", read: true, write: true }]
+                    }
+                ]
+            }
+        ]
+    };
+
+    const withReader = () => {
+        (getProblemStatement as jest.Mock).mockResolvedValue(
+            problemStatementFromGQL(hasuraStatement)
+        );
+        const built = build();
+        const service = createScenarioService({
+            ...built.deps,
+            problemStatements: {
+                ...built.deps.problemStatements,
+                getProblemStatementById: problemStatementReader
+            }
+        });
+        for (const [id, thread] of [
+            ["exec-1", "thread-mine"],
+            ["exec-2", "thread-theirs"]
+        ]) {
+            built.records.push({
+                id,
+                plan_id: `plan-${id}`,
+                thread_id: thread,
+                model_id: MODEL,
+                status: "model_running",
+                created_at: "2026-11-08T16:00:00Z"
+            } as UnifiedExecutionRecord);
+        }
+        return service;
+    };
+
+    it("lists the caller's thread and not the other user's", async () => {
+        const service = withReader();
+        const { runs } = await service.listRuns({ problem_statement_id: "ps-shared" }, alice);
+        expect(runs.map((run) => run.thread_id)).toEqual(["thread-mine"]);
+        const theirs = await service.listRuns({ problem_statement_id: "ps-shared" }, bob);
+        expect(theirs.runs.map((run) => run.thread_id)).toEqual(["thread-theirs"]);
+    });
+
+    it("reports a statement that is not there as not found", async () => {
+        (getProblemStatement as jest.Mock).mockResolvedValue(null);
+        await expect(problemStatementReader("ps-x", "Bearer t")).rejects.toBeInstanceOf(
+            NotFoundError
         );
     });
 });

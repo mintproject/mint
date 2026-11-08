@@ -5,6 +5,7 @@ import { GraphQL } from "@/config/graphql";
 import getModelcatalogConfigurationGQL from "@/classes/graphql/queries/model/get-modelcatalog-configuration.graphql";
 import getConfigurationResponseVariablesGQL from "@/classes/graphql/queries/model/get-configuration-response-variables.graphql";
 import { getRegionWithGeometries } from "@/classes/graphql/graphql_functions_v2";
+import { getProblemStatement as getProblemStatementWithThreads } from "@/classes/graphql/graphql_functions";
 import { SECRET_PARAMETER_TYPE } from "@/classes/graphql/graphql_adapter";
 import { convertApiUrlToW3Id } from "@/classes/mint/model-catalog-graphql-adapter";
 import { MintEvent, MintPermission, ProblemStatement } from "@/classes/mint/mint-types";
@@ -752,13 +753,38 @@ export const catalogFromGraphql: ScenarioCatalog = {
     }
 };
 
+/**
+ * problemStatementsService.getProblemStatementById maps through an adapter that
+ * keeps tasks as a flat list without their threads, which is enough for task
+ * creation but leaves a run list nothing to list. The scenario service needs
+ * tasks, threads, events and permissions, so its reader uses the query/mapper
+ * that keeps them. Null (not readable, or not there) is reported as not found.
+ */
+export const problemStatementReader = async (
+    id: string,
+    authorizationHeader: string
+): Promise<ProblemStatement> => {
+    const token = getTokenFromAuthorizationHeader(authorizationHeader);
+    const problemStatement = await getProblemStatementWithThreads(id, token);
+    if (!problemStatement) throw new NotFoundError("Problem statement not found");
+    return problemStatement;
+};
+
 export const defaultScenarioDeps = (
     unified: ScenarioDeps["unified"],
     store: UnifiedExecutionStore
 ): ScenarioDeps => ({
     unified,
     store,
-    problemStatements: problemStatementsService,
+    problemStatements: {
+        createProblemStatement: (problemStatement, authorization, options) =>
+            problemStatementsService.createProblemStatement(
+                problemStatement,
+                authorization,
+                options
+            ),
+        getProblemStatementById: problemStatementReader
+    },
     tasks: tasksService,
     subTasks: subTasksService,
     regions: regionsService,
