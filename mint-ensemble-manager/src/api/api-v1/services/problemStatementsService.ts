@@ -17,6 +17,11 @@ import { problemStatementFromGQL } from "@/classes/graphql/adapters/problem_stat
  */
 export interface CreateOptions extends InsertOptions {
     permissions?: MintPermission[];
+    // Who the CREATE event names. Hasura shows a problem statement, task or
+    // thread to its creator through that event (`events.userid` = the caller's
+    // X-Hasura-User-Id), which is how rows without a `*` permission stay visible
+    // to the user who made them. Default "system" (an API call with no caller).
+    createdBy?: string;
 }
 
 export const sharedPermissions = (): MintPermission[] => [
@@ -73,7 +78,7 @@ const problemStatementsService: ProblemStatementsService = {
             {
                 event: "CREATE",
                 timestamp: new Date(),
-                userid: "system",
+                userid: options.createdBy ?? "system",
                 notes: "Added problem statement from API"
             }
         ];

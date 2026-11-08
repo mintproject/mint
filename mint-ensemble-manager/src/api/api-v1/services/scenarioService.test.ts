@@ -230,7 +230,16 @@ describe("scenarioService.createScenario", () => {
             permissions
         });
         expect((deps.subTasks.createSubtask as jest.Mock).mock.calls[0][4]).toEqual({
-            permissions
+            permissions,
+            createdBy: "alice"
+        });
+        // Hasura shows a row to its creator through the CREATE event, so every
+        // level names the caller (the per-user permission row alone is not enough).
+        expect(
+            (deps.problemStatements.createProblemStatement as jest.Mock).mock.calls[0][2]
+        ).toMatchObject({ createdBy: "alice" });
+        expect((deps.tasks.createTask as jest.Mock).mock.calls[0][3]).toMatchObject({
+            createdBy: "alice"
         });
     });
 

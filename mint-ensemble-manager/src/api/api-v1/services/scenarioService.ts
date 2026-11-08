@@ -493,7 +493,7 @@ export function createScenarioService(deps: ScenarioDeps) {
                         dates
                     },
                     authorization,
-                    { id: psId, ifAbsent: true, permissions }
+                    { id: psId, ifAbsent: true, permissions, createdBy: username }
                 );
 
                 step = "task";
@@ -510,7 +510,7 @@ export function createScenarioService(deps: ScenarioDeps) {
                         response_variables: spec.responseVariable ? [spec.responseVariable] : []
                     },
                     authorization,
-                    { id: taskId, ifAbsent: true, permissions }
+                    { id: taskId, ifAbsent: true, permissions, createdBy: username }
                 );
 
                 step = "thread";
@@ -525,7 +525,7 @@ export function createScenarioService(deps: ScenarioDeps) {
                         response_variables: []
                     },
                     authorization,
-                    { permissions }
+                    { permissions, createdBy: username }
                 );
 
                 step = "bindings";

@@ -72,7 +72,7 @@ const tasksService: TasksService = {
             {
                 event: "CREATE",
                 timestamp: new Date(),
-                userid: "system",
+                userid: options.createdBy ?? "system",
                 notes: "Added task from API"
             }
         ];
