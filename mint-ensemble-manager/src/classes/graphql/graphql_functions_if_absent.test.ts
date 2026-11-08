@@ -1,6 +1,7 @@
 import {
     addProblemStatement,
     addTask,
+    insertRegionIfAbsent,
     isAlreadyPresent
 } from "@/classes/graphql/graphql_functions";
 import { GraphQL } from "@/config/graphql";
@@ -63,5 +64,23 @@ describe("create-if-absent when the row already exists", () => {
         client(jest.fn().mockRejectedValue(zeroRows("problem_statement")));
         await expect(addProblemStatement(statement, "tok", {})).rejects.toThrow();
         await expect(addProblemStatement(statement, "tok", { id: "ps-1" })).rejects.toThrow();
+    });
+});
+
+describe("insertRegionIfAbsent when the region already exists", () => {
+    const region = { id: "aoi-1", name: "r", geometries: { data: [{ geometry: "{}" }] } };
+    const instance = (mutate: jest.Mock) =>
+        (GraphQL.instance as jest.Mock).mockReturnValue({ mutate });
+
+    it("answers false (nothing written) instead of failing", async () => {
+        instance(jest.fn().mockRejectedValue(zeroRows("region")));
+        await expect(insertRegionIfAbsent(region)).resolves.toBe(false);
+    });
+
+    it("answers true when a row was written, and still fails on any other error", async () => {
+        instance(jest.fn().mockResolvedValue({ data: { insert_region: { affected_rows: 1 } } }));
+        await expect(insertRegionIfAbsent(region)).resolves.toBe(true);
+        instance(jest.fn().mockRejectedValue(new Error("permission denied")));
+        await expect(insertRegionIfAbsent(region)).rejects.toThrow();
     });
 });
