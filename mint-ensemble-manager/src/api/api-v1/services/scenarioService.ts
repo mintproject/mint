@@ -7,8 +7,9 @@ import getConfigurationResponseVariablesGQL from "@/classes/graphql/queries/mode
 import { getRegionWithGeometries } from "@/classes/graphql/graphql_functions_v2";
 import { SECRET_PARAMETER_TYPE } from "@/classes/graphql/graphql_adapter";
 import { convertApiUrlToW3Id } from "@/classes/mint/model-catalog-graphql-adapter";
-import { MintPermission, ProblemStatement } from "@/classes/mint/mint-types";
+import { MintEvent, MintPermission, ProblemStatement } from "@/classes/mint/mint-types";
 import { getTokenFromAuthorizationHeader, usernameFromToken } from "@/utils/authUtils";
+import { sharedPermissions } from "./problemStatementsService";
 import problemStatementsService from "./problemStatementsService";
 import tasksService from "./tasksService";
 import subTasksService from "./subTasksService";
@@ -99,9 +100,11 @@ interface ScenarioRequest {
 
 const hash16 = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 16);
 
-// JSON-encoded so no character in the label can shift the boundary between the two.
-export const standingProblemStatementId = (username: string, appLabel: string) =>
-    `ps-${hash16(JSON.stringify([username, appLabel]))}`;
+// One shared standing statement per app label: every run submitted through
+// this path lands under it, readable by every user (D6, revised 2026-11-08).
+// JSON-encoded so the label cannot be confused with a different encoding.
+export const standingProblemStatementId = (appLabel: string) =>
+    `ps-${hash16(JSON.stringify(["shared", appLabel]))}`;
 
 /**
  * The key as stored: namespaced by the caller, so another caller's key can
@@ -273,12 +276,21 @@ const stepError = (step: string, created: CreatedIds, error: unknown): UnifiedEx
 const grantsRead = (permissions: MintPermission[] | undefined, username: string): boolean =>
     (permissions || []).some((p) => (p.userid === username || p.userid === "*") && p.read);
 
+// Ownership is the creator stamp: the thread's CREATE event names the user who
+// submitted the run. Permissions are shared (`*`), so they cannot tell runs apart.
+const createdBy = (events: MintEvent[] | undefined): string | null => {
+    const create = (events || []).find((event) => event.event === "CREATE");
+    return create?.userid ?? null;
+};
+const ownedBy = (thread: ThreadSummary, username: string): boolean => thread.createdBy === username;
+
 interface ThreadSummary {
     id: string;
     name: string;
     taskId: string;
     regionId: string | null;
     permissions: MintPermission[];
+    createdBy: string | null;
     start_date: string | null;
     end_date: string | null;
 }
@@ -293,6 +305,7 @@ const threadsOf = (problemStatement: ProblemStatement): ThreadSummary[] => {
                 taskId: task.id,
                 regionId: thread.regionid || task.regionid || null,
                 permissions: thread.permissions || [],
+                createdBy: createdBy(thread.events),
                 start_date: dateOnly(thread.dates?.start_date),
                 end_date: dateOnly(thread.dates?.end_date)
             });
@@ -393,9 +406,9 @@ export function createScenarioService(deps: ScenarioDeps) {
         >;
     };
 
-    const standingPermissions = (username: string): MintPermission[] => [
-        { userid: username, read: true, write: true, execute: true, owner: true }
-    ];
+    // Every row is readable by every user, like the rest of the DYNAMO API; the
+    // CREATE event (createdBy) is what makes a run the caller's own.
+    const standingPermissions = (_username: string): MintPermission[] => sharedPermissions();
 
     /** The caller's own thread for an earlier request with this key, as a response. */
     const reuse = async (
@@ -408,8 +421,7 @@ export function createScenarioService(deps: ScenarioDeps) {
         try {
             const standing = await problemStatements.getProblemStatementById(psId, authorization);
             found = threadsOf(standing).find(
-                (thread) =>
-                    thread.id === record.thread_id && grantsRead(thread.permissions, username)
+                (thread) => thread.id === record.thread_id && ownedBy(thread, username)
             );
         } catch (error) {
             if (!(error instanceof NotFoundError)) throw error;
@@ -442,7 +454,7 @@ export function createScenarioService(deps: ScenarioDeps) {
             let step = "validate";
             try {
                 const request = parseRequest(body);
-                const psId = standingProblemStatementId(username, request.app_label);
+                const psId = standingProblemStatementId(request.app_label);
                 const permissions = standingPermissions(username);
                 const modelId = convertApiUrlToW3Id(request.model_id);
 
@@ -617,8 +629,7 @@ export function createScenarioService(deps: ScenarioDeps) {
                     "PROBLEM_STATEMENT_REQUIRED"
                 );
             }
-            const psId =
-                explicitId || standingProblemStatementId(username, parseAppLabel(query.app_label));
+            const psId = explicitId || standingProblemStatementId(parseAppLabel(query.app_label));
             const parsedLimit = Number(query.limit);
             const limit =
                 Number.isInteger(parsedLimit) && parsedLimit > 0
@@ -650,9 +661,9 @@ export function createScenarioService(deps: ScenarioDeps) {
                 throw new ForbiddenError("You cannot read this problem statement");
             }
 
-            // A thread is listed only if it is itself readable by the caller.
+            // The caller's runs are the threads the caller created.
             const threads = threadsOf(problemStatement).filter((thread) =>
-                grantsRead(thread.permissions, username)
+                ownedBy(thread, username)
             );
             const byId = new Map(threads.map((thread) => [thread.id, thread]));
             let records: UnifiedExecutionRecord[];
