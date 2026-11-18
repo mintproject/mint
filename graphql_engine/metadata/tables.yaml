@@ -5025,15 +5025,17 @@
         table:
           name: transform_contract
           schema: adapter
+  # The adapter reads the registry as the calling user (as_user), so these
+  # filters decide which pieces a caller can plan with.
   select_permissions:
   - role: anonymous
     permission:
-      columns: [id, name, description]
-      filter: {}
+      columns: [id, name, version, description, transform_type, is_lossy, method, tapis_app_id, app_version, container_image, parameters_schema_json, stage, env_from_args, file_inputs, mint_model_config_id, mint_synced_at, owner_username, visibility, mint_etl_process_id, approved_source_sha256]
+      filter: {visibility: {_eq: public}}
   - role: user
     permission:
-      columns: [id, name, description]
-      filter: {}
+      columns: [id, name, version, description, transform_type, is_lossy, method, tapis_app_id, app_version, container_image, parameters_schema_json, stage, env_from_args, file_inputs, mint_model_config_id, mint_synced_at, owner_username, visibility, mint_etl_process_id, approved_source_sha256]
+      filter: {_or: [{visibility: {_eq: public}}, {visibility: {_eq: shared}}, {owner_username: {_eq: X-Hasura-User-Id}}]}
 - table:
     name: transform_contract
     schema: adapter
@@ -5055,15 +5057,16 @@
         table:
           name: transform_edge
           schema: adapter
+  # A contract is visible exactly when its piece is.
   select_permissions:
   - role: anonymous
     permission:
-      columns: [id, transform_spec_id, role, standard_variable_uri, format, unit]
-      filter: {}
+      columns: [id, transform_spec_id, role, standard_variable_uri, format, unit, dimensionality, spatial_type, crs_requirement, temporal_resolution, schema_requirement_json, metadata_json]
+      filter: {transform_spec: {visibility: {_eq: public}}}
   - role: user
     permission:
-      columns: [id, transform_spec_id, role, standard_variable_uri, format, unit]
-      filter: {}
+      columns: [id, transform_spec_id, role, standard_variable_uri, format, unit, dimensionality, spatial_type, crs_requirement, temporal_resolution, schema_requirement_json, metadata_json]
+      filter: {transform_spec: {_or: [{visibility: {_eq: public}}, {visibility: {_eq: shared}}, {owner_username: {_eq: X-Hasura-User-Id}}]}}
 - table:
     name: transform_edge
     schema: adapter

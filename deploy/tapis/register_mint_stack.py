@@ -399,6 +399,8 @@ def build_specs(
                     # Operator credential for /admin/* and POST /transform-specs;
                     # unset = those routes answer 503.
                     "SVO_ADAPTER_ADMIN_ROUTE_SECRET",
+                    # Read the registry as the calling user (owner/visibility scoping).
+                    "SVO_ADAPTER_REGISTRY_USER_SCOPED",
                     # CKAN org whose SVO-typed resources become adapter data objects.
                     "SVO_ADAPTER_CKAN_SYNC_ORG",
                 ),
@@ -1131,6 +1133,7 @@ def sync_svo_runtime(t: Any, spec: dict[str, Any], *, restart: bool = True) -> i
         "SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS",
         "SVO_ADAPTER_SECRETS_ADMIN_SECRET",
         "SVO_ADAPTER_ADMIN_ROUTE_SECRET",
+        "SVO_ADAPTER_REGISTRY_USER_SCOPED",
         "SVO_ADAPTER_CKAN_SYNC_ORG",
     ):
         if key in spec_env:

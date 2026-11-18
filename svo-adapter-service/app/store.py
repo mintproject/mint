@@ -66,6 +66,10 @@ class InMemoryHasura:
     def __init__(self, bearer_token: str | None = None) -> None:
         self._bearer = bearer_token
 
+    def as_user(self) -> "InMemoryHasura":
+        """The demo store has no users, so there is nothing to scope."""
+        return self
+
     async def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         variables = variables or {}
         m = _OP_RE.search(query)

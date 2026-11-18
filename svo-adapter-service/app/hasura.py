@@ -28,11 +28,25 @@ def get_client(bearer_token: str | None = None):
 
 
 class HasuraClient:
-    def __init__(self, bearer_token: str | None = None) -> None:
+    def __init__(self, bearer_token: str | None = None, *, user_scoped: bool = False) -> None:
         self._bearer = bearer_token
+        self._user_scoped = user_scoped
+
+    def as_user(self) -> "HasuraClient":
+        """A client that reads as the caller, so Hasura's own select permissions
+        decide which rows come back. It never sends the admin secret; with no
+        bearer token Hasura treats the request as anonymous. Returns this client
+        unchanged while ``registry_user_scoped`` is off."""
+        if not settings.registry_user_scoped:
+            return self
+        return HasuraClient(self._bearer, user_scoped=True)
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
+        if self._user_scoped:
+            if self._bearer:
+                headers["Authorization"] = f"Bearer {self._bearer}"
+            return headers
         if settings.hasura_admin_secret:
             # Adapter schema tables have no user-level Hasura permissions; always
             # use admin secret so all adapter.* queries succeed.  Bearer token
@@ -121,6 +135,7 @@ query TransformRegistry {
     container_image parameters_schema_json
     stage env_from_args file_inputs
     mint_model_config_id mint_synced_at
+    owner_username visibility mint_etl_process_id approved_source_sha256
     contracts {
       id role standard_variable_uri format unit dimensionality
       spatial_type crs_requirement temporal_resolution schema_requirement_json

@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # which write the shared registry with the Hasura admin secret. Sent as
     # X-Admin-Secret. Unset = those routes answer 503 (demo mode excepted).
     admin_route_secret: str | None = None
+    # Read the transform registry with the caller's own Hasura identity, so a
+    # caller sees only public pieces, shared pieces and their own. Off = every
+    # caller sees every piece (the admin-secret read). Turn on only once Hasura's
+    # session user is confirmed to be the Tapis username.
+    registry_user_scoped: bool = False
 
     # Tapis Workflows. Submission emulates SUBSIDE's manager so adapter-generated
     # pipelines are interchangeable with SUBSIDE's: same pipeline shape, registered
