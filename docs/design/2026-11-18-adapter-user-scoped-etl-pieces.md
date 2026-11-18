@@ -1,7 +1,8 @@
 # SVO adapter: user-scoped ETL pieces and safe execution of stored code
 
 Status: Implementing (approved by user 2026-11-18). Phase 1 is merged (#416) and deployed
-to dev. Phases 0 and 2–6 are not started.
+to dev. Phase 0 is done except the Hasura session-user check, moved to Phase 2. Phases 2–6
+are not started.
 
 Supersedes `mcp-suite/docs/design/2026-11-18-etl-function-piece-authoring.md`, whose two
 reviews (security: no-go; skeptic: revise) are the reason for this rewrite. That spec's MCP
@@ -102,6 +103,41 @@ Added after security re-review:
   (the model task's `signal_*`, `credentials_url`, `token_fetch_*`), through the environment
   or the execution context. If it can, the Phase 4 refusal list is not a real control and
   those values must be kept out of pipelines that carry stored code.
+
+**Results (2026-11-18, three runs of a two-task probe pipeline in group `subside-ops`, all
+completed):**
+
+- **`entrypoint` does nothing.** The engine stores the task with `entrypoint: null` whatever
+  is sent, saves the code as `…/task/src/entrypoint.py` and runs that file as a script
+  (`argv` is that path; `_OWE_ENTRYPOINT_FILE_PATH` names it). A function named by
+  `entrypoint` is never called. Code written as `def transform(): …` defines the function,
+  does nothing, and the task still reports success.
+- **Inputs and chaining work through the execution context.** `ctx.get_input` returned the
+  bound run argument and the previous task's `result` output; `ctx.set_output` is how a task
+  hands a value on.
+- **An unbound argument is not readable** by the three routes tested: `ctx.get_input` for
+  it returned `None`, no environment variable held its value, and a scan of 2,085 files
+  from `/` found it only in the probe's own source (where the probe embedded the marker).
+  The Phase 4 allowlist is therefore a real control for these routes.
+- **Default time cap is one hour.** A task with no `execution_profile` gets
+  `max_exec_time: 3600`, `max_retries: 0`, flavor `c1med`. The adapter's main function
+  steps run with that today.
+- **Function tasks run in the Workflows cluster, not on an HPC system.** What task code can
+  reach from there is to be confirmed with the Tapis team before stored code is enabled.
+- **Hasura session user: inconclusive.** The check returned the same 50 public rows with
+  and without a token, because the caller owns no private ETL process. It is settled in
+  Phase 2 instead: with the owner preset in place, insert one private process on dev and
+  read back its `owner_username`.
+
+Consequences for later phases:
+
+- Phase 5 cannot rely on `entrypoint`. Either stored code must be a top-level script that
+  calls `ctx.set_output("result", …)`, or the adapter appends a call to the named function
+  and sets the output from its return value. The second keeps the catalog UI's
+  `def transform()` default working and is the proposed choice.
+- The adapter should stop emitting the `entrypoint` key, which is silently dropped.
+- Until Phase 5, a piece whose code only defines a function must be rejected at
+  registration or plan time rather than left to succeed while doing nothing.
 
 ### Phase 1 — Caller identity and endpoint authentication
 
