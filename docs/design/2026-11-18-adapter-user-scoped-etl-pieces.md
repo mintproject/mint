@@ -1,7 +1,8 @@
 # SVO adapter: user-scoped ETL pieces and safe execution of stored code
 
-Status: Implementing (approved by user 2026-11-18). Phases 1 and 2 are merged (#416, #418).
-Phase 3 is in review (#419). Phases 4, 5 and 6 are coded and tested but not yet pushed.
+Status: Implementing (approved by user 2026-11-18). Phases 1–5 are merged and deployed to
+dev (#416, #418, #419, #421, #422). Phase 6 is coded and tested in the `mcp-suite` working
+tree but not committed. Phase 0's live checks are not all done.
 Stored-source execution and user-scoped registry reads both ship switched off. See
 "Implementation notes, Phases 2–6" under Decisions for deviations and what is still
 unverified on a live pod.
@@ -388,7 +389,7 @@ rule for configurations, so an empty or failed listing cannot empty the registry
 Approval is set through `PUT /admin/transform-spec-approval` with the piece id in the body,
 because piece ids are URIs.
 
-**Phase 3 — user-scoped reads (#419).** All 16 registry reads go through one helper.
+**Phase 3 — user-scoped reads (#419, merged).** All 16 registry reads go through one helper.
 Deviations:
 
 - It is behind a setting, `SVO_ADAPTER_REGISTRY_USER_SCOPED`, off by default, because the
@@ -399,7 +400,7 @@ Deviations:
 - A caller with no token is anonymous and sees public pieces only. Planning does not
   require a token. (The user was asked and did not choose; this is the non-breaking option.)
 
-**Phase 4 — execution controls.** As designed, with these limits:
+**Phase 4 — execution controls (#421, merged).** As designed, with these limits:
 
 - The opt-in for an unapproved shared or public piece exists on `POST /plans`
   (`allow_unapproved_piece_ids`) and on the piece test endpoint (`allow_unapproved`). The
@@ -412,7 +413,7 @@ Deviations:
   source runs only once approved.
 - The username lookup is cached for 60 seconds per token.
 
-**Phase 5 — runnable stored source.** As designed, using the wrapper option: when the
+**Phase 5 — runnable stored source (#422, merged).** As designed, using the wrapper option: when the
 source defines its entrypoint, the adapter appends a call that passes the task inputs as
 one dict and writes the return value to `result`. Deviations:
 
@@ -427,9 +428,20 @@ one dict and writes the return value to `result`. Deviations:
 parsing. `servers/dynamo` is not yet committed to the `mcp-suite` repository, so the tool
 exists only in that working tree.
 
+**Deploy incident.** The dev deploy for #418 failed: Hasura refused the metadata file
+because #415 had declared the relationship `configuration_parameters` on
+`modelcatalog_parameter` twice. Migrations had applied; metadata and every later deploy
+step had not, so neither #415's owner-scoped writes nor #418's owner preset was live. #420
+removed the duplicate and added a test that fails on any repeated relationship name. Its
+deploy applied the metadata from #415 and #418 for the first time, without further error.
+
+**Checked on dev after the deploys.** The adapter lists all 234 pieces, each with a
+`visibility` (all `public`). An anonymous Hasura query can read the registry columns and
+contracts of public pieces. Both settings remain unset on the pod.
+
 **Not yet verified on a live pod**
 
-- That Hasura's session user id is the Tapis username. Check after #418 deploys: insert one
+- That Hasura's session user id is the Tapis username. #418 is now live, so: insert one
   private ETL process as a signed-in user and read back `owner_username`. Until it passes,
   leave `SVO_ADAPTER_REGISTRY_USER_SCOPED` unset.
 - A stored-source piece running end to end. The wrapper is executed in tests against a
