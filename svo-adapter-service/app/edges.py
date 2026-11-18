@@ -13,9 +13,19 @@ recompute(h)                   -> coroutine; deletes + re-inserts all edges
 """
 from __future__ import annotations
 
+import asyncio
+import logging
+import time
 from typing import Any
 
 from .planner import DataObjectContract, _contract_from_registry, compatibility, ReadinessStatus
+
+log = logging.getLogger(__name__)
+
+
+def _variable_key(uri: str | None) -> str | None:
+    """A standard variable as the semantic check compares it."""
+    return uri.strip().lower() if uri is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -71,9 +81,23 @@ def compute_edges(registry: list[dict[str, Any]]) -> list[dict[str, Any]]:
             elif c.get("role") == "input":
                 inputs.append((c, spec))
 
+    # The semantic check passes only when the target names no standard variable
+    # or names the same one as the source (planner._check_semantic). Index the
+    # inputs that way so each output is compared with the inputs that can match
+    # it, not with every input in the registry. Positions keep the original
+    # order, which the planner's tie-breaking depends on.
+    parsed_inputs = [(in_c, in_spec, _contract_from_registry(in_c)) for in_c, in_spec in inputs]
+    by_variable: dict[str | None, list[int]] = {}
+    for position, (_, _, tgt) in enumerate(parsed_inputs):
+        by_variable.setdefault(_variable_key(tgt.standard_variable_uri), []).append(position)
+
     edges: list[dict[str, Any]] = []
     for out_c, out_spec in outputs:
         src = _contract_from_registry(out_c)
+        positions = list(by_variable.get(None, []))
+        key = _variable_key(src.standard_variable_uri)
+        if key is not None:
+            positions = sorted(positions + by_variable.get(key, []))
         # Output contracts have no resource_uri (they're specs, not materialized files).
         # Treat the output as accessible — the upstream transform produces a file
         # when it runs, so accessibility is guaranteed by definition.
@@ -97,8 +121,8 @@ def compute_edges(registry: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 is_passthrough = True
                 break
 
-        for in_c, in_spec in inputs:
-            tgt = _contract_from_registry(in_c)
+        for position in positions:
+            in_c, in_spec, tgt = parsed_inputs[position]
             # Use inferred format for compatibility check
             src_for_check = src
             if src.format is None and inferred_format is not None:
@@ -165,7 +189,11 @@ async def recompute(h) -> dict[str, Any]:
     from .hasura import TRANSFORM_REGISTRY_QUERY
 
     registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
-    edges = compute_edges(registry)
+    # CPU-bound: run it off the event loop so the service keeps answering.
+    started = time.monotonic()
+    edges = await asyncio.to_thread(compute_edges, registry)
+    log.info("edges: computed %d edges for %d specs in %.1fs",
+                len(edges), len(registry), time.monotonic() - started)
 
     deleted = (await h.execute(DELETE_ALL_EDGES))["delete_adapter_transform_edge"]["affected_rows"]
 
