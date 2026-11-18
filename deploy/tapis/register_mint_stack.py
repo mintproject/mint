@@ -401,6 +401,8 @@ def build_specs(
                     "SVO_ADAPTER_ADMIN_ROUTE_SECRET",
                     # Read the registry as the calling user (owner/visibility scoping).
                     "SVO_ADAPTER_REGISTRY_USER_SCOPED",
+                    # Allow Python source stored with a piece to run.
+                    "SVO_ADAPTER_STORED_SOURCE_ENABLED",
                     # CKAN org whose SVO-typed resources become adapter data objects.
                     "SVO_ADAPTER_CKAN_SYNC_ORG",
                 ),
@@ -1134,6 +1136,7 @@ def sync_svo_runtime(t: Any, spec: dict[str, Any], *, restart: bool = True) -> i
         "SVO_ADAPTER_SECRETS_ADMIN_SECRET",
         "SVO_ADAPTER_ADMIN_ROUTE_SECRET",
         "SVO_ADAPTER_REGISTRY_USER_SCOPED",
+        "SVO_ADAPTER_STORED_SOURCE_ENABLED",
         "SVO_ADAPTER_CKAN_SYNC_ORG",
     ):
         if key in spec_env:

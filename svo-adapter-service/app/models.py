@@ -99,6 +99,9 @@ class PlanIn(BaseModel):
     target_model_configuration_id: str | None = None
     target_dataset_specification_id: str | None = None
     target_contract: DataObjectContract | None = None
+    # Shared or public pieces whose stored code has NOT been approved, that the
+    # caller agrees to run with their own Tapis token. Never chosen otherwise.
+    allow_unapproved_piece_ids: list[str] = Field(default_factory=list)
 
 
 class DeferredPlanIn(BaseModel):

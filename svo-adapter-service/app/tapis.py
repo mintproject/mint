@@ -35,6 +35,7 @@ from typing import Any
 from .config import settings
 from .etl_contract import normalize_env_from_args
 from .run_tokens import run_token_ttl
+from .stored_source import allowed_args
 
 try:
     from .config import settings
@@ -1059,11 +1060,18 @@ def generate_tapis_workflow(
             }
             if s.get("python_entrypoint"):
                 task["entrypoint"] = s["python_entrypoint"]
+            env_map = normalize_env_from_args(s.get("env_from_args") or {}) or {}
+            if s.get("python_source"):
+                # The piece's author chose this mapping, so stored code may only
+                # be handed the args it is allowed to see.
+                refused = sorted(set(map(str, env_map.values()))
+                                 - allowed_args(s, _INPUT_SECRET_PARAMS))
+                if refused:
+                    raise ValueError(
+                        f"stored-source pieces may not bind: {', '.join(refused)}")
             inputs = {
                 key: {"type": "string", "value_from": {"args": arg}}
-                for key, arg in (
-                    normalize_env_from_args(s.get("env_from_args") or {}) or {}
-                ).items()
+                for key, arg in env_map.items()
             }
             # unit_convert is the first scalar consumer in the transform
             # registry. Its input is the preceding function's named result,

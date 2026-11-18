@@ -267,6 +267,7 @@ jobs:
           SVO_ADAPTER_ADMIN_ROUTE_SECRET: ${{ secrets.SVO_ADAPTER_ADMIN_ROUTE_SECRET }}
           # Registry reads as the calling user; unset leaves the pod as it is.
           SVO_ADAPTER_REGISTRY_USER_SCOPED: ${{ vars.SVO_ADAPTER_REGISTRY_USER_SCOPED }}
+          SVO_ADAPTER_STORED_SOURCE_ENABLED: ${{ vars.SVO_ADAPTER_STORED_SOURCE_ENABLED }}
           SVO_ADAPTER_CKAN_SYNC_ORG: ${{ vars.SVO_ADAPTER_CKAN_SYNC_ORG }}
         run: |
           set -euo pipefail

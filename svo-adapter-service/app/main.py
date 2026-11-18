@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import hashlib
+import time
 import json
 import logging
 import re
@@ -46,7 +47,7 @@ from fastapi.staticfiles import StaticFiles
 
 log = logging.getLogger(__name__)
 
-from . import input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, tapis
+from . import input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
@@ -128,6 +129,8 @@ class TestTransformIn(BaseModel):
     args: dict[str, Any] = {}
     dry_run: bool = True
     run_name: str | None = None
+    # Run a shared or public piece whose stored code has not been approved.
+    allow_unapproved: bool = False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -327,6 +330,27 @@ async def _require_caller(token: str | None) -> str:
             "code": "TAPIS_AUTH_REQUIRED",
             "message": "a valid Tapis bearer token is required",
         })
+    return username
+
+
+_CALLER_CACHE: dict[str, tuple[float, str | None]] = {}
+_CALLER_CACHE_SECONDS = 60.0
+
+
+async def _caller_or_none(token: str | None) -> str | None:
+    """Tapis-verified username for the token, or None. Cached briefly by token
+    hash so planning does not call Tapis on every request."""
+    if not token:
+        return None
+    key = hashlib.sha256(token.encode()).hexdigest()
+    now = time.monotonic()
+    cached = _CALLER_CACHE.get(key)
+    if cached and now - cached[0] < _CALLER_CACHE_SECONDS:
+        return cached[1]
+    username = await run_in_threadpool(tapis.userinfo_username, token)
+    if len(_CALLER_CACHE) > 1024:
+        _CALLER_CACHE.clear()
+    _CALLER_CACHE[key] = (now, username)
     return username
 
 
@@ -790,7 +814,7 @@ def _contract_insert_obj(c: dict[str, Any]) -> dict[str, Any]:
 async def list_transform_specs(authorization: str | None = Header(None)):
     """The transform registry (specs + their input/output contracts)."""
     h = get_client(_bearer(authorization))
-    return await _registry(h)
+    return await _registry(h, plannable=False)
 
 
 @app.post("/transform-specs", tags=["Core: Registry"])
@@ -892,10 +916,18 @@ async def test_transform_spec(spec_id: str, body: TestTransformIn, authorization
     if not settings.demo_mode:
         await _require_caller(token)
     h = get_client(token)
-    specs = await _registry(h)
+    specs = await _registry(h, plannable=False)
     spec = next((s for s in specs if s.get("id") == spec_id), None)
     if not spec:
         raise HTTPException(404, "transform spec not found")
+    if stored_source.stored_source(spec):
+        verdict = stored_source.decision(
+            spec, await _caller_or_none(token), (spec_id,) if body.allow_unapproved else ())
+        if verdict == "denied":
+            raise HTTPException(403, detail={
+                "code": "STORED_SOURCE_NOT_PERMITTED",
+                "message": "this piece carries stored code you may not run",
+            })
     step = build_plan_json([spec])["steps"][0]
     pipeline = tapis.generate_tapis_workflow({"id": f"test-{spec_id}", "plan_json": {"steps": [step]}})
     args = _wrap_args(body.args)
@@ -911,15 +943,22 @@ async def test_transform_spec(spec_id: str, body: TestTransformIn, authorization
     return {"status": "submitted", "spec_id": spec_id, **result}
 
 
-async def _registry(h: Any) -> list[dict[str, Any]]:
-    """The transform registry as the caller may see it.
+async def _registry(h: Any, *, plannable: bool = True,
+                    opt_in: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+    """The transform registry as the caller may see it, and by default only the
+    pieces the planner may choose for them (see stored_source.decision).
+    ``plannable=False`` returns every visible piece, for listing.
 
     With ``registry_user_scoped`` on, the read goes to Hasura with the caller's
     own token (or none), so its select permissions return only public pieces,
     shared pieces and the caller's own. Otherwise every piece is returned.
     """
     client = h.as_user() if hasattr(h, "as_user") else h
-    return (await client.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = (await client.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    if not plannable or not any(stored_source.stored_source(s) for s in registry):
+        return registry
+    username = await _caller_or_none(getattr(h, "_bearer", None))
+    return stored_source.plannable(registry, username, opt_in)
 
 
 async def _load_edge_map(
@@ -1808,7 +1847,8 @@ async def create_plan(body: PlanIn, authorization: str | None = Header(None)):
     if compatibility(src, tgt).status == ReadinessStatus.ready:
         return {"status": "ready", "plan": None, "message": "data object is already model-ready"}
 
-    registry = await _registry(h)
+    opt_in = tuple(body.allow_unapproved_piece_ids)
+    registry = await _registry(h, opt_in=opt_in)
 
     edge_map = await _load_edge_map(registry)
     path = find_path(src, tgt, registry, edge_map=edge_map)
@@ -1816,6 +1856,13 @@ async def create_plan(body: PlanIn, authorization: str | None = Header(None)):
         raise HTTPException(422, "no transform path found from source contract to target contract")
 
     plan_json = _plan_with_parameters(build_plan_json(path))
+    if opt_in:
+        # The opt-in belongs to this caller and this plan; it is re-checked
+        # against whoever submits.
+        plan_json["stored_source_opt_in"] = {
+            "username": await _caller_or_none(_bearer(authorization)),
+            "piece_ids": sorted(opt_in),
+        }
     created = (await h.execute(INSERT_PLAN, {"obj": {
         "source_data_object_id": body.data_object_id,
         "target_model_configuration_id": body.target_model_configuration_id,
@@ -2685,6 +2732,27 @@ async def submit_workflow(
             raise HTTPException(409, detail={"code": "BOUND_PLAN_INVALID"})
         if tapis.plan_publishes((plan.get("plan_json") or {}).get("steps") or []):
             await _enforce_run_owner(body.execution_id, token)
+
+    stored_steps = list(stored_source.iter_stored_steps(plan.get("plan_json") or {}))
+    if stored_steps:
+        # Checked against the submitter and the pieces as they are now, so a plan
+        # made by a piece's author cannot be handed to someone else to run.
+        submitter = await _caller_or_none(token)
+        recorded = (plan.get("plan_json") or {}).get("stored_source_opt_in") or {}
+        opt_in = recorded.get("piece_ids") or [] if submitter and recorded.get("username") == submitter else []
+        problems = stored_source.check_plan(
+            plan.get("plan_json") or {}, await _registry(h, plannable=False), submitter, opt_in)
+        if problems:
+            raise HTTPException(403, detail={"code": "STORED_SOURCE_REFUSED", "problems": problems})
+        if not body.dry_run:
+            await h.execute(INSERT_PROVENANCE, {"obj": {
+                "event_type": "stored_source_run",
+                "payload_json": {
+                    "plan_id": stored_plan_id,
+                    "submitted_by": submitter,
+                    "pieces": [step.get("stored_source") for step in stored_steps],
+                },
+            }})
 
     if idempotency_key:
         existing_rows = (await h.execute(

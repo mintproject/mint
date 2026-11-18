@@ -17,6 +17,33 @@ public pieces, shared pieces and the caller's own. A request with no token is an
 and sees public pieces only. The setting is off by default, in which case every caller
 sees every piece.
 
+### Pieces that carry stored Python source
+
+A piece may carry its own Python source instead of running one of the adapter's
+built-in transforms. Such code runs with the submitting user's Tapis token, so it is
+controlled separately. `SVO_ADAPTER_STORED_SOURCE_ENABLED` is off by default; while it
+is off these pieces are left out of planning and a plan that carries stored source is
+refused at submit. Built-in pieces are unaffected.
+
+With it on, a caller may run a stored-source piece when:
+
+| Case | Chosen by the planner automatically? |
+|---|---|
+| The caller owns the piece | Yes |
+| The piece is shared or public and an admin approved its current source (`PUT /admin/transform-spec-approval`) | Yes |
+| The piece is shared or public and unapproved, and the caller named it (`allow_unapproved_piece_ids` on `POST /plans`, `allow_unapproved` on `POST /transform-specs/{id}/test`) | No |
+| Anything else, including another user's private piece | Not runnable |
+
+Each plan step that carries stored source records the piece id, owner and the SHA-256
+of the source under `stored_source`. `POST /workflows/submit` checks every such step
+again, against the submitter and against the piece as it is now, and answers 403
+`STORED_SOURCE_REFUSED` with a `problems` list (`STORED_SOURCE_DISABLED`,
+`STORED_SOURCE_PIECE_NOT_VISIBLE`, `STORED_SOURCE_CHANGED`,
+`STORED_SOURCE_NOT_PERMITTED`). An opt-in belongs to the user who gave it and does not
+carry over to another submitter. Each real run writes a `stored_source_run` provenance
+event. Stored code may bind only `tapis_token`, `source_uri` and the run arguments the
+piece declares.
+
 Ensemble Manager-owned model-output handoffs additionally require the server-only
 `X-Ensemble-Manager-Secret` header. Configure the same value as
 `SVO_ADAPTER_INTERNAL_SERVICE_SECRET` on the adapter and
