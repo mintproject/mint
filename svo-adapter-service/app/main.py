@@ -790,7 +790,7 @@ def _contract_insert_obj(c: dict[str, Any]) -> dict[str, Any]:
 async def list_transform_specs(authorization: str | None = Header(None)):
     """The transform registry (specs + their input/output contracts)."""
     h = get_client(_bearer(authorization))
-    return (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    return await _registry(h)
 
 
 @app.post("/transform-specs", tags=["Core: Registry"])
@@ -892,7 +892,7 @@ async def test_transform_spec(spec_id: str, body: TestTransformIn, authorization
     if not settings.demo_mode:
         await _require_caller(token)
     h = get_client(token)
-    specs = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    specs = await _registry(h)
     spec = next((s for s in specs if s.get("id") == spec_id), None)
     if not spec:
         raise HTTPException(404, "transform spec not found")
@@ -911,11 +911,25 @@ async def test_transform_spec(spec_id: str, body: TestTransformIn, authorization
     return {"status": "submitted", "spec_id": spec_id, **result}
 
 
+async def _registry(h: Any) -> list[dict[str, Any]]:
+    """The transform registry as the caller may see it.
+
+    With ``registry_user_scoped`` on, the read goes to Hasura with the caller's
+    own token (or none), so its select permissions return only public pieces,
+    shared pieces and the caller's own. Otherwise every piece is returned.
+    """
+    client = h.as_user() if hasattr(h, "as_user") else h
+    return (await client.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+
+
 async def _load_edge_map(
     registry: list[dict[str, Any]],
 ) -> "dict[str, list[dict[str, Any]]] | None":
     """Fetch precomputed edges from Hasura and build the BFS index. Returns None
-    in demo mode or when the edge table is empty (first run before recompute)."""
+    in demo mode or when the edge table is empty (first run before recompute).
+
+    Edges are read for every piece, but build_edge_map keeps only those leading
+    into a piece in ``registry``, so a caller-scoped registry scopes the edges."""
     if settings.demo_mode:
         return None
     from . import edges as edges_mod
@@ -1260,7 +1274,7 @@ async def evaluate_objective_plan(
     target = DataObjectContract(**{
         key: value for key, value in target_contract.items() if key in target_fields
     })
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     edge_map = await _load_edge_map(registry)
 
     candidates = []
@@ -1334,7 +1348,7 @@ async def create_dfc_fanout_plan(
         key: value for key, value in target_contract_raw.items()
         if key in DataObjectContract.model_fields
     })
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     edge_map = await _load_edge_map(registry)
     path = find_path(source, target, registry, edge_map=edge_map)
     if path is None:
@@ -1435,7 +1449,7 @@ async def create_deferred_plan(
     target = await _resolve_target(
         h, body.target_dataset_specification_id, body.target_contract
     )
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     edge_map = await _load_edge_map(registry)
     # A deferred source is a model output that does not exist as a registered
     # data object yet.  Treat it as reachable while planning; the later bind
@@ -1513,7 +1527,7 @@ def _input_plan_error(exc: "input_plan.InputPlanError") -> HTTPException:
 async def _derive_input_plan(
     h, configuration_id: str, sources: list[dict[str, Any]], filled: "set[str] | list[str]",
 ) -> dict[str, Any]:
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     edge_map = await _load_edge_map(registry)
     try:
         return input_plan.plan_model_inputs(registry, edge_map, configuration_id, sources, filled)
@@ -1693,7 +1707,7 @@ async def list_publishers(
     """
     token = _bearer(authorization)
     h = get_client(token)
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     model = next((s for s in registry if s.get("mint_model_config_id") == configuration_id), None)
     if model is None:
         raise HTTPException(404, detail={"code": "CONFIGURATION_NOT_FOUND",
@@ -1794,7 +1808,7 @@ async def create_plan(body: PlanIn, authorization: str | None = Header(None)):
     if compatibility(src, tgt).status == ReadinessStatus.ready:
         return {"status": "ready", "plan": None, "message": "data object is already model-ready"}
 
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
 
     edge_map = await _load_edge_map(registry)
     path = find_path(src, tgt, registry, edge_map=edge_map)
@@ -1830,7 +1844,7 @@ async def discover_reachable_targets(body: dict[str, Any]):
         resource_uri="https://example.com/discover-probe",
     )
     h = get_client(None)
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     edge_map = await _load_edge_map(registry)
 
     # Build candidate targets: all unique output contracts across all specs
@@ -1877,7 +1891,7 @@ async def discover_reachable_sources(body: dict[str, Any]):
     )
 
     h = get_client(None)
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
 
     def _ck(c: dict) -> tuple[str, str, str]:
         return (c.get("standard_variable_uri") or "", c.get("unit") or "", c.get("format") or "")
@@ -2118,7 +2132,7 @@ async def list_standard_variables(authorization: str | None = Header(None)):
     transform registry's contracts + registered data objects. Drives the
     'want this SVO output' picker."""
     h = get_client(_bearer(authorization))
-    specs = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    specs = await _registry(h)
     objs = (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
     seen: dict[str, dict[str, Any]] = {}
     for s in specs:
@@ -2151,7 +2165,7 @@ async def modflow6_qaqc(authorization: str | None = Header(None)):
     data_objects = None
     data_objects_error = None
     try:
-        registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+        registry = await _registry(h)
     except Exception as exc:  # noqa: BLE001 - report dependency failure
         registry_error = f"{type(exc).__name__}: {exc}"
     try:
@@ -2178,7 +2192,7 @@ async def modflow6_qaqc_tapis(body: dict[str, Any] | None = None,
     body = body or {}
     token = _bearer(authorization) or body.get("tapis_token")
     h = get_client(_bearer(authorization))
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     data_objects = (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
     context = qaqc.tapis_context(registry=registry, data_objects=data_objects)
     pipeline_id = body.get("pipeline_id") or f"modflow6-svo-qaqc-{context['config']['name']}"
@@ -2233,7 +2247,7 @@ async def reachable(data_object_id: str, authorization: str | None = Header(None
     if not rows:
         raise HTTPException(404, "data object not found")
     src = _data_object_to_contract(rows[0])
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     reach = reachable_variables(src, registry)
     out = []
     for r in reach:
@@ -2255,7 +2269,7 @@ async def plan_model_run_endpoint(body: ModelRunIn, authorization: str | None = 
     the registered data objects and runs it (e.g. the SUBSIDE forecast). Returns
     the per-input resolution + the converging plan_json, and whether it's complete."""
     h = get_client(_bearer(authorization))
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     run_spec = next((t for t in registry if t.get("id") == body.run_spec_id), None)
     if run_spec is None:
         raise HTTPException(404, f"run spec '{body.run_spec_id}' not found")
@@ -3836,7 +3850,7 @@ async def _resolve_forecast_plan(h, lat: float, lon: float,
     """Registry-driven resolution: detect the aquifer/layer (CKAN polygons), filter the
     registered data objects to that layer + services, and ask the planner to resolve every
     forecast input -> per-input branches (source + ETL) + the converging DAG."""
-    registry = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
+    registry = await _registry(h)
     run_spec = next((t for t in registry if t.get("name") == _FORECAST_RUN_SPEC), None)
     if run_spec is None:
         raise HTTPException(404, f"run-spec '{_FORECAST_RUN_SPEC}' not registered — "

@@ -10,6 +10,13 @@ token is forwarded to Hasura/Tapis where the operation needs caller authorizatio
 Use the generated OpenAPI document for the exact Pydantic request and response
 schemas.
 
+With `SVO_ADAPTER_REGISTRY_USER_SCOPED=1`, every endpoint that reads the transform
+registry (listing, readiness, planning, discovery) reads it as the caller: the bearer
+token is sent to Hasura without the adapter's admin secret, and Hasura returns only
+public pieces, shared pieces and the caller's own. A request with no token is anonymous
+and sees public pieces only. The setting is off by default, in which case every caller
+sees every piece.
+
 Ensemble Manager-owned model-output handoffs additionally require the server-only
 `X-Ensemble-Manager-Secret` header. Configure the same value as
 `SVO_ADAPTER_INTERNAL_SERVICE_SECRET` on the adapter and
