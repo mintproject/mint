@@ -1,8 +1,10 @@
 # SVO adapter: user-scoped ETL pieces and safe execution of stored code
 
-Status: Implementing (approved by user 2026-11-18). Phase 1 is merged (#416) and deployed
-to dev. Phase 0 is done except the Hasura session-user check, moved to Phase 2. Phases 2–6
-are not started.
+Status: Implementing (approved by user 2026-11-18). Phases 1 and 2 are merged (#416, #418).
+Phase 3 is in review (#419). Phases 4, 5 and 6 are coded and tested but not yet pushed.
+Stored-source execution and user-scoped registry reads both ship switched off. See
+"Implementation notes, Phases 2–6" under Decisions for deviations and what is still
+unverified on a live pod.
 
 Supersedes `mcp-suite/docs/design/2026-11-18-etl-function-piece-authoring.md`, whose two
 reviews (security: no-go; skeptic: revise) are the reason for this rewrite. That spec's MCP
@@ -376,6 +378,64 @@ propagate it).
   200. None of the 234 pieces then in the dev registry carried stored source. Not checked:
   an operator call with the correct secret. This spec was held out of #416 because the
   repository is public and the route was still open.
+
+### Implementation notes, Phases 2–6 (2026-11-18)
+
+**Phase 2 — ownership (#418, merged).** As designed. The contract insert permission was
+also tightened: a contract can only be added to a process the session user owns. The sync
+skips ETL deletion when the catalog lists no ETL process at all, mirroring the existing
+rule for configurations, so an empty or failed listing cannot empty the registry.
+Approval is set through `PUT /admin/transform-spec-approval` with the piece id in the body,
+because piece ids are URIs.
+
+**Phase 3 — user-scoped reads (#419).** All 16 registry reads go through one helper.
+Deviations:
+
+- It is behind a setting, `SVO_ADAPTER_REGISTRY_USER_SCOPED`, off by default, because the
+  Hasura session-user check is still outstanding.
+- No Hasura permission was added on `adapter.transform_edge`. Edges are still read for
+  every piece; `build_edge_map` keeps only edges leading into a piece in the caller's
+  registry, which gives the same result with less to maintain. Tested.
+- A caller with no token is anonymous and sees public pieces only. Planning does not
+  require a token. (The user was asked and did not choose; this is the non-breaking option.)
+
+**Phase 4 — execution controls.** As designed, with these limits:
+
+- The opt-in for an unapproved shared or public piece exists on `POST /plans`
+  (`allow_unapproved_piece_ids`) and on the piece test endpoint (`allow_unapproved`). The
+  other planning endpoints (deferred, DFC fan-out, model-run, forecast) never choose an
+  unapproved piece and offer no opt-in.
+- Ensemble Manager runs get no special path. A submit whose plan carries stored source is
+  checked against whoever the bearer token identifies; with no valid token nothing but an
+  approved piece passes.
+- A piece registered straight into the adapter by an operator has no owner, so its stored
+  source runs only once approved.
+- The username lookup is cached for 60 seconds per token.
+
+**Phase 5 — runnable stored source.** As designed, using the wrapper option: when the
+source defines its entrypoint, the adapter appends a call that passes the task inputs as
+one dict and writes the return value to `result`. Deviations:
+
+- The explicit time limit (600 s, no retries) is applied to main steps that run stored
+  source only. Built-in main function steps keep the engine default of one hour, because
+  shortening them could break existing long transforms.
+- The hash recorded on a plan step is of the author's source, not of the wrapped code.
+- The catalog UI's `def transform()` default now works unchanged, so the UI was not edited.
+
+**Phase 6 — `create_etl_function_piece` (mcp-suite).** As revised: private only, no
+`owner_username` sent, `env_from_args` supported, random id suffix, size checked before
+parsing. `servers/dynamo` is not yet committed to the `mcp-suite` repository, so the tool
+exists only in that working tree.
+
+**Not yet verified on a live pod**
+
+- That Hasura's session user id is the Tapis username. Check after #418 deploys: insert one
+  private ETL process as a signed-in user and read back `owner_username`. Until it passes,
+  leave `SVO_ADAPTER_REGISTRY_USER_SCOPED` unset.
+- A stored-source piece running end to end. The wrapper is executed in tests against a
+  stand-in for the Workflows execution context, not on Tapis.
+- What task code can reach from inside the Workflows cluster. To be confirmed with the
+  Tapis team before `SVO_ADAPTER_STORED_SOURCE_ENABLED` is set anywhere.
 
 ## User feedback / decisions
 
