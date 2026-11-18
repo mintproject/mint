@@ -35,7 +35,7 @@ from typing import Any
 from .config import settings
 from .etl_contract import normalize_env_from_args
 from .run_tokens import run_token_ttl
-from .stored_source import allowed_args
+from .stored_source import allowed_args, runnable_code
 
 try:
     from .config import settings
@@ -799,6 +799,20 @@ def input_stage_arg_names(input_steps: list[dict[str, Any]] | None) -> set[str]:
 
 
 # Server-injected, secret-bearing standard params an input step may never bind.
+def _function_code(step: dict[str, Any], inputs: dict[str, Any]) -> str:
+    """Code for a hosted function task: the step's stored source (with a call to
+    its entrypoint appended when it defines one), else the built-in transform.
+
+    Tapis Workflows ignores a task-level ``entrypoint`` and runs the code as a
+    script, so none is emitted.
+    """
+    source = step.get("python_source")
+    if not source:
+        from . import task_code
+        return task_code.get_code(step.get("transform_type"))
+    return runnable_code(source, step.get("python_entrypoint"), inputs)
+
+
 _INPUT_SECRET_PARAMS = frozenset({
     "credentials_url", "signal_url", "signal_token", "signal_expires", "token_url",
     "token_fetch_token", "token_fetch_expires", "ckan_token", "stac_token", "tapis_token"})
@@ -857,13 +871,11 @@ def _input_stage_tasks(
                 "runtime": "python:3.11",
                 "installer": "pip",
                 "description": step.get("name"),
-                "code": step.get("python_source") or _task_code.get_code(step.get("transform_type")),
+                "code": _function_code(step, inputs),
                 "output": {"result": {"type": "string"}},
                 "input": inputs,
                 "execution_profile": {"max_retries": 1, "max_exec_time": 600},
             }
-            if step.get("python_entrypoint"):
-                task["entrypoint"] = step["python_entrypoint"]
             if previous:
                 task["depends_on"] = [{"id": previous}]
             tasks.append(task)
@@ -1052,14 +1064,15 @@ def generate_tapis_workflow(
                 "runtime": "python:3.11",
                 "installer": "pip",
                 "description": s.get("name"),
-                "code": s.get("python_source") or _task_code.get_code(transform_type),
                 # Built-in and custom hosted transforms use this stable output
-                # name for typed task-to-task handoffs. Custom code must call
-                # ctx.set_output("result", json_text) to populate it.
+                # name for typed task-to-task handoffs. Custom code populates it
+                # by returning a value from its entrypoint function, or by
+                # calling ctx.set_output("result", json_text) itself.
                 "output": {"result": {"type": "string"}},
             }
-            if s.get("python_entrypoint"):
-                task["entrypoint"] = s["python_entrypoint"]
+            if s.get("python_source"):
+                task["execution_profile"] = {
+                    "max_retries": 0, "max_exec_time": settings.stored_source_max_exec_seconds}
             env_map = normalize_env_from_args(s.get("env_from_args") or {}) or {}
             if s.get("python_source"):
                 # The piece's author chose this mapping, so stored code may only
@@ -1084,8 +1097,11 @@ def generate_tapis_workflow(
                 ),
                 None,
             )
-            if transform_type == "unit_convert" and source_task_id:
-                inputs.pop("SOURCE_URI", None)
+            if (transform_type == "unit_convert" or s.get("python_source")) and source_task_id:
+                # Stored code keeps any SOURCE_URI it bound and also receives the
+                # preceding function's result.
+                if not s.get("python_source"):
+                    inputs.pop("SOURCE_URI", None)
                 inputs["SOURCE_RESULT"] = {
                     "type": "string",
                     "value_from": {
@@ -1120,6 +1136,7 @@ def generate_tapis_workflow(
                 }
             if inputs:
                 task["input"] = inputs
+            task["code"] = _function_code(s, inputs)
             if str(transform_type or "").lower() == PUBLISH_STEP_TYPE:
                 # The catalog choice postdates the registered piece's env mapping;
                 # wire it here so a live piece needs no re-registration.

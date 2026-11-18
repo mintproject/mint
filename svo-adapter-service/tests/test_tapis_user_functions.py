@@ -19,6 +19,8 @@ def test_generated_pipeline_mixes_user_function_and_tapis_job():
 
     assert [task["type"] for task in pipeline["tasks"]] == ["function", "tapis_job"]
     assert pipeline["tasks"][0]["code"].startswith("def transform")
-    assert pipeline["tasks"][0]["entrypoint"] == "transform"
+    # Tapis Workflows ignores a task-level entrypoint, so the adapter appends the call.
+    assert "entrypoint" not in pipeline["tasks"][0]
+    assert "_svo_fn = transform" in pipeline["tasks"][0]["code"]
     assert pipeline["tasks"][1]["tapis_job_def"]["appId"] == "heavy-app"
     assert pipeline["tasks"][1]["depends_on"] == [{"id": "step-0-custom_python"}]
