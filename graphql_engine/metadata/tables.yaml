@@ -3266,13 +3266,6 @@
     name: modelcatalog_parameter
     schema: public
   array_relationships:
-  - name: configuration_parameters
-    using:
-      foreign_key_constraint_on:
-        column: parameter_id
-        table:
-          name: modelcatalog_configuration_parameter
-          schema: public
   - name: execution_parameter_bindings
     using:
       foreign_key_constraint_on:
