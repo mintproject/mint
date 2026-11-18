@@ -103,7 +103,7 @@ def _plan_with_parameters(plan_json: dict[str, Any]) -> dict[str, Any]:
     standard = tapis.STANDARD_PARAMS
     if tapis.plan_publishes(steps):
         standard = {**standard, **tapis.publish_params()}
-    plan_json["parameters"] = parameter_definitions(steps, standard)
+    plan_json["parameters"] = parameter_definitions(steps, standard, tapis.FRAMING_PARAMS)
     # Use the backend-owned catalog as the final geometry default. Explicit
     # caller values and workflow-specific recommendations still take priority.
     transform_names = " ".join(
@@ -2733,6 +2733,7 @@ async def submit_workflow(
         if tapis.plan_publishes((plan.get("plan_json") or {}).get("steps") or []):
             await _enforce_run_owner(body.execution_id, token)
 
+    stored_source_audit: dict[str, Any] | None = None
     stored_steps = list(stored_source.iter_stored_steps(plan.get("plan_json") or {}))
     if stored_steps:
         # Checked against the submitter and the pieces as they are now, so a plan
@@ -2744,15 +2745,11 @@ async def submit_workflow(
             plan.get("plan_json") or {}, await _registry(h, plannable=False), submitter, opt_in)
         if problems:
             raise HTTPException(403, detail={"code": "STORED_SOURCE_REFUSED", "problems": problems})
-        if not body.dry_run:
-            await h.execute(INSERT_PROVENANCE, {"obj": {
-                "event_type": "stored_source_run",
-                "payload_json": {
-                    "plan_id": stored_plan_id,
-                    "submitted_by": submitter,
-                    "pieces": [step.get("stored_source") for step in stored_steps],
-                },
-            }})
+        stored_source_audit = {
+            "plan_id": stored_plan_id,
+            "submitted_by": submitter,
+            "pieces": [step.get("stored_source") for step in stored_steps],
+        }
 
     if idempotency_key:
         existing_rows = (await h.execute(
@@ -2941,10 +2938,23 @@ async def submit_workflow(
             h, "bound", {"id": item["id"], "scope": secrets_store.SCOPE_MODEL_OWNER, "name": item["name"],
                          "configuration_id": body.model_task.get("configuration_id")},
             run_id=run["id"], actor=submitted_by or "unknown", version=item["version"])
+    # What the caller said the run is about (time period, area), whether or not
+    # a piece reads it. Values a caller supplied only; nothing is inferred.
+    framing = {
+        name: args[name].get("value") for name in tapis.FRAMING_PARAMS
+        if isinstance(args.get(name), dict) and args[name].get("value") not in (None, "")
+    }
     await h.execute(INSERT_PROVENANCE, {"obj": {
         "workflow_run_id": run["id"], "event_type": "workflow_submit_requested",
-        "payload_json": {"plan_id": body.plan_id, "dry_run": body.dry_run},
+        "payload_json": {"plan_id": body.plan_id, "dry_run": body.dry_run,
+                         **({"framing": framing} if framing else {})},
     }})
+    if stored_source_audit is not None and not body.dry_run:
+        # Recorded against the run, so its provenance shows whose code ran.
+        await h.execute(INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run["id"], "event_type": "stored_source_run",
+            "payload_json": stored_source_audit,
+        }})
     if body.model_task is not None and body.model_task.get("input_steps"):
         # Names, step ids and the planner's decisions; the produced content is
         # never recorded here.

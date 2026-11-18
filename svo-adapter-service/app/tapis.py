@@ -54,6 +54,17 @@ except ImportError:  # pydantic-settings absent (e.g. offline generation tests)
 # Run params the generated pipeline declares. Names + intent match SUBSIDE's
 # werc-opera.yaml so a SUBSIDE-style arg builder is interchangeable. Each task's
 # tapis_job_def pulls concrete values from these at run time.
+# Arguments that say what a run is about rather than how a piece works: the
+# time period and the area it concerns. A plan lists them apart from a piece's
+# own arguments, and what a caller supplies is recorded with the run.
+FRAMING_PARAMS: dict[str, str] = {
+    "start_date": "time_period",
+    "end_date": "time_period",
+    "aoi_geojson_uri": "area",
+    "lat": "area",
+    "lon": "area",
+}
+
 STANDARD_PARAMS: dict[str, dict[str, Any]] = {
     "start_date": {"type": "string", "required": True},
     "end_date": {"type": "string", "required": True},
@@ -1168,31 +1179,32 @@ def generate_tapis_workflow(
             function_task_ids_by_step[int(s["step"])] = task_id
         prev_id = task_id
 
-    if model_task:
-        # Composite MINT runs use the adapter's task-specific arguments. The
-        # SUBSIDE-compatible defaults also declare date/AOI arguments, but
-        # those must not block a run when no task references them.
-        referenced_args: set[str] = set()
+    # The SUBSIDE-compatible defaults declare a time period and an area of
+    # interest as required. They frame a run, but Tapis refuses a submission
+    # that lacks a required argument, so they are required only when a task
+    # actually reads them. Otherwise a plan whose pieces need neither could
+    # not be submitted without inventing values.
+    referenced_args: set[str] = set()
 
-        def collect_arg_references(value: Any) -> None:
-            if isinstance(value, dict):
-                arg_name = value.get("args")
-                if isinstance(arg_name, str):
-                    referenced_args.add(arg_name)
-                for child in value.values():
-                    collect_arg_references(child)
-            elif isinstance(value, list):
-                for child in value:
-                    collect_arg_references(child)
-            elif isinstance(value, str):
-                for name in params:
-                    if f"args.{name}" in value:
-                        referenced_args.add(name)
+    def collect_arg_references(value: Any) -> None:
+        if isinstance(value, dict):
+            arg_name = value.get("args")
+            if isinstance(arg_name, str):
+                referenced_args.add(arg_name)
+            for child in value.values():
+                collect_arg_references(child)
+        elif isinstance(value, list):
+            for child in value:
+                collect_arg_references(child)
+        elif isinstance(value, str):
+            for name in params:
+                if f"args.{name}" in value:
+                    referenced_args.add(name)
 
-        collect_arg_references(tasks)
-        for name in ("start_date", "end_date", "aoi_geojson_uri"):
-            if name in params and name not in referenced_args:
-                params[name] = {**params[name], "required": False}
+    collect_arg_references(tasks)
+    for name in FRAMING_PARAMS:
+        if name in params and name not in referenced_args and params[name].get("required"):
+            params[name] = {**params[name], "required": False}
 
     return {
         "id": pipeline_id,

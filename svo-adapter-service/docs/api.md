@@ -17,6 +17,23 @@ public pieces, shared pieces and the caller's own. A request with no token is an
 and sees public pieces only. The setting is off by default, in which case every caller
 sees every piece.
 
+### Run parameters and framing
+
+A stored plan lists its run parameters under `plan_json.parameters`. Each entry says
+whether a run must supply it (`required`), whether the adapter fills it in itself
+(`managed`), and, for the arguments that say what a run is *about*, a `framing` kind:
+
+| Parameter | `framing` |
+|---|---|
+| `start_date`, `end_date` | `time_period` |
+| `aoi_geojson_uri`, `lat`, `lon` | `area` |
+
+Framing parameters are always listed. They are required only when a piece in the plan
+reads them (`used_by_plan: true`); the generated pipeline marks the same ones required,
+so a plan whose pieces need neither a period nor an area can be submitted without
+inventing values. Framing a caller does supply is recorded in the run's
+`workflow_submit_requested` provenance event under `framing`.
+
 ### Pieces that carry stored Python source
 
 A piece may carry its own Python source instead of running one of the adapter's
@@ -41,7 +58,7 @@ again, against the submitter and against the piece as it is now, and answers 403
 `STORED_SOURCE_PIECE_NOT_VISIBLE`, `STORED_SOURCE_CHANGED`,
 `STORED_SOURCE_NOT_PERMITTED`). An opt-in belongs to the user who gave it and does not
 carry over to another submitter. Each real run writes a `stored_source_run` provenance
-event. Stored code may bind only `tapis_token`, `source_uri` and the run arguments the
+event against the run, naming the submitter and each piece's owner and source hash. Stored code may bind only `tapis_token`, `source_uri` and the run arguments the
 piece declares.
 
 **How stored code is called.** Tapis Workflows runs a function task's code as a script
