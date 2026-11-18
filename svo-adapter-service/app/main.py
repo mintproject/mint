@@ -269,6 +269,40 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+def _is_operator_route(method: str, path: str) -> bool:
+    """Routes that act on the shared registry for every user: all of /admin/*
+    and registry writes. /admin/secrets keeps its own dedicated credential."""
+    path = path.rstrip("/")
+    if path == "/admin/secrets":
+        return False
+    if path == "/admin" or path.startswith("/admin/"):
+        return True
+    return method == "POST" and path == "/transform-specs"
+
+
+# Registered before CORS so CORS stays outermost and a refusal still carries
+# CORS headers. Demo mode has no shared state to protect (in-memory store).
+@app.middleware("http")
+async def _operator_route_guard(request: Request, call_next):
+    if (
+        request.method != "OPTIONS"
+        and not settings.demo_mode
+        and _is_operator_route(request.method, request.url.path)
+    ):
+        expected = settings.admin_route_secret
+        if not expected:
+            return JSONResponse(
+                {"detail": {"code": "ADMIN_ROUTES_NOT_CONFIGURED",
+                            "message": "no admin route secret is configured"}},
+                status_code=503,
+            )
+        supplied = request.headers.get("X-Admin-Secret")
+        if not (supplied and hmac.compare_digest(supplied.encode(), expected.encode())):
+            return JSONResponse({"detail": {"code": "ADMIN_AUTH_REQUIRED"}}, status_code=403)
+    return await call_next(request)
+
+
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
@@ -282,6 +316,17 @@ def _bearer(authorization: str | None) -> str | None:
     if authorization and authorization.lower().startswith("bearer "):
         return authorization[7:]
     return None
+
+
+async def _require_caller(token: str | None) -> str:
+    """Username for the bearer token as verified by Tapis, or 401."""
+    username = await run_in_threadpool(tapis.userinfo_username, token) if token else None
+    if not username:
+        raise HTTPException(401, detail={
+            "code": "TAPIS_AUTH_REQUIRED",
+            "message": "a valid Tapis bearer token is required",
+        })
+    return username
 
 
 def _internal_service_authorized(secret: str | None) -> bool:
@@ -843,6 +888,8 @@ async def reset_demo():
 async def test_transform_spec(spec_id: str, body: TestTransformIn, authorization: str | None = Header(None)):
     """Generate or submit a one-piece pipeline using the registered definition."""
     token = _bearer(authorization)
+    if not settings.demo_mode:
+        await _require_caller(token)
     h = get_client(token)
     specs = (await h.execute(TRANSFORM_REGISTRY_QUERY))["adapter_transform_spec"]
     spec = next((s for s in specs if s.get("id") == spec_id), None)
