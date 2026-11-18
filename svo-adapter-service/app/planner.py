@@ -25,6 +25,7 @@ from .models import (
     ReadinessStatus,
 )
 from .etl_contract import canonical_key, normalize_env_from_args
+from .stored_source import annotate_step
 
 
 def _normalize_unit(u: str | None) -> str | None:
@@ -382,6 +383,17 @@ def reachable_variables(
     return list(reached.values())
 
 
+def _carry_stored_source(step: dict[str, Any], spec: dict[str, Any]) -> None:
+    """Copy a piece's stored Python source onto its plan step, with the record
+    the submit-time check needs."""
+    metadata = (spec.get("parameters_schema_json") or {}).get("metadata") or {}
+    source = metadata.get("source")
+    if isinstance(source, dict) and isinstance(source.get("code"), str):
+        annotate_step(step, spec, source["code"])
+        if source.get("entrypoint"):
+            step["python_entrypoint"] = source["entrypoint"]
+
+
 def build_plan_json(path: list[dict[str, Any]]) -> dict[str, Any]:
     """Serialize a transform path into the stored plan_json DAG."""
     steps = []
@@ -414,12 +426,7 @@ def build_plan_json(path: list[dict[str, Any]]) -> dict[str, Any]:
         schema = spec.get("parameters_schema_json") or {}
         if isinstance(schema, dict) and schema.get("properties"):
             step["parameters_schema_json"] = schema
-        metadata = (spec.get("parameters_schema_json") or {}).get("metadata") or {}
-        source = metadata.get("source")
-        if isinstance(source, dict) and isinstance(source.get("code"), str):
-            step["python_source"] = source["code"]
-            if source.get("entrypoint"):
-                step["python_entrypoint"] = source["entrypoint"]
+        _carry_stored_source(step, spec)
         steps.append(step)
     return {
         "steps": steps,
@@ -554,12 +561,7 @@ def _step_from_spec(idx: int, spec: dict[str, Any], depends_on: list[int]) -> di
     schema = spec.get("parameters_schema_json") or {}
     if isinstance(schema, dict) and schema.get("properties"):
         step["parameters_schema_json"] = schema
-    metadata = (spec.get("parameters_schema_json") or {}).get("metadata") or {}
-    source = metadata.get("source")
-    if isinstance(source, dict) and isinstance(source.get("code"), str):
-        step["python_source"] = source["code"]
-        if source.get("entrypoint"):
-            step["python_entrypoint"] = source["entrypoint"]
+    _carry_stored_source(step, spec)
     return step
 
 

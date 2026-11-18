@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # caller sees every piece (the admin-secret read). Turn on only once Hasura's
     # session user is confirmed to be the Tapis username.
     registry_user_scoped: bool = False
+    # Let Python source stored with a piece run as a function task. Off = such
+    # pieces are left out of planning and a plan that carries stored source is
+    # refused at submit. Built-in pieces are unaffected either way.
+    stored_source_enabled: bool = False
 
     # Tapis Workflows. Submission emulates SUBSIDE's manager so adapter-generated
     # pipelines are interchangeable with SUBSIDE's: same pipeline shape, registered
