@@ -3144,7 +3144,9 @@
       - parameter_assignment_method
       - valid_until
       - author_id
-      filter: {}
+      filter:
+        owner_username:
+          _eq: X-Hasura-User-Id
       check: null
   delete_permissions:
   - role: user
@@ -3264,6 +3266,13 @@
     name: modelcatalog_parameter
     schema: public
   array_relationships:
+  - name: configuration_parameters
+    using:
+      foreign_key_constraint_on:
+        column: parameter_id
+        table:
+          name: modelcatalog_configuration_parameter
+          schema: public
   - name: execution_parameter_bindings
     using:
       foreign_key_constraint_on:
@@ -3339,12 +3348,20 @@
   - role: user
     permission:
       columns: *id006
-      filter: {}
+      filter:
+        configuration_parameters:
+          configuration:
+            owner_username:
+              _eq: X-Hasura-User-Id
       check: null
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter:
+        configuration_parameters:
+          configuration:
+            owner_username:
+              _eq: X-Hasura-User-Id
 - table:
     name: modelcatalog_configuration_input
     schema: public
@@ -3358,7 +3375,10 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check:
+        configuration:
+          owner_username:
+            _eq: X-Hasura-User-Id
       columns: &id007
       - configuration_id
       - input_id
@@ -3380,7 +3400,10 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter:
+        configuration:
+          owner_username:
+            _eq: X-Hasura-User-Id
   event_triggers:
   - name: semantic_search_configuration_input
     definition:
@@ -3409,7 +3432,10 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check:
+        configuration:
+          owner_username:
+            _eq: X-Hasura-User-Id
       columns: &id008
       - configuration_id
       - output_id
@@ -3429,7 +3455,10 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter:
+        configuration:
+          owner_username:
+            _eq: X-Hasura-User-Id
   event_triggers:
   - name: semantic_search_configuration_output
     definition:
@@ -3458,7 +3487,10 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check:
+        configuration:
+          owner_username:
+            _eq: X-Hasura-User-Id
       columns: &id009
       - configuration_id
       - parameter_id
@@ -3476,7 +3508,10 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter:
+        configuration:
+          owner_username:
+            _eq: X-Hasura-User-Id
 - table:
     name: modelcatalog_person
     schema: public
