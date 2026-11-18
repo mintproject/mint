@@ -157,9 +157,43 @@ mutation UpsertMintETLSpec($obj: adapter_transform_spec_insert_input!) {
       update_columns: [
         name description transform_type method tapis_app_id app_version
         stage parameters_schema_json env_from_args file_inputs mint_synced_at
+        owner_username visibility mint_etl_process_id
       ]
     }
   ) { id }
+}
+"""
+
+# Delete spec rows synced from catalog ETL processes that no longer exist.
+DELETE_OBSOLETE_ETL_SPECS_MUTATION = """
+mutation DeleteObsoleteEtlSpecs($live_ids: [String!]!) {
+  delete_adapter_transform_spec(
+    where: {
+      _and: [
+        { mint_etl_process_id: { _is_null: false } }
+        { mint_etl_process_id: { _nin: $live_ids } }
+      ]
+    }
+  ) { affected_rows }
+}
+"""
+
+# Approval of a spec's stored source. approved_source_sha256 is written only
+# here (an operator route) and is never part of a sync upsert.
+GET_SPEC_FOR_APPROVAL_QUERY = """
+query GetSpecForApproval($id: String!) {
+  adapter_transform_spec_by_pk(id: $id) {
+    id name owner_username visibility parameters_schema_json approved_source_sha256
+  }
+}
+"""
+
+SET_SPEC_APPROVAL_MUTATION = """
+mutation SetSpecApproval($id: String!, $sha: String) {
+  update_adapter_transform_spec_by_pk(
+    pk_columns: { id: $id }
+    _set: { approved_source_sha256: $sha }
+  ) { id approved_source_sha256 }
 }
 """
 
@@ -258,7 +292,7 @@ query ListMintConfigurations($limit: Int!, $offset: Int!) {
 LIST_MINT_ETL_PROCESSES_QUERY = """
 query ListMintETLProcesses($limit: Int!, $offset: Int!) {
   modelcatalog_etl_process(limit: $limit, offset: $offset, order_by: {id: asc}) {
-    id label description version visibility runtime_kind runtime_json
+    id label description version owner_username visibility runtime_kind runtime_json
     contracts(order_by: [{role: asc}, {position: asc}]) {
       role position standard_variable_uri unit format dimensionality
       spatial_type crs_requirement temporal_resolution schema_requirement_json

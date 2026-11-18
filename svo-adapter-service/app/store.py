@@ -322,6 +322,19 @@ class InMemoryHasura:
     def _op_DeleteObsoleteMintSpecs(self, v):
         return {"delete_adapter_transform_spec": {"affected_rows": 0}}
 
+    def _op_DeleteObsoleteEtlSpecs(self, v):
+        return {"delete_adapter_transform_spec": {"affected_rows": 0}}
+
+    def _op_GetSpecForApproval(self, v):
+        return {"adapter_transform_spec_by_pk": STORE.transform_spec.get(v["id"])}
+
+    def _op_SetSpecApproval(self, v):
+        row = STORE.transform_spec.get(v["id"])
+        if row is not None:
+            row["approved_source_sha256"] = v.get("sha")
+        return {"update_adapter_transform_spec_by_pk": row and {
+            "id": row["id"], "approved_source_sha256": row.get("approved_source_sha256")}}
+
     def _op_GetMintSpecIds(self, v):
         mint_rows = [
             {"mint_model_config_id": r["mint_model_config_id"]}

@@ -170,6 +170,12 @@ class TransformSpecIn(BaseModel):
     contracts: list[TransformContractIn] = Field(default_factory=list)
 
 
+class SpecApprovalIn(BaseModel):
+    # Spec ids are URIs, so the id travels in the body rather than the path.
+    spec_id: str
+    approved: bool
+
+
 class ModelRunIn(BaseModel):
     # Plan an ETL DAG that resolves EVERY input of a multi-input model (run_spec)
     # from the registered data objects, then runs it. source_ids optionally

@@ -299,6 +299,9 @@ def etl_process_to_spec_row(
     runtime = process.get("runtime_json") or {}
     app_id = runtime.get("tapis_app_id")
     app_version = runtime.get("tapis_app_version")
+    visibility = process.get("visibility")
+    if visibility not in ("private", "shared", "public"):
+        visibility = "private"
     metadata = {
         "mint_etl_process_id": process_id,
         "visibility": process.get("visibility"),
@@ -358,6 +361,11 @@ def etl_process_to_spec_row(
         "tapis_app_id": app_id,
         "app_version": app_version,
         "parameters_schema_json": {**(schema if isinstance(schema, dict) else {}), "metadata": metadata},
+        # Who may see and run the piece. A process with no stated visibility is
+        # treated as private, the catalog's own default.
+        "owner_username": process.get("owner_username"),
+        "visibility": visibility,
+        "mint_etl_process_id": process_id,
         "contracts": {"data": normalized_contracts},
     }
     for key in ("stage", "env_from_args", "file_inputs"):
@@ -403,6 +411,7 @@ async def sync_mint_to_adapter(
         UPSERT_TRANSFORM_SPEC_MUTATION,
         UPSERT_ETL_TRANSFORM_SPEC_MUTATION,
         DELETE_OBSOLETE_MINT_SPECS_MUTATION,
+        DELETE_OBSOLETE_ETL_SPECS_MUTATION,
         GET_MINT_SPEC_IDS_QUERY,
         DELETE_SPEC_CONTRACTS_MUTATION,
     )
@@ -420,6 +429,7 @@ async def sync_mint_to_adapter(
 
     rows_to_upsert: list[dict[str, Any]] = []
     live_mint_ids: list[str] = []
+    live_etl_ids: list[str] = []
 
     for cfg in configs:
         row = mint_config_to_spec_row(cfg, warnings)
@@ -436,6 +446,7 @@ async def sync_mint_to_adapter(
         if row is None:
             result.skipped += 1
             continue
+        live_etl_ids.append(row["mint_etl_process_id"])
         rows_to_upsert.append(row)
 
     result.warnings = warnings
@@ -491,6 +502,18 @@ async def sync_mint_to_adapter(
             {"live_ids": live_mint_ids},
         )
         result.deleted = (
+            del_data.get("delete_adapter_transform_spec", {}).get("affected_rows", 0)
+        )
+
+    # Same for ETL processes removed from the catalog. Skipped when the catalog
+    # lists none, like the configuration case above, so an empty or failed
+    # listing can never empty the registry.
+    if live_etl_ids:
+        del_data = await hasura_client.execute(
+            DELETE_OBSOLETE_ETL_SPECS_MUTATION,
+            {"live_ids": live_etl_ids},
+        )
+        result.deleted += (
             del_data.get("delete_adapter_transform_spec", {}).get("affected_rows", 0)
         )
 
