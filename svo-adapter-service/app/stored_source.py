@@ -7,7 +7,9 @@ a plain string.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
+import json
 from typing import Any, Iterable, Iterator
 
 from .config import settings
@@ -24,6 +26,62 @@ def stored_source(spec: dict[str, Any]) -> str | None:
     metadata = (spec.get("parameters_schema_json") or {}).get("metadata") or {}
     runtime = metadata.get("runtime") if isinstance(metadata.get("runtime"), dict) else {}
     return _code(metadata.get("source")) or _code(runtime.get("source"))
+
+
+def stored_entrypoint(spec: dict[str, Any]) -> str | None:
+    """Name of the function the piece's author asked to have called, if any."""
+    metadata = (spec.get("parameters_schema_json") or {}).get("metadata") or {}
+    runtime = metadata.get("runtime") if isinstance(metadata.get("runtime"), dict) else {}
+    for source in (metadata.get("source"), runtime.get("source")):
+        if isinstance(source, dict) and isinstance(source.get("entrypoint"), str) and source["entrypoint"]:
+            return source["entrypoint"]
+    name = runtime.get("entrypoint")
+    return name if isinstance(name, str) and name else None
+
+
+def defines_function(source: str, name: str) -> bool:
+    """Whether ``source`` defines a top-level function called ``name``."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        return False
+    return any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+               for node in tree.body)
+
+
+_CALL_ENTRYPOINT = '''
+
+# --- appended by the SVO adapter: call the piece's entrypoint -----------------
+# Tapis Workflows runs this file as a script and never calls a named function,
+# so the call is made here. The function receives its task inputs as one dict
+# (or nothing, if it takes no parameters) and its return value becomes the
+# task's "result" output.
+import inspect as _svo_inspect
+import json as _svo_json
+from owe_python_sdk.runtime import execution_context as _svo_ctx
+
+_svo_inputs = {_name: _svo_ctx.get_input(_name) for _name in __INPUT_NAMES__}
+_svo_fn = __ENTRYPOINT__
+if _svo_inspect.iscoroutinefunction(_svo_fn):
+    raise TypeError("the entrypoint must be a plain function, not async")
+_svo_result = _svo_fn(_svo_inputs) if _svo_inspect.signature(_svo_fn).parameters else _svo_fn()
+if _svo_result is not None:
+    _svo_ctx.set_output(
+        "result", _svo_result if isinstance(_svo_result, str) else _svo_json.dumps(_svo_result))
+'''
+
+
+def runnable_code(source: str, entrypoint: str | None, input_names: Iterable[str]) -> str:
+    """The code to hand Tapis Workflows for a stored-source step.
+
+    When the source defines the named entrypoint function, a call to it is
+    appended. Otherwise the source is a script that sets its own output and is
+    returned unchanged.
+    """
+    if not entrypoint or not entrypoint.isidentifier() or not defines_function(source, entrypoint):
+        return source
+    return source.rstrip("\n") + _CALL_ENTRYPOINT.replace(
+        "__INPUT_NAMES__", json.dumps(sorted(input_names))).replace("__ENTRYPOINT__", entrypoint)
 
 
 def source_sha256(source: str) -> str:

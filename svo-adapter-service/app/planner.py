@@ -25,7 +25,7 @@ from .models import (
     ReadinessStatus,
 )
 from .etl_contract import canonical_key, normalize_env_from_args
-from .stored_source import annotate_step
+from .stored_source import annotate_step, stored_entrypoint, stored_source
 
 
 def _normalize_unit(u: str | None) -> str | None:
@@ -386,12 +386,12 @@ def reachable_variables(
 def _carry_stored_source(step: dict[str, Any], spec: dict[str, Any]) -> None:
     """Copy a piece's stored Python source onto its plan step, with the record
     the submit-time check needs."""
-    metadata = (spec.get("parameters_schema_json") or {}).get("metadata") or {}
-    source = metadata.get("source")
-    if isinstance(source, dict) and isinstance(source.get("code"), str):
-        annotate_step(step, spec, source["code"])
-        if source.get("entrypoint"):
-            step["python_entrypoint"] = source["entrypoint"]
+    source = stored_source(spec)
+    if source:
+        annotate_step(step, spec, source)
+        entrypoint = stored_entrypoint(spec)
+        if entrypoint:
+            step["python_entrypoint"] = entrypoint
 
 
 def build_plan_json(path: list[dict[str, Any]]) -> dict[str, Any]:

@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # pieces are left out of planning and a plan that carries stored source is
     # refused at submit. Built-in pieces are unaffected either way.
     stored_source_enabled: bool = False
+    # Time limit for a main function step that runs stored source. Without one
+    # Tapis Workflows applies its own default of an hour.
+    stored_source_max_exec_seconds: int = 600
 
     # Tapis Workflows. Submission emulates SUBSIDE's manager so adapter-generated
     # pipelines are interchangeable with SUBSIDE's: same pipeline shape, registered

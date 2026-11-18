@@ -44,6 +44,26 @@ carry over to another submitter. Each real run writes a `stored_source_run` prov
 event. Stored code may bind only `tapis_token`, `source_uri` and the run arguments the
 piece declares.
 
+**How stored code is called.** Tapis Workflows runs a function task's code as a script
+and ignores a task-level `entrypoint`, so the adapter makes the call itself. Source can
+take two forms:
+
+- *A function.* If the piece names an entrypoint (`runtime_json.entrypoint`, or
+  `source.entrypoint`) and the source defines a top-level function of that name, the
+  adapter appends a call to it. The function receives one dict of its task inputs, keyed
+  by input name, or nothing if it takes no parameters. Its return value becomes the
+  task's `result` output: a string as is, anything else as JSON. Returning `None` sets no
+  output. `async` functions are rejected.
+- *A script.* Otherwise the source is run unchanged and must call
+  `ctx.set_output("result", ...)` itself (`from owe_python_sdk.runtime import
+  execution_context as ctx`).
+
+Inputs are the pipeline arguments the piece maps in `env_from_args`, plus
+`SOURCE_RESULT`, the previous function step's `result`, when there is one. A main step
+that runs stored source is limited to `SVO_ADAPTER_STORED_SOURCE_MAX_EXEC_SECONDS`
+(default 600) with no retries. The plan step records the hash of the author's source,
+not of the code with the call appended.
+
 Ensemble Manager-owned model-output handoffs additionally require the server-only
 `X-Ensemble-Manager-Secret` header. Configure the same value as
 `SVO_ADAPTER_INTERNAL_SERVICE_SECRET` on the adapter and
