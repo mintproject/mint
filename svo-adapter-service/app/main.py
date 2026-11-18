@@ -69,6 +69,7 @@ from .models import (
     ReadinessResult,
     ReadinessStatus,
     RegisterOutputIn,
+    SpecApprovalIn,
     SubmitWorkflowIn,
     TransformSpecIn,
 )
@@ -1093,6 +1094,41 @@ async def sync_status(authorization: str | None = Header(None)):
         "function_task_count": data.get("function_tasks", {}).get("aggregate", {}).get("count", 0),
         "last_sync": last_sync_rows[0]["mint_synced_at"] if last_sync_rows else None,
     }
+
+
+@app.put("/admin/transform-spec-approval", tags=["Integrations"])
+async def set_transform_spec_approval(body: SpecApprovalIn):
+    """Approve, or withdraw approval of, the Python source stored with a piece.
+
+    Approval records the SHA-256 of the source as it is now, so it lapses the
+    moment the source changes. Only pieces that carry stored source can be
+    approved; built-in pieces run code reviewed in this repository.
+    """
+    from .hasura import GET_SPEC_FOR_APPROVAL_QUERY, SET_SPEC_APPROVAL_MUTATION
+    from .stored_source import source_sha256, stored_source
+
+    h = get_client(None)
+    spec = (await h.execute(GET_SPEC_FOR_APPROVAL_QUERY, {"id": body.spec_id}))[
+        "adapter_transform_spec_by_pk"]
+    if not spec:
+        raise HTTPException(404, "transform spec not found")
+    source = stored_source(spec)
+    if body.approved and not source:
+        raise HTTPException(400, detail={
+            "code": "NO_STORED_SOURCE",
+            "message": "this piece carries no stored source to approve",
+        })
+    sha = source_sha256(source) if body.approved else None
+    await h.execute(SET_SPEC_APPROVAL_MUTATION, {"id": body.spec_id, "sha": sha})
+    await h.execute(INSERT_PROVENANCE, {"obj": {
+        "event_type": "transform_spec_approval_set",
+        "payload_json": {
+            "transform_spec_id": body.spec_id,
+            "owner_username": spec.get("owner_username"),
+            "approved_source_sha256": sha,
+        },
+    }})
+    return {"spec_id": body.spec_id, "approved": body.approved, "approved_source_sha256": sha}
 
 
 _DFC_FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "twdb_adopted_dfc_2021.json"

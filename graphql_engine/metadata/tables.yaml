@@ -4934,7 +4934,10 @@
   - role: user
     permission:
       check: {}
-      columns: [id, label, description, version, owner_username, visibility, runtime_kind, runtime_json]
+      # The owner is the session user, never a value the client sends.
+      set:
+        owner_username: x-hasura-User-Id
+      columns: [id, label, description, version, visibility, runtime_kind, runtime_json]
   select_permissions:
   - role: anonymous
     permission:
@@ -4954,7 +4957,11 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      # Contracts may only be added to a process the session user owns.
+      check:
+        etl_process:
+          owner_username:
+            _eq: X-Hasura-User-Id
       columns: [etl_process_id, role, position, standard_variable_uri, unit, format, dimensionality, spatial_type, crs_requirement, temporal_resolution, schema_requirement_json]
   select_permissions:
   - role: anonymous

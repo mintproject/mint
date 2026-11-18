@@ -142,8 +142,9 @@ are not specific to one scientific use case, although the records they load may 
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/admin/sync-from-mint` | Dry-run or apply MINT model-configuration to transform-registry sync. |
+| POST | `/admin/sync-from-mint` | Dry-run or apply MINT model-configuration and ETL-process to transform-registry sync. An ETL process's owner and visibility are copied to the registry row, and rows for processes no longer in the catalog are deleted. |
 | GET | `/admin/sync-status` | Report synchronization state, including unresolved Tapis apps. |
+| PUT | `/admin/transform-spec-approval` | Approve, or withdraw approval of, the Python source stored with a piece (`{spec_id, approved}`). Records the SHA-256 of the current source, so approval lapses when the source changes. 400 `NO_STORED_SOURCE` for a piece that runs built-in code. |
 | POST | `/admin/sync-from-ckan` | Dry-run or apply CKAN resource-to-data-object sync. |
 | POST | `/admin/recompute-edges` | Rebuild the registry compatibility edge cache. |
 | POST | `/admin/validate-tapis` | Probe Tapis authentication, Workflows, group, and registration access. |
