@@ -16,6 +16,15 @@ Ensemble Manager-owned model-output handoffs additionally require the server-onl
 `SVO_ADAPTER_INTERNAL_SERVICE_SECRET` (or `svo_adapter_internal_secret`) on
 Ensemble Manager. Do not expose this value to the browser.
 
+Operator routes require the `X-Admin-Secret` header, matching
+`SVO_ADAPTER_ADMIN_ROUTE_SECRET`. These are every `/admin/*` route except
+`/admin/secrets` (which has its own `X-Secrets-Admin-Secret`), and
+`POST /transform-specs`. They act on the registry shared by all users, with the
+adapter's own Hasura credential, so a Tapis token does not open them. Without the
+header they answer 403 `ADMIN_AUTH_REQUIRED`; when no secret is configured they answer
+503 `ADMIN_ROUTES_NOT_CONFIGURED`. Demo mode (`SVO_ADAPTER_DEMO_MODE=1`) does not
+enforce this. Do not expose the value to the browser.
+
 ## Core API — reusable across SVO Adapter deployments
 
 Swagger UI splits the Core API into five task-oriented groups: Registry, Planning,
@@ -35,8 +44,8 @@ plans through the existing adapter workflow tables.
 | POST | `/data-objects` | Register a data object and its variable contracts. |
 | GET | `/data-objects` | List registered data objects. |
 | GET | `/transform-specs` | List registered transform specs and contracts. |
-| POST | `/transform-specs` | Register one transform spec and its contracts. |
-| POST | `/transform-specs/{id}/test` | Generate a one-piece Tapis workflow for dry-run inspection, or submit it when `dry_run` is false. |
+| POST | `/transform-specs` | Register one transform spec and its contracts. Operator route (`X-Admin-Secret`). |
+| POST | `/transform-specs/{id}/test` | Generate a one-piece Tapis workflow for dry-run inspection, or submit it when `dry_run` is false. Requires a valid Tapis bearer token (401 `TAPIS_AUTH_REQUIRED`), except in demo mode. |
 | GET | `/standard-variables` | List standard variables known by the registry. |
 | GET | `/reachable/{data_object_id}` | List SVO variables reachable from a registered source. |
 

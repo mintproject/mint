@@ -263,6 +263,8 @@ jobs:
           # Secrets store (svo-adapter-service/app/secrets.py) and CKAN sync org.
           SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS: ${{ secrets.SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS }}
           SVO_ADAPTER_SECRETS_ADMIN_SECRET: ${{ secrets.SVO_ADAPTER_SECRETS_ADMIN_SECRET }}
+          # Operator credential for /admin/* and POST /transform-specs.
+          SVO_ADAPTER_ADMIN_ROUTE_SECRET: ${{ secrets.SVO_ADAPTER_ADMIN_ROUTE_SECRET }}
           SVO_ADAPTER_CKAN_SYNC_ORG: ${{ vars.SVO_ADAPTER_CKAN_SYNC_ORG }}
         run: |
           set -euo pipefail

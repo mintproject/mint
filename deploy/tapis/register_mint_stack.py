@@ -396,6 +396,9 @@ def build_specs(
                     # Fernet ring and the admin-route secret; empty = store off.
                     "SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS",
                     "SVO_ADAPTER_SECRETS_ADMIN_SECRET",
+                    # Operator credential for /admin/* and POST /transform-specs;
+                    # unset = those routes answer 503.
+                    "SVO_ADAPTER_ADMIN_ROUTE_SECRET",
                     # CKAN org whose SVO-typed resources become adapter data objects.
                     "SVO_ADAPTER_CKAN_SYNC_ORG",
                 ),
@@ -1127,6 +1130,7 @@ def sync_svo_runtime(t: Any, spec: dict[str, Any], *, restart: bool = True) -> i
         "SVO_ADAPTER_RUN_TOKEN_KEEPER_SWEEP_ENABLED",
         "SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS",
         "SVO_ADAPTER_SECRETS_ADMIN_SECRET",
+        "SVO_ADAPTER_ADMIN_ROUTE_SECRET",
         "SVO_ADAPTER_CKAN_SYNC_ORG",
     ):
         if key in spec_env:

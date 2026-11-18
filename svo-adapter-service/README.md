@@ -40,14 +40,17 @@ The adapter can pull ModelConfigurations directly from the MINT catalog (same
 Hasura/Postgres) and register them as `adapter.transform_spec` rows.
 
 ```bash
+# /admin/* needs the operator secret (SVO_ADAPTER_ADMIN_ROUTE_SECRET) outside demo mode.
+AUTH="X-Admin-Secret: $SVO_ADAPTER_ADMIN_ROUTE_SECRET"
+
 # Preview what would be created/updated/deleted (no writes):
-curl -X POST http://localhost:8090/admin/sync-from-mint?dry_run=true
+curl -X POST -H "$AUTH" http://localhost:8090/admin/sync-from-mint?dry_run=true
 
 # Run the sync (also triggers a background edge-recompute):
-curl -X POST http://localhost:8090/admin/sync-from-mint
+curl -X POST -H "$AUTH" http://localhost:8090/admin/sync-from-mint
 
 # Check state:
-curl http://localhost:8090/admin/sync-status
+curl -H "$AUTH" http://localhost:8090/admin/sync-status
 ```
 
 **How it works:**
