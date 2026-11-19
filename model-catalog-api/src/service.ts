@@ -13,6 +13,10 @@ import { transformRow, transformList } from './mappers/response.js'
 import { buildTree } from './mappers/nested-tree.js'
 import { compilePost, compilePut } from './mappers/mutation-compiler.js'
 import { readClient, getWriteClient, gql } from './hasura/client.js'
+
+const NOT_PERMITTED =
+  'Not permitted: only the owner or an admin can change this resource, and an owner cannot ' +
+  "delete a resource that holds other users' resources"
 import { getFieldSelection } from './hasura/field-maps.js'
 import { customHandlers } from './custom-handlers.js'
 
@@ -386,14 +390,23 @@ class CatalogServiceImpl {
 
     try {
       const writeClient = getWriteClient(authHeader)
-      await writeClient.mutate({
+      const result = await writeClient.mutate({
         mutation: gql`${mutation}`,
         variables,
       })
+      const updateKey = `update_${resourceConfig.hasuraTable}_by_pk`
+      if (await this.replyIfNoRowWritten(result?.data, updateKey, resourceConfig.hasuraTable, fullId, reply)) {
+        return
+      }
       reply.code(200).send({ id: fullId })
     } catch (err: any) {
       req.log.error({ err }, 'GraphQL update mutation failed')
       const msg = err?.message || ''
+      if (msg.includes('check constraint of an insert/update permission has failed')) {
+        // A nested link or child write was refused. Hasura rolled the whole mutation back.
+        reply.code(403).send({ error: NOT_PERMITTED })
+        return
+      }
       if (msg.includes('Foreign key violation')) {
         reply.code(400).send({
           error: 'FK violation — id may target wrong resource type',
@@ -407,6 +420,38 @@ class CatalogServiceImpl {
       }
       reply.code(500).send({ error: 'Internal server error', details: err?.message })
     }
+  }
+
+  /**
+   * Hasura does not raise an error when a permission filter excludes the row of an
+   * update or delete by primary key: it returns null for that field. Report that as
+   * 403, or 404 when the row does not exist, instead of as success.
+   *
+   * Returns true when it has sent the reply.
+   */
+  private async replyIfNoRowWritten(
+    data: unknown,
+    mutationKey: string,
+    hasuraTable: string,
+    id: string,
+    reply: any,
+  ): Promise<boolean> {
+    const fields = (data ?? {}) as Record<string, unknown>
+    if (!(mutationKey in fields) || fields[mutationKey] !== null) {
+      return false
+    }
+    const existsKey = `${hasuraTable}_by_pk`
+    const exists = await readClient.query({
+      query: gql`query RowExists($id: String!) { ${existsKey}(id: $id) { id } }`,
+      variables: { id },
+      fetchPolicy: 'no-cache',
+    })
+    if ((exists.data as Record<string, unknown>)?.[existsKey]) {
+      reply.code(403).send({ error: NOT_PERMITTED })
+    } else {
+      reply.code(404).send({ error: 'Not found' })
+    }
+    return true
   }
 
   /**
@@ -442,10 +487,14 @@ class CatalogServiceImpl {
 
     try {
       const writeClient = getWriteClient(authHeader)
-      await writeClient.mutate({
+      const result = await writeClient.mutate({
         mutation: gql`${mutationStr}`,
         variables: { id: fullId },
       })
+      const deleteKey = `delete_${resourceConfig.hasuraTable}_by_pk`
+      if (await this.replyIfNoRowWritten(result?.data, deleteKey, resourceConfig.hasuraTable, fullId, reply)) {
+        return
+      }
       reply.code(202).send({ deleted: fullId })
     } catch (err: any) {
       req.log.error({ err }, 'GraphQL delete mutation failed')

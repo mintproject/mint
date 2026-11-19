@@ -773,3 +773,88 @@ describe('POST software with hasVersion links existing version rows', () => {
     expect(args.variables.link_parent_0).toBe('https://w3id.org/okn/i/mint/NEW-1')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Hasura returns null, not an error, when a permission filter excludes the row
+// of an update or delete by primary key. That must not be reported as success.
+// ---------------------------------------------------------------------------
+describe('a write that Hasura refuses is not reported as success', () => {
+  const uri = 'https://w3id.org/okn/i/mint/MODEL-OWNED'
+  const putReq = () =>
+    makeReq({
+      params: { id: encodeURIComponent(uri) },
+      headers: { authorization: 'Bearer test' },
+      body: { type: ['https://w3id.org/okn/o/sdm#Model'], id: uri, label: ['M'] },
+    })
+  const deleteReq = () =>
+    makeReq({ params: { id: encodeURIComponent(uri) }, headers: { authorization: 'Bearer test' } })
+
+  beforeEach(() => { mockQuery.mockReset(); mockMutate.mockReset() })
+
+  it('PUT on a row the caller may not change returns 403', async () => {
+    mockMutate.mockResolvedValueOnce({ data: { update_modelcatalog_software_by_pk: null } })
+    mockQuery.mockResolvedValueOnce({ data: { modelcatalog_software_by_pk: { id: uri } } })
+    const reply = makeReply()
+    await (CatalogService as any).models_id_put(putReq(), reply)
+    expect(reply._status).toBe(403)
+    expect(mockQuery.mock.calls[0][0].variables).toEqual({ id: uri })
+  })
+
+  it('PUT on a row that does not exist returns 404', async () => {
+    mockMutate.mockResolvedValueOnce({ data: { update_modelcatalog_software_by_pk: null } })
+    mockQuery.mockResolvedValueOnce({ data: { modelcatalog_software_by_pk: null } })
+    const reply = makeReply()
+    await (CatalogService as any).models_id_put(putReq(), reply)
+    expect(reply._status).toBe(404)
+  })
+
+  it('PUT that changed the row still returns 200 without a second query', async () => {
+    mockMutate.mockResolvedValueOnce({ data: { update_modelcatalog_software_by_pk: { id: uri } } })
+    const reply = makeReply()
+    await (CatalogService as any).models_id_put(putReq(), reply)
+    expect(reply._status).toBe(200)
+    expect(mockQuery).not.toHaveBeenCalled()
+  })
+
+  it('DELETE on a row the caller may not delete returns 403', async () => {
+    mockMutate.mockResolvedValueOnce({ data: { delete_modelcatalog_software_by_pk: null } })
+    mockQuery.mockResolvedValueOnce({ data: { modelcatalog_software_by_pk: { id: uri } } })
+    const reply = makeReply()
+    await (CatalogService as any).models_id_delete(deleteReq(), reply)
+    expect(reply._status).toBe(403)
+  })
+
+  it('DELETE on a row that does not exist returns 404', async () => {
+    mockMutate.mockResolvedValueOnce({ data: { delete_modelcatalog_software_by_pk: null } })
+    mockQuery.mockResolvedValueOnce({ data: { modelcatalog_software_by_pk: null } })
+    const reply = makeReply()
+    await (CatalogService as any).models_id_delete(deleteReq(), reply)
+    expect(reply._status).toBe(404)
+  })
+
+  it('DELETE that removed the row returns 202', async () => {
+    mockMutate.mockResolvedValueOnce({ data: { delete_modelcatalog_software_by_pk: { id: uri } } })
+    const reply = makeReply()
+    await (CatalogService as any).models_id_delete(deleteReq(), reply)
+    expect(reply._status).toBe(202)
+  })
+})
+
+describe('a nested write that Hasura refuses is a 403, not a constraint error', () => {
+  beforeEach(() => { mockQuery.mockReset(); mockMutate.mockReset() })
+
+  it('PUT whose link insert fails the permission check returns 403', async () => {
+    mockMutate.mockRejectedValueOnce(
+      new Error('check constraint of an insert/update permission has failed'),
+    )
+    const uri = 'https://w3id.org/okn/i/mint/MODEL-OWNED'
+    const req = makeReq({
+      params: { id: encodeURIComponent(uri) },
+      headers: { authorization: 'Bearer test' },
+      body: { type: ['https://w3id.org/okn/o/sdm#Model'], id: uri, label: ['M'] },
+    })
+    const reply = makeReply()
+    await (CatalogService as any).models_id_put(req, reply)
+    expect(reply._status).toBe(403)
+  })
+})
