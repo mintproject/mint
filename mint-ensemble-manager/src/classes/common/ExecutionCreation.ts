@@ -61,8 +61,18 @@ export class ExecutionCreation {
         this.executionService = executionService;
     }
 
+    /**
+     * Verify the component of the model about to run. When no model is named,
+     * every model in the thread is verified, as before.
+     *
+     * A model that is not being run must not be able to stop this one: a thread
+     * may hold a configuration whose component cannot be loaded (one with no
+     * Tapis component, or one the caller's token cannot read), and that used to
+     * fail every run in the thread.
+     */
     private async verifyComponents(): Promise<void> {
         for (const modelid in this.thread.model_ensembles) {
+            if (this.modelid && this.modelid !== modelid) continue;
             const component = await this.getModelDetails(this.thread.models[modelid]);
             await this.executionService.verifyComponent(component);
         }
