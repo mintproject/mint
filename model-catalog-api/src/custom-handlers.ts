@@ -23,6 +23,7 @@ import {
   custom_regions_import_post,
 } from './region-import.js';
 import { custom_regions_categories_post } from './region-category.js';
+import { custom_flows_post } from './flows.js';
 
 /**
  * Resolve an incoming {id} path/query value to a full resource URI.
@@ -896,5 +897,6 @@ export const customHandlers: Record<
   custom_regions_import_access_get,
   custom_regions_import_post,
   custom_regions_categories_post,
+  custom_flows_post,
   user_login_post,
 };

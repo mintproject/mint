@@ -334,6 +334,8 @@ def build_specs(
                 "PORT": "3000",
                 "HASURA_GRAPHQL_URL": graphql_endpoint,
                 "HASURA_ADMIN_SECRET": admin_secret,
+                # POST /flows asks the adapter whether a flow's pieces fit together.
+                "SVO_ADAPTER_API_URL": _env("SVO_ADAPTER_API_URL", urls["svo"]),
                 "TAPIS_JWKS_URI": _env("TAPIS_JWKS_URI", "https://portals.tapis.io/v3/tenants/portals"),
                 "TAPIS_TOKEN_ISSUER": _env("TAPIS_TOKEN_ISSUER", "https://portals.tapis.io/v3/tokens"),
                 "REGION_IMPORT_BODY_LIMIT": _env("REGION_IMPORT_BODY_LIMIT", "10485760"),

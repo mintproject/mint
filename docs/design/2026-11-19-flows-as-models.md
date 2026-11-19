@@ -131,15 +131,16 @@ check 3; the result is under Decisions):
 
 **Catalog shape**
 
+- `modelcatalog_configuration_flow`: one row marks a configuration as a flow, and holds
+  the flow's outputs and its region and date bindings.
 - `modelcatalog_configuration_step`: `configuration_id`, `position`, `etl_process_id`
-  (`ON DELETE SET NULL`), `settings_json`.
-- `modelcatalog_configuration_step_wire`: what one step receives from where. The target
-  is an input or a setting of the step, or nothing ("runs after"). The source is a flow
-  input, or an output of an earlier step.
-- `modelcatalog_configuration_step_output`: which step and output a flow output row
-  comes from.
-- A configuration is a flow when it has steps. Readers ask one boolean, `is_flow`,
-  computed from the steps table. It is not a stored second fact.
+  (`ON DELETE SET NULL`), `settings_json`, `wires_json` (what the step receives),
+  `pause_after`.
+- A link's target is an input or a setting of the step, or nothing ("runs after"). Its
+  source is a flow input, or an output or a value of an earlier step.
+- A configuration is a flow when it has a row in `modelcatalog_configuration_flow`.
+  Readers ask for `configuration.flow`, which is null for a model. There is no second
+  stored fact to keep in step.
 - A flow configuration has no Tapis component. It has ordinary input, output and
   parameter rows, written at registration from the pieces, so every existing screen can
   show it and bind to it:
@@ -342,13 +343,14 @@ reordered or dropped without undoing the first four.
 
 ## API/schema changes
 
-- **New tables:** `modelcatalog_configuration_step`, `_step_wire`, `_step_output`; a
-  computed `is_flow` on `modelcatalog_configuration`.
-- **Model Catalog API:** `POST /flows`, `GET /flows`, `DELETE /flows/{id}`.
+- **New tables:** `modelcatalog_configuration_flow` and `modelcatalog_configuration_step`;
+  a `flow` relationship on `modelcatalog_configuration`.
+- **Model Catalog API:** `POST /flows`. A flow is listed and deleted as the configuration
+  it is, through the existing routes.
 - **Ensemble Manager:** `POST /v1/plans` accepts a flow configuration; run responses carry
   one stage per piece and a waiting-for-user status; a resume route (phase E).
-- **Adapter:** a graph check from piece ids and wires; a plan by flow with one data object
-  per input; several sources and several named results per task; run reads limited to the
+- **Adapter:** `POST /flows/check`, a graph check from piece ids and links;
+  `POST /plans/flow`, a plan by flow with one data object per input; several sources and several named results per task; run reads limited to the
   submitter; approval accepts catalog admins (phase D); routes closed (phase F).
 - **Piece task contract:** inputs beyond the first arrive as `SOURCE_<k>`, outputs beyond
   the first are returned by name. Existing pieces are unaffected.
@@ -590,6 +592,119 @@ reordered or dropped without undoing the first four.
   from the dev UI's address for `POST` and `GET`, allowing the `x-tapis-token` header from
   any origin. A browser can upload to the user's Tapis storage directly. Open question 5
   is answered yes; the upload in phase C goes ahead.
+
+- 2026-11-19, phase A, first part (catalog tables, graph check, delivery, the two adapter
+  routes). Deviations from the approved text:
+  - **Links are stored on the step, not in a `_step_wire` table**, and flow outputs and
+    region and date bindings on the flow row, not in a `_step_output` table. The form of
+    a link changed four times in a day, and nothing reads links except as a whole flow.
+    The adapter checks them when a flow is registered and again when it is planned, so a
+    flow written straight into the catalog is still checked before it runs. Told to the
+    user; no objection.
+  - **The marker is a row in `modelcatalog_configuration_flow`, not "has steps"**, so
+    steps cannot exist without it. Readers ask for `configuration.flow`, which is null
+    for a model. There is no computed `is_flow`.
+  - **Steps are numbered from 1 to 24 and a step reads only from lower numbers.** That is
+    how a loop is ruled out.
+  - **Settings are shared by name across a flow's steps**, as in a chain. The approved
+    text gave two pieces with the same argument name two parameters, named by step. A
+    link from a flow parameter is accepted by the check and refused at plan time
+    (`FLOW_NOT_SUPPORTED`) until per-step naming is built.
+  - **Planning a flow is its own route, `POST /plans/flow`**, not `flow_id` on
+    `POST /plans`, which requires one data object and a target. The check route is
+    `POST /flows/check`. Both need a signed-in caller.
+  - **A piece that runs as a Tapis app could not yet hand its outputs to a later step.**
+    Built later in phase A; see the third part below.
+  - **A public flow shows the ids of its pieces, private ones included.** Another user
+    cannot read or run a private piece, but can see that the flow names it.
+  - Tested locally: 16 live permission checks on the tables with two users and an admin;
+    the adapter's two catalog queries run as the owner and as another user; adapter suite
+    712 passing, with the four failures that predate this work.
+
+- 2026-11-19, changes after an independent security review of phase A's first part:
+  - **A flow's settings need the submitter's acceptance.** A flow's author could set, or
+    link from an earlier step, the arguments of a piece that then runs with the runner's
+    token. Admin approval covers a piece's code, not its arguments, so an approved piece
+    with a destination argument could be pointed at the author's own storage. Flow
+    defaults are now marked in the plan and a submit is refused until the submitter
+    accepts them or sends their own values. The thread's settings step will show them.
+  - **A link can no longer invent a task input.** A linked setting fell back to the
+    setting's name in upper case, which could replace the runner's token. It now needs a
+    task input the piece itself declared, never one named `SOURCE_*` or `TAPIS_*`, and the
+    list of refused settings is compared without regard to case.
+  - **A flow cannot be changed in place, by anyone.** The owner could add a step to an
+    existing flow. A trigger now accepts a step only in the transaction that creates its
+    flow.
+  - **A configuration in use as a model cannot be made a flow** by its owner: one with a
+    Tapis app, setups, or a thread or run that picked it.
+  - **Planning reads only pieces the caller can see.** It read the adapter's whole copy,
+    so a runner saw diagnostics for another user's private piece.
+  - **Free-form JSON cannot crash the check or the plan.** Values of the wrong kind are
+    reported as a problem. Booleans and floats no longer pass as whole numbers. Links,
+    outputs and inputs are limited in number, in the adapter and in the tables.
+  - **A plan is built into a pipeline once at plan time**, so a flow that checks out but
+    cannot be built is refused there and not at submit.
+  - **A step's own first input replaces the flow's first input** under the name a chain
+    piece reads, and a step with no linked input is handed no dataset.
+  - **A piece that runs as a Tapis app is refused as a flow step** until its outputs can
+    be handed on.
+  - **Accepted, not changed:** an owner can delete a flow and register a different one on
+    the same configuration. Plans are snapshots, and every piece is checked again for the
+    runner. A flow's steps and settings are readable by everyone; the API notes say never
+    to put a credential in a setting.
+  - **Found, not caused by this work:** any signed-in user can list every data object
+    with its location (`GET /data-objects`). Data objects have no owner. Planning a flow
+    with someone else's data object id therefore reveals nothing new, but the gap itself
+    needs its own fix.
+  - **For phase B:** a flow's `outputs_json` is copied into the plan without checking
+    `output_id` or `record`. Whatever registers a flow's results must not trust them.
+
+- 2026-11-19, phase A, second part (`POST /flows` on the Model Catalog API, the adapter's
+  catalog sync):
+  - **The flow row cannot be nested under a new configuration** in one Hasura insert. The
+    route sends the model rows and the flow row as two fields of one mutation, which
+    Hasura runs in one transaction. Tested locally: when the flow is refused, the
+    configuration and everything under it is rolled back.
+  - **A flow input is named by a short key in the request** and becomes a dataset
+    specification id in the catalog. Input, output and setting ids are derived from the
+    configuration id.
+  - **The route reads the caller's username from the token without verifying it.** It is
+    only used as the owner value; the catalog verifies the token and refuses a write
+    whose owner is not the caller.
+  - **`GET /flows` and `DELETE /flows/{id}` are not built.** A flow is listed and deleted
+    as the configuration it is, through the existing routes. Deleting the configuration
+    removes the flow and its steps.
+  - **A flow family is given the type `sdm#Model`.** The marker is the flow row; no
+    ontology term was invented for a flow.
+  - **New setting `SVO_ADAPTER_API_URL` on the Model Catalog API**, carried by the dev
+    deploy script and the local stack. Unset, `POST /flows` answers 503 and nothing else
+    changes. **The Helm chart does not set it yet**: a change to the chart's templates
+    needs a chart version bump, which release-please owns, so it is left for the next
+    chart release. Until then the Kubernetes deployment answers 503 on `POST /flows`.
+  - **The adapter's catalog sync skips flow configurations**, and still runs against a
+    catalog from before flows existed.
+  - Tested locally: the route's real output written to a local catalog as three users
+    (new family, existing version, another user's version, another user's family); a
+    duplicate configuration id is refused. Model Catalog API suite 184 passing; adapter
+    suite 759 passing with the four failures that predate this work.
+
+- 2026-11-19, phase A, third part (a piece that runs as a Tapis app, in a flow). The
+  user: "but we can find it on storage?" Built that way:
+  - **An app piece in a flow runs through a function that submits the job, waits, and
+    finds each output in the job's archive** by the file name the piece declared, or hands
+    on the archive folder when it declared none. Several outputs are one file each.
+  - **It is new code beside the model stage, not the model stage reused.** The model
+    stage is tied to the Ensemble Manager's liveness signals, token renewal and stored
+    credentials. Sharing it would have put the model path at risk for no gain a user
+    would see yet.
+  - **Limit: no token renewal.** A job that outlasts the token the run was submitted with
+    fails the step with a clear reason. Jobs that queue for many hours need the renewal
+    the model stage has; that belongs with step 7 of the earlier spec.
+  - **In a chain an app piece is unchanged**: still a plain job task.
+  - The earlier refusal of app pieces in a flow is removed.
+  - Tested by running the generated step against a stand-in Tapis: submit, wait, file
+    matching, a failed job, a missing or ambiguous file, a rejected token, and that a
+    failed submit is not retried.
 
 ## User feedback / decisions
 

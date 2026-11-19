@@ -821,7 +821,172 @@ def _function_code(step: dict[str, Any], inputs: dict[str, Any]) -> str:
     if not source:
         from . import task_code
         return task_code.get_code(step.get("transform_type"))
-    return runnable_code(source, step.get("python_entrypoint"), inputs)
+    output_ids = flow_output_ids(step)
+    extra = len(output_ids["outputs"]) + len(output_ids["values"]) > 1 if output_ids else False
+    return runnable_code(source, step.get("python_entrypoint"), inputs, output_ids if extra else None)
+
+
+def flow_output_ids(step: dict[str, Any]) -> dict[str, dict[str, str]] | None:
+    """Task output ids for a flow step's outputs, or None for a step that is not
+    part of a flow.
+
+    The first data output keeps the id ``result`` that a chain uses, so a piece
+    written for a chain works in a flow unchanged. Further data outputs are
+    ``result_<position>`` and values are ``value_<name>``.
+    """
+    declared = step.get("flow_outputs")
+    if not isinstance(declared, dict):
+        return None
+    positions = sorted(int(p) for p in declared.get("outputs") or [])
+    return {
+        "outputs": {str(p): ("result" if p == positions[0] else f"result_{p}") for p in positions},
+        "values": {str(name): f"value_{name}" for name in sorted(declared.get("values") or [])},
+    }
+
+
+def _app_piece_task(
+    step: dict[str, Any],
+    pipeline_id: str,
+    task_id: str,
+    exec_system: str,
+    task_ids_by_step: dict[int, str],
+    steps_by_number: dict[int, dict[str, Any]],
+    params: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """The function task for a flow step whose piece is a Tapis app."""
+    from .app_piece import app_piece_code
+
+    env_map = normalize_env_from_args(step.get("env_from_args") or {}) or {}
+    refused = sorted(set(map(str, env_map.values())) & (_INPUT_SECRET_PARAMS - {"tapis_token"}))
+    if refused:
+        raise ValueError(f"an app piece in a flow may not bind: {', '.join(refused)}")
+    inputs: dict[str, dict[str, Any]] = {
+        env: {"type": "string", "value_from": {"args": str(arg)}} for env, arg in env_map.items()}
+    for env, arg in (("TAPIS_BASE_URL", "tapis_base_url"), ("TAPIS_TOKEN", "tapis_token"), ("ALLOCATION", "allocation")):
+        inputs[env] = {"type": "string", "value_from": {"args": arg}}
+    for wire in step.get("wires") or []:
+        arg = (wire.get("from") or {}).get("arg")
+        if arg and arg not in params:
+            params[str(arg)] = {
+                "type": "string", "required": True, "description": "A dataset the flow takes as an input"}
+    linked, taken_away = _flow_inputs(step, env_map, task_ids_by_step, steps_by_number)
+    for env in taken_away:
+        inputs.pop(env, None)
+    inputs.update(linked)
+
+    linked_positions = sorted(int(name.split("_", 1)[1]) for name in linked
+                              if name.startswith("SOURCE_") and name != "SOURCE_RESULT")
+    file_inputs = []
+    for index, declared in enumerate(step.get("file_inputs") or []):
+        if "from_input" in declared:
+            task_input = f"SOURCE_{int(declared['from_input'])}"
+        elif declared.get("from_arg") == "source_uri" and linked_positions:
+            # Written for a chain: its source is this step's first linked input.
+            task_input = f"SOURCE_{linked_positions[0]}"
+        else:
+            arg = str(declared["from_arg"])
+            if arg in _INPUT_SECRET_PARAMS:
+                raise ValueError(f"an app piece in a flow may not bind: {arg}")
+            task_input = f"FILE_{index}"
+            inputs[task_input] = {"type": "string", "value_from": {"args": arg}}
+        if task_input not in inputs:
+            raise ValueError(f"the app's file input {declared.get('name')} is linked to nothing")
+        file_inputs.append({"name": str(declared["name"]), "target_path": declared.get("target_path"),
+                            "task_input": task_input})
+
+    ids = flow_output_ids(step) or {"outputs": {}, "values": {}}
+    files = (step.get("flow_outputs") or {}).get("files") or {}
+    outputs = []
+    for position, output_id in sorted(ids["outputs"].items(), key=lambda item: int(item[0])):
+        wanted = files.get(position)
+        if wanted is not None and output_file_error(wanted):
+            raise ValueError(f"output {position}: {output_file_error(wanted)}")
+        outputs.append({"id": output_id, "file": wanted})
+    spec = {
+        "app_id": str(step["tapis_app_id"]),
+        "app_version": str(step.get("app_version") or "${LATEST}"),
+        "exec_system": exec_system,
+        "job_name": f"{pipeline_id}-{task_id}"[:64],
+        "stage": str(step.get("stage") or step.get("name") or "run"),
+        "env_keys": sorted(env for env in env_map if env in inputs),
+        "file_inputs": file_inputs,
+        "outputs": outputs,
+        "job_uuid_output": ids["values"].get("job_uuid"),
+        "outage_seconds": max(0, int(settings.model_poll_outage_seconds)),
+        "poll_seconds": 15,
+    }
+    declared_outputs = {output["id"] for output in outputs} | set(ids["values"].values()) or {"result"}
+    return {
+        "id": task_id,
+        "type": "function",
+        "runtime": "python:3.11",
+        "installer": "pip",
+        "description": step.get("name"),
+        "output": {output_id: {"type": "string"} for output_id in sorted(declared_outputs)},
+        # The job may queue for hours. One attempt: a retry would submit it again.
+        "execution_profile": {"max_retries": 0, "max_exec_time": int(settings.model_task_max_exec_seconds)},
+        "input": inputs,
+        "code": app_piece_code(spec),
+    }
+
+
+def _flow_inputs(
+    step: dict[str, Any],
+    env_map: dict[str, Any],
+    task_ids_by_step: dict[int, str],
+    steps_by_number: dict[int, dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Task inputs for what a flow step receives through its links, and the
+    inputs to take away.
+
+    Each linked input ``k`` of the piece arrives as ``SOURCE_<k>``, from a pipeline
+    argument (a flow input) or from an earlier task's output. The first linked
+    input is also given under the names a chain uses: the input the piece bound
+    to ``source_uri``, and ``SOURCE_RESULT`` when it comes from an earlier step.
+    A step with no linked input is handed no dataset at all, so the input it
+    bound to ``source_uri`` is taken away. A linked setting replaces the argument
+    the piece would otherwise have read for it.
+
+    Raises ValueError for a link the piece cannot receive.
+    """
+    def value_from(source: dict[str, Any]) -> dict[str, Any]:
+        if "arg" in source:
+            return {"args": str(source["arg"])}
+        number = int(source["step"])
+        ids = flow_output_ids(steps_by_number[number]) or {"outputs": {}, "values": {}}
+        output_id = (ids["values"][str(source["value"])] if "value" in source
+                     else ids["outputs"][str(source["output"])])
+        return {"task_output": {"task_id": task_ids_by_step[number], "output_id": output_id}}
+
+    inputs: dict[str, dict[str, Any]] = {}
+    wires = [w for w in step.get("wires") or [] if w.get("to")]
+    data = sorted((w for w in wires if "input" in w["to"]), key=lambda w: int(w["to"]["input"]))
+    # A piece written for a chain reads its source from the argument source_uri.
+    # In a flow that argument is the flow's first input, which is not this
+    # step's input for every step.
+    source_envs = [env for env, arg in env_map.items() if str(arg) == "source_uri"]
+    for index, wire in enumerate(data):
+        bound = {"type": "string", "value_from": value_from(wire["from"])}
+        inputs[f"SOURCE_{int(wire['to']['input'])}"] = bound
+        if index == 0:
+            for env in source_envs:
+                inputs[env] = dict(bound)
+            if "step" in wire["from"]:
+                inputs["SOURCE_RESULT"] = dict(bound)
+    for wire in wires:
+        if "setting" not in wire["to"]:
+            continue
+        name = str(wire["to"]["setting"])
+        envs = [env for env, arg in env_map.items() if str(arg) == name]
+        if not envs:
+            # No guessing at a name: a made-up input could replace one the
+            # adapter fills in, such as the runner's token.
+            raise ValueError(f"the piece reads the setting {name} through no task input")
+        for env in envs:
+            if env in inputs or str(env).upper().startswith(("SOURCE_", "TAPIS_")):
+                raise ValueError(f"a link may not replace the task input {env}")
+            inputs[env] = {"type": "string", "value_from": value_from(wire["from"])}
+    return inputs, ([] if data else source_envs)
 
 
 _INPUT_SECRET_PARAMS = frozenset({
@@ -1029,6 +1194,7 @@ def generate_tapis_workflow(
     from . import task_code as _task_code
     task_ids_by_step: dict[int, str] = {}
     function_task_ids_by_step: dict[int, str] = {}
+    steps_by_number = {int(s["step"]): s for s in steps}
     for s in steps:
         task_id = f"step-{s['step']}-{(s.get('transform_type') or 'transform')}"
         app_id = s.get("tapis_app_id")
@@ -1038,7 +1204,13 @@ def generate_tapis_workflow(
             for dep in declared_dependencies
             if dep in task_ids_by_step
         ]
-        if app_id:
+        if app_id and s.get("wires") is not None:
+            # A flow step: a Tapis Workflows job task returns nothing a later
+            # task can read, so the app runs through a function that submits
+            # the job and finds its outputs in the archive.
+            task = _app_piece_task(
+                s, pipeline_id, task_id, exec_system, task_ids_by_step, steps_by_number, params)
+        elif app_id:
             task = {
                 "id": task_id,
                 "type": "tapis_job",
@@ -1081,6 +1253,10 @@ def generate_tapis_workflow(
                 # calling ctx.set_output("result", json_text) itself.
                 "output": {"result": {"type": "string"}},
             }
+            # A flow step declares every output it has; a later step reads each by id.
+            for group in (flow_output_ids(s) or {}).values():
+                for output_id in group.values():
+                    task["output"].setdefault(output_id, {"type": "string"})
             if s.get("python_source"):
                 task["execution_profile"] = {
                     "max_retries": 0, "max_exec_time": settings.stored_source_max_exec_seconds}
@@ -1108,7 +1284,20 @@ def generate_tapis_workflow(
                 ),
                 None,
             )
-            if (transform_type == "unit_convert" or s.get("python_source")) and source_task_id:
+            if s.get("wires") is not None:
+                # A flow step: what it receives is stated link by link.
+                for wire in s["wires"]:
+                    arg = (wire.get("from") or {}).get("arg")
+                    if arg and arg not in params:
+                        params[str(arg)] = {
+                            "type": "string", "required": True,
+                            "description": "A dataset the flow takes as an input",
+                        }
+                linked, taken_away = _flow_inputs(s, env_map, task_ids_by_step, steps_by_number)
+                for env in taken_away:
+                    inputs.pop(env, None)
+                inputs.update(linked)
+            elif (transform_type == "unit_convert" or s.get("python_source")) and source_task_id:
                 # Stored code keeps any SOURCE_URI it bound and also receives the
                 # preceding function's result.
                 if not s.get("python_source"):
@@ -1169,9 +1358,10 @@ def generate_tapis_workflow(
                 # The token handoff reads the model task's output, so it must run first.
                 dependency_ids = [model_id, *dependency_ids]
             task["depends_on"] = [{"id": dep_id} for dep_id in dependency_ids]
-        elif prev_id:
+        elif prev_id and s.get("wires") is None:
             # Older plans omitted depends_on for a simple chain. Preserve that
-            # compatibility while honoring explicit DAG edges above.
+            # compatibility while honoring explicit DAG edges above. A flow step
+            # states its links, so one with none depends on nothing.
             task["depends_on"] = [{"id": prev_id}]
         tasks.append(task)
         task_ids_by_step[int(s["step"])] = task_id

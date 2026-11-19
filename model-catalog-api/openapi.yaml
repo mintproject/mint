@@ -7969,6 +7969,79 @@ paths:
       summary: Import shared regions
       tags:
         - Region
+  /flows:
+    post:
+      operationId: custom_flows_post
+      description: >-
+        Register a flow of ETL pieces as a model. The flow is stored as a Software, a
+        Version and a Configuration, with a row that marks the configuration as a flow
+        and one row per step. The SVO adapter checks that the graph of pieces fits
+        together before anything is written, and everything is written in one request
+        with the caller's token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [configuration, steps]
+              properties:
+                software:
+                  type: object
+                  description: The flow family. Give `id` to add to an existing one, or `label` to create it.
+                version:
+                  type: object
+                  description: The pinned code version. Give `id` to add to an existing one, or `label` to create it.
+                configuration:
+                  type: object
+                  description: The flow itself. `label` is required.
+                inputs:
+                  type: array
+                  maxItems: 64
+                  description: The datasets the flow takes. Each has a `key`, a `label` and a `standard_variable`.
+                  items:
+                    type: object
+                steps:
+                  type: array
+                  minItems: 1
+                  maxItems: 24
+                  description: >-
+                    The pieces, numbered from 1 in an order they can run in. Each has
+                    `position`, `etl_process_id`, optional `settings`, and `wires` that
+                    name a flow input by its `key` or an earlier step.
+                  items:
+                    type: object
+                outputs:
+                  type: array
+                  maxItems: 64
+                  description: Which step outputs, values or published records are the flow's outputs.
+                  items:
+                    type: object
+                thread_bindings:
+                  type: object
+                  description: Which input or setting the thread's region and dates fill in.
+      responses:
+        "201":
+          description: Flow registered. Returns the ids of the software, version, configuration, inputs and settings.
+        "400":
+          description: The request is not in the expected form, or names something not in the catalog.
+        "401":
+          description: Missing or invalid bearer token.
+        "403":
+          description: The caller may not add to that model, or cannot see one of the pieces.
+        "409":
+          description: A configuration with that id already exists.
+        "422":
+          description: The flow does not fit its pieces. `problems` lists each one with its step and link.
+        "502":
+          description: The SVO adapter or the catalog could not complete the request.
+        "503":
+          description: This deployment has no SVO adapter configured.
+      security:
+        - BearerAuth: []
+      summary: Register a flow of ETL pieces
+      tags:
+        - ModelConfiguration
   /regions/categories:
     post:
       operationId: custom_regions_categories_post

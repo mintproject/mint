@@ -249,6 +249,14 @@ mutation DeleteSpecContracts($ids: [String!]!) {
 }
 """
 
+# The configurations that are flows. A flow is a graph of pieces, not a piece, so the
+# MINT sync leaves it out of the transform registry.
+LIST_FLOW_CONFIGURATION_IDS_QUERY = """
+query ListFlowConfigurationIds {
+  modelcatalog_configuration_flow { configuration_id }
+}
+"""
+
 # Lists ModelConfigurations with their full I/O + parameter tree for the MINT sync.
 # Paginated; caller increments offset until an empty page is returned.
 LIST_MINT_CONFIGURATIONS_QUERY = """
@@ -299,6 +307,33 @@ query ListMintConfigurations($limit: Int!, $offset: Int!) {
         has_default_value
         parameter_type
       }
+    }
+  }
+}
+"""
+
+# A model configuration and, when it is a flow, its graph. `flow` is null for a model.
+GET_FLOW = """
+query GetFlow($id: String!) {
+  modelcatalog_configuration_by_pk(id: $id) {
+    id label
+    parameters { parameter { id label } }
+    flow {
+      outputs_json thread_bindings_json
+      steps(order_by: {position: asc}) { position etl_process_id settings_json wires_json pause_after }
+    }
+  }
+}
+"""
+
+# Catalog pieces by id, as the caller may see them, for checking a flow.
+GET_FLOW_PIECES = """
+query GetFlowPieces($ids: [String!]!) {
+  modelcatalog_etl_process(where: {id: {_in: $ids}}) {
+    id label version owner_username visibility runtime_kind runtime_json
+    contracts(order_by: [{role: asc}, {position: asc}]) {
+      role position standard_variable_uri unit format dimensionality
+      spatial_type crs_requirement temporal_resolution schema_requirement_json
     }
   }
 }

@@ -461,6 +461,27 @@ def build_plan_json(path: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+# These values are supplied by the service/coordinator, never by a modeler.
+# Keep source_uri in the immutable plan contract so the workflow generator
+# can wire it, but mark it managed so clients do not render it as an input.
+MANAGED_PARAMS = {
+    "allocation": "adapter_service",
+    "budget_drain_package_candidates": "adapter_service",
+    "budget_river_package_candidates": "adapter_service",
+    "geo_actor_id": "adapter_service",
+    "source_uri": "execution_handoff",
+    # A catalog_register step: bound by the adapter from settings and the run.
+    "stac_url": "adapter_service",
+    "ckan_url": "adapter_service",
+    "stac_item_id": "execution_handoff",
+    "execution_id": "execution_handoff",
+    "product_pattern": "adapter_service",
+    "catalogs": "adapter_service",
+    "tapis_base_url": "adapter_service",
+    "tapis_token": "authorization",
+}
+
+
 def parameter_definitions(
     steps: list[dict[str, Any]],
     standard_params: dict[str, dict[str, Any]] | None = None,
@@ -476,26 +497,7 @@ def parameter_definitions(
     represented alongside transform-specific arguments.
     """
     definitions: dict[str, dict[str, Any]] = {}
-
-    # These values are supplied by the service/coordinator, never by a modeler.
-    # Keep source_uri in the immutable plan contract so the workflow generator
-    # can wire it, but mark it managed so clients do not render it as an input.
-    managed_params = {
-        "allocation": "adapter_service",
-        "budget_drain_package_candidates": "adapter_service",
-        "budget_river_package_candidates": "adapter_service",
-        "geo_actor_id": "adapter_service",
-        "source_uri": "execution_handoff",
-        # A catalog_register step: bound by the adapter from settings and the run.
-        "stac_url": "adapter_service",
-        "ckan_url": "adapter_service",
-        "stac_item_id": "execution_handoff",
-        "execution_id": "execution_handoff",
-        "product_pattern": "adapter_service",
-        "catalogs": "adapter_service",
-        "tapis_base_url": "adapter_service",
-        "tapis_token": "authorization",
-    }
+    managed_params = MANAGED_PARAMS
 
     def add(name: str, definition: dict[str, Any], transform: dict[str, Any]) -> None:
         if name == "tapis_token":

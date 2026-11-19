@@ -67,6 +67,117 @@ A pipeline registered before this change keeps the policy it was registered with
 To make a repeated request return the first run instead of starting another, send the same
 `Idempotency-Key` header (or `idempotency_key`) on both.
 
+### Flows
+
+A flow is a graph of pieces stored on a model configuration (catalog tables
+`modelcatalog_configuration_flow` and `modelcatalog_configuration_step`). It holds no
+code and grants nothing: every piece is still checked for whoever plans and submits.
+
+**Steps and links.** Steps are numbered from 1 in an order they can run in. A step
+receives what its links say. A link is `{"to": ..., "from": ...}`:
+
+| `to` | `from` | Meaning |
+|---|---|---|
+| `{"input": k}` | `{"flow_input": id}` | input `k` of the piece reads a dataset the flow takes |
+| `{"input": k}` | `{"step": n, "output": j}` | it reads output `j` of step `n` |
+| `{"setting": name}` | `{"step": n, "value": v}` | a setting reads a value step `n` returned |
+| `{"setting": name}` | `{"step": n, "output": j}` | a setting is handed the location of that output |
+| `{}` | `{"step": n}` | nothing is passed; the step runs after step `n` |
+
+A step may read only from steps before it, so a flow cannot contain a loop. Every input
+of a piece is linked exactly once.
+
+**`POST /flows/check`** checks a flow before it is registered. The body names pieces by
+catalog id, read with the caller's token:
+
+```json
+{"inputs": [{"id": "in:corpus", "contract": {"standard_variable_uri": "..."}}],
+ "steps": [{"position": 1, "etl_process_id": "...", "settings": {}, "wires": [...]}],
+ "outputs": [{"step": 1, "output": 1}], "thread_bindings": {}}
+```
+
+Both flow routes need a signed-in caller (401 `TAPIS_AUTH_REQUIRED` otherwise).
+
+It returns `ok`, `problems` (each with `code`, `message`, and the `step` and `wire` it is
+on), `depends_on`, and for each piece its input and output positions, the settings a flow
+may give it, and the values it returns. Nothing is stored.
+
+**`POST /plans/flow`** plans a stored flow: `{"flow_id": "<configuration id>", "inputs":
+{"<flow input id>": "<data object id>"}}`. The response is a plan like any other, to
+submit with `/workflows/submit`.
+
+- Each flow input becomes a managed argument filled in from its data object: `source_uri`
+  for the first input the steps read, `source_uri_2`, `source_uri_3` for the rest.
+- A step's `settings` become the defaults of the plan's parameters. A value sent at
+  submit still wins. Steps that declare the same setting name share it.
+- The plan records the flow under `plan_json.flow`: the configuration, the bound inputs,
+  the flow's outputs, its region and date bindings, and the steps to pause after.
+
+| Code | Status | When |
+|---|---|---|
+| `FLOW_NOT_FOUND` | 422 | no such configuration, or it is a model and not a flow |
+| `FLOW_INPUT_NOT_BOUND` | 422 | an input the flow reads has no data object |
+| `DATA_OBJECT_NOT_FOUND` | 404 | a bound data object does not exist |
+| `FLOW_DOES_NOT_CHECK_OUT` | 422 | the graph does not fit its pieces or the bound data; `problems` lists why |
+| `FLOW_SETTING_CONFLICT` | 422 | two steps give different defaults for a setting they share |
+| `FLOW_NOT_SUPPORTED` | 422 | the flow links a setting from a flow parameter, which is not built yet |
+| `FLOW_DOES_NOT_BUILD` | 422 | the flow checks out but cannot be made into a pipeline, for example a linked setting the piece reads through no task input |
+| `STORED_SOURCE_REFUSED` | 403 | the caller may not run one of the pieces |
+
+**A piece that runs as a Tapis app.** A Tapis Workflows job task returns nothing a later
+task can read. In a flow, an app piece therefore runs through a function that submits the
+job, waits for it, and finds the piece's outputs in the job's archive on storage.
+
+- An output contract names its file with `schema_requirement_json.archived_file`, a file
+  name or a glob in the archive's top folder. It must match exactly one file. An output
+  with no file name is the archive folder itself.
+- A file input of the app is filled from a linked input: `{"name": ..., "from_input": k}`,
+  or the piece's existing `{"from_arg": "source_uri"}`, which is the step's first linked
+  input.
+- A piece that declares the value `job_uuid` returns the job's id.
+- The job is submitted once and never resubmitted. The step fails with `APP_PIECE_JOB_FAILED`,
+  `APP_PIECE_OUTPUT_MISSING` or `APP_PIECE_OUTPUT_AMBIGUOUS`, each with the job id.
+- **Limit:** the step uses the token the run was submitted with for its whole wait. A job
+  that outlasts that token fails with `APP_PIECE_AUTH_FAILED`. The model stage renews its
+  token; an app piece does not yet.
+- In a chain, an app piece is still a plain job task, as before.
+
+**Accepting a flow's settings.** A piece runs with the submitter's token, and approval
+covers a piece's code, not the arguments it is given. So what a flow's author chose is
+used only when the submitter says so.
+
+- A parameter whose default came from the flow carries `"default_source": "flow"`.
+  `plan_json.flow.linked_settings` lists the settings the flow links from earlier steps.
+- `POST /workflows/submit` refuses a flow plan with 422 `FLOW_SETTINGS_NOT_ACCEPTED`,
+  listing those `defaults` and `links`, unless the body has `"accept_flow_settings": true`.
+- A value the submitter sends replaces the flow's default and needs no acceptance. A dry
+  run needs none.
+
+**What a flow's author cannot do.**
+
+- Set or link an argument the adapter manages or one that carries a credential, in any
+  letter case.
+- Link a setting the piece reads through no task input, or one whose task input is named
+  `SOURCE_*` or `TAPIS_*`.
+- Name a piece the caller cannot see: it is an empty step, and nothing about it is
+  reported.
+
+A flow's steps, links and settings are readable by everyone, signed in or not. Never put
+a credential in a setting.
+
+**What a piece receives and returns in a flow.**
+
+- Each linked input `k` arrives as the task input `SOURCE_<k>`. The first one is also
+  given under the names a chain uses: the input the piece bound to `source_uri`, and
+  `SOURCE_RESULT` when it comes from an earlier step. A piece written for a chain runs in
+  a flow unchanged.
+- A step with no linked input is handed no dataset: the input it bound to `source_uri`
+  is not set.
+- A stored-code piece returns its first output as before. To return more, its entrypoint
+  returns `{"svo_flow": {"outputs": {<position>: <value>}, "values": {<name>: <value>}}}`.
+  A piece declares the values it returns in its runtime metadata as `value_outputs`.
+  A value name is a plain identifier of at most 64 characters.
+
 ### Pieces that carry stored Python source
 
 A piece may carry its own Python source instead of running one of the adapter's

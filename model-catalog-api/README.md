@@ -12,6 +12,7 @@ The API connects to Hasura via the endpoint and admin-secret environment variabl
 | `HASURA_ADMIN_SECRET` | `CHANGEME` | Hasura admin secret (reads and authorized region imports) |
 | `TAPIS_JWKS_URI` | `https://portals.tapis.io/v3/tenants/portals` | Tapis tenant key endpoint used to verify import tokens |
 | `TAPIS_TOKEN_ISSUER` | `https://portals.tapis.io/v3/tokens` | Required issuer for import tokens |
+| `SVO_ADAPTER_API_URL` | unset | Base URL of the SVO adapter. `POST /flows` asks it whether a flow's pieces fit together; unset, that route answers 503 |
 | `REGION_IMPORT_BODY_LIMIT` | `10485760` | Maximum import request body in bytes |
 | `REGION_IMPORT_MAX_REGIONS` | `500` | Maximum regions per import |
 | `REGION_IMPORT_MAX_GEOMETRIES` | `10` | Maximum geometries per region |
