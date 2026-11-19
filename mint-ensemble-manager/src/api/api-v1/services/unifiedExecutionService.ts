@@ -8,6 +8,15 @@ import {
     UnifiedExecutionRecord,
     UnifiedExecutionStore
 } from "./unifiedExecutionStore";
+import {
+    FlowDeps,
+    FlowPlan,
+    FlowThreadService,
+    flowStages,
+    planFlow,
+    reconcileFlow,
+    submitFlow
+} from "./flowExecution";
 
 export type UnifiedExecutor = "ensemble_manager" | "svo_adapter";
 
@@ -46,6 +55,9 @@ interface LegacyPlan {
     // Catalog tokens the run asked its outputs to be published to. Tokens only;
     // the publish parameters travel with the submit, not the plan id.
     publish?: string[];
+    // Set when the thread's model is a flow of ETL pieces: the adapter's plan for
+    // it. A flow has no model job, so none of the model fields above apply.
+    flow?: FlowPlan;
 }
 
 interface ConsideredInput {
@@ -104,7 +116,8 @@ interface AdapterChildRun {
 
 interface UnifiedWorkflowStage {
     stage_id: string;
-    type: "adapter_input" | "model" | "output_handoff" | "adapter_output";
+    type: "adapter_input" | "model" | "output_handoff" | "adapter_output" | "flow_step";
+    name?: string;
     depends_on: string[];
     status: string;
     provider: string;
@@ -547,6 +560,8 @@ function modelStageStatus(record: UnifiedExecutionRecord, plan: LegacyPlan): str
 }
 
 function workflowStages(record: UnifiedExecutionRecord, plan: LegacyPlan): UnifiedWorkflowStage[] {
+    // A flow is its steps: one stage each, and no model stage.
+    if (plan.flow) return flowStages(record);
     const stages: UnifiedWorkflowStage[] = [];
     const adapterChildren = (record.adapter_run_ids || []) as Array<Record<string, any>>;
     const adapterStageType = plan.post_model_adapter ? "adapter_output" : "adapter_input";
@@ -671,12 +686,16 @@ function tapisWorkflowTracking(record: UnifiedExecutionRecord): TapisWorkflowTra
 
 function parentResponse(record: UnifiedExecutionRecord) {
     const plan = decodePlan(record.plan_id);
-    const hasWorkflowStage = Boolean(plan.post_model_adapter || record.adapter_steps?.length);
-    const adapterStage = plan.post_model_adapter
-        ? "post_model"
-        : record.adapter_steps?.length
-          ? "pre_model"
-          : "none";
+    const hasWorkflowStage = Boolean(
+        plan.flow || plan.post_model_adapter || record.adapter_steps?.length
+    );
+    const adapterStage = plan.flow
+        ? "flow"
+        : plan.post_model_adapter
+          ? "post_model"
+          : record.adapter_steps?.length
+            ? "pre_model"
+            : "none";
     const modelJobId = modelProviderJobId(record.model_result) || record.model_child_id || null;
     return {
         run_id: parentRunId(record.id),
@@ -777,9 +796,31 @@ export function createUnifiedExecutionService(
             ) => Promise<void>;
         };
     },
-    dependencies: { store?: UnifiedExecutionStore } = {}
+    dependencies: { store?: UnifiedExecutionStore; flows?: FlowThreadService } = {}
 ) {
     const store = dependencies.store || createHasuraUnifiedExecutionStore();
+    // The thread's side of running a flow. Without it a flow is planned like a
+    // model and fails at its missing component, as before.
+    const flowDeps = (): FlowDeps | null =>
+        dependencies.flows
+            ? { store, adapterRequest, parentRunId, flows: dependencies.flows }
+            : null;
+
+    const reconcileFlowRun = async (record: UnifiedExecutionRecord, authorization?: string) => {
+        const deps = flowDeps();
+        if (!deps) return parentResponse(record);
+        // The flow's outputs by name, to file each as a result. Read as the caller;
+        // a caller who cannot read the thread still sees the run's status.
+        const context = authorization
+            ? await deps.flows
+                  .flowContext(
+                      { thread_id: record.thread_id, model_id: record.model_id },
+                      authorization
+                  )
+                  .catch(() => null)
+            : null;
+        return parentResponse(await reconcileFlow(deps, record, context, authorization));
+    };
 
     const persistWorkflowStages = async (record: UnifiedExecutionRecord) => {
         if (!store.upsertStep) return;
@@ -2050,6 +2091,39 @@ export function createUnifiedExecutionService(
                     "THREAD_MODEL_REQUIRED"
                 );
             }
+            const flowPlanDeps = flowDeps();
+            const plannedFlow = flowPlanDeps
+                ? await planFlow(
+                      flowPlanDeps,
+                      { thread_id: body.thread_id, model_id: body.model_id },
+                      authorization
+                  )
+                : null;
+            if (plannedFlow) {
+                // The thread's model is a flow: the adapter plans its graph. None
+                // of the model path below (engine, input ETL, publishing) applies.
+                const flowPlan: LegacyPlan = {
+                    executor,
+                    thread_id: body.thread_id,
+                    model_id: body.model_id,
+                    execution_engine: "tapis",
+                    flow: plannedFlow.flow
+                };
+                return {
+                    executor,
+                    version: 1,
+                    plan_id: encodePlan(flowPlan),
+                    parameters: plannedFlow.parameters,
+                    parameter_values: plannedFlow.parameter_values,
+                    status: "flow_ready",
+                    execution_mode: "workflow_pipeline",
+                    adapter_stage: "flow",
+                    adapter_steps: [],
+                    post_model_adapter: null,
+                    flow_steps: plannedFlow.steps,
+                    flow_settings: plannedFlow.flow_settings
+                };
+            }
             const { tokens: publish, offered: offeredPublishers } = await validatedPublishTokens(
                 body.publish,
                 body.model_id,
@@ -2349,9 +2423,11 @@ export function createUnifiedExecutionService(
                     );
                 }
                 const decoded = decodePlan(record.plan_id);
-                const response = decoded.post_model_adapter
-                    ? reconcilePostModel(record, authorization)
-                    : reconcileParent(record, authorization);
+                const response = decoded.flow
+                    ? reconcileFlowRun(record, authorization)
+                    : decoded.post_model_adapter
+                      ? reconcilePostModel(record, authorization)
+                      : reconcileParent(record, authorization);
                 const result = await response;
                 const latest = await store.getById(runId.slice(3));
                 if (latest) await persistWorkflowStages(latest);
@@ -2473,6 +2549,26 @@ export function createUnifiedExecutionService(
             }
 
             const plan = decodePlan(body.plan_id);
+            if (plan.flow) {
+                const deps = flowDeps();
+                if (!deps) {
+                    throw new UnifiedExecutionError(
+                        503,
+                        "this service is not set up to run flows",
+                        "FLOWS_UNAVAILABLE"
+                    );
+                }
+                const flowRecord = await submitFlow(
+                    deps,
+                    { ...plan, flow: plan.flow },
+                    body.plan_id,
+                    planHash(plan),
+                    body,
+                    authorization
+                );
+                await persistWorkflowStages(flowRecord);
+                return parentResponse(flowRecord);
+            }
             if (plan.post_model_adapter) {
                 const adapter = plan.post_model_adapter;
                 const existing = await store.getByPlanId(body.plan_id);

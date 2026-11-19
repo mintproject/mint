@@ -42,6 +42,7 @@ import { createHasuraUnifiedExecutionStore } from "@/api/api-v1/services/unified
 import executionsTapisService from "@/api/api-v1/services/executionsTapisService";
 import { getConfiguration } from "./classes/mint/mint-functions";
 import { modelBindingsRouter } from "./api/api-v1/paths/modelBindings";
+import executionsFlowService from "@/api/api-v1/services/executionsFlowService";
 import { createUnifiedExecutionService } from "@/api/api-v1/services/unifiedExecutionService";
 import runHistoryService from "@/api/api-v1/services/runHistoryService";
 import * as OpenApiValidator from "express-openapi-validator";
@@ -113,7 +114,7 @@ const unifiedExecutionService = createUnifiedExecutionService(
         wings: v1ExecutionsService,
         tapis: executionsTapisService
     },
-    { store: unifiedExecutionStore }
+    { store: unifiedExecutionStore, flows: executionsFlowService }
 );
 app.use(
     `/${version}/plans`,
