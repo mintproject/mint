@@ -844,6 +844,92 @@ def flow_output_ids(step: dict[str, Any]) -> dict[str, dict[str, str]] | None:
     }
 
 
+def _app_piece_task(
+    step: dict[str, Any],
+    pipeline_id: str,
+    task_id: str,
+    exec_system: str,
+    task_ids_by_step: dict[int, str],
+    steps_by_number: dict[int, dict[str, Any]],
+    params: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """The function task for a flow step whose piece is a Tapis app."""
+    from .app_piece import app_piece_code
+
+    env_map = normalize_env_from_args(step.get("env_from_args") or {}) or {}
+    refused = sorted(set(map(str, env_map.values())) & (_INPUT_SECRET_PARAMS - {"tapis_token"}))
+    if refused:
+        raise ValueError(f"an app piece in a flow may not bind: {', '.join(refused)}")
+    inputs: dict[str, dict[str, Any]] = {
+        env: {"type": "string", "value_from": {"args": str(arg)}} for env, arg in env_map.items()}
+    for env, arg in (("TAPIS_BASE_URL", "tapis_base_url"), ("TAPIS_TOKEN", "tapis_token"), ("ALLOCATION", "allocation")):
+        inputs[env] = {"type": "string", "value_from": {"args": arg}}
+    for wire in step.get("wires") or []:
+        arg = (wire.get("from") or {}).get("arg")
+        if arg and arg not in params:
+            params[str(arg)] = {
+                "type": "string", "required": True, "description": "A dataset the flow takes as an input"}
+    linked, taken_away = _flow_inputs(step, env_map, task_ids_by_step, steps_by_number)
+    for env in taken_away:
+        inputs.pop(env, None)
+    inputs.update(linked)
+
+    linked_positions = sorted(int(name.split("_", 1)[1]) for name in linked
+                              if name.startswith("SOURCE_") and name != "SOURCE_RESULT")
+    file_inputs = []
+    for index, declared in enumerate(step.get("file_inputs") or []):
+        if "from_input" in declared:
+            task_input = f"SOURCE_{int(declared['from_input'])}"
+        elif declared.get("from_arg") == "source_uri" and linked_positions:
+            # Written for a chain: its source is this step's first linked input.
+            task_input = f"SOURCE_{linked_positions[0]}"
+        else:
+            arg = str(declared["from_arg"])
+            if arg in _INPUT_SECRET_PARAMS:
+                raise ValueError(f"an app piece in a flow may not bind: {arg}")
+            task_input = f"FILE_{index}"
+            inputs[task_input] = {"type": "string", "value_from": {"args": arg}}
+        if task_input not in inputs:
+            raise ValueError(f"the app's file input {declared.get('name')} is linked to nothing")
+        file_inputs.append({"name": str(declared["name"]), "target_path": declared.get("target_path"),
+                            "task_input": task_input})
+
+    ids = flow_output_ids(step) or {"outputs": {}, "values": {}}
+    files = (step.get("flow_outputs") or {}).get("files") or {}
+    outputs = []
+    for position, output_id in sorted(ids["outputs"].items(), key=lambda item: int(item[0])):
+        wanted = files.get(position)
+        if wanted is not None and output_file_error(wanted):
+            raise ValueError(f"output {position}: {output_file_error(wanted)}")
+        outputs.append({"id": output_id, "file": wanted})
+    spec = {
+        "app_id": str(step["tapis_app_id"]),
+        "app_version": str(step.get("app_version") or "${LATEST}"),
+        "exec_system": exec_system,
+        "job_name": f"{pipeline_id}-{task_id}"[:64],
+        "stage": str(step.get("stage") or step.get("name") or "run"),
+        "env_keys": sorted(env for env in env_map if env in inputs),
+        "file_inputs": file_inputs,
+        "outputs": outputs,
+        "job_uuid_output": ids["values"].get("job_uuid"),
+        "outage_seconds": max(0, int(settings.model_poll_outage_seconds)),
+        "poll_seconds": 15,
+    }
+    declared_outputs = {output["id"] for output in outputs} | set(ids["values"].values()) or {"result"}
+    return {
+        "id": task_id,
+        "type": "function",
+        "runtime": "python:3.11",
+        "installer": "pip",
+        "description": step.get("name"),
+        "output": {output_id: {"type": "string"} for output_id in sorted(declared_outputs)},
+        # The job may queue for hours. One attempt: a retry would submit it again.
+        "execution_profile": {"max_retries": 0, "max_exec_time": int(settings.model_task_max_exec_seconds)},
+        "input": inputs,
+        "code": app_piece_code(spec),
+    }
+
+
 def _flow_inputs(
     step: dict[str, Any],
     env_map: dict[str, Any],
@@ -1118,7 +1204,13 @@ def generate_tapis_workflow(
             for dep in declared_dependencies
             if dep in task_ids_by_step
         ]
-        if app_id:
+        if app_id and s.get("wires") is not None:
+            # A flow step: a Tapis Workflows job task returns nothing a later
+            # task can read, so the app runs through a function that submits
+            # the job and finds its outputs in the archive.
+            task = _app_piece_task(
+                s, pipeline_id, task_id, exec_system, task_ids_by_step, steps_by_number, params)
+        elif app_id:
             task = {
                 "id": task_id,
                 "type": "tapis_job",

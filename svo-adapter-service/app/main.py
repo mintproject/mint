@@ -2223,13 +2223,6 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             "message": "a link from a flow parameter is not supported yet; "
                        "steps that declare the same setting name already share it"})
 
-    app_steps = [int(step["position"]) for step, spec in zip(rows, specs) if spec.get("tapis_app_id")]
-    if app_steps:
-        # A Tapis app task takes no links and returns nothing a later step can read.
-        raise HTTPException(422, detail={
-            "code": "FLOW_NOT_SUPPORTED", "steps": app_steps,
-            "message": "a piece that runs as a Tapis app cannot be a flow step yet"})
-
     args = {input_id: "source_uri" if index == 0 else f"source_uri_{index + 1}"
             for index, input_id in enumerate(used)}
     plan_json = build_plan_json(specs)
@@ -2247,6 +2240,13 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         step_json["flow_outputs"] = {
             "outputs": sorted(flow_graph.piece_outputs(view)),
             "values": sorted(flow_graph.piece_values(view)),
+            # For a piece that runs as a Tapis app: the file each output is, in the
+            # job's archive. An output with none is the archive folder itself.
+            "files": {
+                str(output_position): contract["schema_requirement_json"]["archived_file"]
+                for output_position, contract in flow_graph.piece_outputs(view).items()
+                if isinstance(contract.get("schema_requirement_json"), dict)
+                and contract["schema_requirement_json"].get("archived_file")},
         }
         if step.get("pause_after"):
             step_json["pause_after"] = True

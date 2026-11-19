@@ -120,9 +120,27 @@ submit with `/workflows/submit`.
 | `DATA_OBJECT_NOT_FOUND` | 404 | a bound data object does not exist |
 | `FLOW_DOES_NOT_CHECK_OUT` | 422 | the graph does not fit its pieces or the bound data; `problems` lists why |
 | `FLOW_SETTING_CONFLICT` | 422 | two steps give different defaults for a setting they share |
-| `FLOW_NOT_SUPPORTED` | 422 | the flow links a setting from a flow parameter, or has a piece that runs as a Tapis app; neither is built yet |
+| `FLOW_NOT_SUPPORTED` | 422 | the flow links a setting from a flow parameter, which is not built yet |
 | `FLOW_DOES_NOT_BUILD` | 422 | the flow checks out but cannot be made into a pipeline, for example a linked setting the piece reads through no task input |
 | `STORED_SOURCE_REFUSED` | 403 | the caller may not run one of the pieces |
+
+**A piece that runs as a Tapis app.** A Tapis Workflows job task returns nothing a later
+task can read. In a flow, an app piece therefore runs through a function that submits the
+job, waits for it, and finds the piece's outputs in the job's archive on storage.
+
+- An output contract names its file with `schema_requirement_json.archived_file`, a file
+  name or a glob in the archive's top folder. It must match exactly one file. An output
+  with no file name is the archive folder itself.
+- A file input of the app is filled from a linked input: `{"name": ..., "from_input": k}`,
+  or the piece's existing `{"from_arg": "source_uri"}`, which is the step's first linked
+  input.
+- A piece that declares the value `job_uuid` returns the job's id.
+- The job is submitted once and never resubmitted. The step fails with `APP_PIECE_JOB_FAILED`,
+  `APP_PIECE_OUTPUT_MISSING` or `APP_PIECE_OUTPUT_AMBIGUOUS`, each with the job id.
+- **Limit:** the step uses the token the run was submitted with for its whole wait. A job
+  that outlasts that token fails with `APP_PIECE_AUTH_FAILED`. The model stage renews its
+  token; an app piece does not yet.
+- In a chain, an app piece is still a plain job task, as before.
 
 **Accepting a flow's settings.** A piece runs with the submitter's token, and approval
 covers a piece's code, not the arguments it is given. So what a flow's author chose is

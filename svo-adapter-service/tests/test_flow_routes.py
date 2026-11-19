@@ -148,7 +148,7 @@ def test_a_flow_is_planned_as_its_graph(pieces, monkeypatch):
     assert steps[1]["wires"] == [
         {"to": {"input": 1}, "from": {"step": 1, "output": 1}},
         {"to": {"input": 2}, "from": {"arg": "source_uri_2"}}]
-    assert steps[0]["flow_outputs"] == {"outputs": [1], "values": []}
+    assert steps[0]["flow_outputs"] == {"outputs": [1], "values": [], "files": {}}
     assert plan_json["flow"]["configuration_id"] == "cfg-1"
     assert [(i["input_id"], i["arg"]) for i in plan_json["flow"]["inputs"]] == [
         ("in:corpus", "source_uri"), ("in:lexicon", "source_uri_2")]
@@ -359,15 +359,69 @@ def test_another_users_private_piece_is_an_empty_step_and_nothing_about_it_is_re
     assert "score" not in str(detail) and pieces["score"] not in str(detail)
 
 
-def test_a_piece_that_runs_as_a_tapis_app_cannot_be_a_flow_step_yet(monkeypatch):
-    app_piece = client.post("/transform-specs", json={
+def app_piece(**over):
+    body = {
         "name": "app", "method": "tapis_job", "tapis_app_id": "some-app", "transform_type": "custom",
-        "contracts": [{"role": "input", "standard_variable_uri": V + "corpus"},
-                      {"role": "output", "standard_variable_uri": V + "clean"}]}).json()["id"]
+        "file_inputs": [{"name": "docs", "from_arg": "source_uri", "target_path": "docs"}],
+        "env_from_args": {"TOP_N": "top_n"},
+        "parameters_schema_json": {"properties": {"top_n": {"type": "string"}},
+                                   "value_outputs": [{"name": "job_uuid"}]},
+        "contracts": [
+            {"role": "input", "standard_variable_uri": V + "corpus"},
+            {"role": "output", "standard_variable_uri": V + "clean",
+             "schema_requirement_json": {"archived_file": "clean_*.csv"}},
+            {"role": "output", "standard_variable_uri": V + "counts"}]}
+    body.update(over)
+    response = client.post("/transform-specs", json=body)
+    assert response.status_code == 200, response.text
+    return response.json()["id"]
+
+
+def test_a_piece_that_runs_as_a_tapis_app_hands_its_archived_files_to_a_later_step(monkeypatch):
+    first = app_piece()
+    second = register("report", ["counts", "clean"], ["report"])
+    stored_flow({}, monkeypatch, outputs=[{"step": 2, "output": 1}], steps=[
+        {"position": 1, "etl_process_id": first, "settings": {"top_n": "5"}, "wires": [from_input("in:corpus", 1)]},
+        {"position": 2, "etl_process_id": second, "settings": {},
+         "wires": [from_step(1, 2, 1), from_step(1, 1, 2)]}])
+    response = plan({"in:corpus": data_object("corpus", "tapis://sys/docs")})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["plan_json"]["steps"][0]["flow_outputs"] == {
+        "outputs": [1, 2], "values": ["job_uuid"], "files": {"1": "clean_*.csv"}}
+    pipeline = tapis.generate_tapis_workflow({"id": body["plan_id"], "plan_json": body["plan_json"]})
+    tasks = {task["id"]: task for task in pipeline["tasks"]}
+    app, report = tasks["step-1-custom"], tasks["step-2-unit_convert"]
+    # A function that runs the job, not a job task: a job task returns nothing.
+    assert app["type"] == "function" and set(app["output"]) == {"result", "result_2", "value_job_uuid"}
+    assert app["input"]["SOURCE_1"]["value_from"] == {"args": "source_uri"}
+    assert app["input"]["TOP_N"]["value_from"] == {"args": "top_n"}
+    assert report["input"]["SOURCE_1"]["value_from"] == {
+        "task_output": {"task_id": "step-1-custom", "output_id": "result_2"}}
+    assert report["input"]["SOURCE_2"]["value_from"] == {
+        "task_output": {"task_id": "step-1-custom", "output_id": "result"}}
+
+
+def test_an_app_pieces_output_file_name_is_checked_when_the_flow_is_planned(monkeypatch):
+    piece = app_piece(contracts=[
+        {"role": "input", "standard_variable_uri": V + "corpus"},
+        {"role": "output", "standard_variable_uri": V + "clean",
+         "schema_requirement_json": {"archived_file": "../../etc/passwd"}}])
     stored_flow({}, monkeypatch, outputs=[], steps=[
-        {"position": 1, "etl_process_id": app_piece, "settings": {}, "wires": [from_input("in:corpus", 1)]}])
-    detail = plan({"in:corpus": data_object("corpus", "tapis://sys/docs")}).json()["detail"]
-    assert (detail["code"], detail["steps"]) == ("FLOW_NOT_SUPPORTED", [1])
+        {"position": 1, "etl_process_id": piece, "settings": {}, "wires": [from_input("in:corpus", 1)]}])
+    response = plan({"in:corpus": data_object("corpus", "tapis://sys/docs")})
+    assert response.status_code == 422 and response.json()["detail"]["code"] == "FLOW_DOES_NOT_BUILD"
+
+
+def test_an_app_piece_in_a_chain_is_still_a_job_task():
+    spec = app_piece()
+    chain = client.post("/plans", headers=AUTH, json={
+        "data_object_id": data_object("corpus", "tapis://sys/docs"), "piece_ids": [spec],
+        "target_contract": {"standard_variable_uri": V + "clean"}})
+    assert chain.status_code == 200, chain.text
+    body = chain.json()
+    pipeline = tapis.generate_tapis_workflow({"id": body["plan_id"], "plan_json": body["plan_json"]})
+    assert [task["type"] for task in pipeline["tasks"]] == ["tapis_job"]
 
 
 def test_a_stored_flow_with_values_of_the_wrong_kind_is_refused_not_a_server_error(pieces, monkeypatch):

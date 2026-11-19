@@ -613,10 +613,8 @@ reordered or dropped without undoing the first four.
   - **Planning a flow is its own route, `POST /plans/flow`**, not `flow_id` on
     `POST /plans`, which requires one data object and a target. The check route is
     `POST /flows/check`. Both need a signed-in caller.
-  - **A piece that runs as a Tapis app cannot yet hand its outputs to a later step.**
-    Its outputs are found in the job's archive by file name, as model outputs are. That
-    needs the model-run step made usable for a piece, and is its own change. The file
-    name belongs on the piece, so it does not change the flow tables.
+  - **A piece that runs as a Tapis app could not yet hand its outputs to a later step.**
+    Built later in phase A; see the third part below.
   - **A public flow shows the ids of its pieces, private ones included.** Another user
     cannot read or run a private piece, but can see that the flow names it.
   - Tested locally: 16 live permission checks on the tables with two users and an admin;
@@ -687,6 +685,24 @@ reordered or dropped without undoing the first four.
     (new family, existing version, another user's version, another user's family); a
     duplicate configuration id is refused. Model Catalog API suite 184 passing; adapter
     suite 759 passing with the four failures that predate this work.
+
+- 2026-11-19, phase A, third part (a piece that runs as a Tapis app, in a flow). The
+  user: "but we can find it on storage?" Built that way:
+  - **An app piece in a flow runs through a function that submits the job, waits, and
+    finds each output in the job's archive** by the file name the piece declared, or hands
+    on the archive folder when it declared none. Several outputs are one file each.
+  - **It is new code beside the model stage, not the model stage reused.** The model
+    stage is tied to the Ensemble Manager's liveness signals, token renewal and stored
+    credentials. Sharing it would have put the model path at risk for no gain a user
+    would see yet.
+  - **Limit: no token renewal.** A job that outlasts the token the run was submitted with
+    fails the step with a clear reason. Jobs that queue for many hours need the renewal
+    the model stage has; that belongs with step 7 of the earlier spec.
+  - **In a chain an app piece is unchanged**: still a plain job task.
+  - The earlier refusal of app pieces in a flow is removed.
+  - Tested by running the generated step against a stand-in Tapis: submit, wait, file
+    matching, a failed job, a missing or ambiguous file, a rejected token, and that a
+    failed submit is not retried.
 
 ## User feedback / decisions
 
