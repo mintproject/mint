@@ -544,6 +544,29 @@ describe("running a flow from a thread", () => {
             );
         });
 
+        it("cancels the pipeline and closes the thread's record of the run", async () => {
+            const svc = await started();
+            adapter({
+                "/runs/run-1/cancel": () => ({ body: { status: "cancelled" } }),
+                "/runs/run-1": () => ({
+                    body: { status: "cancelled", error_message: "Cancelled by alice" }
+                })
+            });
+            const run = await svc.cancelRun("ue_parent-1", AUTH);
+            expect([run.status, run.failure_code]).toEqual(["failed", "CANCELLED_BY_USER"]);
+            expect(calls("/runs/run-1/cancel")).toHaveLength(1);
+            expect(flows.finishFlowExecution).toHaveBeenCalledWith(
+                "thread-1",
+                "cfg-flow",
+                "exec-1",
+                "failed",
+                []
+            );
+            // Nothing follows a closed run.
+            await svc.getRun("ue_parent-1", AUTH);
+            expect(calls("/runs/run-1/poll")).toHaveLength(0);
+        });
+
         it("leaves the run as it is when the adapter cannot be asked", async () => {
             const svc = await started();
             adapter({

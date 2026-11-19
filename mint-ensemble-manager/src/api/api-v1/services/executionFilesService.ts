@@ -96,7 +96,10 @@ const executionFilesService: ExecutionFilesService = {
             );
         }
         const tapisExecutionService = new TapisExecutionService(access_token, prefs.tapis.basePath);
-        if (execution.runid) {
+        // A flow's execution carries its run's id ("ue_..."), not a Tapis job id:
+        // it has no job, and its files are found from its results like a
+        // composite run's.
+        if (execution.runid && !execution.runid.startsWith("ue_")) {
             const files = await tapisExecutionService.listJobFiles(execution.runid);
             return files.map(toExecutionFile);
         }

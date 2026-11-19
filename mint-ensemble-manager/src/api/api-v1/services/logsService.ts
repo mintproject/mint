@@ -37,7 +37,9 @@ const logsService: LogsService = {
             if (!access_token) {
                 throw new UnauthorizedError("Invalid authorization header");
             }
-            if (!execution.runid) {
+            // No Tapis job id: a composite run, or a flow, whose execution carries
+            // its run's id ("ue_...") in that place.
+            if (!execution.runid || execution.runid.startsWith("ue_")) {
                 return await fetchWorkflowTaskLog(execution_id, access_token, prefs);
             }
             const tapisExecutionService = new TapisExecutionService(

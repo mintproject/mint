@@ -2505,6 +2505,19 @@ export function createUnifiedExecutionService(
                 error_message: cancelledBy || "Cancelled by user"
             });
             const latest = updated || { ...record, status: "failed" };
+            if (decodePlan(record.plan_id).flow && record.model_child_id && dependencies.flows) {
+                // A flow's run is now closed, so nothing will follow it to its end.
+                // Close the thread's record of it here.
+                await dependencies.flows
+                    .finishFlowExecution(
+                        record.thread_id,
+                        record.model_id,
+                        record.model_child_id,
+                        "failed",
+                        []
+                    )
+                    .catch(() => undefined);
+            }
             await persistWorkflowStages(latest);
             return parentResponse(latest);
         },
