@@ -37,14 +37,30 @@ def _user_permissions(name, kind):
     raise AssertionError(f"{name} is not tracked")
 
 
-def test_only_the_owner_can_delete_a_process():
+ADMIN = {
+    "_exists": {
+        "_table": {"name": "modelcatalog_admin", "schema": "public"},
+        "_where": {"username": {"_eq": "X-Hasura-User-Id"}},
+    }
+}
+
+
+def test_only_the_owner_or_an_admin_can_delete_a_process():
     (perm,) = _user_permissions("modelcatalog_etl_process", "delete_permissions")
-    assert perm["filter"] == {"owner_username": {"_eq": "X-Hasura-User-Id"}}
+    assert perm["filter"] == {"_or": [{"owner_username": {"_eq": "X-Hasura-User-Id"}}, ADMIN]}
 
 
-def test_a_process_cannot_be_edited_in_place_or_have_contracts_removed_alone():
-    # A changed piece is a new piece: approval and plans are pinned to the source.
-    assert _user_permissions("modelcatalog_etl_process", "update_permissions") == []
+def test_only_an_admin_can_reassign_a_process_and_nothing_else_is_editable():
+    # A changed piece is a new piece: approval and plans are pinned to the source. The one
+    # exception is the owner, which only an admin may change. An owner cannot give a piece
+    # away, because the adapter runs a caller's own pieces without approval.
+    (perm,) = _user_permissions("modelcatalog_etl_process", "update_permissions")
+    assert perm["columns"] == ["owner_username"]
+    assert perm["filter"] == ADMIN
+    assert perm["check"] == ADMIN
+
+
+def test_contracts_cannot_be_edited_or_removed_alone():
     for kind in ("update_permissions", "delete_permissions"):
         assert _user_permissions("modelcatalog_etl_process_contract", kind) == []
 

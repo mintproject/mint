@@ -2748,6 +2748,9 @@
   - role: user
     permission:
       check: {}
+      # The owner is the session user, never a value the client sends.
+      set:
+        owner_username: x-hasura-User-Id
       columns: &id001
       - id
       - label
@@ -2783,19 +2786,59 @@
       allow_aggregations: true
   - role: user
     permission:
-      columns: *id001
+      columns:
+      - id
+      - label
+      - description
+      - keywords
+      - license
+      - website
+      - date_created
+      - date_published
+      - has_documentation
+      - has_download_url
+      - has_purpose
+      - author_id
+      - type
+      - owner_username
       filter: {}
       allow_aggregations: true
   update_permissions:
   - role: user
     permission:
-      columns: *id001
-      filter: {}
-      check: null
+      # owner_username is updatable so that an admin can reassign a row. The check
+      # stops an owner giving a row away or leaving it unowned: after the update the
+      # caller must still own it, or be an admin. `_is_null: false` is needed because
+      # Hasura lets a check through when the comparison is NULL.
+      columns:
+      - id
+      - label
+      - description
+      - keywords
+      - license
+      - website
+      - date_created
+      - date_published
+      - has_documentation
+      - has_download_url
+      - has_purpose
+      - author_id
+      - type
+      - owner_username
+      filter: {_or: [{owner_username: {_eq: X-Hasura-User-Id}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
+      check: {_or: [{owner_username: {_eq: X-Hasura-User-Id, _is_null: false}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      # The delete cascades. An owner may not take other users' versions or
+      # configurations with it; an admin may.
+      filter:
+        _or:
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
+        - _and:
+          - {owner_username: {_eq: X-Hasura-User-Id}}
+          - _not: {versions: {_or: [{owner_username: {_neq: X-Hasura-User-Id}}, {owner_username: {_is_null: true}}]}}
+          - _not: {versions: {configurations: {_or: [{owner_username: {_neq: X-Hasura-User-Id}}, {owner_username: {_is_null: true}}]}}}
   event_triggers:
   - name: semantic_search_software
     definition:
@@ -2882,6 +2925,9 @@
   - role: user
     permission:
       check: {}
+      # The owner is the session user, never a value the client sends.
+      set:
+        owner_username: x-hasura-User-Id
       columns: &id002
       - id
       - software_id
@@ -2920,18 +2966,61 @@
       filter: {}
   - role: user
     permission:
-      columns: *id002
+      columns:
+      - id
+      - software_id
+      - version_id
+      - label
+      - description
+      - keywords
+      - has_usage_notes
+      - date_created
+      - has_source_code
+      - short_description
+      - limitations
+      - parameterization
+      - runtime_estimation
+      - theoretical_basis
+      - author_id
+      - owner_username
       filter: {}
   update_permissions:
   - role: user
     permission:
-      columns: *id002
-      filter: {}
-      check: null
+      # owner_username is updatable so that an admin can reassign a row. The check
+      # stops an owner giving a row away or leaving it unowned: after the update the
+      # caller must still own it, or be an admin. `_is_null: false` is needed because
+      # Hasura lets a check through when the comparison is NULL.
+      columns:
+      - id
+      - software_id
+      - version_id
+      - label
+      - description
+      - keywords
+      - has_usage_notes
+      - date_created
+      - has_source_code
+      - short_description
+      - limitations
+      - parameterization
+      - runtime_estimation
+      - theoretical_basis
+      - author_id
+      - owner_username
+      filter: {_or: [{owner_username: {_eq: X-Hasura-User-Id}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
+      check: {_or: [{owner_username: {_eq: X-Hasura-User-Id, _is_null: false}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      # The delete cascades. An owner may not take other users' configurations with
+      # it; an admin may.
+      filter:
+        _or:
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
+        - _and:
+          - {owner_username: {_eq: X-Hasura-User-Id}}
+          - _not: {configurations: {_or: [{owner_username: {_neq: X-Hasura-User-Id}}, {owner_username: {_is_null: true}}]}}
   event_triggers:
   - name: semantic_search_software_version
     definition:
@@ -3144,19 +3233,20 @@
       - parameter_assignment_method
       - valid_until
       - author_id
-      filter:
-        owner_username:
-          _eq: X-Hasura-User-Id
-      check: null
+      # Updatable so that an admin can reassign a configuration; the check stops an
+      # owner giving one away.
+      - owner_username
+      filter: {_or: [{owner_username: {_eq: X-Hasura-User-Id}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
+      check: {_or: [{owner_username: {_eq: X-Hasura-User-Id, _is_null: false}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
   delete_permissions:
   - role: user
     permission:
       filter:
-        _and:
-        - owner_username:
-            _eq: X-Hasura-User-Id
-        - model_configuration_id:
-            _is_null: true
+        _or:
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
+        - _and:
+          - {owner_username: {_eq: X-Hasura-User-Id}}
+          - model_configuration_id: {_is_null: true}
   event_triggers:
   - name: semantic_search_configuration
     definition:
@@ -3342,19 +3432,27 @@
     permission:
       columns: *id006
       filter:
-        configuration_parameters:
-          configuration:
-            owner_username:
-              _eq: X-Hasura-User-Id
+        # Linked to a configuration of the caller, and to no configuration of anyone
+        # else. Without the second half a user could link another user's parameter
+        # to their own configuration and then edit or delete it.
+        _or:
+        - _and:
+          - configuration_parameters: {configuration: {owner_username: {_eq: X-Hasura-User-Id}}}
+          - _not: {configuration_parameters: {configuration: {_or: [{owner_username: {_neq: X-Hasura-User-Id}}, {owner_username: {_is_null: true}}]}}}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
       check: null
   delete_permissions:
   - role: user
     permission:
       filter:
-        configuration_parameters:
-          configuration:
-            owner_username:
-              _eq: X-Hasura-User-Id
+        # Linked to a configuration of the caller, and to no configuration of anyone
+        # else. Without the second half a user could link another user's parameter
+        # to their own configuration and then edit or delete it.
+        _or:
+        - _and:
+          - configuration_parameters: {configuration: {owner_username: {_eq: X-Hasura-User-Id}}}
+          - _not: {configuration_parameters: {configuration: {_or: [{owner_username: {_neq: X-Hasura-User-Id}}, {owner_username: {_is_null: true}}]}}}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
 - table:
     name: modelcatalog_configuration_input
     schema: public
@@ -3369,9 +3467,9 @@
   - role: user
     permission:
       check:
-        configuration:
-          owner_username:
-            _eq: X-Hasura-User-Id
+        _or:
+        - configuration: {owner_username: {_eq: X-Hasura-User-Id}}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
       columns: &id007
       - configuration_id
       - input_id
@@ -3394,9 +3492,9 @@
   - role: user
     permission:
       filter:
-        configuration:
-          owner_username:
-            _eq: X-Hasura-User-Id
+        _or:
+        - configuration: {owner_username: {_eq: X-Hasura-User-Id}}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
   event_triggers:
   - name: semantic_search_configuration_input
     definition:
@@ -3426,9 +3524,9 @@
   - role: user
     permission:
       check:
-        configuration:
-          owner_username:
-            _eq: X-Hasura-User-Id
+        _or:
+        - configuration: {owner_username: {_eq: X-Hasura-User-Id}}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
       columns: &id008
       - configuration_id
       - output_id
@@ -3449,9 +3547,9 @@
   - role: user
     permission:
       filter:
-        configuration:
-          owner_username:
-            _eq: X-Hasura-User-Id
+        _or:
+        - configuration: {owner_username: {_eq: X-Hasura-User-Id}}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
   event_triggers:
   - name: semantic_search_configuration_output
     definition:
@@ -3480,10 +3578,15 @@
   insert_permissions:
   - role: user
     permission:
+      # The caller's configuration, and a parameter that no other user's configuration
+      # uses. Linking someone else's parameter would let the caller block its owner
+      # from editing it.
       check:
-        configuration:
-          owner_username:
-            _eq: X-Hasura-User-Id
+        _or:
+        - _and:
+          - configuration: {owner_username: {_eq: X-Hasura-User-Id}}
+          - _not: {parameter: {configuration_parameters: {configuration: {_or: [{owner_username: {_neq: X-Hasura-User-Id}}, {owner_username: {_is_null: true}}]}}}}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
       columns: &id009
       - configuration_id
       - parameter_id
@@ -3502,9 +3605,9 @@
   - role: user
     permission:
       filter:
-        configuration:
-          owner_username:
-            _eq: X-Hasura-User-Id
+        _or:
+        - configuration: {owner_username: {_eq: X-Hasura-User-Id}}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
 - table:
     name: modelcatalog_person
     schema: public
@@ -4241,7 +4344,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id023
       - software_version_id
       - category_id
@@ -4259,7 +4362,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_software_version_process
     schema: public
@@ -4273,7 +4376,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id024
       - software_version_id
       - process_id
@@ -4291,7 +4394,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_software_version_grid
     schema: public
@@ -4305,7 +4408,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id025
       - software_version_id
       - grid_id
@@ -4323,7 +4426,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_software_version_image
     schema: public
@@ -4337,7 +4440,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id026
       - software_version_id
       - image_id
@@ -4355,7 +4458,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_software_version_input_variable
     schema: public
@@ -4369,7 +4472,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id027
       - software_version_id
       - variable_id
@@ -4387,7 +4490,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_software_version_output_variable
     schema: public
@@ -4401,7 +4504,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id028
       - software_version_id
       - variable_id
@@ -4419,7 +4522,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_configuration_causal_diagram
     schema: public
@@ -4433,7 +4536,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id029
       - configuration_id
       - causal_diagram_id
@@ -4451,7 +4554,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_configuration_time_interval
     schema: public
@@ -4465,7 +4568,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id030
       - configuration_id
       - time_interval_id
@@ -4483,7 +4586,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_configuration_region
     schema: public
@@ -4497,7 +4600,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id031
       - configuration_id
       - region_id
@@ -4515,7 +4618,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
   event_triggers:
   - name: semantic_search_configuration_region
     definition:
@@ -4544,7 +4647,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id032
       - configuration_id
       - variable_id
@@ -4562,7 +4665,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_configuration_calibration_target
     schema: public
@@ -4576,7 +4679,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id033
       - configuration_id
       - variable_id
@@ -4594,7 +4697,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_parameter_intervention
     schema: public
@@ -4608,7 +4711,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{parameter: {configuration_parameters: {configuration: {owner_username: {_eq: X-Hasura-User-Id}}}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id035
       - parameter_id
       - intervention_id
@@ -4626,7 +4729,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{parameter: {configuration_parameters: {configuration: {owner_username: {_eq: X-Hasura-User-Id}}}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_diagram_part
     schema: public
@@ -4671,7 +4774,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{software: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id037
       - software_id
       - person_id
@@ -4689,7 +4792,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{software: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_software_category
     schema: public
@@ -4703,7 +4806,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{software: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id040
       - software_id
       - category_id
@@ -4721,7 +4824,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{software: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_version_author
     schema: public
@@ -4735,7 +4838,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id038
       - software_version_id
       - person_id
@@ -4753,7 +4856,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{software_version: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_configuration_author
     schema: public
@@ -4767,7 +4870,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id039
       - configuration_id
       - person_id
@@ -4785,7 +4888,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_configuration_category
     schema: public
@@ -4799,7 +4902,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id041
       - configuration_id
       - category_id
@@ -4817,7 +4920,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
   event_triggers:
   - name: semantic_search_configuration_category
     definition:
@@ -4893,7 +4996,7 @@
   insert_permissions:
   - role: user
     permission:
-      check: {}
+      check: {_or: [{parameter: {configuration_parameters: {configuration: {owner_username: {_eq: X-Hasura-User-Id}}}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
       columns: &id046
       - parameter_id
       - variable_id
@@ -4911,7 +5014,7 @@
   delete_permissions:
   - role: user
     permission:
-      filter: {}
+      filter: {_or: [{parameter: {configuration_parameters: {configuration: {owner_username: {_eq: X-Hasura-User-Id}}}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_etl_process
     schema: public
@@ -4940,14 +5043,21 @@
     permission:
       columns: [id, label, description, version, owner_username, visibility, runtime_kind, runtime_json, created_at, updated_at]
       filter: {_or: [{visibility: {_eq: public}}, {visibility: {_eq: shared}}, {owner_username: {_eq: X-Hasura-User-Id}}]}
+  update_permissions:
+  - role: user
+    permission:
+      # Only an admin may reassign a piece, and nothing else about it changes in
+      # place. An owner cannot give a piece away: the adapter runs a caller's own
+      # pieces without approval.
+      columns: [owner_username]
+      filter: {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
+      check: {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
   delete_permissions:
   - role: user
     permission:
       # An owner may remove their own piece; its contracts go with it (ON DELETE
       # CASCADE). The adapter drops the registry row on its next catalog sync.
-      filter:
-        owner_username:
-          _eq: X-Hasura-User-Id
+      filter: {_or: [{owner_username: {_eq: X-Hasura-User-Id}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
 - table:
     name: modelcatalog_etl_process_contract
     schema: public
@@ -4976,6 +5086,16 @@
     permission:
       columns: [etl_process_id, role, position, standard_variable_uri, unit, format, dimensionality, spatial_type, crs_requirement, temporal_resolution, schema_requirement_json]
       filter: {}
+- table:
+    name: modelcatalog_admin
+    schema: public
+  # Written only with the admin secret. A signed-in user can read only their own row,
+  # so the UI can tell whether the caller is an admin without listing the admins.
+  select_permissions:
+  - role: user
+    permission:
+      columns: [username]
+      filter: {username: {_eq: X-Hasura-User-Id}}
 - table:
     name: data_object
     schema: adapter
