@@ -45,6 +45,14 @@ from pathlib import Path
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+# uvicorn configures only its own loggers, so without this the service's INFO
+# messages (sync counts, edge recomputes) are dropped and only warnings show.
+# HTTP client request lines are kept out: they add a line per outbound call.
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s: %(message)s")
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
 log = logging.getLogger(__name__)
 
 from . import input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis

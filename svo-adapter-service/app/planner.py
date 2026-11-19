@@ -287,8 +287,11 @@ def find_path(
 
     When `edge_map` is provided (built by edges.build_edge_map), subsequent BFS
     steps after the first transform use the pre-indexed output→input pairs instead
-    of scanning the whole registry. Correctness is preserved: _transform_accepts is
-    still called on every candidate so stale edges are silently skipped.
+    of scanning the whole registry. _transform_accepts is still called on every
+    candidate, so an edge that no longer holds is skipped. An output with no
+    entry in the map is scanned against the whole registry instead: the map is
+    a cache, and one written before a piece was registered or re-synced knows
+    nothing about that piece's contracts.
     """
     if compatibility(source, target).status == ReadinessStatus.ready:
         return []
@@ -308,7 +311,7 @@ def find_path(
         # have precomputed edges, only check the pre-filtered candidates. Fall back
         # to the full registry for the first step or when no edge_map is available.
         if edge_map is not None and last_out_id is not None:
-            candidates = edge_map.get(last_out_id, [])
+            candidates = edge_map.get(last_out_id) or registry
         else:
             candidates = registry
 
