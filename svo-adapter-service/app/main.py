@@ -2056,6 +2056,25 @@ async def _load_flow(h: Any, configuration_id: str) -> dict[str, Any] | None:
     }
 
 
+def _unaccepted_flow_settings(plan_json: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:
+    """What a flow's author chose that this submission would use as it stands.
+
+    A piece runs with the submitter's token, and approval covers a piece's code,
+    not the arguments it is given. So a flow's defaults and the settings it links
+    from earlier steps take effect only when the submitter accepts them. A value
+    the submitter sends replaces the flow's default and needs no acceptance.
+    """
+    if not isinstance(plan_json.get("flow"), dict):
+        return {"defaults": {}, "links": []}
+    sent = set(accepted_aliases(str(name) for name in (args or {})))
+    defaults = {
+        str(parameter["name"]): parameter.get("default")
+        for parameter in plan_json.get("parameters") or []
+        if parameter.get("default_source") == "flow" and parameter.get("name") not in sent
+    }
+    return {"defaults": defaults, "links": list(plan_json["flow"].get("linked_settings") or [])}
+
+
 async def _require_signed_in(bearer: str | None) -> str | None:
     """The caller's username, or 401. Flows are read from the catalog as the
     caller; someone who is not signed in may not read every column a check needs.
@@ -2130,11 +2149,17 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
     registry = await _registry(h, plannable=False)
     by_id: dict[str, dict[str, Any]] = {}
     for spec in registry:
+        # Only pieces this caller could see in the catalog, whatever the registry
+        # read returned: another user's private piece is an empty step here, as it
+        # is in /flows/check, and nothing about it is reported.
+        if spec.get("visibility") == "private" and spec.get("owner_username") != caller:
+            continue
         by_id.setdefault(str(spec.get("id")), spec)
         if spec.get("mint_etl_process_id"):
             by_id[str(spec["mint_etl_process_id"])] = spec
 
-    rows = sorted(flow["steps"], key=lambda step: step.get("position") or 0)
+    rows = sorted((step for step in flow["steps"] if isinstance(step, dict)),
+                  key=lambda step: step.get("position") if type(step.get("position")) is int else 0)
     specs = [by_id.get(str(step.get("etl_process_id") or "")) for step in rows]
 
     # Flow inputs in the order the steps first read them. The first is the
@@ -2181,6 +2206,13 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             "message": "a link from a flow parameter is not supported yet; "
                        "steps that declare the same setting name already share it"})
 
+    app_steps = [int(step["position"]) for step, spec in zip(rows, specs) if spec.get("tapis_app_id")]
+    if app_steps:
+        # A Tapis app task takes no links and returns nothing a later step can read.
+        raise HTTPException(422, detail={
+            "code": "FLOW_NOT_SUPPORTED", "steps": app_steps,
+            "message": "a piece that runs as a Tapis app cannot be a flow step yet"})
+
     args = {input_id: "source_uri" if index == 0 else f"source_uri_{index + 1}"
             for index, input_id in enumerate(used)}
     plan_json = build_plan_json(specs)
@@ -2214,9 +2246,12 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
     by_name = {parameter.get("name"): parameter for parameter in plan_json["parameters"]}
     for name, value in defaults.items():
         if name in by_name:
-            # The flow's default. A value sent at submit still wins.
+            # The flow's default, marked as such. A value sent at submit still wins,
+            # and the default is used only when the submitter accepts the flow's
+            # settings: its author is not the one whose token the piece runs with.
             by_name[name]["default"] = value
             by_name[name]["required"] = False
+            by_name[name]["default_source"] = "flow"
     for input_id, arg in args.items():
         definition = by_name.get(arg)
         if definition is None:
@@ -2234,8 +2269,17 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         raise HTTPException(403, detail={"code": "STORED_SOURCE_REFUSED", "problems": problems})
     if opt_in:
         plan_json["stored_source_opt_in"] = {"username": caller, "piece_ids": sorted(opt_in)}
+    try:
+        # Prove the plan builds into a pipeline now, not when someone submits it.
+        tapis.generate_tapis_workflow({"id": "check", "plan_json": plan_json})
+    except (ValueError, KeyError, TypeError) as error:
+        raise HTTPException(422, detail={
+            "code": "FLOW_DOES_NOT_BUILD", "flow_id": body.flow_id, "message": str(error)}) from error
     plan_json["flow"] = {
         "configuration_id": flow["configuration_id"],
+        "linked_settings": [
+            {"step": int(step["position"]), "setting": wire["to"]["setting"], "from": wire["from"]}
+            for step in rows for wire in step.get("wires") or [] if "setting" in wire["to"]],
         "inputs": [{"input_id": input_id, "data_object_id": body.inputs[input_id], "arg": arg}
                    for input_id, arg in args.items()],
         "outputs": flow["outputs"],
@@ -3110,6 +3154,13 @@ async def submit_workflow(
             raise HTTPException(409, detail={"code": "BOUND_PLAN_INVALID"})
         if tapis.plan_publishes((plan.get("plan_json") or {}).get("steps") or []):
             await _enforce_run_owner(body.execution_id, token)
+
+    unaccepted = _unaccepted_flow_settings(plan.get("plan_json") or {}, body.args)
+    if (unaccepted["defaults"] or unaccepted["links"]) and not body.accept_flow_settings and not body.dry_run:
+        raise HTTPException(422, detail={
+            "code": "FLOW_SETTINGS_NOT_ACCEPTED", **unaccepted,
+            "message": "this flow's author chose these settings for pieces that will run with your "
+                       "token; send accept_flow_settings to use them, or send your own values"})
 
     stored_source_audit: dict[str, Any] | None = None
     stored_steps = list(stored_source.iter_stored_steps(plan.get("plan_json") or {}))

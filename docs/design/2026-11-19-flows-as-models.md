@@ -622,6 +622,44 @@ reordered or dropped without undoing the first four.
     the adapter's two catalog queries run as the owner and as another user; adapter suite
     712 passing, with the four failures that predate this work.
 
+- 2026-11-19, changes after an independent security review of phase A's first part:
+  - **A flow's settings need the submitter's acceptance.** A flow's author could set, or
+    link from an earlier step, the arguments of a piece that then runs with the runner's
+    token. Admin approval covers a piece's code, not its arguments, so an approved piece
+    with a destination argument could be pointed at the author's own storage. Flow
+    defaults are now marked in the plan and a submit is refused until the submitter
+    accepts them or sends their own values. The thread's settings step will show them.
+  - **A link can no longer invent a task input.** A linked setting fell back to the
+    setting's name in upper case, which could replace the runner's token. It now needs a
+    task input the piece itself declared, never one named `SOURCE_*` or `TAPIS_*`, and the
+    list of refused settings is compared without regard to case.
+  - **A flow cannot be changed in place, by anyone.** The owner could add a step to an
+    existing flow. A trigger now accepts a step only in the transaction that creates its
+    flow.
+  - **A configuration in use as a model cannot be made a flow** by its owner: one with a
+    Tapis app, setups, or a thread or run that picked it.
+  - **Planning reads only pieces the caller can see.** It read the adapter's whole copy,
+    so a runner saw diagnostics for another user's private piece.
+  - **Free-form JSON cannot crash the check or the plan.** Values of the wrong kind are
+    reported as a problem. Booleans and floats no longer pass as whole numbers. Links,
+    outputs and inputs are limited in number, in the adapter and in the tables.
+  - **A plan is built into a pipeline once at plan time**, so a flow that checks out but
+    cannot be built is refused there and not at submit.
+  - **A step's own first input replaces the flow's first input** under the name a chain
+    piece reads, and a step with no linked input is handed no dataset.
+  - **A piece that runs as a Tapis app is refused as a flow step** until its outputs can
+    be handed on.
+  - **Accepted, not changed:** an owner can delete a flow and register a different one on
+    the same configuration. Plans are snapshots, and every piece is checked again for the
+    runner. A flow's steps and settings are readable by everyone; the API notes say never
+    to put a credential in a setting.
+  - **Found, not caused by this work:** any signed-in user can list every data object
+    with its location (`GET /data-objects`). Data objects have no owner. Planning a flow
+    with someone else's data object id therefore reveals nothing new, but the gap itself
+    needs its own fix.
+  - **For phase B:** a flow's `outputs_json` is copied into the plan without checking
+    `output_id` or `record`. Whatever registers a flow's results must not trust them.
+
 ## User feedback / decisions
 
 See "User need" for the user's words.

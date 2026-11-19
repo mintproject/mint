@@ -159,3 +159,43 @@ def test_a_piece_cannot_set_an_output_its_step_does_not_declare(monkeypatch):
     source = "def run():\n    return {'svo_flow': {'outputs': {3: 'tapis://c'}}}\n"
     with pytest.raises(ValueError, match="does not declare"):
         _run(source, IDS, monkeypatch)
+
+
+# --- links a piece may not receive ---------------------------------------------
+SOURCE_ENV = {"TAPIS_TOKEN": "tapis_token", "SOURCE_URI": "source_uri"}
+
+
+def test_the_input_a_chain_piece_reads_its_source_from_gets_this_steps_own_input():
+    tasks, _ = _tasks([
+        _step(1, env=SOURCE_ENV, wires=[{"to": {"input": 1}, "from": {"arg": "source_uri_2"}}]),
+        _step(2, env=SOURCE_ENV, depends_on=(1,), wires=[{"to": {"input": 1}, "from": {"step": 1, "output": 1}}]),
+    ])
+    # Not the flow's first input: each step's own first input.
+    assert _from(tasks["step-1-custom"], "SOURCE_URI") == {"args": "source_uri_2"}
+    assert _from(tasks["step-2-custom"], "SOURCE_URI") == {
+        "task_output": {"task_id": "step-1-custom", "output_id": "result"}}
+
+
+def test_a_step_with_no_linked_input_is_handed_no_dataset():
+    tasks, _ = _tasks([
+        _step(1, env=SOURCE_ENV, wires=[{"to": {"input": 1}, "from": {"arg": "source_uri"}}]),
+        _step(2, env=SOURCE_ENV, depends_on=(1,), wires=[{"to": {}, "from": {"step": 1}}]),
+    ])
+    assert "SOURCE_URI" not in tasks["step-2-custom"]["input"]
+    assert set(tasks["step-2-custom"]["input"]) == {"TAPIS_TOKEN"}
+
+
+def test_a_linked_setting_must_be_one_the_piece_reads_through_a_task_input():
+    link = {"to": {"setting": "manifest_name"}, "from": {"step": 1, "value": "manifest_name"}}
+    steps = [_step(1, values=("manifest_name",), wires=[]), _step(2, depends_on=(1,), wires=[link])]
+    with pytest.raises(ValueError, match="through no task input"):
+        _tasks(steps)
+
+
+@pytest.mark.parametrize("env", ["TAPIS_TOKEN", "Tapis_Base_Url", "SOURCE_1", "SOURCE_RESULT"])
+def test_a_linked_setting_cannot_replace_an_input_the_adapter_fills_in(env):
+    link = {"to": {"setting": "manifest_name"}, "from": {"step": 1, "value": "manifest_name"}}
+    steps = [_step(1, values=("manifest_name",), wires=[]),
+             _step(2, depends_on=(1,), env={env: "manifest_name"}, wires=[link])]
+    with pytest.raises(ValueError, match="may not replace the task input"):
+        _tasks(steps)

@@ -34,9 +34,42 @@ def _permissions(table, kind, role="user"):
     return [p["permission"] for p in _table(table).get(f"{kind}_permissions") or [] if p["role"] == role]
 
 
-def test_only_the_configurations_owner_or_an_admin_makes_it_a_flow():
+def test_only_the_owner_of_a_configuration_not_in_use_as_a_model_makes_it_a_flow():
+    # A model other people run must not turn into a flow under them: it has a Tapis
+    # app, setups under it, or a thread or a run that picked it.
     (perm,) = _permissions(FLOW, "insert")
-    assert perm["check"] == OWN_CONFIGURATION_OR_ADMIN
+    assert perm["check"] == {
+        "_or": [
+            {"configuration": {"_and": [
+                OWNER,
+                {"tapis_app_id": {"_is_null": True}},
+                {"_not": {"child_configurations": {}}},
+                {"_not": {"thread_models": {}}},
+                {"_not": {"executions": {}}},
+            ]}},
+            ADMIN,
+        ]
+    }
+
+
+def test_a_user_cannot_choose_a_flows_creation_time():
+    # The step trigger compares it with the transaction's start.
+    (perm,) = _permissions(FLOW, "insert")
+    assert "created_at" not in perm["columns"]
+
+
+def test_steps_are_added_only_in_the_transaction_that_creates_their_flow():
+    up = (MIGRATION / "up.sql").read_text()
+    assert "BEFORE INSERT ON modelcatalog_configuration_step" in up
+    assert "f.created_at = now()" in up
+    down = (MIGRATION / "down.sql").read_text()
+    assert "DROP FUNCTION IF EXISTS modelcatalog_configuration_step_only_with_its_flow();" in down
+
+
+def test_links_and_outputs_are_limited_in_number():
+    up = (MIGRATION / "up.sql").read_text()
+    assert "CHECK (jsonb_array_length(wires_json) <= 64)" in up
+    assert "CHECK (jsonb_array_length(outputs_json) <= 64)" in up
 
 
 def test_a_step_needs_the_callers_flow_and_a_piece_the_caller_can_see():

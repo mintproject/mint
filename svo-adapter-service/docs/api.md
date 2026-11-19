@@ -120,17 +120,45 @@ submit with `/workflows/submit`.
 | `DATA_OBJECT_NOT_FOUND` | 404 | a bound data object does not exist |
 | `FLOW_DOES_NOT_CHECK_OUT` | 422 | the graph does not fit its pieces or the bound data; `problems` lists why |
 | `FLOW_SETTING_CONFLICT` | 422 | two steps give different defaults for a setting they share |
-| `FLOW_NOT_SUPPORTED` | 422 | the flow links a setting from a flow parameter, which is not built yet |
+| `FLOW_NOT_SUPPORTED` | 422 | the flow links a setting from a flow parameter, or has a piece that runs as a Tapis app; neither is built yet |
+| `FLOW_DOES_NOT_BUILD` | 422 | the flow checks out but cannot be made into a pipeline, for example a linked setting the piece reads through no task input |
 | `STORED_SOURCE_REFUSED` | 403 | the caller may not run one of the pieces |
+
+**Accepting a flow's settings.** A piece runs with the submitter's token, and approval
+covers a piece's code, not the arguments it is given. So what a flow's author chose is
+used only when the submitter says so.
+
+- A parameter whose default came from the flow carries `"default_source": "flow"`.
+  `plan_json.flow.linked_settings` lists the settings the flow links from earlier steps.
+- `POST /workflows/submit` refuses a flow plan with 422 `FLOW_SETTINGS_NOT_ACCEPTED`,
+  listing those `defaults` and `links`, unless the body has `"accept_flow_settings": true`.
+- A value the submitter sends replaces the flow's default and needs no acceptance. A dry
+  run needs none.
+
+**What a flow's author cannot do.**
+
+- Set or link an argument the adapter manages or one that carries a credential, in any
+  letter case.
+- Link a setting the piece reads through no task input, or one whose task input is named
+  `SOURCE_*` or `TAPIS_*`.
+- Name a piece the caller cannot see: it is an empty step, and nothing about it is
+  reported.
+
+A flow's steps, links and settings are readable by everyone, signed in or not. Never put
+a credential in a setting.
 
 **What a piece receives and returns in a flow.**
 
 - Each linked input `k` arrives as the task input `SOURCE_<k>`. The first one is also
-  given under the name a chain uses (`SOURCE_RESULT`, or the input bound to `source_uri`),
-  so a piece written for a chain runs in a flow unchanged.
+  given under the names a chain uses: the input the piece bound to `source_uri`, and
+  `SOURCE_RESULT` when it comes from an earlier step. A piece written for a chain runs in
+  a flow unchanged.
+- A step with no linked input is handed no dataset: the input it bound to `source_uri`
+  is not set.
 - A stored-code piece returns its first output as before. To return more, its entrypoint
   returns `{"svo_flow": {"outputs": {<position>: <value>}, "values": {<name>: <value>}}}`.
   A piece declares the values it returns in its runtime metadata as `value_outputs`.
+  A value name is a plain identifier of at most 64 characters.
 
 ### Pieces that carry stored Python source
 

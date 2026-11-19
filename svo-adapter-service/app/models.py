@@ -98,16 +98,16 @@ class FlowStepIn(BaseModel):
     position: int
     etl_process_id: str | None = None
     settings: dict[str, Any] = Field(default_factory=dict)
-    wires: list[Any] = Field(default_factory=list)
+    wires: list[Any] = Field(default_factory=list, max_length=64)
     pause_after: bool = False
 
 
 class FlowCheckIn(BaseModel):
     """A flow to check before it is registered. Pieces are named by catalog id."""
-    inputs: list[dict[str, Any]] = Field(default_factory=list)
-    parameters: list[dict[str, Any]] = Field(default_factory=list)
+    inputs: list[dict[str, Any]] = Field(default_factory=list, max_length=64)
+    parameters: list[dict[str, Any]] = Field(default_factory=list, max_length=64)
     steps: list[FlowStepIn] = Field(max_length=24)
-    outputs: list[Any] = Field(default_factory=list)
+    outputs: list[Any] = Field(default_factory=list, max_length=64)
     thread_bindings: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -235,6 +235,9 @@ class SubmitWorkflowIn(BaseModel):
     # on completion (upserts resource + execution_data_binding rows).
     execution_id: str | None = None
     idempotency_key: str | None = None
+    # A flow's author chose defaults and links for settings of pieces that run with
+    # the submitter's token. They are used only when the submitter says so here.
+    accept_flow_settings: bool = False
 
 
 class RegisterOutputIn(BaseModel):

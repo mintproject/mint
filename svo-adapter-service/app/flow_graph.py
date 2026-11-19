@@ -14,6 +14,7 @@ catalog, decide who may run a piece, or build a pipeline.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -21,6 +22,20 @@ from .models import DataObjectContract, ReadinessStatus
 from .planner import _contract_from_registry, compatibility
 
 MAX_STEPS = 24
+MAX_LINKS = 64      # per step, and flow outputs
+MAX_INPUTS = 64     # flow inputs, and flow parameters
+
+# A value name becomes a task output id, so it is kept to a plain identifier.
+_VALUE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+
+def _is_position(value: Any) -> bool:
+    """A whole number, and not a boolean or a float that happens to equal one."""
+    return type(value) is int
+
+
+def _is_name(value: Any) -> bool:
+    return isinstance(value, str) and bool(value)
 
 _CONTRACT_FIELDS = ("standard_variable_uri", "unit", "format", "dimensionality",
                     "spatial_type", "crs", "temporal_resolution", "catalog")
@@ -72,9 +87,9 @@ def piece_values(piece: dict[str, Any]) -> set[str]:
     if declared is None:
         declared = (piece.get("parameters_schema_json") or {}).get("value_outputs")
     names: set[str] = set()
-    for item in declared or []:
+    for item in declared if isinstance(declared, list) else []:
         name = item.get("name") if isinstance(item, dict) else item
-        if isinstance(name, str) and name:
+        if isinstance(name, str) and _VALUE_NAME.match(name):
             names.add(name)
     return names
 
@@ -82,7 +97,7 @@ def piece_values(piece: dict[str, Any]) -> set[str]:
 def _contracts(piece: dict[str, Any], role: str) -> dict[int, dict[str, Any]]:
     found: dict[int, dict[str, Any]] = {}
     for contract in piece.get("contracts") or []:
-        if contract.get("role") == role and isinstance(contract.get("position"), int):
+        if isinstance(contract, dict) and contract.get("role") == role and _is_position(contract.get("position")):
             found[contract["position"]] = contract
     return found
 
@@ -118,6 +133,18 @@ def _one_key(value: Any, allowed: Iterable[frozenset[str]]) -> frozenset[str] | 
     return keys if keys in set(allowed) else None
 
 
+# What each key of a link must hold. A flow is free-form JSON written by a user,
+# so nothing is used as a key or an index before its type is known.
+_KEY_TYPES = {
+    "input": _is_position, "output": _is_position, "step": _is_position,
+    "setting": _is_name, "value": _is_name, "flow_input": _is_name, "flow_parameter": _is_name,
+}
+
+
+def _well_typed(part: dict[str, Any]) -> bool:
+    return all(_KEY_TYPES[key](value) for key, value in part.items())
+
+
 _TO_SHAPES = (frozenset(), frozenset({"input"}), frozenset({"setting"}))
 _FROM_SHAPES = (frozenset({"flow_input"}), frozenset({"flow_parameter"}), frozenset({"step"}),
                 frozenset({"step", "output"}), frozenset({"step", "value"}))
@@ -128,6 +155,16 @@ def check(
     *,
     refused_settings: Iterable[str] = (),
 ) -> Checked:
+    """Check a flow against its pieces. Never raises: a flow this module cannot
+    read is reported as a problem, not as a server error for whoever plans it."""
+    try:
+        return _check(flow, refused_settings)
+    except Exception as error:  # noqa: BLE001 — a flow is user-written JSON
+        return Checked(problems=[Problem(
+            "FLOW_MALFORMED", f"the flow could not be read: {type(error).__name__}")])
+
+
+def _check(flow: dict[str, Any], refused_settings: Iterable[str]) -> Checked:
     """Check a flow against its pieces.
 
     ``flow`` holds:
@@ -147,17 +184,26 @@ def check(
     """
     result = Checked()
     problems = result.problems
-    refused = set(refused_settings)
+    # Compared without regard to case: TAPIS_TOKEN is refused as tapis_token is.
+    refused = {str(name).lower() for name in refused_settings}
+
+    for key, limit in (("inputs", MAX_INPUTS), ("parameters", MAX_INPUTS), ("outputs", MAX_LINKS)):
+        if len(flow.get(key) or []) > limit:
+            problems.append(Problem("FLOW_TOO_LONG", f"a flow has at most {limit} {key}"))
+            return result
 
     flow_inputs: dict[str, DataObjectContract] = {}
     for item in flow.get("inputs") or []:
-        if isinstance(item, dict) and isinstance(item.get("id"), str):
+        if isinstance(item, dict) and _is_name(item.get("id")):
             contract = item.get("contract") or {}
+            if not isinstance(contract, (dict, DataObjectContract)):
+                problems.append(Problem("FLOW_MALFORMED", f"the contract of flow input {item['id']} is not an object"))
+                continue
             flow_inputs[item["id"]] = _addressable(
                 contract if isinstance(contract, DataObjectContract) else _contract_from_registry(contract),
                 f"input/{item['id']}")
     flow_parameters = {item["id"] for item in flow.get("parameters") or []
-                       if isinstance(item, dict) and isinstance(item.get("id"), str)}
+                       if isinstance(item, dict) and _is_name(item.get("id"))}
 
     steps = flow.get("steps") or []
     if not steps:
@@ -170,7 +216,10 @@ def check(
     by_position: dict[int, dict[str, Any]] = {}
     for step in steps:
         position = step.get("position")
-        if not isinstance(position, int) or isinstance(position, bool) or not 1 <= position <= MAX_STEPS:
+        if not isinstance(step, dict):
+            problems.append(Problem("FLOW_MALFORMED", "a step is an object"))
+            continue
+        if not _is_position(position) or not 1 <= position <= MAX_STEPS:
             problems.append(Problem("FLOW_STEP_POSITION", f"a step position is a whole number from 1 to {MAX_STEPS}"))
             continue
         if position in by_position:
@@ -197,10 +246,15 @@ def check(
         aimed_inputs: set[int] = set()
         after: set[int] = set()
 
-        for index, wire in enumerate(step.get("wires") or []):
+        wires = step.get("wires") or []
+        if not isinstance(wires, list) or len(wires) > MAX_LINKS:
+            problems.append(Problem("FLOW_TOO_LONG", f"a step has at most {MAX_LINKS} links", position))
+            continue
+        for index, wire in enumerate(wires):
             to_shape = _one_key((wire or {}).get("to"), _TO_SHAPES) if isinstance(wire, dict) else None
             from_shape = _one_key((wire or {}).get("from"), _FROM_SHAPES) if isinstance(wire, dict) else None
-            if to_shape is None or from_shape is None:
+            if (to_shape is None or from_shape is None
+                    or not _well_typed(wire["to"]) or not _well_typed(wire["from"])):
                 problems.append(Problem("FLOW_WIRE_SHAPE", "this link is not in a known form", position, index))
                 continue
             to, source = wire["to"], wire["from"]
@@ -210,8 +264,7 @@ def check(
             data: DataObjectContract | None = None
             if "step" in source:
                 source_position = source["step"]
-                if (not isinstance(source_position, int) or isinstance(source_position, bool)
-                        or source_position not in by_position):
+                if source_position not in by_position:
                     problems.append(Problem("FLOW_WIRE_SOURCE", "this link reads from a step that does not exist", position, index))
                     continue
                 if source_position >= position:
@@ -255,8 +308,7 @@ def check(
                     "FLOW_WIRE_SHAPE", "a link into an input or a setting names what it carries", position, index))
                 continue
             if "input" in to:
-                if isinstance(to["input"], int):
-                    aimed_inputs.add(to["input"])
+                aimed_inputs.add(to["input"])
                 target = inputs.get(to["input"])
                 if target is None:
                     problems.append(Problem("FLOW_WIRE_TARGET", "the piece has no such input", position, index))
@@ -281,7 +333,7 @@ def check(
                 if name not in arguments:
                     problems.append(Problem("FLOW_WIRE_TARGET", f"the piece has no setting named {name}", position, index))
                     continue
-                if name in refused:
+                if name.lower() in refused:
                     problems.append(Problem(
                         "FLOW_SETTING_REFUSED", f"{name} is managed by the adapter or carries a secret", position, index))
                     continue
@@ -302,7 +354,7 @@ def check(
         for name in sorted(settings):
             if name not in arguments:
                 problems.append(Problem("FLOW_SETTING_REFUSED", f"the piece has no setting named {name}", position))
-            elif name in refused:
+            elif str(name).lower() in refused:
                 problems.append(Problem(
                     "FLOW_SETTING_REFUSED", f"{name} is managed by the adapter or carries a secret", position))
             elif name in wired_settings:
@@ -325,9 +377,11 @@ def check(
 def _check_outputs(flow: dict[str, Any], by_position: dict[int, dict[str, Any]], result: Checked) -> None:
     for index, output in enumerate(flow.get("outputs") or []):
         position = output.get("step") if isinstance(output, dict) else None
-        piece = (by_position.get(position) or {}).get("piece") if isinstance(position, int) else None
+        piece = (by_position.get(position) or {}).get("piece") if _is_position(position) else None
         kinds = [key for key in ("output", "value", "record") if isinstance(output, dict) and key in output]
-        if not isinstance(piece, dict) or len(kinds) != 1:
+        typed = len(kinds) == 1 and (_is_position(output[kinds[0]]) if kinds[0] == "output"
+                                     else _is_name(output[kinds[0]]))
+        if not isinstance(piece, dict) or not typed:
             result.problems.append(Problem(
                 "FLOW_OUTPUT", f"flow output {index} names a step and one of its outputs, values or records"))
             continue
@@ -353,8 +407,9 @@ def _check_thread_bindings(
         return
     for role, target in sorted(bindings.items()):
         known = isinstance(target, dict) and (
-            (set(target) == {"input"} and target["input"] in flow_inputs)
-            or (set(target) == {"parameter"} and target["parameter"] in flow_parameters))
+            (set(target) == {"input"} and _is_name(target["input"]) and target["input"] in flow_inputs)
+            or (set(target) == {"parameter"} and _is_name(target["parameter"])
+                and target["parameter"] in flow_parameters))
         if role not in _THREAD_ROLES or not known:
             problems.append(Problem(
                 "FLOW_THREAD_BINDING",

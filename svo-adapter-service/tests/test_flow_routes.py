@@ -264,3 +264,112 @@ def test_checking_or_planning_a_flow_needs_a_signed_in_caller(monkeypatch):
             asyncio.run(main_module._require_signed_in(token))
         assert getattr(caught.value, "status_code", None) == 401
     main_module._CALLER_CACHE.clear()
+
+
+# --- what a flow's author may not do to whoever runs it ------------------------
+
+def submit(plan_id, **body):
+    return client.post("/workflows/submit", headers=AUTH, json={"plan_id": plan_id, **body})
+
+
+def test_a_flows_defaults_are_marked_and_need_the_submitters_acceptance(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    body = plan().json()
+    parameters = {p["name"]: p for p in body["plan_json"]["parameters"]}
+    assert parameters["top_n"]["default_source"] == "flow"
+    assert "default_source" not in parameters["source_uri"]
+    refused = submit(body["plan_id"])
+    detail = refused.json()["detail"]
+    assert refused.status_code == 422 and detail["code"] == "FLOW_SETTINGS_NOT_ACCEPTED"
+    assert detail["defaults"] == {"top_n": "25", "title": "Dictionary"} and detail["links"] == []
+
+
+def test_a_value_the_submitter_sends_needs_no_acceptance(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    plan_json = plan().json()["plan_json"]
+    own = main_module._unaccepted_flow_settings(plan_json, {"top_n": "9", "title": {"value": "Mine"}})
+    assert own == {"defaults": {}, "links": []}
+    partly = main_module._unaccepted_flow_settings(plan_json, {"top_n": "9"})
+    assert partly["defaults"] == {"title": "Dictionary"}
+
+
+def test_accepting_the_flows_settings_lets_the_submission_through(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    body = plan().json()
+    assert submit(body["plan_id"], dry_run=True).status_code == 200
+    gate = main_module._unaccepted_flow_settings(body["plan_json"], {})
+    assert gate["defaults"]  # there is something to accept, and a chain plan has none:
+    assert main_module._unaccepted_flow_settings({"parameters": body["plan_json"]["parameters"]}, {}) == {
+        "defaults": {}, "links": []}
+
+
+def test_a_setting_linked_from_an_earlier_step_is_listed_for_acceptance(monkeypatch):
+    first = client.post("/transform-specs", json={
+        "name": "resolve", "method": "tapis_function", "transform_type": "unit_convert",
+        "contracts": [{"role": "output", "standard_variable_uri": V + "archive"}],
+        "parameters_schema_json": {"properties": {}, "value_outputs": [{"name": "manifest_name"}]}}).json()["id"]
+    second = register("publish", ["archive"], [], settings_=["manifest_name"])
+    link = {"to": {"setting": "manifest_name"}, "from": {"step": 1, "value": "manifest_name"}}
+    stored_flow({}, monkeypatch, outputs=[], steps=[
+        {"position": 1, "etl_process_id": first, "settings": {}, "wires": []},
+        {"position": 2, "etl_process_id": second, "settings": {}, "wires": [from_step(1, 1, 1), link]}])
+    response = plan({})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["plan_json"]["flow"]["linked_settings"] == [
+        {"step": 2, "setting": "manifest_name", "from": {"step": 1, "value": "manifest_name"}}]
+    detail = submit(body["plan_id"]).json()["detail"]
+    assert detail["code"] == "FLOW_SETTINGS_NOT_ACCEPTED" and len(detail["links"]) == 1
+
+
+def test_a_flow_that_cannot_be_built_into_a_pipeline_is_refused_at_plan_time(monkeypatch):
+    resolve = client.post("/transform-specs", json={
+        "name": "resolve", "method": "tapis_function", "transform_type": "unit_convert",
+        "contracts": [{"role": "output", "standard_variable_uri": V + "archive"}],
+        "parameters_schema_json": {"properties": {}, "value_outputs": [{"name": "manifest_name"}]}}).json()["id"]
+    # Declares the setting but reads it through no task input.
+    publish = client.post("/transform-specs", json={
+        "name": "publish", "method": "tapis_function", "transform_type": "unit_convert",
+        "contracts": [{"role": "input", "standard_variable_uri": V + "archive"}],
+        "parameters_schema_json": {"properties": {"manifest_name": {"type": "string"}}}}).json()["id"]
+    link = {"to": {"setting": "manifest_name"}, "from": {"step": 1, "value": "manifest_name"}}
+    stored_flow({}, monkeypatch, outputs=[], steps=[
+        {"position": 1, "etl_process_id": resolve, "settings": {}, "wires": []},
+        {"position": 2, "etl_process_id": publish, "settings": {}, "wires": [from_step(1, 1, 1), link]}])
+    response = plan({})
+    assert response.status_code == 422 and response.json()["detail"]["code"] == "FLOW_DOES_NOT_BUILD"
+
+
+def test_another_users_private_piece_is_an_empty_step_and_nothing_about_it_is_reported(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    real = main_module._registry
+
+    async def registry(h, **kwargs):
+        rows = await real(h, **kwargs)
+        return [{**row, "visibility": "private", "owner_username": "someone-else"}
+                if row.get("name") == "score" else row for row in rows]
+    monkeypatch.setattr(main_module, "_registry", registry)
+    detail = plan().json()["detail"]
+    assert detail["code"] == "FLOW_DOES_NOT_CHECK_OUT"
+    assert ("FLOW_STEP_EMPTY", 2) in [(p["code"], p["step"]) for p in detail["problems"]]
+    assert "score" not in str(detail) and pieces["score"] not in str(detail)
+
+
+def test_a_piece_that_runs_as_a_tapis_app_cannot_be_a_flow_step_yet(monkeypatch):
+    app_piece = client.post("/transform-specs", json={
+        "name": "app", "method": "tapis_job", "tapis_app_id": "some-app", "transform_type": "custom",
+        "contracts": [{"role": "input", "standard_variable_uri": V + "corpus"},
+                      {"role": "output", "standard_variable_uri": V + "clean"}]}).json()["id"]
+    stored_flow({}, monkeypatch, outputs=[], steps=[
+        {"position": 1, "etl_process_id": app_piece, "settings": {}, "wires": [from_input("in:corpus", 1)]}])
+    detail = plan({"in:corpus": data_object("corpus", "tapis://sys/docs")}).json()["detail"]
+    assert (detail["code"], detail["steps"]) == ("FLOW_NOT_SUPPORTED", [1])
+
+
+def test_a_stored_flow_with_values_of_the_wrong_kind_is_refused_not_a_server_error(pieces, monkeypatch):
+    flow = stored_flow(pieces, monkeypatch)
+    flow["steps"][1]["wires"] = [{"to": {"input": True}, "from": {"flow_input": []}}, None]
+    flow["steps"].append("nope")
+    response = plan()
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["code"] == "FLOW_DOES_NOT_CHECK_OUT"

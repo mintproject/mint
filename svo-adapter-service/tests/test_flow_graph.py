@@ -223,3 +223,76 @@ def test_an_output_carries_forward_what_its_first_input_brought():
         step(2, needs, [from_step(1, 1, 1)]),
     ]))
     assert checked.ok, checked.problems
+
+
+# --- a flow is JSON a user wrote ----------------------------------------------
+import pytest  # noqa: E402
+
+UNHASHABLE_OR_WRONG = [
+    {"to": {"input": []}, "from": {"flow_input": "corpus"}},
+    {"to": {"input": True}, "from": {"flow_input": "corpus"}},
+    {"to": {"input": 1.0}, "from": {"flow_input": "corpus"}},
+    {"to": {"input": "1"}, "from": {"flow_input": "corpus"}},
+    {"to": {"setting": []}, "from": {"step": 1, "value": "v"}},
+    {"to": {"setting": ""}, "from": {"step": 1, "value": "v"}},
+    {"to": {"input": 1}, "from": {"flow_input": []}},
+    {"to": {"input": 1}, "from": {"flow_parameter": {}}},
+    {"to": {"input": 1}, "from": {"step": 1, "output": []}},
+    {"to": {"input": 1}, "from": {"step": 1, "output": True}},
+    {"to": {"input": 1}, "from": {"step": 1, "output": 1.0}},
+    {"to": {"input": 1}, "from": {"step": True, "output": 1}},
+    {"to": {"input": 1}, "from": {"step": 1, "value": []}},
+    {"to": {}, "from": {"step": "1"}},
+    None, 7, [], {"to": None, "from": None},
+]
+
+
+@pytest.mark.parametrize("wire", UNHASHABLE_OR_WRONG)
+def test_a_link_with_the_wrong_kind_of_value_is_a_problem_not_a_crash(wire):
+    checked = flow_graph.check(flow([
+        step(1, INGEST, [from_input("corpus", 1)]),
+        step(2, INGEST, [wire]),
+    ]))
+    assert "FLOW_WIRE_SHAPE" in codes(checked), wire
+
+
+@pytest.mark.parametrize("broken", [
+    {"steps": "nope"}, {"steps": [None]}, {"steps": [step(1, INGEST, "nope")]},
+    {"steps": [step(1, INGEST, [])], "outputs": [{"step": 1, "output": []}]},
+    {"steps": [step(1, INGEST, [])], "outputs": "nope"},
+    {"steps": [step(1, INGEST, [])], "thread_bindings": {"region": {"input": []}}},
+    {"steps": [step(1, INGEST, [])], "inputs": [{"id": "x", "contract": "nope"}]},
+    {"steps": [step(1, INGEST, [], settings=[1, 2])]},
+])
+def test_nothing_a_user_can_write_makes_the_check_raise(broken):
+    checked = flow_graph.check(broken)
+    assert not checked.ok
+
+
+def test_a_piece_with_unreadable_metadata_is_read_as_having_none():
+    # A piece's metadata is written by its owner. Garbage is not a crash.
+    checked = flow_graph.check({"steps": [step(1, {"contracts": "nope", "value_outputs": "nope"}, [])]})
+    assert checked.ok and checked.outputs == {1: {}}
+
+
+def test_sizes_are_limited():
+    many_links = [from_input("corpus", 1)] * 65
+    assert codes(flow_graph.check(flow([step(1, INGEST, many_links)]))) == ["FLOW_TOO_LONG"]
+    many_outputs = {"steps": [step(1, piece([], [TEXT]), [])], "outputs": [{"step": 1, "output": 1}] * 65}
+    assert codes(flow_graph.check(many_outputs)) == ["FLOW_TOO_LONG"]
+
+
+def test_a_refused_setting_is_refused_whatever_its_case():
+    a = piece([], [], arguments=["TAPIS_TOKEN", "Tapis_Base_Url"], values=["v"])
+    wires = [{"to": {"setting": "TAPIS_TOKEN"}, "from": {"step": 1, "value": "v"}}]
+    refused = {"tapis_token", "tapis_base_url"}
+    assert codes(flow_graph.check({"steps": [step(1, a, []), step(2, a, wires)]}, refused_settings=refused)) == [
+        "FLOW_SETTING_REFUSED"]
+    defaults = step(1, a, [], settings={"Tapis_Base_Url": "https://evil.example"})
+    assert codes(flow_graph.check({"steps": [defaults]}, refused_settings=refused)) == ["FLOW_SETTING_REFUSED"]
+
+
+def test_a_value_name_is_a_plain_identifier():
+    odd = {"contracts": [], "value_outputs": [{"name": "ok_name"}, {"name": "has space"}, {"name": "a-b"},
+                                              {"name": "x" * 65}, {"name": "'); import os"}, 7]}
+    assert flow_graph.piece_values(odd) == {"ok_name"}

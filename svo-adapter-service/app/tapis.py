@@ -849,14 +849,19 @@ def _flow_inputs(
     env_map: dict[str, Any],
     task_ids_by_step: dict[int, str],
     steps_by_number: dict[int, dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    """Task inputs for what a flow step receives through its links.
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Task inputs for what a flow step receives through its links, and the
+    inputs to take away.
 
     Each linked input ``k`` of the piece arrives as ``SOURCE_<k>``, from a pipeline
     argument (a flow input) or from an earlier task's output. The first linked
-    input is also given under the name a chain uses, ``SOURCE_RESULT``, when it
-    comes from an earlier step. A linked setting replaces the argument the piece
-    would otherwise have read for it.
+    input is also given under the names a chain uses: the input the piece bound
+    to ``source_uri``, and ``SOURCE_RESULT`` when it comes from an earlier step.
+    A step with no linked input is handed no dataset at all, so the input it
+    bound to ``source_uri`` is taken away. A linked setting replaces the argument
+    the piece would otherwise have read for it.
+
+    Raises ValueError for a link the piece cannot receive.
     """
     def value_from(source: dict[str, Any]) -> dict[str, Any]:
         if "arg" in source:
@@ -870,26 +875,32 @@ def _flow_inputs(
     inputs: dict[str, dict[str, Any]] = {}
     wires = [w for w in step.get("wires") or [] if w.get("to")]
     data = sorted((w for w in wires if "input" in w["to"]), key=lambda w: int(w["to"]["input"]))
+    # A piece written for a chain reads its source from the argument source_uri.
+    # In a flow that argument is the flow's first input, which is not this
+    # step's input for every step.
+    source_envs = [env for env, arg in env_map.items() if str(arg) == "source_uri"]
     for index, wire in enumerate(data):
         bound = {"type": "string", "value_from": value_from(wire["from"])}
         inputs[f"SOURCE_{int(wire['to']['input'])}"] = bound
-        if index == 0 and "step" in wire["from"]:
-            inputs["SOURCE_RESULT"] = dict(bound)
-        elif index == 0:
-            # A piece written for a chain reads its source from the argument
-            # source_uri. Hand it this step's own first input under that name,
-            # which is not the flow's first input for every step.
-            for env, arg in env_map.items():
-                if str(arg) == "source_uri":
-                    inputs[env] = dict(bound)
+        if index == 0:
+            for env in source_envs:
+                inputs[env] = dict(bound)
+            if "step" in wire["from"]:
+                inputs["SOURCE_RESULT"] = dict(bound)
     for wire in wires:
         if "setting" not in wire["to"]:
             continue
         name = str(wire["to"]["setting"])
-        names = [env for env, arg in env_map.items() if str(arg) == name] or [name.upper()]
-        for env in names:
+        envs = [env for env, arg in env_map.items() if str(arg) == name]
+        if not envs:
+            # No guessing at a name: a made-up input could replace one the
+            # adapter fills in, such as the runner's token.
+            raise ValueError(f"the piece reads the setting {name} through no task input")
+        for env in envs:
+            if env in inputs or str(env).upper().startswith(("SOURCE_", "TAPIS_")):
+                raise ValueError(f"a link may not replace the task input {env}")
             inputs[env] = {"type": "string", "value_from": value_from(wire["from"])}
-    return inputs
+    return inputs, ([] if data else source_envs)
 
 
 _INPUT_SECRET_PARAMS = frozenset({
@@ -1190,7 +1201,10 @@ def generate_tapis_workflow(
                             "type": "string", "required": True,
                             "description": "A dataset the flow takes as an input",
                         }
-                inputs.update(_flow_inputs(s, env_map, task_ids_by_step, steps_by_number))
+                linked, taken_away = _flow_inputs(s, env_map, task_ids_by_step, steps_by_number)
+                for env in taken_away:
+                    inputs.pop(env, None)
+                inputs.update(linked)
             elif (transform_type == "unit_convert" or s.get("python_source")) and source_task_id:
                 # Stored code keeps any SOURCE_URI it bound and also receives the
                 # preceding function's result.

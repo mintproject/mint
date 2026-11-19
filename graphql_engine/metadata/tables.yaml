@@ -5112,7 +5112,20 @@
   insert_permissions:
   - role: user
     permission:
-      check: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
+      # The caller's own configuration, and one that is not in use as a model: it has
+      # no Tapis app, no setups under it, and no thread or run that picked it. Making
+      # a model other people run into a flow would change what their threads run.
+      # created_at is not insertable: the step trigger relies on it.
+      check:
+        _or:
+        - configuration:
+            _and:
+            - {owner_username: {_eq: X-Hasura-User-Id}}
+            - tapis_app_id: {_is_null: true}
+            - _not: {child_configurations: {}}
+            - _not: {thread_models: {}}
+            - _not: {executions: {}}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
       columns: [configuration_id, outputs_json, thread_bindings_json]
   select_permissions:
   - role: anonymous
