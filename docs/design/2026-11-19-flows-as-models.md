@@ -117,12 +117,25 @@ Checked against `develop` at `1a22db1`.
 - A wire is valid when the source's contract fits the input's contract, by the same
   comparison the planner uses today. The graph may not contain a loop.
 
+Four additions came out of writing the SUBSIDE displacement flow as pieces (phase 0,
+check 3; the result is under Decisions):
+
+- **A piece may return a value as well as data**: a job id, a file name, a label. A value
+  output has a name and a type and no standard variable. It can be wired into a later
+  piece's setting.
+- **A wire may carry nothing.** "Runs after" is a valid link between two pieces, for a
+  piece that changes something in place for a later one to find.
+- **A flow output may be a published record** (a catalog entry) as well as a file.
+- **A flow says which of its inputs and settings are the thread's region and dates.** The
+  thread fills those in; a flow that names none is not asked for them.
+
 **Catalog shape**
 
 - `modelcatalog_configuration_step`: `configuration_id`, `position`, `etl_process_id`
   (`ON DELETE SET NULL`), `settings_json`.
-- `modelcatalog_configuration_step_wire`: for a step's input, either the flow input it
-  reads or the earlier step and output it reads. Exactly one of the two.
+- `modelcatalog_configuration_step_wire`: what one step receives from where. The target
+  is an input or a setting of the step, or nothing ("runs after"). The source is a flow
+  input, or an output of an earlier step.
 - `modelcatalog_configuration_step_output`: which step and output a flow output row
   comes from.
 - A configuration is a flow when it has steps. Readers ask one boolean, `is_flow`,
@@ -485,6 +498,28 @@ reordered or dropped without undoing the first four.
   - **The pause is held by the Ensemble Manager and run as segments** (architecture).
   - **Not taken:** keeping the chain with an optional input map. Superseded by the
     user's decision on several inputs and outputs.
+- 2026-11-19, phase 0 check 3, the SUBSIDE displacement flow on paper
+  (`subside/tapis/workflows/pipelines/werc-opera.yaml`, three tasks):
+
+  | Piece | Receives | Returns |
+  |---|---|---|
+  | run | area of interest (data); Earthdata login (secret file); dates, reference point, queue and memory (settings) | the result archive (data); the job id (value) |
+  | publish | the archive, from run | a manifest (value); it also writes the manifest into the archive |
+  | stac-publish | the archive, from run; collection, organisation and catalog logins (settings, some secret) | catalog records |
+
+  What the graph shape already covered: one dataset in plus settings; a piece with two
+  outputs; a piece reading the output of a piece that is not the one before it.
+
+  What it did not cover, now added to "What a flow is":
+  - stac-publish must run after publish but receives nothing from it;
+  - the job id, manifest name and labels are values, not datasets, and the related
+    `subside-publish` pipeline wires such values into later settings;
+  - the flow's result is a set of catalog records;
+  - the area of interest and the dates are the thread's region and time period.
+
+  Also confirmed as needed by a second family, and already in the design: a secret that
+  is a file and not a model key; settings for queue, cores and memory; and a run that
+  lasts hours and outlives its user's token (step 7 of the earlier spec).
 
 ## User feedback / decisions
 
