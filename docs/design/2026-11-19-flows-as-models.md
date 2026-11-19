@@ -117,12 +117,25 @@ Checked against `develop` at `1a22db1`.
 - A wire is valid when the source's contract fits the input's contract, by the same
   comparison the planner uses today. The graph may not contain a loop.
 
+Four additions came out of writing the SUBSIDE displacement flow as pieces (phase 0,
+check 3; the result is under Decisions):
+
+- **A piece may return a value as well as data**: a job id, a file name, a label. A value
+  output has a name and a type and no standard variable. It can be wired into a later
+  piece's setting.
+- **A wire may carry nothing.** "Runs after" is a valid link between two pieces, for a
+  piece that changes something in place for a later one to find.
+- **A flow output may be a published record** (a catalog entry) as well as a file.
+- **A flow says which of its inputs and settings are the thread's region and dates.** The
+  thread fills those in; a flow that names none is not asked for them.
+
 **Catalog shape**
 
 - `modelcatalog_configuration_step`: `configuration_id`, `position`, `etl_process_id`
   (`ON DELETE SET NULL`), `settings_json`.
-- `modelcatalog_configuration_step_wire`: for a step's input, either the flow input it
-  reads or the earlier step and output it reads. Exactly one of the two.
+- `modelcatalog_configuration_step_wire`: what one step receives from where. The target
+  is an input or a setting of the step, or nothing ("runs after"). The source is a flow
+  input, or an output of an earlier step.
 - `modelcatalog_configuration_step_output`: which step and output a flow output row
   comes from.
 - A configuration is a flow when it has steps. Readers ask one boolean, `is_flow`,
@@ -204,10 +217,23 @@ In the Ensemble Manager, built on the `adapter_steps` branch, not as a parallel 
 5. **Cancel** uses the adapter's run.
 
 **Secret settings.** A parameter row marked secret is the general form of the model key.
-Its value is accepted only in the submit request, passed to the adapter, and kept out of
-the plan, `parameter_values`, its hash, and `thread_model_parameter` by an allow-list. A
-rerun asks for it again. Phase 0 check 4 decides how much has to change. Step 6 of the
-earlier spec (a key held for the user) builds on this.
+Its value is never typed into a run and never passes through the Ensemble Manager.
+
+- The runner stores the secret once with the adapter, encrypted, as a model's owner can
+  today. The store is extended from the owner's secrets to each user's own.
+- A flow names the secret a piece needs. At submit the adapter binds the runner's stored
+  secret by id; the plan and the run record hold the id, never the value.
+- The piece fetches the value when it starts, with a per-run credential. That fetch exists
+  for the model task and is extended to function pieces.
+- A flow that needs a secret the runner has not stored is refused at plan time, naming
+  what is missing.
+- A secret setting has no default, and is never one of the region or date settings.
+- The UI gets a page for a user's saved credentials: add, replace, delete, never shown.
+
+This replaces "sent with the submit and filtered out", which phase 0 check 4 showed would
+have to cover about a dozen tables, hashes, logs and responses. It also does most of what
+step 6 of the earlier spec needed; what remains of step 6 is a key the operator holds for
+everyone.
 
 ### Phase C — Finding, running and watching a flow in the UI
 
@@ -401,7 +427,9 @@ reordered or dropped without undoing the first four.
   piece with two outputs returns both; an existing one-input piece is unchanged. Live:
   register the three sensemaking flows and the SUBSIDE flow, and plan each.
 - **B:** run counters and results with no Tapis job; several bound datasets; cancel; a
-  secret value appears in no plan, record, hash or log; a rerun asks for it again. Live:
+  stored secret is bound by id and its value appears in no plan, record, hash, log or
+  response; a flow whose secret the runner has not stored is refused at plan time; one
+  user cannot bind or fetch another user's secret. Live:
   the second account runs a flow from a thread through the API.
 - **C:** the badge and filter; an unavailable flow cannot be picked; stages side by side;
   every output listed. Live: the second account runs a flow in the browser.
@@ -445,7 +473,7 @@ reordered or dropped without undoing the first four.
 3. **Should a user need a problem statement to run a flow?** A "run this flow" button
    that opens a thread is held back until this is answered.
 4. **Who approves pieces beyond dev**, and against what written standard? Carried over.
-5. **Can the browser upload to Tapis Files?** Phase 0 check 7.
+5. **Can the browser upload to Tapis Files?** Yes (phase 0 check 7, under Decisions).
 
 ## Decisions
 
@@ -485,9 +513,90 @@ reordered or dropped without undoing the first four.
   - **The pause is held by the Ensemble Manager and run as segments** (architecture).
   - **Not taken:** keeping the chain with an optional input map. Superseded by the
     user's decision on several inputs and outputs.
+- 2026-11-19, phase 0 check 3, the SUBSIDE displacement flow on paper
+  (`subside/tapis/workflows/pipelines/werc-opera.yaml`, three tasks):
+
+  | Piece | Receives | Returns |
+  |---|---|---|
+  | run | area of interest (data); Earthdata login (secret file); dates, reference point, queue and memory (settings) | the result archive (data); the job id (value) |
+  | publish | the archive, from run | a manifest (value); it also writes the manifest into the archive |
+  | stac-publish | the archive, from run; collection, organisation and catalog logins (settings, some secret) | catalog records |
+
+  What the graph shape already covered: one dataset in plus settings; a piece with two
+  outputs; a piece reading the output of a piece that is not the one before it.
+
+  What it did not cover, now added to "What a flow is":
+  - stac-publish must run after publish but receives nothing from it;
+  - the job id, manifest name and labels are values, not datasets, and the related
+    `subside-publish` pipeline wires such values into later settings;
+  - the flow's result is a set of catalog records;
+  - the area of interest and the dates are the thread's region and time period.
+
+  Also confirmed as needed by a second family, and already in the design: a secret that
+  is a file and not a model key; settings for queue, cores and memory; and a run that
+  lasts hours and outlives its user's token (step 7 of the earlier spec).
+
+- 2026-11-19, phase 0 check 4, where a run setting's value ends up (code trace; nothing
+  was run):
+  - **The secret handling that exists covers credentials a model's owner registers, not
+    values a runner types.** The owner stores the value with the adapter, encrypted. A run
+    binds it by id, and the task fetches it at run time with a per-run credential
+    (`/runs/{id}/credentials`). The value never passes through the Ensemble Manager.
+  - **A value a runner types is kept in many places.** `thread_model_parameter`,
+    `thread_adapter_plan.parameter_values`, `unified_execution.parameter_values`, an
+    unsalted hash of the values that is copied into step rows and idempotency keys,
+    `execution_parameter_binding`, the run history response, several log lines (the whole
+    thread is logged on every run), the Tapis pipeline's arguments, and a dry run's
+    response.
+  - **Conclusion.** Keeping a typed value out of all of those is a long allow-list that
+    every later change could break. The proposal is to change phase B: a secret setting is
+    never typed into a run. The runner stores it once with the adapter, as owners do
+    today, and the flow names it. This extends the existing store to a runner's own
+    secrets and the run-time fetch to function pieces. Approved by the user on 2026-11-19 ("approve").
+  - Two rules hold either way: a secret setting has no default, and is never one of the
+    region or date settings, because both are recorded with the plan.
+- 2026-11-19, phase 0 check 5, readers of a configuration's Tapis component:
+  - In the Ensemble Manager: `verifyComponents` (fixed in #432), `previewExecutions` and
+    `createExecutions` (the model being run only), `TapisExecutionService`
+    (`verifyComponent`, `submitExecutions`, `buildCompositeJob`), and the local and Wings
+    engines. `modelFromGQL` reads it on every thread load and tolerates it being empty.
+  - In the adapter: the catalog sync reads it for every configuration and falls back to a
+    function task with a warning; composite submit and secret registration check it for
+    one model.
+  - Phase B therefore has to branch before `previewExecutions`, `createExecutions` and
+    `buildCompositeJob` for a flow, and the adapter's sync has to skip flow
+    configurations.
+  - An input or output with position 0 is treated as having no position and fails the
+    run. A flow's rows are numbered from 1.
+
+- 2026-11-19, phase 0 check 1 on dev after #431 deployed: with no token the run list and
+  a run lookup answer 401. The first account lists its 31 runs and the second account its
+  2, with none in common. The second account gets 404 reading, polling or asking for the
+  provenance of one of the first account's runs.
+- 2026-11-19, phase 0 check 6, the existing recommendations on five descriptions (the
+  three sensemaking flows, the displacement flow, and one word):
+  - **Standard variables are ranked well.** The right variable was first each time, with
+    scores of 0.5 to 0.7: the term-count variable for the dictionary flow, the
+    narrative-frame variable for the narrative flow, the term-set variable for
+    formulation, the displacement-rate variable for SUBSIDE.
+  - **Model configurations are ranked poorly**, at 0.2 to 0.5, and unrelated hydrology
+    models appear. No flow is a configuration yet, so there was nothing right to find.
+  - **It does not decline on thin text.** One word returned results at about 0.18. The
+    existing rule is a minimum length, not a minimum score.
+  - **Conclusion for phase D.** Rank by standard variable, then let the piece graph find
+    the pieces that produce and consume those variables. Add a score floor below which
+    nothing is suggested. Ranking pieces or flows directly waits until flows are indexed.
+- 2026-11-19, phase 0 check 7, browser upload: Tapis Files answers a browser's preflight
+  from the dev UI's address for `POST` and `GET`, allowing the `x-tapis-token` header from
+  any origin. A browser can upload to the user's Tapis storage directly. Open question 5
+  is answered yes; the upload in phase C goes ahead.
 
 ## User feedback / decisions
 
 See "User need" for the user's words.
+
+- 2026-11-19: "ok approved", for the four additions that came out of the SUBSIDE check
+  (value outputs, order-only links, published-record outputs, region and dates from the
+  thread).
 
 - 2026-11-19: "1 approved", in answer to "Do you approve the revised spec?"
