@@ -92,7 +92,21 @@ def test_a_report_a_piece_made_unreadable_is_ignored_not_raised():
 def test_an_overlong_location_is_not_an_output():
     detail = {"tasks": [{"task_id": "step-2-custom", "status": "completed",
                          "stdout": report(result="tapis://s/" + "x" * 3000)}]}
+    assert flow_run.view(PLAN, detail)["outputs"][0]["location"] is None
+    detail["tasks"][0]["stdout"] = report(result="x" * 30_000)
     assert flow_run.view(PLAN, detail)["outputs"][0]["value"] is None
+
+
+def test_a_piece_written_for_a_chain_reports_a_summary_and_its_folder_is_the_location():
+    # Seen on dev: each sensemaking piece returns one JSON summary of all it wrote.
+    summary = json.dumps({"report_uri": "tapis://s/out/summary.md", "documents": 81,
+                          "output_uri": "tapis://s/out", "padding": "x" * 2500})
+    detail = {"tasks": [{"task_id": "step-2-custom", "status": "completed", "stdout": report(result=summary)}]}
+    output = flow_run.view(PLAN, detail)["outputs"][0]
+    assert output["value"] == summary and output["location"] == "tapis://s/out"
+    assert flow_run.location("tapis://s/out/report.md") == "tapis://s/out/report.md"
+    assert flow_run.location(json.dumps({"no": "folder"})) is None
+    assert flow_run.location("{broken") is None and flow_run.location(None) is None
 
 
 def _run(source, output_ids, monkeypatch, capsys):

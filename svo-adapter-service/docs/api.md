@@ -134,9 +134,11 @@ from a flow:
 
 - `steps`: one entry per step with `step`, `name`, `task_id`, `depends_on`, `status`
   (`pending`, `running`, `completed`, `failed`, `cancelled`, `skipped`) and `message`.
-- `outputs`: the flow's outputs as registered, each with `value`: where the output is, or
-  the value the step returned. `value` is null until the step has finished, and for a
-  published record.
+- `outputs`: the flow's outputs as registered, each with `value` (what the step reported)
+  and `location` (where the output is). Both are null until the step has finished, and
+  for a published record. A piece written for a flow reports each output's location, and
+  `location` is that. A piece written for a chain reports one JSON summary of everything
+  it wrote; `location` is then the summary's `output_uri`, the folder it wrote to.
 
 - `status`: the run's status in the adapter's words (`running`, `completed`, `failed`,
   `cancelled`). The top-level `status` of a poll is Tapis's own and is not mapped.
@@ -144,7 +146,7 @@ from a flow:
 Tapis Workflows does not report a task's named outputs, so every flow step prints them as
 its last line of output, `{"svo_flow_outputs": {...}}`, and the adapter reads that back.
 A report line over 100,000 characters, or one that cannot be read as JSON, is skipped. A
-location over 2,000 characters is not reported.
+reported value over 20,000 characters, or a location over 2,000, is not given.
 
 **A piece that runs as a Tapis app.** A Tapis Workflows job task returns nothing a later
 task can read. In a flow, an app piece therefore runs through a function that submits the

@@ -816,6 +816,26 @@ reordered or dropped without undoing the first four.
   - Tests: Ensemble Manager 450 passing, 57 of them for flows; adapter 794 passing with
     the same four failures.
 
+- 2026-11-19, phase B checked on dev (mint #436, 40ee81d): the dictionary flow was run
+  from a thread through `POST /v1/plans` and `/v1/plans/submit`.
+  - **Worked:** the thread was planned as a flow with its four steps; one run and one
+    execution were recorded; the thread showed each step as its own stage; all four steps
+    completed in about four minutes; **the adapter read each step's printed report back
+    from live Tapis**, which was the unproven part.
+  - **Did not work:** no result was filed and the run was closed as failed
+    (`FLOW_OUTPUTS_UNREPORTED`). The sensemaking pieces were written for a chain. Each
+    reports one JSON summary of everything it wrote, for the next piece to read, not a
+    location. The thread side takes only a plain location. One summary was also longer
+    than the 2,000-character limit that the review fix had put on a reported value.
+  - **Fix:** the adapter's flow view gives each output a `location` beside its `value`.
+    For a summary, the location is its `output_uri`, the folder the piece wrote to. The
+    limit of 2,000 characters applies to the location; a reported value may be 20,000.
+    The Ensemble Manager files the location. Both outputs of the dictionary flow
+    therefore point at the run's folder until the pieces report each file themselves.
+  - Also fixed: the run's Tapis pipeline and run ids were missing from its stages.
+  - Seen, not changed: Tapis cuts a task's stderr at 10,000 characters. If stdout is cut
+    the same way and from the end, a piece that prints more than that loses its report.
+
 ## User feedback / decisions
 
 See "User need" for the user's words.

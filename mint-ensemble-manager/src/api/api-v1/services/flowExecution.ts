@@ -144,6 +144,11 @@ function isResultLocation(value: unknown): value is string {
     );
 }
 
+/** Where the adapter says an output is; an adapter from before it said so gives only the value. */
+function whereItIs(output: any): unknown {
+    return typeof output?.location === "string" ? output.location : output?.value;
+}
+
 function ageMs(record: UnifiedExecutionRecord): number {
     const stamp = Date.parse(String(record.updated_at || record.created_at || ""));
     return Number.isNaN(stamp) ? 0 : Date.now() - stamp;
@@ -457,6 +462,8 @@ export async function reconcileFlow(
     const next: FlowChild = {
         ...child,
         status,
+        tapis_workflow_id: polled?.tapis_workflow_id || child.tapis_workflow_id || null,
+        tapis_run_id: polled?.tapis_run_id || child.tapis_run_id || null,
         steps: Array.isArray(polled?.flow?.steps) ? polled.flow.steps : child.steps,
         error_message: polled?.error_message || null
     };
@@ -472,12 +479,12 @@ export async function reconcileFlow(
                 (output: any) =>
                     typeof output?.output_id === "string" &&
                     names.has(output.output_id) &&
-                    isResultLocation(output.value)
+                    isResultLocation(whereItIs(output))
             )
             .map((output: any) => ({
                 model_io_id: output.output_id as string,
                 name: names.get(output.output_id) as string,
-                url: output.value as string
+                url: whereItIs(output) as string
             }));
         if (names.size && !outputs.length) {
             // Every step finished, yet none said where an output is. Filing the run
