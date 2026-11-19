@@ -2091,11 +2091,28 @@ async def _require_signed_in(bearer: str | None) -> str | None:
 
 
 def _piece_summary(view: dict[str, Any]) -> dict[str, Any]:
+    """What whoever registers a flow needs to know about a piece: where a link can
+    go, and the settings a flow may give it with their type and default."""
+    refused = {name.lower() for name in _refused_flow_settings()}
+    properties = (view.get("parameters_schema_json") or {}).get("properties") or {}
+    settings = sorted(name for name in flow_graph.piece_arguments(view) if name.lower() not in refused)
+
+    def contracts(found: dict[int, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        return {str(position): {key: contract.get(key) for key in ("standard_variable_uri", "unit", "format")
+                                if contract.get(key) is not None}
+                for position, contract in sorted(found.items())}
+
     return {
         "inputs": sorted(flow_graph.piece_inputs(view)),
         "outputs": sorted(flow_graph.piece_outputs(view)),
-        "settings": sorted(flow_graph.piece_arguments(view) - _refused_flow_settings()),
+        "settings": settings,
         "values": sorted(flow_graph.piece_values(view)),
+        "input_contracts": contracts(flow_graph.piece_inputs(view)),
+        "output_contracts": contracts(flow_graph.piece_outputs(view)),
+        "setting_details": {
+            name: {key: properties[name].get(key) for key in ("type", "default", "description")
+                   if isinstance(properties.get(name), dict) and properties[name].get(key) is not None}
+            for name in settings},
     }
 
 

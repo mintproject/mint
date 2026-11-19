@@ -110,8 +110,12 @@ def test_a_flow_that_fits_checks_out_and_describes_its_pieces(pieces):
     ])
     assert result["ok"] is True and result["problems"] == []
     assert result["depends_on"] == {"1": [], "2": [1]}
-    assert result["pieces"][pieces["score"]] == {
+    described = result["pieces"][pieces["score"]]
+    assert {key: described[key] for key in ("inputs", "outputs", "settings", "values")} == {
         "inputs": [1, 2], "outputs": [1], "settings": ["top_n"], "values": []}
+    assert described["setting_details"] == {"top_n": {"type": "string"}}
+    assert described["input_contracts"]["2"] == {"standard_variable_uri": V + "lexicon"}
+    assert described["output_contracts"] == {"1": {"standard_variable_uri": V + "counts"}}
 
 
 def test_a_check_reports_each_problem_with_its_step_and_link(pieces):

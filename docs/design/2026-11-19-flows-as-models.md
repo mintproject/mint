@@ -345,7 +345,8 @@ reordered or dropped without undoing the first four.
 
 - **New tables:** `modelcatalog_configuration_flow` and `modelcatalog_configuration_step`;
   a `flow` relationship on `modelcatalog_configuration`.
-- **Model Catalog API:** `POST /flows`, `GET /flows`, `DELETE /flows/{id}`.
+- **Model Catalog API:** `POST /flows`. A flow is listed and deleted as the configuration
+  it is, through the existing routes.
 - **Ensemble Manager:** `POST /v1/plans` accepts a flow configuration; run responses carry
   one stage per piece and a waiting-for-user status; a resume route (phase E).
 - **Adapter:** `POST /flows/check`, a graph check from piece ids and links;
@@ -659,6 +660,33 @@ reordered or dropped without undoing the first four.
     needs its own fix.
   - **For phase B:** a flow's `outputs_json` is copied into the plan without checking
     `output_id` or `record`. Whatever registers a flow's results must not trust them.
+
+- 2026-11-19, phase A, second part (`POST /flows` on the Model Catalog API, the adapter's
+  catalog sync):
+  - **The flow row cannot be nested under a new configuration** in one Hasura insert. The
+    route sends the model rows and the flow row as two fields of one mutation, which
+    Hasura runs in one transaction. Tested locally: when the flow is refused, the
+    configuration and everything under it is rolled back.
+  - **A flow input is named by a short key in the request** and becomes a dataset
+    specification id in the catalog. Input, output and setting ids are derived from the
+    configuration id.
+  - **The route reads the caller's username from the token without verifying it.** It is
+    only used as the owner value; the catalog verifies the token and refuses a write
+    whose owner is not the caller.
+  - **`GET /flows` and `DELETE /flows/{id}` are not built.** A flow is listed and deleted
+    as the configuration it is, through the existing routes. Deleting the configuration
+    removes the flow and its steps.
+  - **A flow family is given the type `sdm#Model`.** The marker is the flow row; no
+    ontology term was invented for a flow.
+  - **New setting `SVO_ADAPTER_API_URL` on the Model Catalog API**, carried by the dev
+    deploy script, the chart (optional) and the local stack. Unset, `POST /flows` answers
+    503 and nothing else changes.
+  - **The adapter's catalog sync skips flow configurations**, and still runs against a
+    catalog from before flows existed.
+  - Tested locally: the route's real output written to a local catalog as three users
+    (new family, existing version, another user's version, another user's family); a
+    duplicate configuration id is refused. Model Catalog API suite 184 passing; adapter
+    suite 759 passing with the four failures that predate this work.
 
 ## User feedback / decisions
 

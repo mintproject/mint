@@ -167,6 +167,15 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(specs["ui"]["image"], "ghcr.io/mintproject/ui:sha-def5678")
         self.assertEqual(specs["api"]["image"], "ghcr.io/mintproject/model-catalog-api:develop")
 
+    def test_the_model_catalog_api_is_told_where_the_adapter_is(self):
+        # POST /flows asks the adapter whether a flow's pieces fit together. Set by the
+        # deploy, not by hand on the pod, so that a redeploy keeps it.
+        specs = deploy.build_specs("mintproject", "develop", "https://portals.tapis.io", {})
+        self.assertEqual(
+            specs["api"]["environment_variables"]["SVO_ADAPTER_API_URL"],
+            "https://mintdevsvo.pods.portals.tapis.io",
+        )
+
     def test_manifest_image_map_rejects_wrong_repository(self):
         with self.assertRaises(SystemExit):
             deploy.parse_image_map(
