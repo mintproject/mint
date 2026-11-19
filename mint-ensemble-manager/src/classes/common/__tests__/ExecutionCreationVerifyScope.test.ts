@@ -7,6 +7,8 @@ jest.mock("@/classes/graphql/graphql_functions");
 const RUNNABLE = "https://w3id.org/okn/i/mint/runnable";
 const NO_COMPONENT = "https://w3id.org/okn/i/mint/no-component";
 
+type LoadableModel = { id: string; code_url: string };
+
 function threadWithTwoModels(): Thread {
     return {
         model_ensembles: { [RUNNABLE]: { id: "tm-1" }, [NO_COMPONENT]: { id: "tm-2" } },
@@ -24,10 +26,12 @@ describe("ExecutionCreation.prepareExecutions component checks", () => {
         // A configuration with no component cannot be loaded at all.
         getModelDetails = jest
             .spyOn(
-                ExecutionCreation.prototype as unknown as { getModelDetails: () => unknown },
+                ExecutionCreation.prototype as unknown as {
+                    getModelDetails: (model: LoadableModel) => Promise<unknown>;
+                },
                 "getModelDetails"
             )
-            .mockImplementation(async (model: { id: string; code_url: string }) => {
+            .mockImplementation(async (model: LoadableModel) => {
                 if (!model.code_url) throw new Error("Component not found: " + model.id);
                 return { id: "comp", version: "1", inputs: [], outputs: [] };
             });
