@@ -745,6 +745,36 @@ describe("running a flow from a thread", () => {
             ]);
         });
 
+        it("files the location the adapter gives when a step reported a summary", async () => {
+            // Seen on dev: a piece written for a chain reports one JSON summary.
+            const svc = await started();
+            poll({
+                status: "completed",
+                tapis_workflow_id: "pipe-9",
+                tapis_run_id: "uuid-9",
+                flow: {
+                    ...FLOW_VIEW,
+                    outputs: [
+                        {
+                            step: 2,
+                            output_id: "out-report",
+                            value: '{"output_uri": "tapis://sys/out", "documents": 81}',
+                            location: "tapis://sys/out"
+                        }
+                    ]
+                }
+            });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect(run.status).toBe("completed");
+            expect(flows.finishFlowExecution.mock.calls[0][4]).toEqual([
+                { model_io_id: "out-report", name: "Sensemaking report", url: "tapis://sys/out" }
+            ]);
+            expect(run.workflow_stages[0].provider_ids).toMatchObject({
+                workflow_id: "pipe-9",
+                run_id: "uuid-9"
+            });
+        });
+
         it("goes by the adapter's word for the run, not Tapis's raw status", async () => {
             const svc = await started();
             poll({ status: "TERMINATED", flow: { ...FLOW_VIEW, status: "failed" } });

@@ -17,7 +17,8 @@ from . import tapis
 REPORT_KEY = "svo_flow_outputs"
 # A report line is a handful of ids and locations. Anything longer is not one.
 _MAX_REPORT_LINE = 100_000
-_MAX_VALUE = 2_000
+_MAX_VALUE = 20_000
+_MAX_LOCATION = 2_000
 
 _STATUS = {
     "completed": "completed", "complete": "completed", "success": "completed", "succeeded": "completed",
@@ -49,11 +50,33 @@ def reported_outputs(stdout: Any) -> dict[str, Any]:
     return {}
 
 
+def location(value: Any) -> str | None:
+    """Where an output is, from what its step reported.
+
+    A piece written for a flow reports each output's location. A piece written
+    for a chain reports one summary of everything it wrote, as JSON, for the next
+    piece to read; the folder it wrote to is that summary's ``output_uri``.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if text.startswith("{"):
+        try:
+            summary = json.loads(text)
+        except Exception:
+            return None
+        text = summary.get("output_uri") if isinstance(summary, dict) else None
+        if not isinstance(text, str):
+            return None
+    return text if text and len(text) <= _MAX_LOCATION else None
+
+
 def view(plan_json: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | None:
     """Steps and outputs of a flow run, or None when the plan is not a flow.
 
     ``detail`` is tapis.get_run_detail's answer. A step Tapis has not started yet
     is ``pending``. An output whose step has not reported is given with no value.
+    ``value`` is what the step reported; ``location`` is where the output is.
     """
     flow = plan_json.get("flow")
     if not isinstance(flow, dict):
@@ -88,6 +111,6 @@ def view(plan_json: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | 
         else:
             output_id = None  # a published record: reported by the publication, not here
         value = reported.get(declared["step"], {}).get(output_id) if output_id else None
-        outputs.append({**declared,
-                        "value": value if isinstance(value, str) and len(value) <= _MAX_VALUE else None})
+        value = value if isinstance(value, str) and len(value) <= _MAX_VALUE else None
+        outputs.append({**declared, "value": value, "location": location(value)})
     return {"configuration_id": flow.get("configuration_id"), "steps": steps, "outputs": outputs}
