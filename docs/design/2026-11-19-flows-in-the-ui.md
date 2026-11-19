@@ -175,7 +175,8 @@ have to be brought to the runner's storage before the first piece runs.
    comes with it.
 5. **Limits.** At most 500 resources and a total size limit per collection, both
    settings of the adapter. Two resources with the same file name get a number added.
-6. **Where the folder is.** Under one staging root per runner (see open question 5).
+6. **Where the folder is.** In the runner's scratch on the execution system (see open
+   question 5).
 7. **The data step in the web app** needs no new field: it already lets a user pick a
    dataset and its resources. For a collection input it shows "all N files are read
    together" in place of the count of runs.
@@ -308,15 +309,18 @@ download a result.
    that takes a collection. Pasting a location is left out of the first build.
 2. **Should a flow be hidden when its outputs lack the thread's indicator?** The plan
    keeps today's rule for models and flows alike.
-3. **May I drive a browser on dev with your token** for the checks? The alternative is
-   that you click through and I read the results.
+3. Answered 2026-11-19: "you can drive". The browser checks on dev are driven with the
+   user's token.
 4. Answered by the review: files go through the Ensemble Manager, so the browser does
    not call Tapis for C1. The question returns for upload in C4.
 
-5. **Where does the gather task put the files, and where do a new user's outputs go?**
-   Proposed: one adapter setting naming a storage system and a path with the username in
-   it, as the test runs used (`cloud.data`, the user's home). This has been open since
-   the earlier spec.
+5. Answered 2026-11-19: the runner's scratch on the execution system, under
+   `dynamo-runs/<run>/`, where model runs already stage their inputs. Gathered files go
+   in `inputs/<input>/`. A flow setting named `output_uri` that the runner leaves empty
+   defaults to `outputs/` beside it. The user's home on `cloud.data` was rejected ("thsi
+   is not a good location"). Consequences, to be said on the screen: the runner needs an
+   account on the execution system, and files there are cleaned up by the system, so a
+   result worth keeping is published to the catalog or copied out.
 
 ## Decisions
 
