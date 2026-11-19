@@ -3043,6 +3043,14 @@
   - name: software_version
     using:
       foreign_key_constraint_on: software_version_id
+  # Present when the configuration is a flow of ETL pieces, null when it is a model.
+  - name: flow
+    using:
+      foreign_key_constraint_on:
+        column: configuration_id
+        table:
+          name: modelcatalog_configuration_flow
+          schema: public
   - name: parent_configuration
     using:
       foreign_key_constraint_on: model_configuration_id
@@ -5086,6 +5094,74 @@
     permission:
       columns: [etl_process_id, role, position, standard_variable_uri, unit, format, dimensionality, spatial_type, crs_requirement, temporal_resolution, schema_requirement_json]
       filter: {}
+- table:
+    name: modelcatalog_configuration_flow
+    schema: public
+  object_relationships:
+  - name: configuration
+    using:
+      foreign_key_constraint_on: configuration_id
+  array_relationships:
+  - name: steps
+    using:
+      foreign_key_constraint_on:
+        column: configuration_id
+        table:
+          name: modelcatalog_configuration_step
+          schema: public
+  insert_permissions:
+  - role: user
+    permission:
+      check: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
+      columns: [configuration_id, outputs_json, thread_bindings_json]
+  select_permissions:
+  - role: anonymous
+    permission:
+      columns: [configuration_id, outputs_json, thread_bindings_json, created_at]
+      filter: {}
+  - role: user
+    permission:
+      columns: [configuration_id, outputs_json, thread_bindings_json, created_at]
+      filter: {}
+  # No update: a flow's graph does not change in place. Plans are built from it and a
+  # changed flow is a new configuration. Deleting it removes its steps (ON DELETE CASCADE)
+  # and turns the configuration back into a model with no component.
+  delete_permissions:
+  - role: user
+    permission:
+      filter: {_or: [{configuration: {owner_username: {_eq: X-Hasura-User-Id}}}, {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}]}
+- table:
+    name: modelcatalog_configuration_step
+    schema: public
+  object_relationships:
+  - name: flow
+    using:
+      foreign_key_constraint_on: configuration_id
+  - name: etl_process
+    using:
+      foreign_key_constraint_on: etl_process_id
+  insert_permissions:
+  - role: user
+    permission:
+      # The caller's own flow, naming a piece the caller can see. Without the second
+      # half a flow could be used to find out that a private piece exists.
+      check:
+        _or:
+        - _and:
+          - flow: {configuration: {owner_username: {_eq: X-Hasura-User-Id}}}
+          - etl_process: {_or: [{visibility: {_eq: public}}, {visibility: {_eq: shared}}, {owner_username: {_eq: X-Hasura-User-Id}}]}
+        - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
+      columns: [configuration_id, position, etl_process_id, settings_json, wires_json, pause_after]
+  select_permissions:
+  - role: anonymous
+    permission:
+      columns: [configuration_id, position, etl_process_id, settings_json, wires_json, pause_after]
+      filter: {}
+  - role: user
+    permission:
+      columns: [configuration_id, position, etl_process_id, settings_json, wires_json, pause_after]
+      filter: {}
+  # No update and no delete: steps go only when their flow goes.
 - table:
     name: modelcatalog_admin
     schema: public
