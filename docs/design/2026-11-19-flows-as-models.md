@@ -769,6 +769,53 @@ reordered or dropped without undoing the first four.
   - Tests: Ensemble Manager 429 passing, 36 of them new; adapter 791 passing with the four
     failures that predate this work.
 
+- 2026-11-19, independent security review of phase B, and what changed because of it.
+  The review asked for a revision before merge. Changed:
+  - **The caller is checked against the thread.** The thread is read with the caller's
+    token, so the database shows it only to someone who may read it. Running a flow also
+    requires that the caller may change the thread (its creator, or someone it gives write
+    access). Before this the service read and wrote the thread with its own identity, so
+    any signed-in user who knew a thread's id could plan and run a flow in it.
+  - **A plan runs only for the user who made it** (`FLOW_PLAN_NOT_YOURS`). The plan id
+    carries its planner's name, under the same signature as the rest. A plan holds its
+    planner's datasets and region.
+  - **These checks come before anything is read back or written**, so someone else's
+    refused attempt cannot use up a plan or be handed its run.
+  - **Closing a run no longer depends on who asks.** The names of the flow's outputs are
+    kept with the run at submit. Before this they were read from the thread at each poll,
+    and a failed read, or a poll with no token, closed the run as done with no results,
+    for good. A poll with no token now changes nothing.
+  - **A run that finishes without reporting where any output is fails**
+    (`FLOW_OUTPUTS_UNREPORTED`) instead of being filed as done with nothing to show.
+  - **Only a plain Tapis location is filed as a result**: `tapis://system/path`, at most
+    2000 characters, with no `..`. A location comes from what a piece printed and becomes
+    a link on the results screen and a folder the files view lists. The review suggested
+    limiting it further, to the run's own output folder; that is not done, because a
+    flow's pieces each choose their folder. Tapis still decides what the reader may list.
+    An `https` location (a catalog record, say) is not filed yet.
+  - **A result row belongs to its run.** Its id was the hash of the location alone, so a
+    run reporting a location another run had filed would have renamed that row.
+  - **A submission cut short is taken up again** on the next submit of the same plan,
+    reusing the record already written for the thread. Before this it stayed "dispatching"
+    with no way to finish or cancel it.
+  - **One open run of a flow per thread** (`FLOW_ALREADY_RUNNING`). Starting a run resets
+    the thread's counts, and an earlier run finishing later was counted on them.
+  - **The run's status is the adapter's own word**, sent in the flow view. Tapis's raw
+    status sat in the same field, so a run Tapis terminated was never closed.
+  - **Adapter: a submission cannot replace what the plan fixed** (`FLOW_ARGUMENT_FIXED`):
+    the datasets and region bound at plan time, the run's own identifiers and the token.
+    A dataset sent at submit skipped the contract check made at plan time.
+  - **Adapter: a report line a piece made unreadable is skipped**, not raised: one nested
+    too deeply made every poll of the run fail. Report lines and locations have a length
+    limit.
+  - Left as they are, and why: anyone holding a run's id can read its record, as for a
+    model run (the id is unguessable); with more than one copy of the service running,
+    two could close the same run at the same moment and count it twice (dev runs one);
+    a refused submission (the adapter saying no) still uses up its plan, so the flow is
+    planned again.
+  - Tests: Ensemble Manager 450 passing, 57 of them for flows; adapter 794 passing with
+    the same four failures.
+
 ## User feedback / decisions
 
 See "User need" for the user's words.

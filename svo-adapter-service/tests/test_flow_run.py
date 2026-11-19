@@ -80,6 +80,21 @@ def test_the_last_report_line_is_the_one_that_counts():
     assert flow_run.reported_outputs(json.dumps({"svo_flow_outputs": "nope"})) == {}
 
 
+def test_a_report_a_piece_made_unreadable_is_ignored_not_raised():
+    # Nested past what json reads, or too long to be a report: skipped, so the
+    # poll still answers and an earlier, readable line is used.
+    deep = '{"svo_flow_outputs": ' + "[" * 100_000 + "]" * 100_000 + "}"
+    assert flow_run.reported_outputs(deep) == {}
+    long = json.dumps({"svo_flow_outputs": {"result": "x" * 200_000}})
+    assert flow_run.reported_outputs(report(result="tapis://s/real") + long + "\n") == {"result": "tapis://s/real"}
+
+
+def test_an_overlong_location_is_not_an_output():
+    detail = {"tasks": [{"task_id": "step-2-custom", "status": "completed",
+                         "stdout": report(result="tapis://s/" + "x" * 3000)}]}
+    assert flow_run.view(PLAN, detail)["outputs"][0]["value"] is None
+
+
 def _run(source, output_ids, monkeypatch, capsys):
     outputs: dict[str, str] = {}
     context = types.SimpleNamespace(get_input=lambda name: None,

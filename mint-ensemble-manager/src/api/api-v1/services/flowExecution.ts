@@ -19,6 +19,8 @@ import { UnifiedExecutionRecord, UnifiedExecutionStore } from "./unifiedExecutio
 /** What the plan id carries for a flow. Small: the plan id is an indexed column. */
 export interface FlowPlan {
     adapter_plan_id: string;
+    /** Who planned it. The plan holds that user's datasets, so only they may run it. */
+    planned_by: string;
 }
 
 export interface FlowInputBinding {
@@ -32,6 +34,8 @@ export interface FlowInputBinding {
 
 export interface FlowThreadContext {
     is_flow: boolean;
+    /** The caller the thread was read as. */
+    caller?: string;
     /** Which input or setting the thread's region and dates fill in (catalog ids). */
     thread_bindings: Record<string, { input?: string; parameter?: string }>;
     inputs: FlowInputBinding[];
@@ -45,12 +49,22 @@ export interface FlowThreadContext {
 
 /** The thread's side of a flow run: reads the thread and writes its run records. */
 export interface FlowThreadService {
+    /**
+     * What the thread bound to the flow, read as the caller. `write` also requires
+     * that the caller may change the thread, as running a flow in it does.
+     */
     flowContext(
         threadmodel: { thread_id: string; model_id: string },
-        authorization: string
+        authorization: string,
+        access?: "read" | "write"
     ): Promise<FlowThreadContext>;
-    /** Record a run that is about to start. Returns the execution's id. */
-    startFlowExecution(threadId: string, modelId: string, runId: string): Promise<string>;
+    /** Record a run that is about to start, for a caller who may change the thread. Returns the execution's id. */
+    startFlowExecution(
+        threadId: string,
+        modelId: string,
+        runId: string,
+        authorization: string
+    ): Promise<string>;
     /** Close the run's record, filing each output as a result. Safe to call twice. */
     finishFlowExecution(
         threadId: string,
@@ -94,9 +108,51 @@ interface FlowChild {
     tapis_run_id?: string | null;
     error_message?: string | null;
     steps?: Array<Record<string, any>>;
+    /** The flow's outputs as its submitter saw them, to file each as a result. */
+    outputs?: { model_io_id: string; name: string }[];
 }
 
 const TERMINAL = new Set(["completed", "failed"]);
+/** How long a submission may sit with no pipeline before it is taken as interrupted. */
+const DISPATCH_GRACE_MS = 60 * 1000;
+const ABANDONED_MS = 10 * 60 * 1000;
+
+const RUN_STATUS: Record<string, string> = {
+    completed: "completed",
+    finished: "completed",
+    normal_completion: "completed",
+    failed: "failed",
+    error: "failed",
+    terminated: "failed",
+    cancelled: "cancelled"
+};
+
+const TAPIS_LOCATION = /^tapis:\/\/[A-Za-z0-9][A-Za-z0-9._-]*\/[^\s\u0000-\u001f]*$/;
+
+/**
+ * A result's location comes from what a piece printed. It becomes a link on the
+ * thread's results screen and a folder the files view lists, so only a plain
+ * Tapis location is taken: nothing a browser would run, and no climbing out of
+ * a folder.
+ */
+function isResultLocation(value: unknown): value is string {
+    return (
+        typeof value === "string" &&
+        value.length <= 2000 &&
+        TAPIS_LOCATION.test(value) &&
+        !value.split("/").includes("..")
+    );
+}
+
+function ageMs(record: UnifiedExecutionRecord): number {
+    const stamp = Date.parse(String(record.updated_at || record.created_at || ""));
+    return Number.isNaN(stamp) ? 0 : Date.now() - stamp;
+}
+
+/** A submission that was recorded but whose pipeline was never started. */
+function neverStarted(record: UnifiedExecutionRecord): boolean {
+    return record.status === "adapter_dispatching" && !(record.adapter_run_ids || []).length;
+}
 
 /** Settings the thread itself fills in: its own values, then its dates where the flow asks. */
 function threadValues(context: FlowThreadContext): Record<string, unknown> {
@@ -129,6 +185,13 @@ export async function planFlow(
     if (!authorization) return null;
     const context = await deps.flows.flowContext(threadmodel, authorization);
     if (!context.is_flow) return null;
+    if (!context.caller) {
+        throw new UnifiedExecutionError(
+            401,
+            "a Tapis token is required to plan a flow",
+            "AUTH_REQUIRED"
+        );
+    }
 
     const inputs: Record<string, string> = {};
     const regionInput = context.thread_bindings.region?.input;
@@ -208,7 +271,7 @@ export async function planFlow(
     }
     const parameters: Array<Record<string, any>> = planned.plan_json?.parameters || [];
     return {
-        flow: { adapter_plan_id: planned.plan_id } as FlowPlan,
+        flow: { adapter_plan_id: planned.plan_id, planned_by: context.caller } as FlowPlan,
         parameters,
         parameter_values: threadValues(context),
         // What the flow's author chose for pieces that run with the runner's token.
@@ -238,8 +301,6 @@ export async function submitFlow(
     body: any,
     authorization: string | undefined
 ): Promise<UnifiedExecutionRecord> {
-    const existing = await deps.store.getByPlanId(planId);
-    if (existing) return existing;
     if (!authorization) {
         throw new UnifiedExecutionError(
             401,
@@ -247,29 +308,76 @@ export async function submitFlow(
             "AUTH_REQUIRED"
         );
     }
+    // Before anything is read back or written: the caller may change this thread,
+    // and this is the plan they made. A plan carries its planner's datasets.
     const context = await deps.flows.flowContext(
         { thread_id: plan.thread_id, model_id: plan.model_id },
-        authorization
+        authorization,
+        "write"
     );
+    if (!context.is_flow || !context.caller || context.caller !== plan.flow.planned_by) {
+        throw new UnifiedExecutionError(
+            403,
+            "this flow plan was made by someone else; plan the flow again to run it",
+            "FLOW_PLAN_NOT_YOURS"
+        );
+    }
+    const existing = await deps.store.getByPlanId(planId);
+    // A submission cut short after it was recorded (the service stopped, or the
+    // record could not be written) is taken up again. The adapter starts one
+    // pipeline per run id however often it is asked.
+    const resume = existing && neverStarted(existing) && ageMs(existing) > DISPATCH_GRACE_MS;
+    if (existing && !resume) return existing;
+    if (!existing && deps.store.listByThread) {
+        // One open run of a flow per thread: starting a run resets the thread's
+        // counts, and an earlier run finishing later would be counted on them.
+        const open = (await deps.store.listByThread(plan.thread_id, plan.model_id)).find(
+            (other) =>
+                other.plan_id !== planId &&
+                !TERMINAL.has(other.status) &&
+                !(neverStarted(other) && ageMs(other) > ABANDONED_MS)
+        );
+        if (open) {
+            throw new UnifiedExecutionError(
+                409,
+                "this thread already has a run of this flow in progress; wait for it or cancel it",
+                "FLOW_ALREADY_RUNNING",
+                { run_id: deps.parentRunId(open.id) }
+            );
+        }
+    }
     // The caller's values win over what the thread holds.
-    const values = { ...threadValues(context), ...(body.parameter_values || {}) };
+    const values = existing
+        ? ((existing.parameter_values || {}) as Record<string, unknown>)
+        : { ...threadValues(context), ...(body.parameter_values || {}) };
 
-    const parent = await deps.store.insert({
-        plan_id: planId,
-        thread_id: plan.thread_id,
-        model_id: plan.model_id,
-        execution_engine: plan.execution_engine,
-        status: "adapter_dispatching",
-        idempotency_key: body.idempotency_key || planId,
-        plan_hash: planHash,
-        adapter_steps: [],
-        adapter_run_ids: [],
-        parameter_values: values
-    });
+    const parent =
+        existing ||
+        (await deps.store.insert({
+            plan_id: planId,
+            thread_id: plan.thread_id,
+            model_id: plan.model_id,
+            execution_engine: plan.execution_engine,
+            status: "adapter_dispatching",
+            idempotency_key: body.idempotency_key || planId,
+            plan_hash: planHash,
+            adapter_steps: [],
+            adapter_run_ids: [],
+            parameter_values: values
+        }));
     const runId = deps.parentRunId(parent.id);
-    let executionId: string | null = null;
+    let executionId: string | null = parent.model_child_id || null;
     try {
-        executionId = await deps.flows.startFlowExecution(plan.thread_id, plan.model_id, runId);
+        if (!executionId) {
+            executionId = await deps.flows.startFlowExecution(
+                plan.thread_id,
+                plan.model_id,
+                runId,
+                authorization
+            );
+            // Kept at once, so a submission taken up again reuses this record.
+            await deps.store.update(parent.id, { model_child_id: executionId });
+        }
         const result = await deps.adapterRequest(
             "/workflows/submit",
             {
@@ -292,7 +400,8 @@ export async function submitFlow(
             execution_kind: "workflow",
             stage: "flow",
             tapis_workflow_id: result.tapis_workflow_id || null,
-            tapis_run_id: result.tapis_run_id || null
+            tapis_run_id: result.tapis_run_id || null,
+            outputs: context.outputs
         };
         const updated = await deps.store.update(parent.id, {
             status: "adapter_running",
@@ -324,7 +433,6 @@ export async function submitFlow(
 export async function reconcileFlow(
     deps: FlowDeps,
     record: UnifiedExecutionRecord,
-    context: FlowThreadContext | null,
     authorization: string | undefined
 ): Promise<UnifiedExecutionRecord> {
     if (TERMINAL.has(record.status)) return record;
@@ -343,7 +451,9 @@ export async function reconcileFlow(
         // have failed, so its record is left as it is.
         return record;
     }
-    const status = String(polled?.status || child.status || "running");
+    // The adapter's own word for the run where it gives one; Tapis's otherwise.
+    const raw = String(polled?.flow?.status || polled?.status || child.status || "running");
+    const status = RUN_STATUS[raw.toLowerCase()] || raw.toLowerCase();
     const next: FlowChild = {
         ...child,
         status,
@@ -353,21 +463,43 @@ export async function reconcileFlow(
     const executionId = record.model_child_id || null;
 
     if (status === "completed") {
-        const names = new Map((context?.outputs || []).map((o) => [o.model_io_id, o.name]));
+        // The outputs as the submitter saw them, kept with the run: closing a run
+        // must not depend on who is asking or on a read that can fail.
+        const names = new Map((child.outputs || []).map((o) => [o.model_io_id, o.name]));
         // Only an output the flow registered, and whose step reported where it is.
         const outputs = (Array.isArray(polled?.flow?.outputs) ? polled.flow.outputs : [])
             .filter(
                 (output: any) =>
                     typeof output?.output_id === "string" &&
                     names.has(output.output_id) &&
-                    typeof output.value === "string" &&
-                    output.value
+                    isResultLocation(output.value)
             )
             .map((output: any) => ({
                 model_io_id: output.output_id as string,
                 name: names.get(output.output_id) as string,
                 url: output.value as string
             }));
+        if (names.size && !outputs.length) {
+            // Every step finished, yet none said where an output is. Filing the run
+            // as done with nothing to show would hide that for good.
+            if (executionId) {
+                await deps.flows.finishFlowExecution(
+                    record.thread_id,
+                    record.model_id,
+                    executionId,
+                    "failed",
+                    []
+                );
+            }
+            const message = "the flow finished but its steps did not report where its outputs are";
+            const unreported = await deps.store.update(record.id, {
+                status: "failed",
+                adapter_run_ids: [{ ...next, error_message: message }],
+                failure_code: "FLOW_OUTPUTS_UNREPORTED",
+                error_message: message
+            });
+            return unreported || { ...record, status: "failed", adapter_run_ids: [next] };
+        }
         if (executionId) {
             await deps.flows.finishFlowExecution(
                 record.thread_id,

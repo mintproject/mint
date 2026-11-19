@@ -2075,6 +2075,24 @@ def _unaccepted_flow_settings(plan_json: dict[str, Any], args: dict[str, Any]) -
     return {"defaults": defaults, "links": list(plan_json["flow"].get("linked_settings") or [])}
 
 
+def _fixed_flow_args(plan_json: dict[str, Any], args: dict[str, Any]) -> list[str]:
+    """Arguments of a flow run that a submission may not send.
+
+    A flow's datasets and region are checked against each piece's contract when
+    the flow is planned, and are stored in the plan. A value sent at submit would
+    replace one unchecked. The run's own identifiers are not the submitter's to
+    choose either.
+    """
+    if not isinstance(plan_json.get("flow"), dict):
+        return []
+    fixed = accepted_aliases(
+        str(parameter["name"]) for parameter in plan_json.get("parameters") or []
+        if parameter.get("managed") and parameter.get("name"))
+    fixed.update({"execution_id", "source_uri", "tapis_token"})
+    sent = normalize_args(_wrap_args(args or {}))
+    return sorted(name for name in sent if name in fixed)
+
+
 def _flow_region(region: dict[str, Any] | None, used: list[str], inputs: dict[str, str],
                  flow: dict[str, Any]) -> tuple[str | None, str | None]:
     """The flow input that takes the thread's region, and the region as GeoJSON
@@ -3237,6 +3255,12 @@ async def submit_workflow(
         if tapis.plan_publishes((plan.get("plan_json") or {}).get("steps") or []):
             await _enforce_run_owner(body.execution_id, token)
 
+    fixed = _fixed_flow_args(plan.get("plan_json") or {}, body.args)
+    if fixed:
+        raise HTTPException(422, detail={
+            "code": "FLOW_ARGUMENT_FIXED", "arguments": fixed,
+            "message": "these were set when the flow was planned (its datasets and region) or belong "
+                       "to the run itself; plan again to change them"})
     unaccepted = _unaccepted_flow_settings(plan.get("plan_json") or {}, body.args)
     if (unaccepted["defaults"] or unaccepted["links"]) and not body.accept_flow_settings and not body.dry_run:
         raise HTTPException(422, detail={
@@ -3719,7 +3743,9 @@ async def poll_run(
     flow_view = flow_run.view((plan_row or {}).get("plan_json") or {}, detail)
     if flow_view is not None:
         # One entry per step with its status, and where each of the flow's outputs is.
-        response["flow"] = flow_view
+        # The run's status in the adapter's own words: Tapis's raw status is also
+        # in this response, and a caller following a flow must not have to map it.
+        response["flow"] = {**flow_view, "status": str(run.get("status") or "")}
     outcome = await _record_run_publication(h, run, detail)
     if outcome:
         response["publication"] = outcome

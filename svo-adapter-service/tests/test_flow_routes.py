@@ -288,6 +288,20 @@ def test_a_flows_defaults_are_marked_and_need_the_submitters_acceptance(pieces, 
     assert detail["defaults"] == {"top_n": "25", "title": "Dictionary"} and detail["links"] == []
 
 
+def test_a_submission_cannot_replace_what_the_plan_fixed(pieces, monkeypatch):
+    # The dataset was checked against the piece's contract at plan time. A value
+    # sent at submit would replace it unchecked.
+    stored_flow(pieces, monkeypatch)
+    body = plan().json()
+    for args in ({"source_uri": "tapis://other/system"}, {"execution_id": "x"}, {"tapis_token": "t"}):
+        refused = submit(body["plan_id"], args=args, accept_flow_settings=True)
+        detail = refused.json()["detail"]
+        assert refused.status_code == 422 and detail["code"] == "FLOW_ARGUMENT_FIXED"
+        assert detail["arguments"] == sorted(args)
+    assert main_module._fixed_flow_args({"parameters": [{"name": "source_uri", "managed": True}]},
+                                        {"source_uri": "x"}) == []  # not a flow: the chain rules apply
+
+
 def test_a_value_the_submitter_sends_needs_no_acceptance(pieces, monkeypatch):
     stored_flow(pieces, monkeypatch)
     plan_json = plan().json()["plan_json"]

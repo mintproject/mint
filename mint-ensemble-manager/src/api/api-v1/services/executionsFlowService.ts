@@ -5,7 +5,7 @@
  */
 import { GraphQL } from "@/config/graphql";
 import { KeycloakAdapter } from "@/config/keycloak-adapter";
-import { NotFoundError } from "@/classes/common/errors";
+import { ForbiddenError, NotFoundError } from "@/classes/common/errors";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { getMd5Hash, threadFromGQL, uuidv4 } from "@/classes/graphql/graphql_adapter";
 import {
@@ -21,6 +21,7 @@ import {
 import { getThread } from "@/classes/graphql/graphql_functions_v2";
 import getConfigurationFlowGQL from "@/classes/graphql/queries/model/get-configuration-flow.graphql";
 import { Execution, ExecutionSummary, Thread } from "@/classes/mint/mint-types";
+import { getTokenFromAuthorizationHeader, usernameFromToken } from "@/utils/authUtils";
 import { FlowThreadContext, FlowThreadService } from "./flowExecution";
 
 const NOT_A_FLOW: FlowThreadContext = {
@@ -41,6 +42,41 @@ async function configurationFlow(configurationId: string) {
     return result?.data?.modelcatalog_configuration_flow_by_pk || null;
 }
 
+/** May this user change the thread? The same rule the database applies to a write. */
+function mayWrite(thread: any, username: string): boolean {
+    const granted = (thread.permissions || []).some(
+        (permission: any) =>
+            permission?.write === true &&
+            (permission.user_id === username || permission.user_id === "*")
+    );
+    const created = (thread.events || []).some(
+        (event: any) => event?.event === "CREATE" && event.userid === username
+    );
+    return granted || created;
+}
+
+/**
+ * The thread, read as the caller: the database returns it only to someone who may
+ * read it. Running a flow changes the thread's run records, so `write` also asks
+ * that the caller may change the thread. This service writes those records with
+ * its own identity, so nothing later would stop a caller who may not.
+ */
+async function loadThreadAs(
+    threadId: string,
+    authorization: string,
+    access: "read" | "write"
+): Promise<{ thread: Thread; caller: string }> {
+    const token = getTokenFromAuthorizationHeader(authorization);
+    const caller = await usernameFromToken(token);
+    const response: any = await getThread(threadId, token);
+    if (!response) throw new NotFoundError("Thread not found");
+    if (access === "write" && !mayWrite(response, caller)) {
+        throw new ForbiddenError("You may not run models in this thread");
+    }
+    return { thread: threadFromGQL(response), caller };
+}
+
+/** The thread, read by this service for a run it already started for its submitter. */
 async function loadThread(threadId: string): Promise<Thread> {
     const response = await getThread(threadId);
     if (!response) throw new NotFoundError("Thread not found");
@@ -57,10 +93,10 @@ function dateString(value: unknown): string | undefined {
 const finishing = new Map<string, Promise<void>>();
 
 const executionsFlowService: FlowThreadService = {
-    async flowContext(threadmodel): Promise<FlowThreadContext> {
+    async flowContext(threadmodel, authorization, access = "read"): Promise<FlowThreadContext> {
         const flow = await configurationFlow(threadmodel.model_id);
         if (!flow) return NOT_A_FLOW;
-        const thread = await loadThread(threadmodel.thread_id);
+        const { thread, caller } = await loadThreadAs(threadmodel.thread_id, authorization, access);
         const model = thread.models?.[threadmodel.model_id];
         if (!model || !thread.model_ensembles?.[threadmodel.model_id]) {
             throw new NotFoundError("Thread model not found");
@@ -73,6 +109,7 @@ const executionsFlowService: FlowThreadService = {
         ];
         return {
             is_flow: true,
+            caller,
             thread_bindings:
                 flow.thread_bindings_json && typeof flow.thread_bindings_json === "object"
                     ? flow.thread_bindings_json
@@ -114,8 +151,8 @@ const executionsFlowService: FlowThreadService = {
         };
     },
 
-    async startFlowExecution(threadId, modelId, runId): Promise<string> {
-        const thread = await loadThread(threadId);
+    async startFlowExecution(threadId, modelId, runId, authorization): Promise<string> {
+        const { thread } = await loadThreadAs(threadId, authorization, "write");
         const threadModelId = thread.model_ensembles?.[modelId]?.id;
         if (!threadModelId) throw new NotFoundError("Thread model not found");
 
@@ -178,7 +215,9 @@ const executionsFlowService: FlowThreadService = {
             const results: Record<string, { id: string; name: string; url: string }> = {};
             for (const output of outputs) {
                 results[output.model_io_id] = {
-                    id: getMd5Hash(output.url),
+                    // This run's own row. A row keyed by the location alone could be
+                    // one another run already filed, which this would then rename.
+                    id: getMd5Hash(`${executionId}|${output.model_io_id}|${output.url}`),
                     name: output.name,
                     url: output.url
                 };

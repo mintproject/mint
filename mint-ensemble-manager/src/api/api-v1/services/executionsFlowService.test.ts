@@ -11,8 +11,15 @@ import {
     updateExecutionStatusResultsAndSummary
 } from "@/classes/graphql/graphql_functions";
 import { getThread } from "@/classes/graphql/graphql_functions_v2";
+import { getMd5Hash } from "@/classes/graphql/graphql_adapter";
+
+import { usernameFromToken } from "@/utils/authUtils";
 
 const mockFlowQuery = jest.fn();
+jest.mock("@/utils/authUtils", () => ({
+    getTokenFromAuthorizationHeader: (header: string) => header.split(" ")[1],
+    usernameFromToken: jest.fn()
+}));
 jest.mock("@/classes/graphql/graphql_functions");
 jest.mock("@/classes/graphql/graphql_functions_v2");
 jest.mock("@/config/keycloak-adapter", () => ({ KeycloakAdapter: { getUser: jest.fn() } }));
@@ -32,12 +39,19 @@ const asFlow = (bindings: unknown = {}) =>
         }
     });
 
+const CREATED_BY_ALICE = { event: "CREATE", userid: "alice" };
+const threadFor = (over: Record<string, unknown>) => ({
+    ...JSON.parse(JSON.stringify(getThreadMock.data.thread_by_pk)),
+    events: [],
+    permissions: [],
+    ...over
+});
+
 describe("the thread's side of a flow run", () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        (getThread as jest.Mock).mockResolvedValue(
-            JSON.parse(JSON.stringify(getThreadMock.data.thread_by_pk))
-        );
+        (usernameFromToken as jest.Mock).mockResolvedValue("alice");
+        (getThread as jest.Mock).mockResolvedValue(threadFor({ events: [CREATED_BY_ALICE] }));
         (getRegionDetails as jest.Mock).mockResolvedValue(getRegionMockTexas);
         (insertThreadModelExecutionSummary as jest.Mock).mockResolvedValue({});
     });
@@ -110,9 +124,65 @@ describe("the thread's side of a flow run", () => {
         });
     });
 
+    describe("who may read and run", () => {
+        const ids = { thread_id: THREAD, model_id: MODEL };
+
+        it("reads the thread as the caller, and says who that is", async () => {
+            asFlow();
+            const context = await executionsFlowService.flowContext(ids, "Bearer t");
+            expect(getThread).toHaveBeenCalledWith(THREAD, "t");
+            expect(context.caller).toBe("alice");
+        });
+
+        it("has no thread for a caller the database does not show it to", async () => {
+            asFlow();
+            (getThread as jest.Mock).mockResolvedValue(null);
+            await expect(executionsFlowService.flowContext(ids, "Bearer t")).rejects.toThrow(
+                "Thread not found"
+            );
+        });
+
+        it("lets someone who can only read a thread plan in it, but not run", async () => {
+            asFlow();
+            (getThread as jest.Mock).mockResolvedValue(
+                threadFor({
+                    events: [{ event: "CREATE", userid: "bob" }],
+                    permissions: [{ user_id: "*", read: true, write: false }]
+                })
+            );
+            await expect(executionsFlowService.flowContext(ids, "Bearer t")).resolves.toMatchObject(
+                { is_flow: true }
+            );
+            await expect(
+                executionsFlowService.flowContext(ids, "Bearer t", "write")
+            ).rejects.toThrow("You may not run models in this thread");
+            await expect(
+                executionsFlowService.startFlowExecution(THREAD, MODEL, "ue_x", "Bearer t")
+            ).rejects.toThrow("You may not run models in this thread");
+            expect(setExecutions).not.toHaveBeenCalled();
+            expect(insertThreadModelExecutionSummary).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            [{ user_id: "alice", read: true, write: true }],
+            [{ user_id: "*", read: true, write: true }]
+        ])("lets someone the thread gives write access run: %o", async (permission) => {
+            asFlow();
+            (getThread as jest.Mock).mockResolvedValue(threadFor({ permissions: [permission] }));
+            await expect(
+                executionsFlowService.flowContext(ids, "Bearer t", "write")
+            ).resolves.toMatchObject({ caller: "alice" });
+        });
+    });
+
     describe("recording a run", () => {
         it("writes one execution the thread can find by the run's id, and counts it", async () => {
-            const id = await executionsFlowService.startFlowExecution(THREAD, MODEL, "ue_parent-1");
+            const id = await executionsFlowService.startFlowExecution(
+                THREAD,
+                MODEL,
+                "ue_parent-1",
+                "Bearer t"
+            );
 
             const [[executions, threadModelId]] = (setExecutions as jest.Mock).mock.calls;
             expect(executions).toHaveLength(1);
@@ -158,6 +228,8 @@ describe("the thread's side of a flow run", () => {
                 name: "Report",
                 url: "tapis://sys/out/report.md"
             });
+            // A row of this run's own, so another run's row for the same place is not renamed.
+            expect(execution.results["out-1"].id).not.toBe(getMd5Hash("tapis://sys/out/report.md"));
         });
 
         it("marks a failed run failed, with no results", async () => {

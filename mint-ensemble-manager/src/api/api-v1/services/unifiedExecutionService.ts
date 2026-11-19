@@ -809,17 +809,10 @@ export function createUnifiedExecutionService(
     const reconcileFlowRun = async (record: UnifiedExecutionRecord, authorization?: string) => {
         const deps = flowDeps();
         if (!deps) return parentResponse(record);
-        // The flow's outputs by name, to file each as a result. Read as the caller;
-        // a caller who cannot read the thread still sees the run's status.
-        const context = authorization
-            ? await deps.flows
-                  .flowContext(
-                      { thread_id: record.thread_id, model_id: record.model_id },
-                      authorization
-                  )
-                  .catch(() => null)
-            : null;
-        return parentResponse(await reconcileFlow(deps, record, context, authorization));
+        // Following a run asks the adapter about it with the caller's token. With
+        // no caller there is nothing to ask with: the run is shown as last recorded.
+        if (!authorization) return parentResponse(record);
+        return parentResponse(await reconcileFlow(deps, record, authorization));
     };
 
     const persistWorkflowStages = async (record: UnifiedExecutionRecord) => {

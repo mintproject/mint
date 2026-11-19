@@ -138,8 +138,13 @@ from a flow:
   the value the step returned. `value` is null until the step has finished, and for a
   published record.
 
+- `status`: the run's status in the adapter's words (`running`, `completed`, `failed`,
+  `cancelled`). The top-level `status` of a poll is Tapis's own and is not mapped.
+
 Tapis Workflows does not report a task's named outputs, so every flow step prints them as
 its last line of output, `{"svo_flow_outputs": {...}}`, and the adapter reads that back.
+A report line over 100,000 characters, or one that cannot be read as JSON, is skipped. A
+location over 2,000 characters is not reported.
 
 **A piece that runs as a Tapis app.** A Tapis Workflows job task returns nothing a later
 task can read. In a flow, an app piece therefore runs through a function that submits the
@@ -169,6 +174,9 @@ used only when the submitter says so.
   listing those `defaults` and `links`, unless the body has `"accept_flow_settings": true`.
 - A value the submitter sends replaces the flow's default and needs no acceptance. A dry
   run needs none.
+- `POST /workflows/submit` refuses a flow plan with 422 `FLOW_ARGUMENT_FIXED` when `args`
+  names something the plan fixed: a dataset or region bound when the flow was planned,
+  `execution_id`, `source_uri` or `tapis_token`. Plan again to change a dataset.
 
 **What a flow's author cannot do.**
 

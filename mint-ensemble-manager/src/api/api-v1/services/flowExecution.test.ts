@@ -20,6 +20,7 @@ const BODY = { executor: "ensemble_manager", thread_id: "thread-1", model_id: "c
 function context(over: Partial<FlowThreadContext> = {}): FlowThreadContext {
     return {
         is_flow: true,
+        caller: "alice",
         thread_bindings: { start_date: { parameter: "par-start" } },
         inputs: [
             {
@@ -84,6 +85,11 @@ describe("running a flow from a thread", () => {
             async getById(id) {
                 return records.get(id) || null;
             },
+            async listByThread(threadId, modelId) {
+                return [...records.values()].filter(
+                    (record) => record.thread_id === threadId && record.model_id === modelId
+                );
+            },
             async listSteps(executionId) {
                 return [...steps.values()].filter((step) => step.execution_id === executionId);
             },
@@ -93,7 +99,10 @@ describe("running a flow from a thread", () => {
                 return step;
             },
             async insert(input) {
-                const record = { id: "parent-1", ...input } as UnifiedExecutionRecord;
+                const record = {
+                    id: `parent-${records.size + 1}`,
+                    ...input
+                } as UnifiedExecutionRecord;
                 records.set(record.id, record);
                 return record;
             },
@@ -340,7 +349,8 @@ describe("running a flow from a thread", () => {
             expect(flows.startFlowExecution).toHaveBeenCalledWith(
                 "thread-1",
                 "cfg-flow",
-                "ue_parent-1"
+                "ue_parent-1",
+                AUTH
             );
             expect(legacy.tapis.submitExecution).not.toHaveBeenCalled();
             expect(legacy.tapis.buildCompositeWorkflowModelTask).not.toHaveBeenCalled();
@@ -405,6 +415,110 @@ describe("running a flow from a thread", () => {
             expect(again.run_id).toBe("ue_parent-1");
             expect(calls("/workflows/submit")).toHaveLength(1);
             expect(flows.startFlowExecution).toHaveBeenCalledTimes(1);
+        });
+
+        it("checks that the caller may change the thread before anything is recorded", async () => {
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            flows.flowContext.mockRejectedValue(new Error("You may not run models in this thread"));
+            await expect(svc.submit({ plan_id: plan.plan_id }, AUTH)).rejects.toThrow(
+                "You may not run models in this thread"
+            );
+            expect(flows.flowContext).toHaveBeenLastCalledWith(
+                { thread_id: "thread-1", model_id: "cfg-flow" },
+                AUTH,
+                "write"
+            );
+            // Nothing recorded: the plan's own maker can still run it.
+            expect(records.size).toBe(0);
+            expect(flows.startFlowExecution).not.toHaveBeenCalled();
+        });
+
+        it("runs a plan only for the user who made it", async () => {
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            flows.flowContext.mockResolvedValue(context({ caller: "bob" }));
+            await expect(
+                svc.submit({ plan_id: plan.plan_id }, "Bearer bobs-token")
+            ).rejects.toMatchObject({ statusCode: 403, code: "FLOW_PLAN_NOT_YOURS" });
+            expect(records.size).toBe(0);
+            expect(calls("/workflows/submit")).toHaveLength(0);
+        });
+
+        it("does not hand a run back to someone who did not make its plan", async () => {
+            const { svc, plan } = await submit();
+            flows.flowContext.mockResolvedValue(context({ caller: "bob" }));
+            await expect(
+                svc.submit({ plan_id: plan.plan_id }, "Bearer bobs-token")
+            ).rejects.toMatchObject({ code: "FLOW_PLAN_NOT_YOURS" });
+        });
+
+        it("takes up a submission that was recorded but never started", async () => {
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            records.set("parent-1", {
+                id: "parent-1",
+                plan_id: plan.plan_id,
+                thread_id: "thread-1",
+                model_id: "cfg-flow",
+                execution_engine: "tapis",
+                status: "adapter_dispatching",
+                adapter_run_ids: [],
+                parameter_values: { output_uri: "tapis://sys/first" },
+                model_child_id: "exec-earlier",
+                created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString()
+            } as unknown as UnifiedExecutionRecord);
+
+            const run = await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            expect(run.status).toBe("adapter_running");
+            expect(run.model_child_id).toBe("exec-earlier");
+            // The record it already wrote for the thread is reused, with the first values.
+            expect(flows.startFlowExecution).not.toHaveBeenCalled();
+            expect(calls("/workflows/submit")[0].body).toMatchObject({
+                args: { output_uri: "tapis://sys/first" },
+                idempotency_key: "ue_parent-1:adapter-plan-1"
+            });
+        });
+
+        it("leaves a submission that is only just under way alone", async () => {
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            records.set("parent-1", {
+                id: "parent-1",
+                plan_id: plan.plan_id,
+                thread_id: "thread-1",
+                model_id: "cfg-flow",
+                status: "adapter_dispatching",
+                adapter_run_ids: [],
+                created_at: new Date().toISOString()
+            } as unknown as UnifiedExecutionRecord);
+            const run = await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            expect(run.status).toBe("adapter_dispatching");
+            expect(calls("/workflows/submit")).toHaveLength(0);
+        });
+
+        it("refuses a second run of the flow in a thread while one is open", async () => {
+            const { svc } = await submit();
+            adapter({
+                "/data-objects": () => ({ body: { id: "do-1" } }),
+                "/plans/flow": () => ({
+                    body: { plan_id: "adapter-plan-2", plan_json: PLAN_JSON }
+                })
+            });
+            const second = await svc.createPlan(BODY, AUTH);
+            await expect(svc.submit({ plan_id: second.plan_id }, AUTH)).rejects.toMatchObject({
+                statusCode: 409,
+                code: "FLOW_ALREADY_RUNNING"
+            });
+            expect(records.size).toBe(1);
+
+            // Once the first is closed, the second may run.
+            records.get("parent-1")!.status = "failed";
+            adapter({
+                "/workflows/submit": () => ({ body: { run_id: "run-2", status: "running" } })
+            });
+            const run = await svc.submit({ plan_id: second.plan_id }, AUTH);
+            expect(run.run_id).toBe("ue_parent-2");
         });
 
         it("needs a signed-in caller", async () => {
@@ -565,6 +679,84 @@ describe("running a flow from a thread", () => {
             // Nothing follows a closed run.
             await svc.getRun("ue_parent-1", AUTH);
             expect(calls("/runs/run-1/poll")).toHaveLength(0);
+        });
+
+        it("files results from what the run kept, not from who is asking", async () => {
+            const svc = await started();
+            // The thread cannot be read now, or the caller is not one who may read it.
+            flows.flowContext.mockRejectedValue(new Error("thread unavailable"));
+            poll({ status: "completed", flow: FLOW_VIEW });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect(run.status).toBe("completed");
+            expect(flows.finishFlowExecution.mock.calls[0][4]).toHaveLength(1);
+        });
+
+        it("does not follow or close a run for a caller with no token", async () => {
+            const svc = await started();
+            poll({ status: "completed", flow: FLOW_VIEW });
+            const run = await svc.getRun("ue_parent-1", undefined);
+            expect(run.status).toBe("adapter_running");
+            expect(calls("/runs/run-1/poll")).toHaveLength(0);
+            expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+        });
+
+        it("fails a run that finished without saying where any output is", async () => {
+            const svc = await started();
+            poll({
+                status: "completed",
+                flow: { ...FLOW_VIEW, outputs: [{ step: 2, output_id: "out-report", value: null }] }
+            });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect([run.status, run.failure_code]).toEqual(["failed", "FLOW_OUTPUTS_UNREPORTED"]);
+            expect(flows.finishFlowExecution).toHaveBeenCalledWith(
+                "thread-1",
+                "cfg-flow",
+                "exec-1",
+                "failed",
+                []
+            );
+        });
+
+        it.each([
+            "javascript:alert(1)",
+            "https://elsewhere.example/report.md",
+            "tapis://sys/out/../../other/secret",
+            "tapis://sys/" + "x".repeat(2100),
+            "tapis:///no-system"
+        ])("does not file %s as a result", async (value) => {
+            const svc = await started();
+            poll({
+                status: "completed",
+                flow: {
+                    ...FLOW_VIEW,
+                    outputs: [
+                        { step: 2, output_id: "out-report", value },
+                        { step: 2, output_id: "out-counts", value: "tapis://sys/out/counts.csv" }
+                    ]
+                }
+            });
+            await svc.getRun("ue_parent-1", AUTH);
+            expect(flows.finishFlowExecution.mock.calls[0][4]).toEqual([
+                {
+                    model_io_id: "out-counts",
+                    name: "Term counts",
+                    url: "tapis://sys/out/counts.csv"
+                }
+            ]);
+        });
+
+        it("goes by the adapter's word for the run, not Tapis's raw status", async () => {
+            const svc = await started();
+            poll({ status: "TERMINATED", flow: { ...FLOW_VIEW, status: "failed" } });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect([run.status, run.failure_code]).toEqual(["failed", "FLOW_FAILED"]);
+        });
+
+        it("closes a run Tapis ended, when the adapter gives only Tapis's status", async () => {
+            const svc = await started();
+            poll({ status: "TERMINATED" });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect(run.status).toBe("failed");
         });
 
         it("leaves the run as it is when the adapter cannot be asked", async () => {

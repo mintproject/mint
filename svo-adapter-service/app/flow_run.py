@@ -15,6 +15,9 @@ from typing import Any
 from . import tapis
 
 REPORT_KEY = "svo_flow_outputs"
+# A report line is a handful of ids and locations. Anything longer is not one.
+_MAX_REPORT_LINE = 100_000
+_MAX_VALUE = 2_000
 
 _STATUS = {
     "completed": "completed", "complete": "completed", "success": "completed", "succeeded": "completed",
@@ -35,11 +38,11 @@ def reported_outputs(stdout: Any) -> dict[str, Any]:
         return {}
     for line in reversed(stdout.splitlines()):
         line = line.strip()
-        if not line.startswith("{") or REPORT_KEY not in line:
+        if not line.startswith("{") or REPORT_KEY not in line or len(line) > _MAX_REPORT_LINE:
             continue
         try:
             payload = json.loads(line)
-        except ValueError:
+        except Exception:  # a piece's own output: malformed or nested past what json reads
             continue
         if isinstance(payload, dict) and isinstance(payload.get(REPORT_KEY), dict):
             return payload[REPORT_KEY]
@@ -85,5 +88,6 @@ def view(plan_json: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | 
         else:
             output_id = None  # a published record: reported by the publication, not here
         value = reported.get(declared["step"], {}).get(output_id) if output_id else None
-        outputs.append({**declared, "value": value if isinstance(value, str) else None})
+        outputs.append({**declared,
+                        "value": value if isinstance(value, str) and len(value) <= _MAX_VALUE else None})
     return {"configuration_id": flow.get("configuration_id"), "steps": steps, "outputs": outputs}
