@@ -238,6 +238,75 @@ describe("running a flow from a thread", () => {
             expect(calls("/plans/flow")[0].body.inputs).toEqual({});
         });
 
+        describe("the thread's region", () => {
+            const SQUARE = {
+                type: "Polygon",
+                coordinates: [
+                    [
+                        [-97.9, 30.1],
+                        [-97.5, 30.1],
+                        [-97.5, 30.5],
+                        [-97.9, 30.1]
+                    ]
+                ]
+            };
+            const withRegion = (over: Partial<FlowThreadContext> = {}) => {
+                const base = context({
+                    thread_bindings: { region: { input: "in-aoi" } },
+                    region: { id: "region-1", geometries: [SQUARE] } as any,
+                    ...over
+                });
+                base.inputs.push({
+                    model_io_id: "in-aoi",
+                    name: "Area of interest",
+                    standard_variables: ["sv:boundary"],
+                    optional: false,
+                    resources: []
+                });
+                return base;
+            };
+
+            it("fills the input the flow marks for it when no dataset is bound there", async () => {
+                flows.flowContext.mockResolvedValue(withRegion());
+                await service().createPlan(BODY, AUTH);
+                const sent = calls("/plans/flow")[0].body;
+                expect(sent.inputs).toEqual({ "in-corpus": "do-1" });
+                expect(sent.region.input).toBe("in-aoi");
+                expect(sent.region.source.kind).toBe("geojson");
+                expect(sent.region.source.geometry.type).toBe("MultiPolygon");
+                expect(sent.region.source.derivation.region_id).toBe("region-1");
+            });
+
+            it("uses a dataset bound to that input in its place", async () => {
+                const bound = withRegion();
+                bound.inputs[1].resources = [
+                    { id: "r", name: "AOI", url: "tapis://sys/aoi.geojson" }
+                ];
+                flows.flowContext.mockResolvedValue(bound);
+                await service().createPlan(BODY, AUTH);
+                const sent = calls("/plans/flow")[0].body;
+                expect(sent.region).toBeUndefined();
+                expect(Object.keys(sent.inputs)).toEqual(["in-corpus", "in-aoi"]);
+            });
+
+            it("still needs a dataset when the thread has no region", async () => {
+                flows.flowContext.mockResolvedValue(withRegion({ region: null }));
+                await expect(service().createPlan(BODY, AUTH)).rejects.toMatchObject({
+                    code: "FLOW_INPUT_UNBOUND"
+                });
+            });
+
+            it("says so when the thread's region has no boundary to send", async () => {
+                flows.flowContext.mockResolvedValue(
+                    withRegion({ region: { id: "region-1", geometries: [] } as any })
+                );
+                await expect(service().createPlan(BODY, AUTH)).rejects.toMatchObject({
+                    statusCode: 422,
+                    code: "FLOW_REGION_INVALID"
+                });
+            });
+        });
+
         it("passes on the adapter's reason when the flow does not check out", async () => {
             adapter({
                 "/data-objects": () => ({ body: { id: "do-1" } }),

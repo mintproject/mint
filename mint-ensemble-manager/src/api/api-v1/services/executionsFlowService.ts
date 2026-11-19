@@ -109,7 +109,8 @@ const executionsFlowService: FlowThreadService = {
             dates: {
                 start_date: dateString(thread.dates?.start_date),
                 end_date: dateString(thread.dates?.end_date)
-            }
+            },
+            region
         };
     },
 

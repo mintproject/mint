@@ -12,6 +12,8 @@
  * and passes in what it owns: its store and its way of calling the adapter.
  */
 import { UnifiedExecutionError } from "@/classes/common/errors";
+import { Region } from "@/classes/mint/mint-types";
+import { deriveRegionSource, InputSource, RegionGeometryError } from "./inputStepDerivation";
 import { UnifiedExecutionRecord, UnifiedExecutionStore } from "./unifiedExecutionStore";
 
 /** What the plan id carries for a flow. Small: the plan id is an indexed column. */
@@ -37,6 +39,8 @@ export interface FlowThreadContext {
     parameters: { id: string; name: string; value?: string }[];
     outputs: { model_io_id: string; name: string }[];
     dates?: { start_date?: string; end_date?: string };
+    /** The thread's region, for the input the flow marks as its region. */
+    region?: Region | null;
 }
 
 /** The thread's side of a flow run: reads the thread and writes its run records. */
@@ -127,6 +131,8 @@ export async function planFlow(
     if (!context.is_flow) return null;
 
     const inputs: Record<string, string> = {};
+    const regionInput = context.thread_bindings.region?.input;
+    let region: { input: string; source: InputSource } | undefined;
     for (const input of context.inputs) {
         if (input.resources.length > 1) {
             // One run of the flow per dataset is not built yet.
@@ -138,6 +144,19 @@ export async function planFlow(
             );
         }
         const resource = input.resources[0];
+        if (!resource && input.model_io_id === regionInput && context.region) {
+            // No dataset is bound to the input the flow marks as its region: the
+            // thread's own region fills it, shaped as it is for a model's input.
+            try {
+                region = { input: input.model_io_id, source: deriveRegionSource(context.region) };
+            } catch (error) {
+                if (!(error instanceof RegionGeometryError)) throw error;
+                throw new UnifiedExecutionError(422, error.message, "FLOW_REGION_INVALID", {
+                    input: input.model_io_id
+                });
+            }
+            continue;
+        }
         if (!resource) {
             if (input.optional) continue;
             throw new UnifiedExecutionError(
@@ -174,7 +193,10 @@ export async function planFlow(
 
     const planned = await deps.adapterRequest(
         "/plans/flow",
-        { method: "POST", body: { flow_id: threadmodel.model_id, inputs } },
+        {
+            method: "POST",
+            body: { flow_id: threadmodel.model_id, inputs, ...(region ? { region } : {}) }
+        },
         authorization
     );
     if (typeof planned?.plan_id !== "string") {

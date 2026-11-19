@@ -116,6 +116,10 @@ class FlowPlanIn(BaseModel):
     flow_id: str = Field(min_length=1, max_length=500)
     # flow input id (a dataset specification of the configuration) -> data object id
     inputs: dict[str, str] = Field(default_factory=dict)
+    # The thread's region, for the flow input the flow marks as its region:
+    # {"input": <flow input id>, "source": {"kind": "geojson", "geometry": ...} or
+    # {"kind": "bbox", "bbox": [...]}}. The piece receives it as GeoJSON text.
+    region: dict[str, Any] | None = None
     allow_unapproved_piece_ids: list[str] = Field(default_factory=list)
 
 

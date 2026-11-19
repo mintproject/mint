@@ -431,3 +431,85 @@ def test_a_stored_flow_with_values_of_the_wrong_kind_is_refused_not_a_server_err
     response = plan()
     assert response.status_code == 422, response.text
     assert response.json()["detail"]["code"] == "FLOW_DOES_NOT_CHECK_OUT"
+
+
+# --- the thread's region as a flow input ---------------------------------------
+import json  # noqa: E402
+
+BBOX = {"kind": "bbox", "bbox": [-97.9, 30.1, -97.5, 30.5]}
+
+
+def region_flow(monkeypatch, **over):
+    piece = register("clip", ["boundary", "corpus"], ["clean"])
+    steps = [{"position": 1, "etl_process_id": piece, "settings": {},
+              "wires": [from_input("in:aoi", 1), from_input("in:corpus", 2)]}]
+    stored_flow({}, monkeypatch, outputs=[], steps=steps,
+                **{"thread_bindings": {"region": {"input": "in:aoi"}}, **over})
+
+
+def plan_region(source=BBOX, input_id="in:aoi", inputs=None):
+    body = {"flow_id": "cfg-1", "inputs": inputs if inputs is not None else {
+        "in:corpus": data_object("corpus", "tapis://sys/docs")}}
+    if source is not None:
+        body["region"] = {"input": input_id, "source": source}
+    return client.post("/plans/flow", headers=AUTH, json=body)
+
+
+def test_the_threads_region_fills_the_input_the_flow_marks_for_it(monkeypatch):
+    region_flow(monkeypatch)
+    response = plan_region()
+    assert response.status_code == 200, response.text
+    plan_json = response.json()["plan_json"]
+    parameters = {p["name"]: p for p in plan_json["parameters"]}
+    region = parameters["source_uri"]
+    # The piece receives the region as GeoJSON text, not as a location.
+    assert json.loads(region["default"]) == {"type": "Polygon", "coordinates": [[
+        [-97.9, 30.1], [-97.5, 30.1], [-97.5, 30.5], [-97.9, 30.5], [-97.9, 30.1]]]}
+    assert (region["managed"], region["managed_source"]) == (True, "thread_region")
+    assert parameters["source_uri_2"]["default"] == "tapis://sys/docs"
+    assert plan_json["flow"]["inputs"][0] == {"input_id": "in:aoi", "arg": "source_uri", "region": True}
+
+
+def test_a_region_boundary_is_passed_on_as_it_was_given(monkeypatch):
+    region_flow(monkeypatch)
+    ring = [[-97.9, 30.1], [-97.5, 30.1], [-97.5, 30.5], [-97.9, 30.1]]
+    source = {"kind": "geojson", "geometry": {"type": "MultiPolygon", "coordinates": [[ring]]}}
+    parameters = {p["name"]: p for p in plan_region(source).json()["plan_json"]["parameters"]}
+    assert json.loads(parameters["source_uri"]["default"]) == source["geometry"]
+
+
+def test_without_a_region_the_marked_input_still_needs_a_dataset(monkeypatch):
+    region_flow(monkeypatch)
+    detail = plan_region(source=None).json()["detail"]
+    assert (detail["code"], detail["inputs"]) == ("FLOW_INPUT_NOT_BOUND", ["in:aoi"])
+    with_dataset = plan_region(source=None, inputs={
+        "in:corpus": data_object("corpus", "tapis://sys/docs"),
+        "in:aoi": data_object("boundary", "tapis://sys/aoi.geojson")})
+    assert with_dataset.status_code == 200, with_dataset.text
+
+
+@pytest.mark.parametrize("case", ["another input", "an input with a dataset", "a flow that marks no region"])
+def test_a_region_fills_only_the_input_the_flow_marks_and_only_when_it_is_free(monkeypatch, case):
+    region_flow(monkeypatch, **({"thread_bindings": {}} if case == "a flow that marks no region" else {}))
+    if case == "another input":
+        response = plan_region(input_id="in:corpus", inputs={})
+    elif case == "an input with a dataset":
+        response = plan_region(inputs={"in:corpus": data_object("corpus", "tapis://sys/docs"),
+                                       "in:aoi": data_object("boundary", "tapis://sys/aoi.geojson")})
+    else:
+        response = plan_region()
+    assert response.status_code == 422 and response.json()["detail"]["code"] == "FLOW_REGION_REFUSED"
+
+
+@pytest.mark.parametrize("source,code", [
+    ({"kind": "bbox", "bbox": [-180, -80, 180, 80]}, "AOI_REGION_TOO_LARGE"),
+    ({"kind": "bbox", "bbox": [1, 2]}, None),
+    ({"kind": "wkt", "text": "POLYGON(...)"}, None),
+    ("nope", None),
+])
+def test_a_region_is_held_to_the_limits_a_models_region_input_has(monkeypatch, source, code):
+    region_flow(monkeypatch)
+    response = plan_region(source)
+    assert response.status_code == 422, response.text
+    if code:
+        assert response.json()["detail"]["code"] == code
