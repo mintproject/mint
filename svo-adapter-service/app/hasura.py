@@ -249,6 +249,14 @@ mutation DeleteSpecContracts($ids: [String!]!) {
 }
 """
 
+# The configurations that are flows. A flow is a graph of pieces, not a piece, so the
+# MINT sync leaves it out of the transform registry.
+LIST_FLOW_CONFIGURATION_IDS_QUERY = """
+query ListFlowConfigurationIds {
+  modelcatalog_configuration_flow { configuration_id }
+}
+"""
+
 # Lists ModelConfigurations with their full I/O + parameter tree for the MINT sync.
 # Paginated; caller increments offset until an empty page is returned.
 LIST_MINT_CONFIGURATIONS_QUERY = """

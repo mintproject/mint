@@ -101,6 +101,22 @@ class MintCatalogClient:
             offset += limit
         return results
 
+    async def flow_configuration_ids(self) -> set[str]:
+        """Ids of the configurations that are flows.
+
+        A catalog from before flows existed has no such table. That is not a
+        reason to fail the whole sync: it then has no flows.
+        """
+        from .hasura import LIST_FLOW_CONFIGURATION_IDS_QUERY
+
+        try:
+            data = await self._hasura.execute(LIST_FLOW_CONFIGURATION_IDS_QUERY)
+        except Exception as error:  # noqa: BLE001
+            log.warning("mint_sync: could not list flow configurations: %s", error)
+            return set()
+        return {str(row["configuration_id"]) for row in (data or {}).get("modelcatalog_configuration_flow") or []
+                if isinstance(row, dict) and row.get("configuration_id")}
+
     async def list_all_etl_processes(self) -> list[dict[str, Any]]:
         """Paginate through first-class ETL processes in the MINT catalog."""
         from .hasura import LIST_MINT_ETL_PROCESSES_QUERY
@@ -431,7 +447,14 @@ async def sync_mint_to_adapter(
     live_mint_ids: list[str] = []
     live_etl_ids: list[str] = []
 
+    flow_ids = await mint_client.flow_configuration_ids()
     for cfg in configs:
+        if cfg.get("id") in flow_ids:
+            # A flow has inputs and outputs like a model, but it is a graph of
+            # pieces. Registered as one piece it would be offered to the planner
+            # as a single step with nothing to run.
+            result.skipped += 1
+            continue
         row = mint_config_to_spec_row(cfg, warnings)
         if row is None:
             result.skipped += 1
