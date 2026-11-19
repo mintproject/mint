@@ -14,7 +14,7 @@ from app.hasura import UPSERT_ETL_TRANSFORM_SPEC_MUTATION  # noqa: E402
 from app.main import _is_operator_route, app  # noqa: E402
 from app.mint_sync import etl_process_to_spec_row, sync_mint_to_adapter  # noqa: E402
 from app.store import STORE  # noqa: E402
-from app.stored_source import is_approved, source_sha256, stored_source  # noqa: E402
+from app.stored_source import approval_sha256, is_approved, source_sha256, stored_source  # noqa: E402
 
 client = TestClient(app)
 CODE = "from owe_python_sdk.runtime import execution_context as ctx\nctx.set_output('result', '1')\n"
@@ -128,13 +128,46 @@ def test_no_stored_source(spec):
 
 
 def test_approval_lapses_when_the_source_changes():
-    spec = {"parameters_schema_json": {"metadata": {"source": {"code": CODE}}},
-            "approved_source_sha256": source_sha256(CODE)}
+    spec = {"parameters_schema_json": {"metadata": {"source": {"code": CODE}}}}
+    spec["approved_source_sha256"] = approval_sha256(spec)
     assert is_approved(spec)
     spec["parameters_schema_json"]["metadata"]["source"]["code"] = CODE + "# changed\n"
     assert not is_approved(spec)
     assert not is_approved({"parameters_schema_json": {"metadata": {"source": {"code": CODE}}}})
     assert not is_approved({"approved_source_sha256": source_sha256(CODE)})
+
+
+def _approved_piece():
+    spec = {"parameters_schema_json": {
+                "properties": {"output_uri": {"type": "string"}}, "required": ["output_uri"],
+                "metadata": {"runtime": {"entrypoint": "transform", "source": {"code": CODE}}}},
+            "env_from_args": {"OUTPUT_URI": "output_uri", "TAPIS_TOKEN": "tapis_token"}}
+    spec["approved_source_sha256"] = approval_sha256(spec)
+    return spec
+
+
+def test_approval_lapses_when_what_the_code_is_handed_changes():
+    # A piece runs with its runner's token: which arguments reach the code is part
+    # of what was approved.
+    spec = _approved_piece()
+    assert is_approved(spec)
+    spec["env_from_args"]["MODEL_API_KEY"] = "model_api_key"
+    assert not is_approved(spec)
+
+    spec = _approved_piece()
+    spec["parameters_schema_json"]["properties"]["anything"] = {"type": "string"}
+    assert not is_approved(spec)
+
+    spec = _approved_piece()
+    spec["parameters_schema_json"]["metadata"]["runtime"]["entrypoint"] = "other"
+    assert not is_approved(spec)
+
+
+def test_an_approval_of_the_source_alone_no_longer_counts():
+    spec = _approved_piece()
+    spec["approved_source_sha256"] = source_sha256(CODE)
+    assert not is_approved(spec)
+    assert approval_sha256({"parameters_schema_json": {}}) is None
 
 
 # --- approval route --------------------------------------------------------
@@ -161,7 +194,7 @@ def test_approve_records_the_source_hash_and_withdraw_clears_it(pieces):
     stored, _ = pieces
     resp = client.put("/admin/transform-spec-approval", json={"spec_id": stored, "approved": True})
     assert resp.status_code == 200
-    assert resp.json()["approved_source_sha256"] == source_sha256(CODE)
+    assert resp.json()["approved_source_sha256"] == approval_sha256(STORE.transform_spec[stored])
     assert is_approved(STORE.transform_spec[stored])
     assert any(e.get("event_type") == "transform_spec_approval_set" for e in STORE.provenance)
 

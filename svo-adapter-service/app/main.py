@@ -1203,12 +1203,13 @@ async def sync_status(authorization: str | None = Header(None)):
 async def set_transform_spec_approval(body: SpecApprovalIn):
     """Approve, or withdraw approval of, the Python source stored with a piece.
 
-    Approval records the SHA-256 of the source as it is now, so it lapses the
-    moment the source changes. Only pieces that carry stored source can be
+    Approval records one hash over the source, the function called in it, the
+    run arguments it is handed and the arguments it declares, so it lapses the
+    moment any of them changes. Only pieces that carry stored source can be
     approved; built-in pieces run code reviewed in this repository.
     """
     from .hasura import GET_SPEC_FOR_APPROVAL_QUERY, SET_SPEC_APPROVAL_MUTATION
-    from .stored_source import source_sha256, stored_source
+    from .stored_source import approval_sha256, stored_source
 
     h = get_client(None)
     spec = (await h.execute(GET_SPEC_FOR_APPROVAL_QUERY, {"id": body.spec_id}))[
@@ -1221,7 +1222,7 @@ async def set_transform_spec_approval(body: SpecApprovalIn):
             "code": "NO_STORED_SOURCE",
             "message": "this piece carries no stored source to approve",
         })
-    sha = source_sha256(source) if body.approved else None
+    sha = approval_sha256(spec) if body.approved else None
     await h.execute(SET_SPEC_APPROVAL_MUTATION, {"id": body.spec_id, "sha": sha})
     await h.execute(INSERT_PROVENANCE, {"obj": {
         "event_type": "transform_spec_approval_set",

@@ -18,7 +18,7 @@ from app.main import app  # noqa: E402
 from app.planner import build_plan_json  # noqa: E402
 from app.store import STORE  # noqa: E402
 from app.stored_source import (  # noqa: E402
-    allowed_args, check_plan, decision, iter_stored_steps, plannable, source_sha256,
+    allowed_args, approval_sha256, check_plan, decision, iter_stored_steps, plannable, source_sha256,
 )
 
 client = TestClient(app)
@@ -30,10 +30,12 @@ def piece(pid="p1", owner="alice", visibility="private", approved=False, code=CO
         "id": pid, "name": pid, "transform_type": "etl_process", "method": "tapis_function",
         "owner_username": owner, "visibility": visibility,
         "parameters_schema_json": {"metadata": {"source": {"language": "python", "code": code}}},
-        "approved_source_sha256": source_sha256(code) if approved else None,
+        "approved_source_sha256": None,
         "contracts": [],
     }
     spec.update(over)
+    if approved:
+        spec["approved_source_sha256"] = approval_sha256(spec)
     return spec
 
 

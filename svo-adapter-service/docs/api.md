@@ -218,7 +218,7 @@ With it on, a caller may run a stored-source piece when:
 | Case | Chosen by the planner automatically? |
 |---|---|
 | The caller owns the piece | Yes |
-| The piece is shared or public and an admin approved its current source (`PUT /admin/transform-spec-approval`) | Yes |
+| The piece is shared or public and an admin approved it as it is now: its source, the function called, the run arguments it is handed and the arguments it declares (`PUT /admin/transform-spec-approval`) | Yes |
 | The piece is shared or public and unapproved, and the caller named it (`allow_unapproved_piece_ids` on `POST /plans`, `allow_unapproved` on `POST /transform-specs/{id}/test`) | No |
 | Anything else, including another user's private piece | Not runnable |
 
@@ -402,7 +402,7 @@ are not specific to one scientific use case, although the records they load may 
 |---|---|---|
 | POST | `/admin/sync-from-mint` | Dry-run or apply MINT model-configuration and ETL-process to transform-registry sync. An ETL process's owner and visibility are copied to the registry row, and rows for processes no longer in the catalog are deleted. |
 | GET | `/admin/sync-status` | Report synchronization state, including unresolved Tapis apps. |
-| PUT | `/admin/transform-spec-approval` | Approve, or withdraw approval of, the Python source stored with a piece (`{spec_id, approved}`). Records the SHA-256 of the current source, so approval lapses when the source changes. 400 `NO_STORED_SOURCE` for a piece that runs built-in code. |
+| PUT | `/admin/transform-spec-approval` | Approve, or withdraw approval of, a piece that carries Python source (`{spec_id, approved}`). Records one SHA-256 over the source, the function called in it, the run arguments it is handed (`env_from_args`) and the arguments it declares, in `approved_source_sha256`. Approval lapses when any of them changes. An approval recorded over the source alone, as before 2026-11-19, no longer counts |
 | POST | `/admin/sync-from-ckan` | Dry-run or apply CKAN resource-to-data-object sync. |
 | POST | `/admin/recompute-edges` | Rebuild the registry compatibility edge cache. |
 | POST | `/admin/validate-tapis` | Probe Tapis authentication, Workflows, group, and registration access. |

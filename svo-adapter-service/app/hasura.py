@@ -198,7 +198,7 @@ mutation DeleteObsoleteEtlSpecs($live_ids: [String!]!) {
 GET_SPEC_FOR_APPROVAL_QUERY = """
 query GetSpecForApproval($id: String!) {
   adapter_transform_spec_by_pk(id: $id) {
-    id name owner_username visibility parameters_schema_json approved_source_sha256
+    id name owner_username visibility parameters_schema_json env_from_args approved_source_sha256
   }
 }
 """

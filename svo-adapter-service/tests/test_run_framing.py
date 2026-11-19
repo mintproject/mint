@@ -31,7 +31,7 @@ def piece(env_from_args=None, declared=("output_uri",)):
             "properties": {name: {"type": "string"} for name in declared}, "required": list(declared),
             "metadata": {"source": {"language": "python", "code": CODE}}},
         "env_from_args": env_from_args or {"OUTPUT_URI": "output_uri", "TAPIS_TOKEN": "tapis_token"},
-        "approved_source_sha256": source_sha256(CODE),
+        "approved_source_sha256": None,
         "contracts": [],
     }
 
