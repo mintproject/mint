@@ -125,8 +125,33 @@ Run before anything is built, with what exists today.
   quick succession, and a 502 on a status check. A button in a browser will hit the first.
 - Not IRB-governed material. See open question 7.
 
-**Results so far (2026-11-19, dev pods, the owner's account and a second account).**
-The real-corpus run and the two transient errors are still to do.
+**Results (2026-11-19, dev pods, the owner's account and a second account).**
+
+- **A real corpus fits.** 86 PDF and Word documents from the SUBSIDE project (125 MB) ran
+  through all three flows. 81 were ingested (393,000 words; the largest 99,000) and 5
+  were skipped as having no extractable text, each named in `skipped_files.csv`.
+
+  | Flow | Whole run | Slowest step |
+  |---|---|---|
+  | Narrative | 5 min 47 s | discover frames, about 2 min 40 s |
+  | Dictionary | 4 min 12 s | ingest, about 1 min 55 s |
+  | Formulation (draft) | 3 min 8 s | ingest, about 1 min 55 s |
+
+  Step times are differences between the engine's cumulative figures and include each
+  step's library install. Every step is well inside the 600-second limit. The corpus
+  handed between steps is a 3 MB file, by location; the result string stays small.
+  The narrative flow made about 63 embedding calls for 2,003 passages and found 11
+  frames, with no rate-limit error. A corpus several times larger would approach both
+  the step limit and the shared 100-calls-a-minute allowance, so neither is settled for
+  large corpora.
+- **Submitting a plan again breaks its earlier runs.** One plan submitted three times in
+  a row: the first run never started (still "submitted" on Tapis, "running" in the
+  adapter, no output), the second was terminated, and only the third completed. Every
+  submit recreates the Tapis pipeline, whose id is the plan id. All three submits were
+  accepted; nothing warned. The 500 seen earlier was not reproduced and is likely the
+  same collision. A double click in a browser would do this. Fixed in step 1.
+- **The 502 on a status check was not reproduced.** During the test the Tapis Pods API
+  stopped answering for about ten minutes while the adapter itself stayed healthy.
 
 - **Run arguments are not readable by another group member.** The second account is a
   member of `adapter-ops`. It could read another user's pipeline definition, run record,
@@ -167,6 +192,10 @@ The real-corpus run and the two transient errors are still to do.
   `stored_source.check_plan` for the caller, at plan time and again at submit, with the
   same opt-in handling as a searched plan.
 - MCP: `create_adapter_plan` takes `piece_ids`.
+- **A submit never disturbs a run in flight** (found in step 0). Each submit registers
+  its own Tapis pipeline, named from the plan and the run, and does not recreate one
+  that has active runs. A second submit with the same idempotency key returns the first
+  run. The flows screen (step 4) sends one key per click.
 
 Named pieces do not use the edge cache, so a half-written cache cannot affect them.
 
