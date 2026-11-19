@@ -117,6 +117,10 @@ Run before anything is built, with what exists today.
 - If a step does not fit, the fix is to split the work across parallel steps. That
   changes the pieces and the hand-on format, and this spec is revised before step 1.
 - Answer open questions 1 to 3 on the live system, with the second account.
+- **Probe Tapis Workflows secrets** (see step 6). With a throwaway value: store a secret,
+  add it to a test group, and bind it to a function task's input. Record whether the
+  engine fills it in, whether the value appears in the run record or logs, and whether a
+  second member of the group can use the same secret in a pipeline of their own.
 - Reproduce the two errors seen once each: a 500 when one plan is submitted twice in
   quick succession, and a 502 on a status check. A button in a browser will hit the first.
 - Not IRB-governed material. See open question 7.
@@ -242,7 +246,15 @@ because a user can bring their own key until then. Its design depends on open qu
 - **Caller values are removed, not just refused.** When the service key is used, the
   adapter overwrites the key and both addresses in the pipeline arguments. A caller's own
   `model_api_key` is honoured only on a run that does not use the service key.
-- **Delivery: fetched at run time.** The step asks the adapter for the key with a
+- **Delivery, first choice: a Tapis Workflows secret.** The Workflows API has user
+  secrets (stored in the Tapis Security Kernel), group secrets, and a task input filled
+  from a secret (`value_from: {secret: ...}`). The key would be held by Tapis, not by the
+  adapter, and the adapter would only write the reference onto steps that qualify. This
+  is in the API description but not in the Tapis documentation, and the engine has
+  ignored a described field before (`entrypoint`), so it is used only if the step 0 probe
+  shows it works. It does not remove the rules above: a group secret can be referenced by
+  any pipeline in the group, so it is only as closed as the group is.
+- **Delivery, fallback: fetched from the adapter at run time.** The step asks the adapter for the key with a
   short-lived per-run credential, through an extension of the existing run-credentials
   route. The route answers only for a run whose stored plan passed the check above. The
   key then appears in no run record. Passing it as an argument is kept only if open
@@ -440,3 +452,5 @@ Questions 1 to 3 are answered in step 0. Question 8 is the user's.
 - 2026-11-19: The adapter's model key is the user's own, used as a project key from TACC
   "for now".
 - 2026-11-19: A second Tapis account is available for the two-user checks.
+- 2026-11-19: "Can we use Tapis secrets for the key?" Made the first choice for delivery
+  in step 6, subject to the step 0 probe.
