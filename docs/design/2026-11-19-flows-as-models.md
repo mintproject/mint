@@ -473,7 +473,7 @@ reordered or dropped without undoing the first four.
 3. **Should a user need a problem statement to run a flow?** A "run this flow" button
    that opens a thread is held back until this is answered.
 4. **Who approves pieces beyond dev**, and against what written standard? Carried over.
-5. **Can the browser upload to Tapis Files?** Phase 0 check 7.
+5. **Can the browser upload to Tapis Files?** Yes (phase 0 check 7, under Decisions).
 
 ## Decisions
 
@@ -568,6 +568,28 @@ reordered or dropped without undoing the first four.
     configurations.
   - An input or output with position 0 is treated as having no position and fails the
     run. A flow's rows are numbered from 1.
+
+- 2026-11-19, phase 0 check 1 on dev after #431 deployed: with no token the run list and
+  a run lookup answer 401. The first account lists its 31 runs and the second account its
+  2, with none in common. The second account gets 404 reading, polling or asking for the
+  provenance of one of the first account's runs.
+- 2026-11-19, phase 0 check 6, the existing recommendations on five descriptions (the
+  three sensemaking flows, the displacement flow, and one word):
+  - **Standard variables are ranked well.** The right variable was first each time, with
+    scores of 0.5 to 0.7: the term-count variable for the dictionary flow, the
+    narrative-frame variable for the narrative flow, the term-set variable for
+    formulation, the displacement-rate variable for SUBSIDE.
+  - **Model configurations are ranked poorly**, at 0.2 to 0.5, and unrelated hydrology
+    models appear. No flow is a configuration yet, so there was nothing right to find.
+  - **It does not decline on thin text.** One word returned results at about 0.18. The
+    existing rule is a minimum length, not a minimum score.
+  - **Conclusion for phase D.** Rank by standard variable, then let the piece graph find
+    the pieces that produce and consume those variables. Add a score floor below which
+    nothing is suggested. Ranking pieces or flows directly waits until flows are indexed.
+- 2026-11-19, phase 0 check 7, browser upload: Tapis Files answers a browser's preflight
+  from the dev UI's address for `POST` and `GET`, allowing the `x-tapis-token` header from
+  any origin. A browser can upload to the user's Tapis storage directly. Open question 5
+  is answered yes; the upload in phase C goes ahead.
 
 ## User feedback / decisions
 
