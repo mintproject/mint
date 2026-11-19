@@ -836,6 +836,18 @@ reordered or dropped without undoing the first four.
   - Seen, not changed: Tapis cuts a task's stderr at 10,000 characters. If stdout is cut
     the same way and from the end, a piece that prints more than that loses its report.
 
+- 2026-11-19, second dev check, after mint #437 (03b2bf8): the dictionary flow run from
+  the same thread completed, the thread's execution is SUCCESS with three results, its
+  counts read one submitted and one successful, and the stages carry the Tapis ids.
+  - **A correction to the review entry above.** "A result row belongs to its run" did not
+    take effect. The catalog keeps one row per location for every result and every bound
+    dataset: the storage layer replaces the id it is given with a hash of the url and
+    updates the row's name. So a run that reports a location already on file renames that
+    row, for a model's result as much as a flow's. The dev run showed it: its three
+    outputs point at one folder and all read "Term counts". The ineffective code is
+    removed. Changing it means changing how every result is stored, which is not part of
+    this phase. For the dictionary flow it goes away once the pieces report each file.
+
 ## User feedback / decisions
 
 See "User need" for the user's words.

@@ -11,7 +11,6 @@ import {
     updateExecutionStatusResultsAndSummary
 } from "@/classes/graphql/graphql_functions";
 import { getThread } from "@/classes/graphql/graphql_functions_v2";
-import { getMd5Hash } from "@/classes/graphql/graphql_adapter";
 
 import { usernameFromToken } from "@/utils/authUtils";
 
@@ -228,8 +227,6 @@ describe("the thread's side of a flow run", () => {
                 name: "Report",
                 url: "tapis://sys/out/report.md"
             });
-            // A row of this run's own, so another run's row for the same place is not renamed.
-            expect(execution.results["out-1"].id).not.toBe(getMd5Hash("tapis://sys/out/report.md"));
         });
 
         it("marks a failed run failed, with no results", async () => {

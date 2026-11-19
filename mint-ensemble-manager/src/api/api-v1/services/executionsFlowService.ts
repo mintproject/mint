@@ -215,9 +215,9 @@ const executionsFlowService: FlowThreadService = {
             const results: Record<string, { id: string; name: string; url: string }> = {};
             for (const output of outputs) {
                 results[output.model_io_id] = {
-                    // This run's own row. A row keyed by the location alone could be
-                    // one another run already filed, which this would then rename.
-                    id: getMd5Hash(`${executionId}|${output.model_io_id}|${output.url}`),
+                    // Stored as the one row the catalog keeps per location, like a
+                    // model's result: the id given here is replaced by a hash of the url.
+                    id: getMd5Hash(output.url),
                     name: output.name,
                     url: output.url
                 };
