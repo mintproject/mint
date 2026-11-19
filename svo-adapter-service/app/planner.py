@@ -441,6 +441,7 @@ def build_plan_json(path: list[dict[str, Any]]) -> dict[str, Any]:
 def parameter_definitions(
     steps: list[dict[str, Any]],
     standard_params: dict[str, dict[str, Any]] | None = None,
+    framing_params: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Return the typed, plan-scoped arguments required by a transform path.
 
@@ -533,6 +534,22 @@ def parameter_definitions(
             })
         elif name == "allocation":
             add(name, definition, {"name": "workflow"})
+
+    # Framing arguments are always offered, so a caller can say what a run is
+    # about even when no piece reads them; they are required only when one does.
+    for name, kind in (framing_params or {}).items():
+        base = (standard_params or {}).get(name) or {}
+        if name not in definitions:
+            definitions[name] = {
+                "name": name,
+                "type": base.get("type", "string"),
+                "required": False,
+                "description": base.get("description"),
+                "used_by_plan": False,
+            }
+        else:
+            definitions[name]["used_by_plan"] = True
+        definitions[name]["framing"] = kind
 
     return [definitions[name] for name in sorted(definitions)]
 
