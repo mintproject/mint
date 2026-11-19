@@ -137,6 +137,53 @@ differs from the steps above, this stands.
 - The canvas component is general and can draw a flow's steps. How well its automatic
   layout places steps side by side is unchecked; that is the first thing (c) finds out.
 
+#### C1(b) revised: an input that takes a collection
+
+The user asked whether a CKAN dataset with several resources could be the input, and
+chose this ("i like this", 2026-11-19). It replaces "paste a location" as the way data
+is bound. Pasting is left out of the first build; it can be added later as a fallback.
+
+**The meaning.** In a thread, several resources bound to one input mean one run per
+resource. A flow input can now say it takes a collection: then the resources bound to it
+are one input made of many files, and there is one run.
+
+**What was checked (2026-11-19).** Of 267 datasets in the catalog, a sample of 25 with
+the most resources: every resource location is an `https` link, to many hosts (NASA
+Earthdata, PTDataX, S3, Corral's web server, files uploaded to CKAN). None is a
+`tapis://` location. The sensemaking pieces read a folder in Tapis storage. So the files
+have to be brought to the runner's storage before the first piece runs.
+
+**The design.**
+
+1. **The marker.** A flow's `thread_bindings` gains `collections`: the flow inputs that
+   take a collection. It sits beside the entries that say which input the thread's region
+   fills. No table change. The catalog API and the adapter's check both refuse a marker
+   on an input that does not exist.
+2. **Ensemble Manager.** For a marked input it sends every selected resource, in the
+   order the thread holds them, as one input. For an unmarked input, more than one
+   resource is still refused (`FLOW_FANOUT_UNSUPPORTED`).
+3. **Adapter: a gather task, written by the adapter, not a piece.** When a plan has a
+   collection input, the pipeline gets one extra task before the steps that read that
+   input. It copies each resource into one new folder in the runner's storage and hands
+   that folder on as the input. The flow and its pieces are unchanged: a piece that reads
+   a folder reads this one. A thread shows it as a stage named "Gather <input name>".
+4. **What the gather task will fetch.** `https` links and `tapis://` locations only. It
+   refuses a link to a private or local address. It fetches with no credential, except a
+   `tapis://` location and a file held by the catalog itself, which use the runner's
+   token. A resource that needs another login (Earthdata, a PTDataX project) fails with
+   the resource named. Giving the gather task such a login is the secret store's job and
+   comes with it.
+5. **Limits.** At most 500 resources and a total size limit per collection, both
+   settings of the adapter. Two resources with the same file name get a number added.
+6. **Where the folder is.** Under one staging root per runner (see open question 5).
+7. **The data step in the web app** needs no new field: it already lets a user pick a
+   dataset and its resources. For a collection input it shows "all N files are read
+   together" in place of the count of runs.
+
+**What this costs.** Flows are never changed in place, so the three sensemaking flows are
+registered once more with the marker. The Dictionary flow's first browser run needs its
+documents published as a CKAN dataset.
+
 ### C2. Find a flow
 
 1. **Browser** (`models-browse`): a "Flow" badge on the row and a facet "Models / Flows".
@@ -257,14 +304,19 @@ download a result.
 
 ## Open questions
 
-1. **Paste a location, or catalog datasets only?** The plan above lets a user paste a
-   `tapis://` location in the data step.
+1. Answered 2026-11-19: a catalog dataset with several resources, through a flow input
+   that takes a collection. Pasting a location is left out of the first build.
 2. **Should a flow be hidden when its outputs lack the thread's indicator?** The plan
    keeps today's rule for models and flows alike.
 3. **May I drive a browser on dev with your token** for the checks? The alternative is
    that you click through and I read the results.
 4. Answered by the review: files go through the Ensemble Manager, so the browser does
    not call Tapis for C1. The question returns for upload in C4.
+
+5. **Where does the gather task put the files, and where do a new user's outputs go?**
+   Proposed: one adapter setting naming a storage system and a path with the username in
+   it, as the test runs used (`cloud.data`, the user's home). This has been open since
+   the earlier spec.
 
 ## Decisions
 
@@ -277,3 +329,5 @@ download a result.
 ## User feedback / decisions
 
 - 2026-11-19: "Ok so we need to plan to account for th eui".
+- 2026-11-19: "could we use a ckan dataset with multiple dfata resources?" and, of a flow
+  input that says it takes a collection, "i like this."
