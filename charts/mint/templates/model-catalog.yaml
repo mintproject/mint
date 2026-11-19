@@ -77,12 +77,6 @@ spec:
               value: {{ .environment.hasura_graphql_url | default (printf "http://%s-hasura/v1/graphql" (include "mint.prefix" $)) | quote }}
             - name: LOG_LEVEL
               value: "{{ .environment.log_level }}"
-            {{- with .environment.svo_adapter_api_url }}
-            # POST /flows asks the adapter whether a flow's pieces fit together.
-            # Unset, that route answers 503 and everything else is unaffected.
-            - name: SVO_ADAPTER_API_URL
-              value: {{ . | quote }}
-            {{- end }}
           {{- end }}
             - name: HASURA_ADMIN_SECRET
               valueFrom:

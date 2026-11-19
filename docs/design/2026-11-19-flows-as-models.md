@@ -677,8 +677,10 @@ reordered or dropped without undoing the first four.
   - **A flow family is given the type `sdm#Model`.** The marker is the flow row; no
     ontology term was invented for a flow.
   - **New setting `SVO_ADAPTER_API_URL` on the Model Catalog API**, carried by the dev
-    deploy script, the chart (optional) and the local stack. Unset, `POST /flows` answers
-    503 and nothing else changes.
+    deploy script and the local stack. Unset, `POST /flows` answers 503 and nothing else
+    changes. **The Helm chart does not set it yet**: a change to the chart's templates
+    needs a chart version bump, which release-please owns, so it is left for the next
+    chart release. Until then the Kubernetes deployment answers 503 on `POST /flows`.
   - **The adapter's catalog sync skips flow configurations**, and still runs against a
     catalog from before flows existed.
   - Tested locally: the route's real output written to a local catalog as three users
