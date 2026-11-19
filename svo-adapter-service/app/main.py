@@ -368,6 +368,40 @@ def _internal_service_authorized(secret: str | None) -> bool:
     return bool(expected and secret and hmac.compare_digest(secret, expected))
 
 
+# Marks a reader that may see every run: the Ensemble Manager, or an admin.
+_ANY_RUN = "*"
+
+
+async def _run_reader(authorization: str | None, internal_secret: str | None) -> str:
+    """Who is reading runs: a Tapis username, or ``_ANY_RUN``.
+
+    A run belongs to the user who submitted it. Its record and provenance name
+    their data, storage paths and outputs, so another user must not read them.
+    The Ensemble Manager reads on a user's behalf with its service secret. The
+    local demo has no accounts and is left open when no token is sent.
+    """
+    if _internal_service_authorized(internal_secret):
+        return _ANY_RUN
+    token = _bearer(authorization)
+    if settings.demo_mode and not token:
+        return _ANY_RUN
+    username = await _caller_or_none(token)
+    if not username:
+        raise HTTPException(401, detail={
+            "code": "TAPIS_AUTH_REQUIRED",
+            "message": "a valid Tapis bearer token is required to read runs",
+        })
+    return _ANY_RUN if username in settings.cancel_admin_list else username
+
+
+def _require_run_reader(run: dict[str, Any] | None, reader: str) -> dict[str, Any]:
+    """The run, or 404. Another user's run is reported as missing, not forbidden,
+    so that a run id tells a stranger nothing."""
+    if not run or (reader != _ANY_RUN and run.get("submitted_by") != reader):
+        raise HTTPException(404, "run not found")
+    return run
+
+
 def humanize_svo(uri: str | None) -> str:
     """SVO machine name -> readable label using the object__quantity grammar:
     'groundwater__hydraulic_head' -> 'Groundwater — hydraulic head'."""
@@ -475,8 +509,9 @@ query GetDataObject($id: String!) {
 """
 
 LIST_RUNS = """
-query ListRuns($limit: Int!, $offset: Int!) {
+query ListRuns($limit: Int!, $offset: Int!, $where: adapter_workflow_run_bool_exp!) {
   adapter_workflow_run(
+    where: $where
     limit: $limit
     offset: $offset
     order_by: [{started_at: desc}, {created_at: desc}]
@@ -485,7 +520,7 @@ query ListRuns($limit: Int!, $offset: Int!) {
     output_data_object_id logs_uri error_message workflow_plan_id execution_id
     dispatched_at last_signal_at health model_job_uuid model_job_verified
   }
-  adapter_workflow_run_aggregate { aggregate { count } }
+  adapter_workflow_run_aggregate(where: $where) { aggregate { count } }
 }
 """
 
@@ -3144,20 +3179,27 @@ async def list_runs(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     authorization: str | None = Header(None),
+    internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
 ):
-    """List persisted workflow runs, most recent first."""
+    """List the caller's workflow runs, most recent first."""
+    reader = await _run_reader(authorization, internal_secret)
+    where = {} if reader == _ANY_RUN else {"submitted_by": {"_eq": reader}}
     h = get_client(_bearer(authorization))
-    data = await h.execute(LIST_RUNS, {"limit": limit, "offset": offset})
+    data = await h.execute(LIST_RUNS, {"limit": limit, "offset": offset, "where": where})
     total = data.get("adapter_workflow_run_aggregate", {}).get("aggregate", {}).get("count", 0)
     return {"runs": data.get("adapter_workflow_run", []), "total": total}
 
 
 @app.get("/runs/{run_id}", tags=["Core: Runs"])
-async def get_run(run_id: str, authorization: str | None = Header(None)):
+async def get_run(
+    run_id: str,
+    authorization: str | None = Header(None),
+    internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
+):
+    reader = await _run_reader(authorization, internal_secret)
     h = get_client(_bearer(authorization))
-    run = (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"]
-    if not run:
-        raise HTTPException(404, "run not found")
+    run = _require_run_reader(
+        (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"], reader)
     return {**run, "publication": await _run_publication(h, run, _bearer(authorization))}
 
 
@@ -3183,13 +3225,17 @@ async def _run_publication(h, run: dict[str, Any], token: str | None) -> dict[st
 
 
 @app.post("/runs/{run_id}/poll", tags=["Core: Runs"])
-async def poll_run(run_id: str, authorization: str | None = Header(None)):
+async def poll_run(
+    run_id: str,
+    authorization: str | None = Header(None),
+    internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
+):
     """Poll one Tapis workflow run and persist any status transition."""
     caller_token = _bearer(authorization)
+    reader = await _run_reader(authorization, internal_secret)
     h = get_client(caller_token or settings.tapis_token)
-    run = (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"]
-    if not run:
-        raise HTTPException(404, "run not found")
+    run = _require_run_reader(
+        (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"], reader)
     if str(run.get("status") or "") == "cancelled":
         # A user cancelled this run; Tapis may still report it active or
         # terminated, neither of which revises the user's decision.
@@ -3792,12 +3838,13 @@ async def get_run_provenance(
     run_id: str,
     limit: int = Query(100, ge=1, le=500),
     authorization: str | None = Header(None),
+    internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
 ):
     """Return persisted provenance events associated with a workflow run."""
+    reader = await _run_reader(authorization, internal_secret)
     h = get_client(_bearer(authorization))
-    run = (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"]
-    if not run:
-        raise HTTPException(404, "run not found")
+    _require_run_reader(
+        (await h.execute(GET_RUN, {"id": run_id}))["adapter_workflow_run_by_pk"], reader)
     data = await h.execute(GET_PROVENANCE, {"run_id": run_id, "limit": limit})
     return {"run_id": run_id, "events": data.get("adapter_provenance_event", [])}
 

@@ -216,7 +216,17 @@ def test_cancel_is_a_noop_on_a_terminal_run(tapis_stubs):
 
 
 # --- /poll interactions --------------------------------------------------------------
-def test_poll_never_revises_a_cancelled_run(monkeypatch):
+@pytest.fixture
+def as_alice(monkeypatch):
+    """/poll answers only the run's submitter; the seeded run is alice's."""
+    from app import main as main_module
+    main_module._CALLER_CACHE.clear()
+    monkeypatch.setattr("app.main.tapis.userinfo_username", lambda token: "alice")
+    yield
+    main_module._CALLER_CACHE.clear()
+
+
+def test_poll_never_revises_a_cancelled_run(monkeypatch, as_alice):
     _run(status="cancelled")
 
     def must_not_be_called(*args, **kwargs):
@@ -227,7 +237,7 @@ def test_poll_never_revises_a_cancelled_run(monkeypatch):
     assert response.status_code == 200 and response.json()["status"] == "cancelled"
 
 
-def test_poll_verifies_the_signalled_job_and_clears_stalled(monkeypatch):
+def test_poll_verifies_the_signalled_job_and_clears_stalled(monkeypatch, as_alice):
     _run(health="stalled", model_job_uuid="job-1", model_job_name="mint-workflow-model-x")
     monkeypatch.setattr("app.main.tapis.get_run_detail",
                         lambda *a, **k: {"status": "ACTIVE", "tasks": []})
