@@ -101,6 +101,42 @@ The smallest set that makes the Dictionary flow usable by a person.
    existing files dialog on that folder. A location that is not `tapis://` is shown as
    text, never as a link.
 
+#### C1 after the architecture review
+
+The review checked the plan against the code and asked for a revision. Where this
+differs from the steps above, this stands.
+
+- **C1 is four pull requests, not one:**
+  (a) types, refusal messages, submit with acceptance, and the settings fixes below;
+  (b) binding a location in the data step;
+  (c) the runs drawing;
+  (d) results download.
+  The Dictionary flow is usable in a browser after (b); (c) and (d) make it readable.
+- **Plan once, at submit.** Planning a flow registers its datasets with the adapter and
+  makes a plan each time, and a plan can be run only once. So the Parameters step does
+  not plan. It shows the flow's settings from the catalog, as it does for a model.
+  Pressing Run plans once. If the plan carries settings chosen by the flow's author, a
+  dialog lists them with the accept checkbox, and the same plan is then submitted.
+- **A flow's setting is one value.** The Parameters step splits what is typed on commas,
+  for sweeps. For a flow only the first part would be used, so a title with a comma would
+  be cut short without a word. A flow's settings use the single-value field.
+- **Values go in `parameter_values`.** The flow path ignores the field the web app sends
+  adapter values in today.
+- **Saving the Parameters step is still required** before Runs opens: the step's save is
+  what creates the record the gate looks for.
+- **Binding a location writes the whole binding**: the dataset, its one resource, and the
+  link from the flow's input to it. The dataset's id is derived from the location, so
+  binding the same location twice does not make two.
+- **Files go through the Ensemble Manager, not straight to Tapis.** Its files route
+  already serves a flow run and uses the user's token, which removes the question of
+  whether the browser may call Tapis. Two changes there: a download route, and a fix for
+  a result that is a folder (today it lists the folder's parent).
+- **The run view refreshes the thread's record when a run settles.** Today that happens
+  only in the first ten minutes after submit, so a longer run would leave the results
+  step stale.
+- The canvas component is general and can draw a flow's steps. How well its automatic
+  layout places steps side by side is unchecked; that is the first thing (c) finds out.
+
 ### C2. Find a flow
 
 1. **Browser** (`models-browse`): a "Flow" badge on the row and a facet "Models / Flows".
@@ -154,7 +190,8 @@ Needs the adapter routes in
 
 ## API/schema changes
 
-- C1: none. It uses what phases A and B built.
+- C1: a download route on the Ensemble Manager's files API, and its folder fix. Nothing
+  else: it uses what phases A and B built.
 - C2: `GET /flows/{id}/availability` on the Ensemble Manager.
 - C3: none beyond the secret store's own.
 - C4: a field on a piece for the outside service it calls.
@@ -226,13 +263,16 @@ download a result.
    keeps today's rule for models and flows alike.
 3. **May I drive a browser on dev with your token** for the checks? The alternative is
    that you click through and I read the results.
-4. Can the browser call Tapis Files from the app's address? Answered on the first day of
-   C1.
+4. Answered by the review: files go through the Ensemble Manager, so the browser does
+   not call Tapis for C1. The question returns for upload in C4.
 
 ## Decisions
 
 - 2026-11-19: written from a reading of the UI code. Build order: C1, C2, the secret
   store, C3, C4.
+
+- 2026-11-19: architecture review, verdict revise. Its changes are in "C1 after the
+  architecture review". All were adopted.
 
 ## User feedback / decisions
 
