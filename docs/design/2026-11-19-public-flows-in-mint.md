@@ -2,8 +2,9 @@
 
 ## Status
 
-In Review. Revised 2026-11-19 after security, architecture and skeptic reviews (see
-Decisions). Not approved; nothing is implemented.
+Implementing. Approved by the user on 2026-11-19 after the step 0 results. Step 0 is
+done. Step 1 is implemented and tested locally (see Decisions for deviations); steps 2
+to 7 are not started.
 
 ## Objective
 
@@ -147,8 +148,11 @@ Run before anything is built, with what exists today.
 - **Submitting a plan again breaks its earlier runs.** One plan submitted three times in
   a row: the first run never started (still "submitted" on Tapis, "running" in the
   adapter, no output), the second was terminated, and only the third completed. Every
-  submit recreates the Tapis pipeline, whose id is the plan id. All three submits were
-  accepted; nothing warned. The 500 seen earlier was not reproduced and is likely the
+  run of a pipeline ends the one before it: Tapis Workflows' default
+  `duplicate_submission_policy` is `terminate`, and the adapter set none. (The adapter
+  did not recreate the pipeline, as first assumed.) A direct probe confirmed it: with the
+  default the first of two runs was terminated, with `allow` both completed. All three
+  submits were accepted; nothing warned. The 500 seen earlier was not reproduced and is likely the
   same collision. A double click in a browser would do this. Fixed in step 1.
 - **The 502 on a status check was not reproduced.** During the test the Tapis Pods API
   stopped answering for about ten minutes while the adapter itself stayed healthy.
@@ -192,10 +196,10 @@ Run before anything is built, with what exists today.
   `stored_source.check_plan` for the caller, at plan time and again at submit, with the
   same opt-in handling as a searched plan.
 - MCP: `create_adapter_plan` takes `piece_ids`.
-- **A submit never disturbs a run in flight** (found in step 0). Each submit registers
-  its own Tapis pipeline, named from the plan and the run, and does not recreate one
-  that has active runs. A second submit with the same idempotency key returns the first
-  run. The flows screen (step 4) sends one key per click.
+- **A submit never disturbs a run in flight** (found in step 0). Generated pipelines set
+  Tapis Workflows' `duplicate_submission_policy` to `allow`. A second submit with the
+  same idempotency key already returns the first run; the flows screen (step 4) sends
+  one key per click.
 
 Named pieces do not use the edge cache, so a half-written cache cannot affect them.
 
@@ -357,7 +361,7 @@ because a user can bring their own key until then. Its design depends on open qu
 ## API/schema changes
 
 - **`POST /plans`:** optional `piece_ids` (step 1) and `flow_id` (step 3), mutually
-  exclusive. Existing requests are unchanged. New 422 codes: `PIECE_NOT_SYNCED`,
+  exclusive. Existing requests are unchanged. New 422 codes: `PIECE_NOT_IN_REGISTRY`,
   `PIECE_DOES_NOT_FIT`, `FLOW_NOT_FOUND`, `FLOW_BROKEN`, `FLOW_SETTING_REFUSED`.
 - **Approval hash** changes what it covers (step 2). No piece is approved today, so
   nothing needs migrating.
@@ -486,6 +490,19 @@ Questions 1 to 3 are answered in step 0. Question 8 is the user's.
   is read as agreement and needs the user's confirmation.
 - 2026-11-19: Pieces are public and approved, not built into the adapter.
 - 2026-11-19: Planning with several inputs at once is dropped from this work.
+- 2026-11-19: **Approved** by the user ("aproved"), which also confirms the flows screen
+  over flows as models.
+- 2026-11-19, step 1 deviations from the approved text:
+  - **One refusal code, not two, for a piece the adapter cannot plan.** The spec named
+    `PIECE_NOT_SYNCED` as distinct from "not found". With registry scoping on, a piece
+    that is not visible and one that does not exist look the same to the adapter, and
+    telling them apart would mean a second catalog read. The code is
+    `PIECE_NOT_IN_REGISTRY`, and its message names all three causes.
+  - **The resubmit fix is a policy setting, not a pipeline per run.** The cause turned
+    out to be Tapis's default policy, so one setting fixes it and the pipeline id stays
+    the plan id, which the composite model path relies on. A pipeline registered before
+    the change keeps its old policy.
+  - **`validate_path` is named `first_misfit`** and returns the position and reason.
 - 2026-11-19, after review:
   - **A real corpus is tested first** (skeptic). It was last.
   - **The adapter-held key moves to the end and is fetched at run time** (all three
