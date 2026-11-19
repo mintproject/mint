@@ -156,7 +156,9 @@ if _SPEC.get("job_uuid_output"):
     _results[_SPEC["job_uuid_output"]] = _uuid
 for _id, _value in _results.items():
     _ctx.set_output(_id, _value)
-print(json.dumps({"status": "ok", "job_uuid": _uuid, "outputs": _results}))
+# Tapis Workflows does not report a task's named outputs: print them, last, for the
+# adapter to read back from the task's stdout.
+print(json.dumps({"status": "ok", "job_uuid": _uuid, "svo_flow_outputs": _results}))
 '''
 
 

@@ -821,9 +821,9 @@ def _function_code(step: dict[str, Any], inputs: dict[str, Any]) -> str:
     if not source:
         from . import task_code
         return task_code.get_code(step.get("transform_type"))
-    output_ids = flow_output_ids(step)
-    extra = len(output_ids["outputs"]) + len(output_ids["values"]) > 1 if output_ids else False
-    return runnable_code(source, step.get("python_entrypoint"), inputs, output_ids if extra else None)
+    # Every flow step, whatever it returns, reports its outputs where the adapter
+    # can read them. A chain step is wrapped exactly as before.
+    return runnable_code(source, step.get("python_entrypoint"), inputs, flow_output_ids(step))
 
 
 def flow_output_ids(step: dict[str, Any]) -> dict[str, dict[str, str]] | None:

@@ -85,12 +85,16 @@ if isinstance(_svo_flow, dict):
         _svo_sets[_svo_ids["values"].get(str(_svo_name))] = _svo_value
     if None in _svo_sets:
         raise ValueError("the piece returned an output or value this step does not declare")
-    for _svo_id, _svo_value in _svo_sets.items():
-        _svo_ctx.set_output(
-            _svo_id, _svo_value if isinstance(_svo_value, str) else _svo_json.dumps(_svo_value))
 elif _svo_result is not None:
-    _svo_ctx.set_output(
-        "result", _svo_result if isinstance(_svo_result, str) else _svo_json.dumps(_svo_result))
+    _svo_sets = {"result": _svo_result}
+else:
+    _svo_sets = {}
+_svo_sets = {_k: _v if isinstance(_v, str) else _svo_json.dumps(_v) for _k, _v in _svo_sets.items()}
+for _svo_id, _svo_value in _svo_sets.items():
+    _svo_ctx.set_output(_svo_id, _svo_value)
+# Tapis Workflows does not report a task's named outputs, so they are printed here,
+# last, for the adapter to read back from the task's stdout.
+print(_svo_json.dumps({"svo_flow_outputs": _svo_sets}))
 '''
 _SET_ONE_OUTPUT = '''if _svo_result is not None:
     _svo_ctx.set_output(

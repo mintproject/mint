@@ -55,7 +55,7 @@ if not logging.getLogger().handlers:
 
 log = logging.getLogger(__name__)
 
-from . import flow_graph, input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis
+from . import flow_graph, flow_run, input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
@@ -3649,6 +3649,12 @@ async def poll_run(
             )
             run = {**run, "auto_bind": bind_result}
     response = {**run, **detail}
+    plan_row = (await h.execute(GET_PLAN, {"id": run.get("workflow_plan_id")}))["adapter_workflow_plan_by_pk"] \
+        if run.get("workflow_plan_id") else None
+    flow_view = flow_run.view((plan_row or {}).get("plan_json") or {}, detail)
+    if flow_view is not None:
+        # One entry per step with its status, and where each of the flow's outputs is.
+        response["flow"] = flow_view
     outcome = await _record_run_publication(h, run, detail)
     if outcome:
         response["publication"] = outcome
