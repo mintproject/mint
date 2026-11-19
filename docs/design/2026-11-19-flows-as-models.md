@@ -525,4 +525,8 @@ reordered or dropped without undoing the first four.
 
 See "User need" for the user's words.
 
+- 2026-11-19: "ok approved", for the four additions that came out of the SUBSIDE check
+  (value outputs, order-only links, published-record outputs, region and dates from the
+  thread).
+
 - 2026-11-19: "1 approved", in answer to "Do you approve the revised spec?"
