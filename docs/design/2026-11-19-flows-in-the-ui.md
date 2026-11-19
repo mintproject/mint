@@ -2,7 +2,7 @@
 
 ## Status
 
-In Review
+Approved (2026-11-19). Implementing: C1(a).
 
 ## Objective
 
@@ -307,8 +307,7 @@ download a result.
 
 1. Answered 2026-11-19: a catalog dataset with several resources, through a flow input
    that takes a collection. Pasting a location is left out of the first build.
-2. **Should a flow be hidden when its outputs lack the thread's indicator?** The plan
-   keeps today's rule for models and flows alike.
+2. Answered 2026-11-19: today's rule is kept, for models and flows alike.
 3. Answered 2026-11-19: "you can drive". The browser checks on dev are driven with the
    user's token.
 4. Answered by the review: files go through the Ensemble Manager, so the browser does
@@ -335,3 +334,5 @@ download a result.
 - 2026-11-19: "Ok so we need to plan to account for th eui".
 - 2026-11-19: "could we use a ckan dataset with multiple dfata resources?" and, of a flow
   input that says it takes a collection, "i like this."
+- 2026-11-19: "yes lets go", approving the plan as revised, keeping the indicator rule,
+  and pushing this document.
