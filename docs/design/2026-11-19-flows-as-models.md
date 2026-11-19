@@ -9,7 +9,7 @@ Implementing. Approved by the user on 2026-11-19. Replaces steps 3, 4 and 5 of
 |---|---|
 | 0 — fixes and checks | done (#431, #432, #433) |
 | A — flows in the catalog and the adapter | done, live on dev (#434, mcp-suite #13) |
-| B — running a flow from a thread | not started |
+| B — running a flow from a thread | built, in review (draft PR); not yet on dev |
 | C to F | not started |
 
 Deviations from the approved text, and what each review changed, are under Decisions.
@@ -734,6 +734,40 @@ reordered or dropped without undoing the first four.
   - **Left open by phase A:** the Helm chart does not set `SVO_ADAPTER_API_URL`; an app
     piece does not renew its token; settings are shared by name across steps; a link from
     a flow parameter is refused; data objects in the adapter have no owner.
+
+- 2026-11-19, phase B (running a flow from a thread). User decisions: the thread's region
+  is to be wired in ("Region, can we do that?"); a flow that needs a secret cannot run
+  from a thread until the per-user secret store exists; the secret is to be fetched with
+  the runner's own token and held by the adapter, so nothing waits on the Tapis team.
+  What was built, and where it differs from the approved text:
+  - **The dictionary flow was run as a flow on dev first**, through the adapter: 4 minutes
+    11 seconds, the same 16 files as the hand-built chain.
+  - **The flow path is its own module** (`flowExecution.ts`) called from the unified
+    service at plan, submit and follow. It reuses the store, the adapter client and the
+    response shape of the `adapter_steps` branch, as the architecture review asked, without
+    threading through that branch's model-job code.
+  - **A flow is detected by one query on `modelcatalog_configuration_flow`**, not through
+    the thread's model query.
+  - **Where each output is comes from the step's printed report.** Tapis Workflows
+    reports a task's status and printed output but not the outputs it set. Every flow
+    step prints them as its last line and the adapter reads that back. Not yet seen on
+    live Tapis.
+  - **The thread's dates fill the settings a flow marks as start and end dates. Its
+    region fills the input a flow marks as its region** when no dataset is bound there,
+    as its boundary or, when that is large, its bounding box, with the limits a model's
+    region input has. The piece receives it as GeoJSON text, not as a file.
+  - **One dataset per input.** A thread that binds several datasets to one input is
+    refused for a flow (`FLOW_FANOUT_UNSUPPORTED`): that would be several runs. A flow
+    with several inputs, each bound to a dataset, is supported.
+  - **The execution row holds the run's id** ("ue_...") where a model's holds its Tapis
+    job id, because the thread screen finds the run through it. The files and logs routes
+    were changed not to treat that id as a job.
+  - **Cancel closes the thread's record of the run**; without that nothing would, since a
+    closed run is no longer followed.
+  - **Not built:** a flow's secret settings from a thread; per-step logs in the thread's
+    logs view; several datasets on one input.
+  - Tests: Ensemble Manager 429 passing, 36 of them new; adapter 791 passing with the four
+    failures that predate this work.
 
 ## User feedback / decisions
 

@@ -108,6 +108,11 @@ submit with `/workflows/submit`.
 
 - Each flow input becomes a managed argument filled in from its data object: `source_uri`
   for the first input the steps read, `source_uri_2`, `source_uri_3` for the rest.
+- `region` fills the input the flow marks as its region when no dataset is bound to it:
+  `{"input": "<flow input id>", "source": {"kind": "geojson", "geometry": ...}}` or
+  `{"kind": "bbox", "bbox": [minx, miny, maxx, maxy]}`, held to the limits a model's
+  region input has. The piece receives it as GeoJSON text on that input, not as a
+  location. 422 `FLOW_REGION_REFUSED` for any other input, or one with a dataset.
 - A step's `settings` become the defaults of the plan's parameters. A value sent at
   submit still wins. Steps that declare the same setting name share it.
 - The plan records the flow under `plan_json.flow`: the configuration, the bound inputs,
