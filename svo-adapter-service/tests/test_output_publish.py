@@ -520,7 +520,8 @@ def test_publication_absent_without_a_publish_task_or_while_it_runs():
 def _run_with_plan(plan_json):
     STORE.plan["plan-x"] = {"id": "plan-x", "plan_json": plan_json}
     STORE.run["run-x"] = {"id": "run-x", "workflow_plan_id": "plan-x", "status": "completed",
-                          "tapis_workflow_id": "pipe", "tapis_run_id": "run-uuid"}
+                          "tapis_workflow_id": "pipe", "tapis_run_id": "run-uuid",
+                          "submitted_by": "alice"}
 
 
 def _publishing_run(monkeypatch, bound_to="do-out"):
@@ -528,7 +529,8 @@ def _publishing_run(monkeypatch, bound_to="do-out"):
     STORE.plan["plan-x"] = {"id": "plan-x", "plan_json": {
         "steps": [{"transform_type": "catalog_register"}], "bound": {"data_object_id": bound_to}}}
     STORE.run["run-x"] = {"id": "run-x", "workflow_plan_id": "plan-x", "status": "running",
-                          "tapis_workflow_id": "pipe", "tapis_run_id": "run-uuid"}
+                          "tapis_workflow_id": "pipe", "tapis_run_id": "run-uuid",
+                          "submitted_by": "alice"}
     result = {"catalog": "ckan+stac", "ckan_dataset": "d", "stac_item": "https://stac/items/ue_1", "public": False}
     monkeypatch.setattr(tapis, "get_run_detail", lambda *a, **k: {
         "status": "COMPLETED", "tasks": [_task(json.dumps(result))]})

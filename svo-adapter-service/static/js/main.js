@@ -578,7 +578,7 @@ function pollWorkflowRun(runId) {
       const elapsed = Math.round((Date.now() - start) / 1000);
       const d = getToken()
         ? await api('POST', `/runs/${runId}/poll`, undefined, { auth: true })
-        : await api('GET', `/runs/${runId}`);
+        : await api('GET', `/runs/${runId}`, undefined, { auth: true });
       const st = (d.status || 'submitted').toLowerCase();
       const done = TERMINAL.includes(st);
       $('runMsg').innerHTML = `run <code>${runId.slice(0, 8)}…</code> <b class="${_statusClass(st)}">${st}</b> (${elapsed}s)`;
@@ -764,12 +764,12 @@ function runWorkflowForPlan(plan, source, target, { dryRun = false } = {}) {
   $('runOut').innerHTML = '';
   const loadCompletedForPlan = async () => {
     if (dryRun || !plan?.plan_id) return null;
-    const data = await api('GET', '/runs?limit=50');
+    const data = await api('GET', '/runs?limit=50', undefined, { auth: true });
     const run = (data.runs || []).find(r => r.workflow_plan_id === plan.plan_id && String(r.status || '').toLowerCase() === 'completed');
     if (!run) return null;
     return getToken()
       ? api('POST', `/runs/${run.id}/poll`, undefined, { auth: true })
-      : api('GET', `/runs/${run.id}`);
+      : api('GET', `/runs/${run.id}`, undefined, { auth: true });
   };
   loadCompletedForPlan()
     .then(existing => {

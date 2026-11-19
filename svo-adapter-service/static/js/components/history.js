@@ -232,7 +232,7 @@ export async function loadRunHistory() {
   historyMsg.textContent = 'loading…';
   historyOut.innerHTML = '<p class="muted">Loading…</p>';
   try {
-    const data = await api('GET', '/runs');
+    const data = await api('GET', '/runs', undefined, { auth: true });
     const runs = data.runs || [];
     if (!runs.length) {
       historyOut.innerHTML = '<p class="muted">No runs yet. Submit a workflow to see history.</p>';
@@ -278,7 +278,7 @@ export function initHistoryHandlers(runWorkflowForPlan, pollWorkflowRun) {
         try {
           const run = STATE.TOKEN
             ? await api('POST', `/runs/${runId}/poll`, undefined, { auth: true })
-            : await api('GET', `/runs/${runId}`);
+            : await api('GET', `/runs/${runId}`, undefined, { auth: true });
           const runOut = $('runOut');
           if (runOut) runOut.innerHTML = `<pre>${esc(JSON.stringify(run, null, 2))}</pre>`;
           const runMsg = $('runMsg');
@@ -293,7 +293,7 @@ export function initHistoryHandlers(runWorkflowForPlan, pollWorkflowRun) {
       if (provBtn) {
         const runId = provBtn.dataset.runId;
         try {
-          const prov = await api('GET', `/runs/${runId}/provenance`);
+          const prov = await api('GET', `/runs/${runId}/provenance`, undefined, { auth: true });
           const events = prov.events || [];
           let html = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="text-align:left;border-bottom:1px solid var(--line)"><th style="padding:8px">Time</th><th style="padding:8px">Event</th><th style="padding:8px">Payload</th></tr></thead><tbody>';
           for (const ev of events) {
@@ -317,7 +317,7 @@ export function initHistoryHandlers(runWorkflowForPlan, pollWorkflowRun) {
       if (dfcBtn) {
         const runId = dfcBtn.dataset.runId;
         try {
-          const run = await api('GET', `/runs/${runId}`);
+          const run = await api('GET', `/runs/${runId}`, undefined, { auth: true });
           const runOut = $('runOut');
           if (runOut) runOut.innerHTML = renderDfcResults(run);
           const runMsg = $('runMsg');

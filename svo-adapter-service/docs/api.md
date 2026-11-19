@@ -173,7 +173,7 @@ plans through the existing adapter workflow tables.
 | POST | `/workflows/generate` | Generate and persist a Tapis Workflows definition for a plan. |
 | POST | `/workflows/submit` | Register/run a generated adapter workflow, or return a dry-run. Deferred plans require a coordinator-owned `execution_id` and a concrete, already-resolved `source_uri`; mismatches return `DEFERRED_EXECUTION_ID_MISMATCH`. Internal Ensemble Manager composite submissions may include a server-generated `model_task`; the adapter then submits/polls that model job, discovers the declared output, and hands its URI to the first transform task. Composite descriptors require Ensemble Manager authentication, an `execution_id`, and contain no bearer credentials. Tapis submission failures are persisted and returned with `TAPIS_WORKFLOW_SUBMISSION_FAILED` plus a run ID. Accepts `Idempotency-Key` (or the equivalent `idempotency_key` body field) for replay-safe submissions. |
 | GET | `/runs` | List recent adapter workflow runs. |
-| GET | `/runs/{run_id}` | Retrieve one run. |
+| GET | `/runs/{run_id}` | Retrieve one run. See "Who can read a run" below. |
 | POST | `/runs/{run_id}/poll` | Poll Tapis and persist the run status transition. Also verifies a signalled model job uuid against Tapis (by job name) and clears a `stalled` health verdict when the job exists. Never reverts `cancelled`. |
 | POST | `/runs/{run_id}/signal` | Liveness report from the composite model task (`started`, `job_submitted`, `finished`). Authenticated by `X-Run-Signal-Token` / `X-Run-Signal-Expires`, a per-run HMAC derived from `SVO_ADAPTER_RUN_SIGNAL_SECRETS`. Updates `health`, `started_at`, `last_signal_at` and the job identity; never moves `status` to a terminal value. 503 when signals are not configured; uniform 401 for a bad token or unknown run. |
 | POST | `/runs/{run_id}/token` | Hand the composite model task the run's current per-run Tapis token (token keeper, `SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED`). Authenticated by `X-Run-Token-Credential` / `X-Run-Token-Expires`, a per-run HMAC in its own domain derived from `SVO_ADAPTER_RUN_SIGNAL_SECRETS`; uniform 401 for a bad credential or unknown run; 404 `RUN_TOKEN_UNAVAILABLE` when the keeper is off, the run is not `running`/`submitting`, nothing is stored, or the keeper deadline has passed; 429 per-run rate limit. Mints and stores a successor when the stored token is within the renewal margin. Response is `no-store`; the token appears nowhere else. |
@@ -225,6 +225,22 @@ Terminal provider failures always populate `error_message`, including when
 Tapis returns no failed-task details. Provider diagnostics are bounded and
 sanitized before persistence; credentials and signed URL parameters are not
 included.
+
+### Who can read a run
+
+`GET /runs`, `GET /runs/{run_id}`, `GET /runs/{run_id}/provenance` and
+`POST /runs/{run_id}/poll` answer only for a run the caller may read:
+
+| Caller | Sees |
+|---|---|
+| A signed-in user (bearer token, resolved through Tapis `userinfo`) | the runs they submitted |
+| A user in `SVO_ADAPTER_CANCEL_ADMINS` | every run |
+| The Ensemble Manager (`X-Ensemble-Manager-Secret`) | every run |
+
+- No token, or a token Tapis does not confirm, gets 401 `TAPIS_AUTH_REQUIRED`.
+- Another user's run is answered with 404, the same as a run that does not exist.
+- A run with no recorded submitter is readable only by an admin and the Ensemble Manager.
+- In demo mode, with no token, every run is listed. Demo mode has no accounts.
 
 ### Generic catalog/objective helpers
 

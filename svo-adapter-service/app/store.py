@@ -122,8 +122,9 @@ class InMemoryHasura:
     def _op_ListRuns(self, v):
         limit = v.get("limit", 50)
         offset = v.get("offset", 0)
+        submitter = ((v.get("where") or {}).get("submitted_by") or {}).get("_eq")
         runs = sorted(
-            STORE.run.values(),
+            (r for r in STORE.run.values() if submitter is None or r.get("submitted_by") == submitter),
             key=lambda r: r.get("started_at") or "",
             reverse=True
         )
