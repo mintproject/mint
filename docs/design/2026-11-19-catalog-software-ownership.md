@@ -2,8 +2,9 @@
 
 ## Status
 
-Implementing. Approved by the user on 2026-11-19 ("Ok do the ownership fix"). Built and
-tested locally on branch `fix/catalog-software-ownership`; not yet pushed or deployed.
+Implemented. Approved by the user on 2026-11-19 ("Ok do the ownership fix"), merged as
+#429 and deployed to dev the same day. Deviations from the approved text are under
+Decisions.
 
 ## Objective
 
@@ -208,6 +209,18 @@ Unchanged. Hasura evaluates the new filters against the caller's token on every 
     own Software or Version by another user's row under it; only an admin can then delete.
   - Verified live: an upsert cannot overwrite or take over another user's Software,
     Version, Configuration or parameter.
+
+- 2026-11-19, on dev after the deploy:
+  - 18 checks passed with the two real accounts through the sign-in webhook: owner set by
+    the server, the second user cannot edit, delete or take over by upsert, an owner cannot
+    give a row away or leave it unowned, a second user's version blocks the owner's delete,
+    an unowned row cannot be claimed, and a user cannot make themselves an admin. The test
+    rows were removed.
+  - `wmobley` was added to `modelcatalog_admin`, at the user's instruction.
+  - Of 33 Software and 58 Version rows without an owner, 25 and 40 were assigned by the
+    runbook's rule. Every proposal named `wmobley`, who owns 194 of the 199 configurations
+    on dev. 8 Software and 18 Version rows remain without an owner: they hold no
+    configuration, or one with no owner.
 
 ## User feedback / decisions
 

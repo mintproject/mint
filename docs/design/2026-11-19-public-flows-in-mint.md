@@ -2,9 +2,13 @@
 
 ## Status
 
-Implementing. Approved by the user on 2026-11-19 after the step 0 results. Step 0 is
-done. Step 1 is implemented and tested locally (see Decisions for deviations); steps 2
-to 7 are not started.
+Implementing. Approved by the user on 2026-11-19 after the step 0 results. Steps 0 and 1
+are done and live on dev (#427).
+
+**Steps 3, 4 and 5 are superseded** by `2026-11-19-flows-as-models.md`: the user decided
+that flows are stored as models and run from a modeling thread, not from a flows screen.
+Step 3 was built on the unmerged branch `feat/etl-flows` and is reshaped there. Steps 2, 6
+and 7 still stand.
 
 ## Objective
 
@@ -517,6 +521,8 @@ Questions 1 to 3 are answered in step 0. Question 8 is the user's.
     the existing `check_plan`** (architecture).
   - **The flows screen is split** into run-and-view and the review step (architecture).
   - **Not taken:** flows as a configuration file (see Alternatives).
+- 2026-11-19: **Reversed by the user:** flows are models in a thread, with the Model
+  metadata structure, not a dedicated screen. See `2026-11-19-flows-as-models.md`.
 
 ## User feedback / decisions
 
