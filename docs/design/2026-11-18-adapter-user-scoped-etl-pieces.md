@@ -331,8 +331,8 @@ auth pages and environment variables, `dso-dynamo` README (Phase 6).
 Phases merge to `develop` and deploy to dev in order. Phases 1–3 are behaviour-tightening
 and independently revertible; the migration is additive. Phases 4–5 are inert until
 `stored_source_enabled` is set on the pod. Rollback for stored code is to unset it. A bad
-catalog row is removed by an admin delete followed by a sync (Phase 2 makes the sync
-propagate it).
+catalog row is removed by a delete, by its owner or an admin, followed by a sync (Phase 2
+makes the sync propagate it).
 
 ## Open questions
 
@@ -459,6 +459,18 @@ contracts of public pieces. Both settings remain unset on the pod.
   Stored code has to be given a token.
 - 2026-11-18: Shared pieces are runnable by other users, not only visible.
 - 2026-11-18: Approval is admin-only.
+- 2026-11-19: "The owner of the pieces SHOULD be able to delete them." Role `user` gets a
+  delete permission on `modelcatalog_etl_process`, filtered to rows it owns; contracts go
+  with the row (`ON DELETE CASCADE`). There is still no update: a changed piece is a new
+  piece, because approval and plans are pinned to the source. Consequences, all existing
+  behaviour: the registry row goes on the next catalog sync (operator-run, so the piece
+  stays plannable and runnable by its owner until then); a stored plan that uses the piece
+  is refused at submit with `STORED_SOURCE_PIECE_NOT_VISIBLE`; a re-insert under the same
+  id starts unapproved. Found when re-pinning four test pieces left two sets with identical
+  contracts and the planner mixed them.
+- 2026-11-19: There is no per-user admin. The auth webhook returns only the user identity,
+  so every Tapis user is role `user`; "admin" means holding the Hasura admin secret or the
+  adapter's operator secret.
 - 2026-11-18: "approve". Taken as approval of the opt-in guard and of the spec as it stood,
   given while the security re-review was still running. Status stays In Review until that
   review is in and any changes it requires have been shown to the user.
