@@ -1,0 +1,7 @@
+# A model configuration is a flow of ETL pieces when it has a row here. Null for a model.
+query get_configuration_flow($id: String!) {
+    modelcatalog_configuration_flow_by_pk(configuration_id: $id) {
+        configuration_id
+        thread_bindings_json
+    }
+}

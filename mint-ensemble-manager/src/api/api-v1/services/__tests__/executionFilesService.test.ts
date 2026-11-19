@@ -86,6 +86,17 @@ describe("executionFilesService.listFiles", () => {
         expect(listCompositeWorkflowFiles).toHaveBeenCalledWith(EXECUTION_ID, undefined);
     });
 
+    it("never asks Tapis for a job when the execution carries a flow run's id", async () => {
+        // A flow has no Tapis job: its execution holds the run's id in that place.
+        const { listJobFiles } = tapisListsFiles([]);
+        (getExecution as jest.Mock).mockResolvedValue({ id: EXECUTION_ID, runid: "ue_parent-1" });
+
+        const files = await executionFilesService.listFiles(EXECUTION_ID, AUTH);
+
+        expect(files).toEqual([]);
+        expect(listJobFiles).not.toHaveBeenCalled();
+    });
+
     it("lists the archive directory for a composite workflow result without a run id", async () => {
         const { listArchiveFiles, listCompositeWorkflowFiles } = tapisListsFiles([
             {

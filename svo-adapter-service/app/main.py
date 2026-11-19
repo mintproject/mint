@@ -55,7 +55,7 @@ if not logging.getLogger().handlers:
 
 log = logging.getLogger(__name__)
 
-from . import flow_graph, input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis
+from . import flow_graph, flow_run, input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
@@ -2075,6 +2075,74 @@ def _unaccepted_flow_settings(plan_json: dict[str, Any], args: dict[str, Any]) -
     return {"defaults": defaults, "links": list(plan_json["flow"].get("linked_settings") or [])}
 
 
+def _fixed_flow_args(plan_json: dict[str, Any], args: dict[str, Any]) -> list[str]:
+    """Arguments of a flow run that a submission may not send.
+
+    A flow's datasets and region are checked against each piece's contract when
+    the flow is planned, and are stored in the plan. A value sent at submit would
+    replace one unchecked. The run's own identifiers are not the submitter's to
+    choose either.
+    """
+    if not isinstance(plan_json.get("flow"), dict):
+        return []
+    fixed = accepted_aliases(
+        str(parameter["name"]) for parameter in plan_json.get("parameters") or []
+        if parameter.get("managed") and parameter.get("name"))
+    fixed.update({"execution_id", "source_uri", "tapis_token"})
+    sent = normalize_args(_wrap_args(args or {}))
+    return sorted(name for name in sent if name in fixed)
+
+
+def _flow_region(region: dict[str, Any] | None, used: list[str], inputs: dict[str, str],
+                 flow: dict[str, Any]) -> tuple[str | None, str | None]:
+    """The flow input that takes the thread's region, and the region as GeoJSON
+    text, or (None, None) when the request sends no region.
+
+    The region is checked with the limits a model's region input has (size, area,
+    vertices). It may fill only the input the flow itself marks as its region, and
+    only when no dataset is bound to that input.
+    """
+    if region is None:
+        return None, None
+    marked = ((flow.get("thread_bindings") or {}).get("region") or {}).get("input")
+    input_id = region.get("input") if isinstance(region, dict) else None
+    if not isinstance(input_id, str) or input_id != marked or input_id not in used or input_id in inputs:
+        raise HTTPException(422, detail={
+            "code": "FLOW_REGION_REFUSED",
+            "message": "a region fills only the input the flow marks as its region, "
+                       "and only when no dataset is bound to it"})
+    try:
+        normalized, _ = input_plan._validate_source(region.get("source"), 0)
+    except input_plan.InputPlanError as error:
+        raise HTTPException(422, detail={"code": error.code, "message": str(error)}) from error
+    if normalized["kind"] == "geojson":
+        geometry = normalized["geometry"]
+    else:
+        minx, miny, maxx, maxy = normalized["bbox"]
+        geometry = {"type": "Polygon", "coordinates": [[
+            [minx, miny], [maxx, miny], [maxx, maxy], [minx, maxy], [minx, miny]]]}
+    return input_id, json.dumps(geometry, sort_keys=True, separators=(",", ":"))
+
+
+def _region_contract(input_id: str, rows: list[dict[str, Any]],
+                     specs: list[dict[str, Any] | None]) -> DataObjectContract:
+    """What the region is taken to be for the fit check: whatever the first piece
+    input linked to it asks for."""
+    for step, spec in zip(rows, specs):
+        if not spec:
+            continue
+        inputs = flow_graph.piece_inputs(_piece_view(spec))
+        for wire in step.get("wires") or []:
+            if not isinstance(wire, dict):
+                continue
+            source, target = wire.get("from") or {}, wire.get("to") or {}
+            if source.get("flow_input") == input_id and target.get("input") in inputs:
+                contract = _contract_from_registry(inputs[target["input"]])
+                contract.resource_uri = "inline:thread-region"
+                return contract
+    return DataObjectContract(resource_uri="inline:thread-region")
+
+
 async def _require_signed_in(bearer: str | None) -> str | None:
     """The caller's username, or 401. Flows are read from the catalog as the
     caller; someone who is not signed in may not read every column a check needs.
@@ -2188,13 +2256,16 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             if (isinstance(source, dict) and isinstance(source.get("flow_input"), str)
                     and source["flow_input"] not in used):
                 used.append(source["flow_input"])
-    unbound = [input_id for input_id in used if input_id not in body.inputs]
+    region_input, region_text = _flow_region(body.region, used, body.inputs, flow)
+    unbound = [input_id for input_id in used if input_id not in body.inputs and input_id != region_input]
     if unbound:
         raise HTTPException(422, detail={
             "code": "FLOW_INPUT_NOT_BOUND", "inputs": unbound,
             "message": "the flow needs a data object for each of these inputs"})
     bound: dict[str, dict[str, Any]] = {}
     for input_id in used:
+        if input_id == region_input:
+            continue
         found = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": body.inputs[input_id]}))["adapter_data_object"]
         if not found:
             raise HTTPException(404, detail={
@@ -2202,7 +2273,13 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         bound[input_id] = found[0]
 
     checked = flow_graph.check({
-        "inputs": [{"id": input_id, "contract": _data_object_to_contract(row)} for input_id, row in bound.items()],
+        "inputs": [
+            *({"id": input_id, "contract": _data_object_to_contract(row)} for input_id, row in bound.items()),
+            # The thread's region is not a registered dataset. It is taken as fitting
+            # the input the flow's author marked for it.
+            *([{"id": region_input, "contract": _region_contract(region_input, rows, specs)}]
+              if region_input else []),
+        ],
         "parameters": flow["parameters"],
         "steps": [{
             "position": step.get("position"), "piece": _piece_view(spec) if spec else None,
@@ -2275,9 +2352,12 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             definition = {"name": arg, "type": "string"}
             plan_json["parameters"].append(definition)
         definition.update({
-            "required": False, "default": bound[input_id].get("resource_uri"),
-            "managed": True, "managed_source": "flow_input",
-            "description": "A dataset the flow takes as an input",
+            "required": False,
+            "default": region_text if input_id == region_input else bound[input_id].get("resource_uri"),
+            "managed": True,
+            "managed_source": "thread_region" if input_id == region_input else "flow_input",
+            "description": ("The thread's region, as GeoJSON text" if input_id == region_input
+                            else "A dataset the flow takes as an input"),
         })
 
     opt_in = tuple(body.allow_unapproved_piece_ids)
@@ -2297,14 +2377,17 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         "linked_settings": [
             {"step": int(step["position"]), "setting": wire["to"]["setting"], "from": wire["from"]}
             for step in rows for wire in step.get("wires") or [] if "setting" in wire["to"]],
-        "inputs": [{"input_id": input_id, "data_object_id": body.inputs[input_id], "arg": arg}
+        "inputs": [{"input_id": input_id, "arg": arg,
+                    **({"region": True} if input_id == region_input
+                       else {"data_object_id": body.inputs[input_id]})}
                    for input_id, arg in args.items()],
         "outputs": flow["outputs"],
         "thread_bindings": flow["thread_bindings"],
         "pause_after": [int(step["position"]) for step in rows if step.get("pause_after")],
     }
     created = (await h.execute(INSERT_PLAN, {"obj": {
-        "source_data_object_id": body.inputs[used[0]] if used else None,
+        "source_data_object_id": next(
+            (body.inputs[input_id] for input_id in used if input_id != region_input), None),
         "target_model_configuration_id": flow["configuration_id"],
         "status": "draft",
         "plan_json": plan_json,
@@ -3172,6 +3255,12 @@ async def submit_workflow(
         if tapis.plan_publishes((plan.get("plan_json") or {}).get("steps") or []):
             await _enforce_run_owner(body.execution_id, token)
 
+    fixed = _fixed_flow_args(plan.get("plan_json") or {}, body.args)
+    if fixed:
+        raise HTTPException(422, detail={
+            "code": "FLOW_ARGUMENT_FIXED", "arguments": fixed,
+            "message": "these were set when the flow was planned (its datasets and region) or belong "
+                       "to the run itself; plan again to change them"})
     unaccepted = _unaccepted_flow_settings(plan.get("plan_json") or {}, body.args)
     if (unaccepted["defaults"] or unaccepted["links"]) and not body.accept_flow_settings and not body.dry_run:
         raise HTTPException(422, detail={
@@ -3649,6 +3738,14 @@ async def poll_run(
             )
             run = {**run, "auto_bind": bind_result}
     response = {**run, **detail}
+    plan_row = (await h.execute(GET_PLAN, {"id": run.get("workflow_plan_id")}))["adapter_workflow_plan_by_pk"] \
+        if run.get("workflow_plan_id") else None
+    flow_view = flow_run.view((plan_row or {}).get("plan_json") or {}, detail)
+    if flow_view is not None:
+        # One entry per step with its status, and where each of the flow's outputs is.
+        # The run's status in the adapter's own words: Tapis's raw status is also
+        # in this response, and a caller following a flow must not have to map it.
+        response["flow"] = {**flow_view, "status": str(run.get("status") or "")}
     outcome = await _record_run_publication(h, run, detail)
     if outcome:
         response["publication"] = outcome

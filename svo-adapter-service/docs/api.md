@@ -108,6 +108,11 @@ submit with `/workflows/submit`.
 
 - Each flow input becomes a managed argument filled in from its data object: `source_uri`
   for the first input the steps read, `source_uri_2`, `source_uri_3` for the rest.
+- `region` fills the input the flow marks as its region when no dataset is bound to it:
+  `{"input": "<flow input id>", "source": {"kind": "geojson", "geometry": ...}}` or
+  `{"kind": "bbox", "bbox": [minx, miny, maxx, maxy]}`, held to the limits a model's
+  region input has. The piece receives it as GeoJSON text on that input, not as a
+  location. 422 `FLOW_REGION_REFUSED` for any other input, or one with a dataset.
 - A step's `settings` become the defaults of the plan's parameters. A value sent at
   submit still wins. Steps that declare the same setting name share it.
 - The plan records the flow under `plan_json.flow`: the configuration, the bound inputs,
@@ -123,6 +128,23 @@ submit with `/workflows/submit`.
 | `FLOW_NOT_SUPPORTED` | 422 | the flow links a setting from a flow parameter, which is not built yet |
 | `FLOW_DOES_NOT_BUILD` | 422 | the flow checks out but cannot be made into a pipeline, for example a linked setting the piece reads through no task input |
 | `STORED_SOURCE_REFUSED` | 403 | the caller may not run one of the pieces |
+
+**Following a run of a flow.** `POST /runs/{run_id}/poll` adds `flow` for a plan made
+from a flow:
+
+- `steps`: one entry per step with `step`, `name`, `task_id`, `depends_on`, `status`
+  (`pending`, `running`, `completed`, `failed`, `cancelled`, `skipped`) and `message`.
+- `outputs`: the flow's outputs as registered, each with `value`: where the output is, or
+  the value the step returned. `value` is null until the step has finished, and for a
+  published record.
+
+- `status`: the run's status in the adapter's words (`running`, `completed`, `failed`,
+  `cancelled`). The top-level `status` of a poll is Tapis's own and is not mapped.
+
+Tapis Workflows does not report a task's named outputs, so every flow step prints them as
+its last line of output, `{"svo_flow_outputs": {...}}`, and the adapter reads that back.
+A report line over 100,000 characters, or one that cannot be read as JSON, is skipped. A
+location over 2,000 characters is not reported.
 
 **A piece that runs as a Tapis app.** A Tapis Workflows job task returns nothing a later
 task can read. In a flow, an app piece therefore runs through a function that submits the
@@ -152,6 +174,9 @@ used only when the submitter says so.
   listing those `defaults` and `links`, unless the body has `"accept_flow_settings": true`.
 - A value the submitter sends replaces the flow's default and needs no acceptance. A dry
   run needs none.
+- `POST /workflows/submit` refuses a flow plan with 422 `FLOW_ARGUMENT_FIXED` when `args`
+  names something the plan fixed: a dataset or region bound when the flow was planned,
+  `execution_id`, `source_uri` or `tapis_token`. Plan again to change a dataset.
 
 **What a flow's author cannot do.**
 
