@@ -217,10 +217,23 @@ In the Ensemble Manager, built on the `adapter_steps` branch, not as a parallel 
 5. **Cancel** uses the adapter's run.
 
 **Secret settings.** A parameter row marked secret is the general form of the model key.
-Its value is accepted only in the submit request, passed to the adapter, and kept out of
-the plan, `parameter_values`, its hash, and `thread_model_parameter` by an allow-list. A
-rerun asks for it again. Phase 0 check 4 decides how much has to change. Step 6 of the
-earlier spec (a key held for the user) builds on this.
+Its value is never typed into a run and never passes through the Ensemble Manager.
+
+- The runner stores the secret once with the adapter, encrypted, as a model's owner can
+  today. The store is extended from the owner's secrets to each user's own.
+- A flow names the secret a piece needs. At submit the adapter binds the runner's stored
+  secret by id; the plan and the run record hold the id, never the value.
+- The piece fetches the value when it starts, with a per-run credential. That fetch exists
+  for the model task and is extended to function pieces.
+- A flow that needs a secret the runner has not stored is refused at plan time, naming
+  what is missing.
+- A secret setting has no default, and is never one of the region or date settings.
+- The UI gets a page for a user's saved credentials: add, replace, delete, never shown.
+
+This replaces "sent with the submit and filtered out", which phase 0 check 4 showed would
+have to cover about a dozen tables, hashes, logs and responses. It also does most of what
+step 6 of the earlier spec needed; what remains of step 6 is a key the operator holds for
+everyone.
 
 ### Phase C — Finding, running and watching a flow in the UI
 
@@ -414,7 +427,9 @@ reordered or dropped without undoing the first four.
   piece with two outputs returns both; an existing one-input piece is unchanged. Live:
   register the three sensemaking flows and the SUBSIDE flow, and plan each.
 - **B:** run counters and results with no Tapis job; several bound datasets; cancel; a
-  secret value appears in no plan, record, hash or log; a rerun asks for it again. Live:
+  stored secret is bound by id and its value appears in no plan, record, hash, log or
+  response; a flow whose secret the runner has not stored is refused at plan time; one
+  user cannot bind or fetch another user's secret. Live:
   the second account runs a flow from a thread through the API.
 - **C:** the badge and filter; an unavailable flow cannot be picked; stages side by side;
   every output listed. Live: the second account runs a flow in the browser.
@@ -537,7 +552,7 @@ reordered or dropped without undoing the first four.
     every later change could break. The proposal is to change phase B: a secret setting is
     never typed into a run. The runner stores it once with the adapter, as owners do
     today, and the flow names it. This extends the existing store to a runner's own
-    secrets and the run-time fetch to function pieces. **Not yet approved by the user.**
+    secrets and the run-time fetch to function pieces. Approved by the user on 2026-11-19 ("approve").
   - Two rules hold either way: a secret setting has no default, and is never one of the
     region or date settings, because both are recorded with the plan.
 - 2026-11-19, phase 0 check 5, readers of a configuration's Tapis component:
