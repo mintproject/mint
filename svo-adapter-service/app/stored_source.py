@@ -132,11 +132,34 @@ def source_sha256(source: str) -> str:
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
-def is_approved(spec: dict[str, Any]) -> bool:
-    """True only while the spec's current source is the one an admin approved."""
+def approval_sha256(spec: dict[str, Any]) -> str | None:
+    """What an approval is given for: the piece's source, the function called in
+    it, the run arguments it is handed and the arguments it declares.
+
+    The source alone is not enough. A piece runs with the token of whoever runs
+    it, and which arguments reach the code decides what it can do with that:
+    an approved piece that later bound one more argument would still read as
+    approved. Returns None for a piece with no stored source.
+    """
     source = stored_source(spec)
+    if not source:
+        return None
+    schema = spec.get("parameters_schema_json")
+    declared = {k: v for k, v in schema.items() if k != "metadata"} if isinstance(schema, dict) else {}
+    covered = {
+        "source": source,
+        "entrypoint": stored_entrypoint(spec),
+        "env_from_args": spec.get("env_from_args") or {},
+        "arguments": declared,
+    }
+    text = json.dumps(covered, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def is_approved(spec: dict[str, Any]) -> bool:
+    """True only while the piece is as it was when an admin approved it."""
     approved = spec.get("approved_source_sha256")
-    return bool(source and approved and source_sha256(source) == approved)
+    return bool(approved and approval_sha256(spec) == approved)
 
 
 # ---------------------------------------------------------------------------

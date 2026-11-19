@@ -489,6 +489,10 @@ Questions 1 to 3 are answered in step 0. Question 8 is the user's.
 
 ## Decisions
 
+- 2026-11-19, step 2, "approval covers the bindings": built. `approved_source_sha256` now
+  holds one hash over the source, the entrypoint, `env_from_args` and the declared
+  arguments. No piece was approved before this, so nothing lapses.
+
 - 2026-11-19: Flows are run from a dedicated screen, not as models in a thread. Proposed
   by the assistant; the user moved on to "how do we go about this" without objecting. This
   is read as agreement and needs the user's confirmation.
