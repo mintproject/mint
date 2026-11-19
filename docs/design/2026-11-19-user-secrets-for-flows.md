@@ -2,7 +2,7 @@
 
 ## Status
 
-In Review
+Approved (2026-11-19). Not yet implemented.
 
 ## Objective
 
@@ -328,3 +328,9 @@ hash, the Tapis pipeline or its arguments, a log line the adapter writes.
   adapter.
 - 2026-11-19: "can we use our jwt for all of this?", then "ok continue" to the
   recommendation that the step fetches with the runner's token.
+- 2026-11-19: "ok then i approve", in answer to four questions put together: the design
+  including section 8 and the change from "refused at plan time" to "planned as not
+  ready"; the bounded answer to the storing risk (open question 4), not a second factor;
+  pushing this document; and sending the flow pieces to the library as a pull request.
+  The user asked in the same exchange that the UI be planned for; that plan is a separate
+  document, and the build order between the two is decided there.
