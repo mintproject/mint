@@ -821,7 +821,68 @@ def _function_code(step: dict[str, Any], inputs: dict[str, Any]) -> str:
     if not source:
         from . import task_code
         return task_code.get_code(step.get("transform_type"))
-    return runnable_code(source, step.get("python_entrypoint"), inputs)
+    output_ids = flow_output_ids(step)
+    extra = len(output_ids["outputs"]) + len(output_ids["values"]) > 1 if output_ids else False
+    return runnable_code(source, step.get("python_entrypoint"), inputs, output_ids if extra else None)
+
+
+def flow_output_ids(step: dict[str, Any]) -> dict[str, dict[str, str]] | None:
+    """Task output ids for a flow step's outputs, or None for a step that is not
+    part of a flow.
+
+    The first data output keeps the id ``result`` that a chain uses, so a piece
+    written for a chain works in a flow unchanged. Further data outputs are
+    ``result_<position>`` and values are ``value_<name>``.
+    """
+    declared = step.get("flow_outputs")
+    if not isinstance(declared, dict):
+        return None
+    positions = sorted(int(p) for p in declared.get("outputs") or [])
+    return {
+        "outputs": {str(p): ("result" if p == positions[0] else f"result_{p}") for p in positions},
+        "values": {str(name): f"value_{name}" for name in sorted(declared.get("values") or [])},
+    }
+
+
+def _flow_inputs(
+    step: dict[str, Any],
+    env_map: dict[str, Any],
+    task_ids_by_step: dict[int, str],
+    steps_by_number: dict[int, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Task inputs for what a flow step receives through its links.
+
+    Each linked input ``k`` of the piece arrives as ``SOURCE_<k>``, from a pipeline
+    argument (a flow input) or from an earlier task's output. The first linked
+    input is also given under the name a chain uses, ``SOURCE_RESULT``, when it
+    comes from an earlier step. A linked setting replaces the argument the piece
+    would otherwise have read for it.
+    """
+    def value_from(source: dict[str, Any]) -> dict[str, Any]:
+        if "arg" in source:
+            return {"args": str(source["arg"])}
+        number = int(source["step"])
+        ids = flow_output_ids(steps_by_number[number]) or {"outputs": {}, "values": {}}
+        output_id = (ids["values"][str(source["value"])] if "value" in source
+                     else ids["outputs"][str(source["output"])])
+        return {"task_output": {"task_id": task_ids_by_step[number], "output_id": output_id}}
+
+    inputs: dict[str, dict[str, Any]] = {}
+    wires = [w for w in step.get("wires") or [] if w.get("to")]
+    data = sorted((w for w in wires if "input" in w["to"]), key=lambda w: int(w["to"]["input"]))
+    for index, wire in enumerate(data):
+        bound = {"type": "string", "value_from": value_from(wire["from"])}
+        inputs[f"SOURCE_{int(wire['to']['input'])}"] = bound
+        if index == 0 and "step" in wire["from"]:
+            inputs["SOURCE_RESULT"] = dict(bound)
+    for wire in wires:
+        if "setting" not in wire["to"]:
+            continue
+        name = str(wire["to"]["setting"])
+        names = [env for env, arg in env_map.items() if str(arg) == name] or [name.upper()]
+        for env in names:
+            inputs[env] = {"type": "string", "value_from": value_from(wire["from"])}
+    return inputs
 
 
 _INPUT_SECRET_PARAMS = frozenset({
@@ -1029,6 +1090,7 @@ def generate_tapis_workflow(
     from . import task_code as _task_code
     task_ids_by_step: dict[int, str] = {}
     function_task_ids_by_step: dict[int, str] = {}
+    steps_by_number = {int(s["step"]): s for s in steps}
     for s in steps:
         task_id = f"step-{s['step']}-{(s.get('transform_type') or 'transform')}"
         app_id = s.get("tapis_app_id")
@@ -1081,6 +1143,10 @@ def generate_tapis_workflow(
                 # calling ctx.set_output("result", json_text) itself.
                 "output": {"result": {"type": "string"}},
             }
+            # A flow step declares every output it has; a later step reads each by id.
+            for group in (flow_output_ids(s) or {}).values():
+                for output_id in group.values():
+                    task["output"].setdefault(output_id, {"type": "string"})
             if s.get("python_source"):
                 task["execution_profile"] = {
                     "max_retries": 0, "max_exec_time": settings.stored_source_max_exec_seconds}
@@ -1108,7 +1174,17 @@ def generate_tapis_workflow(
                 ),
                 None,
             )
-            if (transform_type == "unit_convert" or s.get("python_source")) and source_task_id:
+            if s.get("wires") is not None:
+                # A flow step: what it receives is stated link by link.
+                for wire in s["wires"]:
+                    arg = (wire.get("from") or {}).get("arg")
+                    if arg and arg not in params:
+                        params[str(arg)] = {
+                            "type": "string", "required": True,
+                            "description": "A dataset the flow takes as an input",
+                        }
+                inputs.update(_flow_inputs(s, env_map, task_ids_by_step, steps_by_number))
+            elif (transform_type == "unit_convert" or s.get("python_source")) and source_task_id:
                 # Stored code keeps any SOURCE_URI it bound and also receives the
                 # preceding function's result.
                 if not s.get("python_source"):
@@ -1169,9 +1245,10 @@ def generate_tapis_workflow(
                 # The token handoff reads the model task's output, so it must run first.
                 dependency_ids = [model_id, *dependency_ids]
             task["depends_on"] = [{"id": dep_id} for dep_id in dependency_ids]
-        elif prev_id:
+        elif prev_id and s.get("wires") is None:
             # Older plans omitted depends_on for a simple chain. Preserve that
-            # compatibility while honoring explicit DAG edges above.
+            # compatibility while honoring explicit DAG edges above. A flow step
+            # states its links, so one with none depends on nothing.
             task["depends_on"] = [{"id": prev_id}]
         tasks.append(task)
         task_ids_by_step[int(s["step"])] = task_id

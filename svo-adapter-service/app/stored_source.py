@@ -70,18 +70,58 @@ if _svo_result is not None:
         "result", _svo_result if isinstance(_svo_result, str) else _svo_json.dumps(_svo_result))
 '''
 
+# Used instead of the last block above when the step has more than one output. The
+# entrypoint may then return {"svo_flow": {"outputs": {position: value}, "values":
+# {name: value}}}; each is set as its own task output so that a later step can
+# read it. Anything else it returns is the first output, as before.
+_SET_FLOW_OUTPUTS = '''
+_svo_ids = __OUTPUT_IDS__
+_svo_flow = _svo_result.get("svo_flow") if isinstance(_svo_result, dict) else None
+if isinstance(_svo_flow, dict):
+    _svo_sets = {}
+    for _svo_position, _svo_value in (_svo_flow.get("outputs") or {}).items():
+        _svo_sets[_svo_ids["outputs"].get(str(_svo_position))] = _svo_value
+    for _svo_name, _svo_value in (_svo_flow.get("values") or {}).items():
+        _svo_sets[_svo_ids["values"].get(str(_svo_name))] = _svo_value
+    if None in _svo_sets:
+        raise ValueError("the piece returned an output or value this step does not declare")
+    for _svo_id, _svo_value in _svo_sets.items():
+        _svo_ctx.set_output(
+            _svo_id, _svo_value if isinstance(_svo_value, str) else _svo_json.dumps(_svo_value))
+elif _svo_result is not None:
+    _svo_ctx.set_output(
+        "result", _svo_result if isinstance(_svo_result, str) else _svo_json.dumps(_svo_result))
+'''
+_SET_ONE_OUTPUT = '''if _svo_result is not None:
+    _svo_ctx.set_output(
+        "result", _svo_result if isinstance(_svo_result, str) else _svo_json.dumps(_svo_result))
+'''
 
-def runnable_code(source: str, entrypoint: str | None, input_names: Iterable[str]) -> str:
+
+def runnable_code(
+    source: str,
+    entrypoint: str | None,
+    input_names: Iterable[str],
+    output_ids: dict[str, dict[str, str]] | None = None,
+) -> str:
     """The code to hand Tapis Workflows for a stored-source step.
 
     When the source defines the named entrypoint function, a call to it is
     appended. Otherwise the source is a script that sets its own output and is
     returned unchanged.
+
+    ``output_ids`` is given for a flow step with more than one output: the task
+    output id for each output position and each value name.
     """
     if not entrypoint or not entrypoint.isidentifier() or not defines_function(source, entrypoint):
         return source
-    return source.rstrip("\n") + _CALL_ENTRYPOINT.replace(
+    call = _CALL_ENTRYPOINT.replace(
         "__INPUT_NAMES__", json.dumps(sorted(input_names))).replace("__ENTRYPOINT__", entrypoint)
+    if output_ids:
+        assert call.endswith(_SET_ONE_OUTPUT)
+        call = call[:-len(_SET_ONE_OUTPUT)] + _SET_FLOW_OUTPUTS.lstrip("\n").replace(
+            "__OUTPUT_IDS__", json.dumps(output_ids, sort_keys=True))
+    return source.rstrip("\n") + call
 
 
 def source_sha256(source: str) -> str:
