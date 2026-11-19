@@ -1214,6 +1214,9 @@ def generate_tapis_workflow(
         "group_id": group_id,
         **({"tenant_id": tenant or settings.tapis_tenant}
            if (tenant or settings.tapis_tenant) else {}),
+        # Tapis Workflows' default for a second run of a pipeline is to TERMINATE
+        # the first. A plan may be run again while an earlier run is in flight.
+        "execution_profile": {"duplicate_submission_policy": "allow"},
         "params": params,
         "tasks": tasks,
         # TODO: append a final "bind-to-model-input" task once the target

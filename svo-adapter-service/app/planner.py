@@ -336,6 +336,29 @@ def find_path(
     return None
 
 
+def first_misfit(
+    source: DataObjectContract,
+    target: DataObjectContract,
+    specs: list[dict[str, Any]],
+) -> tuple[int, str] | None:
+    """Check a NAMED chain instead of searching for one. Returns None when it
+    fits, else ``(position, reason)`` for the first step that does not;
+    ``position == len(specs)`` means every step fits but the result does not
+    meet ``target``.
+
+    Fit is what the search itself uses: a step is accepted when one of its
+    inputs matches the state, and only its first output is handed on.
+    """
+    state = source
+    for position, spec in enumerate(specs):
+        if not _transform_accepts(spec, state):
+            return position, "no input of this piece accepts what the previous step hands on"
+        state = _apply_transform(spec, state)
+    if compatibility(state, target).status != ReadinessStatus.ready:
+        return len(specs), "the last piece's output does not meet the target"
+    return None
+
+
 def reachable_variables(
     source: DataObjectContract,
     registry: list[dict[str, Any]],

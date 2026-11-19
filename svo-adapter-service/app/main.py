@@ -89,6 +89,7 @@ from .planner import (
     _catalogs,
     _contract_from_registry,
     find_path,
+    first_misfit,
     parameter_definitions,
     plan_model_run,
     reachable_variables,
@@ -1841,6 +1842,32 @@ async def readiness_check(body: ReadinessCheckIn, authorization: str | None = He
     return result
 
 
+async def _named_path(h: Any, piece_ids: list[str], src: DataObjectContract,
+                      tgt: DataObjectContract) -> list[dict[str, Any]]:
+    """The registry rows for a chain the caller named by catalog piece id, in
+    order, after checking that the chain fits. Nothing is searched for."""
+    by_id: dict[str, dict[str, Any]] = {}
+    for spec in await _registry(h, plannable=False):
+        by_id.setdefault(str(spec.get("id")), spec)
+        if spec.get("mint_etl_process_id"):
+            by_id[str(spec["mint_etl_process_id"])] = spec
+    missing = [piece_id for piece_id in piece_ids if piece_id not in by_id]
+    if missing:
+        raise HTTPException(422, detail={
+            "code": "PIECE_NOT_IN_REGISTRY", "piece_ids": missing,
+            "message": "not in the adapter's registry: the piece does not exist, is not visible "
+                       "to you, or was registered after the last catalog sync"})
+    path = [by_id[piece_id] for piece_id in piece_ids]
+    misfit = first_misfit(src, tgt, path)
+    if misfit:
+        position, reason = misfit
+        raise HTTPException(422, detail={
+            "code": "PIECE_DOES_NOT_FIT", "position": position,
+            "piece_id": piece_ids[position] if position < len(piece_ids) else None,
+            "message": reason})
+    return path
+
+
 @app.post("/plans", tags=["Core: Planning"])
 async def create_plan(body: PlanIn, authorization: str | None = Header(None)):
     h = get_client(_bearer(authorization))
@@ -1852,18 +1879,30 @@ async def create_plan(body: PlanIn, authorization: str | None = Header(None)):
     src = _data_object_to_contract(src_rows[0])
     tgt = await _resolve_target(h, body.target_dataset_specification_id, body.target_contract)
 
-    if compatibility(src, tgt).status == ReadinessStatus.ready:
-        return {"status": "ready", "plan": None, "message": "data object is already model-ready"}
-
     opt_in = tuple(body.allow_unapproved_piece_ids)
-    registry = await _registry(h, opt_in=opt_in)
+    if body.piece_ids is not None:
+        path = await _named_path(h, body.piece_ids, src, tgt)
+        plan_json = _plan_with_parameters(build_plan_json(path))
+        plan_json["piece_ids"] = list(body.piece_ids)
+        # The same check as at submit, so a chain the caller may not run is
+        # refused here and not after they have filled in its arguments.
+        problems = stored_source.check_plan(
+            plan_json, await _registry(h, plannable=False),
+            await _caller_or_none(_bearer(authorization)), opt_in)
+        if problems:
+            raise HTTPException(403, detail={"code": "STORED_SOURCE_REFUSED", "problems": problems})
+    else:
+        if compatibility(src, tgt).status == ReadinessStatus.ready:
+            return {"status": "ready", "plan": None, "message": "data object is already model-ready"}
 
-    edge_map = await _load_edge_map(registry)
-    path = find_path(src, tgt, registry, edge_map=edge_map)
-    if path is None:
-        raise HTTPException(422, "no transform path found from source contract to target contract")
+        registry = await _registry(h, opt_in=opt_in)
 
-    plan_json = _plan_with_parameters(build_plan_json(path))
+        edge_map = await _load_edge_map(registry)
+        path = find_path(src, tgt, registry, edge_map=edge_map)
+        if path is None:
+            raise HTTPException(422, "no transform path found from source contract to target contract")
+
+        plan_json = _plan_with_parameters(build_plan_json(path))
     if opt_in:
         # The opt-in belongs to this caller and this plan; it is re-checked
         # against whoever submits.
