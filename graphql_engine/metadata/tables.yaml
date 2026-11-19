@@ -4940,6 +4940,14 @@
     permission:
       columns: [id, label, description, version, owner_username, visibility, runtime_kind, runtime_json, created_at, updated_at]
       filter: {_or: [{visibility: {_eq: public}}, {visibility: {_eq: shared}}, {owner_username: {_eq: X-Hasura-User-Id}}]}
+  delete_permissions:
+  - role: user
+    permission:
+      # An owner may remove their own piece; its contracts go with it (ON DELETE
+      # CASCADE). The adapter drops the registry row on its next catalog sync.
+      filter:
+        owner_username:
+          _eq: X-Hasura-User-Id
 - table:
     name: modelcatalog_etl_process_contract
     schema: public
