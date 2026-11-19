@@ -34,6 +34,39 @@ so a plan whose pieces need neither a period nor an area can be submitted withou
 inventing values. Framing a caller does supply is recorded in the run's
 `workflow_submit_requested` provenance event under `framing`.
 
+### Naming the pieces of a plan
+
+`POST /plans` normally searches the registry for the shortest chain from the data object
+to the target. When two pieces fit the same step, the search cannot tell them apart and
+returns whichever it meets first.
+
+Pass `piece_ids`, an ordered list of catalog piece ids, to plan exactly that chain. The
+adapter does not search. It checks that the chain fits and stores the plan, which records
+`piece_ids`.
+
+- A piece is found by its catalog id or its registry id.
+- Fit is the same rule the search uses: a step is accepted when one of its inputs matches
+  what the previous step hands on, and a step hands on its first output only.
+- The caller's right to run each piece is checked at plan time with the same rule as at
+  submit, and again at submit. `allow_unapproved_piece_ids` applies as it does to a
+  searched plan.
+
+| Refusal | Status | `detail.code` |
+|---|---|---|
+| A named piece is not in the registry: it does not exist, is not visible to the caller, or was registered after the last catalog sync | 422 | `PIECE_NOT_IN_REGISTRY` (`piece_ids` lists them) |
+| A step does not accept what the previous step hands on, or the last step does not meet the target | 422 | `PIECE_DOES_NOT_FIT` (`position`, `piece_id`; `position` equal to the number of pieces means the target was not met) |
+| The caller may not run a named piece's stored code | 403 | `STORED_SOURCE_REFUSED` (`problems`) |
+
+### Running a plan again
+
+Every generated pipeline sets `execution_profile.duplicate_submission_policy` to `allow`.
+Tapis Workflows' default is `terminate`: a second run of a pipeline ends the first. A plan
+can therefore be submitted again while an earlier run of it is in flight, and both finish.
+A pipeline registered before this change keeps the policy it was registered with.
+
+To make a repeated request return the first run instead of starting another, send the same
+`Idempotency-Key` header (or `idempotency_key`) on both.
+
 ### Pieces that carry stored Python source
 
 A piece may carry its own Python source instead of running one of the adapter's
@@ -125,7 +158,7 @@ plans through the existing adapter workflow tables.
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/readiness/check` | Check a source data object against a model-input requirement. |
-| POST | `/plans` | Find and persist an ETL plan that closes compatibility gaps. |
+| POST | `/plans` | Find and persist an ETL plan that closes compatibility gaps. With `piece_ids`, plan exactly the named chain instead of searching (see "Naming the pieces of a plan"). |
 | POST | `/plans/deferred` | Create a server-owned adapter plan whose source contract will be supplied by a later model output. |
 | POST | `/plans/deferred/{plan_id}/bind` | Bind one Ensemble Manager-owned model-output data object to a deferred plan and return an opaque bound plan token. |
 | GET | `/plans/{plan_id}` | Retrieve a stored plan. |

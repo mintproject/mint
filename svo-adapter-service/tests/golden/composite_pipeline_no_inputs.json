@@ -1,6 +1,9 @@
 {
  "binds_model_input": null,
  "description": "svo-adapter generated ETL pipeline (2 step(s))",
+ "execution_profile": {
+  "duplicate_submission_policy": "allow"
+ },
  "group_id": "adapter-ops",
  "id": "golden-plan",
  "owner": "${apiUserId}",

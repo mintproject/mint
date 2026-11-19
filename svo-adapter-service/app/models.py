@@ -102,6 +102,9 @@ class PlanIn(BaseModel):
     # Shared or public pieces whose stored code has NOT been approved, that the
     # caller agrees to run with their own Tapis token. Never chosen otherwise.
     allow_unapproved_piece_ids: list[str] = Field(default_factory=list)
+    # The pieces to run, in order, by catalog id. Given, the planner does not
+    # search: it checks that the named chain fits and plans exactly that.
+    piece_ids: list[str] | None = Field(default=None, min_length=1, max_length=12)
 
 
 class DeferredPlanIn(BaseModel):
