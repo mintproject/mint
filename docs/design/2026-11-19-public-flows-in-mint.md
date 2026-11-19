@@ -125,6 +125,32 @@ Run before anything is built, with what exists today.
   quick succession, and a 502 on a status check. A button in a browser will hit the first.
 - Not IRB-governed material. See open question 7.
 
+**Results so far (2026-11-19, dev pods, the owner's account and a second account).**
+The real-corpus run and the two transient errors are still to do.
+
+- **Run arguments are not readable by another group member.** The second account is a
+  member of `adapter-ops`. It could read another user's pipeline definition, run record,
+  task executions and run list. None of them held the model key or a Tapis token that the
+  run had been given as arguments. Open question 1 is answered for those four routes.
+- **Tapis Workflows secrets do not reach a function task.** A secret can be stored (as a
+  string; the API description says an object, and an object is refused), added to a
+  group, and listed by a member, and its value is never returned. But a task input
+  naming the secret failed in the engine with "Error attempting to fetch value from
+  secret" for every form tried: the secret id, the group-secret id, both UUIDs and the
+  Security Kernel name as the key, with and without a field selector, and two engine
+  names. A pipeline-level setting naming the secret was accepted and reached the task as
+  nothing. The form in the Tapis documentation is refused at registration. The first
+  choice in step 6 is therefore not available without an answer from the Tapis team.
+- **A private piece is hidden in the catalog but not in the adapter.** The second account
+  saw none of the six private pieces through the catalog. Through the adapter's registry
+  it saw all six, source code included, because `SVO_ADAPTER_REGISTRY_USER_SCOPED` is off.
+- **The adapter's run list is not limited to the caller** (open question 4). The second
+  account listed every run and read another user's run and its provenance.
+- **Private pieces cannot be planned or run by another user.** Planning found no path, and
+  submitting the owner's stored plan was refused, naming each piece.
+- **Another user cannot delete an owner's piece.** The catalog answered with nothing
+  deleted, and the piece was still there.
+
 ### Step 1 — Named pieces on a plan
 
 - `PlanIn` gains `piece_ids`, an ordered list of **catalog** piece ids. `flow_id` (step 3)
@@ -159,6 +185,8 @@ Named pieces do not use the edge cache, so a half-written cache cannot affect th
   The function runtime image (`python:3.11`) stays outside what approval covers; that is
   recorded as a limit, not solved.
 - **Backbone hand-on** (library). `map_and_project` binds `taxonomy_uri`.
+- **Runs are the caller's own.** The adapter's run list, a run and its provenance are
+  limited to the submitter (and an operator). Step 0 found that any user can read them.
 - **Registry scoping.** `SVO_ADAPTER_REGISTRY_USER_SCOPED` is turned on, so a private
   piece is hidden from other users' listings as well as from their plans. The check it
   was waiting for (the session user is the Tapis username) passed on 2026-11-18.
@@ -249,10 +277,9 @@ because a user can bring their own key until then. Its design depends on open qu
 - **Delivery, first choice: a Tapis Workflows secret.** The Workflows API has user
   secrets (stored in the Tapis Security Kernel), group secrets, and a task input filled
   from a secret (`value_from: {secret: ...}`). The key would be held by Tapis, not by the
-  adapter, and the adapter would only write the reference onto steps that qualify. This
-  is in the API description but not in the Tapis documentation, and the engine has
-  ignored a described field before (`entrypoint`), so it is used only if the step 0 probe
-  shows it works. It does not remove the rules above: a group secret can be referenced by
+  adapter, and the adapter would only write the reference onto steps that qualify. The
+  step 0 probe found that the engine does not deliver a secret to a function task in any
+  form tried, so this needs an answer from the Tapis team before it can be used. It does not remove the rules above: a group secret can be referenced by
   any pipeline in the group, so it is only as closed as the group is.
 - **Delivery, fallback: fetched from the adapter at run time.** The step asks the adapter for the key with a
   short-lived per-run credential, through an extension of the existing run-credentials
@@ -407,14 +434,15 @@ because a user can bring their own key until then. Its design depends on open qu
 
 Questions 1 to 3 are answered in step 0. Question 8 is the user's.
 
-1. **Who can read a run's arguments in the adapter's Tapis Workflows group?** Not
-   answerable from the repository. Decides step 6's delivery, and whether the Tapis token
-   needs the same treatment.
+1. **Who can read a run's arguments in the adapter's Tapis Workflows group?** Answered in
+   step 0 for the routes tested: a member can read the run, and the arguments are not in
+   it. Still to ask the Tapis team: whether any other route shows them, and how a secret
+   is meant to reach a function task.
 2. **Can the browser upload to Tapis Files?**
 3. **Where do a new user's outputs go by default?** The tests wrote to one user's home on
    `cloud.data`.
-4. **Does the adapter's run list show a caller only their own runs?** Not verified; the
-   flows screen depends on it.
+4. **Does the adapter's run list show a caller only their own runs?** No (step 0). Fixed
+   in step 2.
 5. **Who does the re-pin when the library changes?**
 6. **Is 600 seconds per step enough?** Step 0.
 7. **May corpus text from IRB-governed material be sent to the model server?** A hard
