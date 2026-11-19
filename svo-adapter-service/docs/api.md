@@ -96,6 +96,8 @@ catalog id, read with the caller's token:
  "outputs": [{"step": 1, "output": 1}], "thread_bindings": {}}
 ```
 
+Both flow routes need a signed-in caller (401 `TAPIS_AUTH_REQUIRED` otherwise).
+
 It returns `ok`, `problems` (each with `code`, `message`, and the `step` and `wire` it is
 on), `depends_on`, and for each piece its input and output positions, the settings a flow
 may give it, and the values it returns. Nothing is stored.

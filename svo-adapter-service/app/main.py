@@ -2056,6 +2056,21 @@ async def _load_flow(h: Any, configuration_id: str) -> dict[str, Any] | None:
     }
 
 
+async def _require_signed_in(bearer: str | None) -> str | None:
+    """The caller's username, or 401. Flows are read from the catalog as the
+    caller; someone who is not signed in may not read every column a check needs.
+    The local demo has no accounts."""
+    if settings.demo_mode:
+        return await _caller_or_none(bearer)
+    username = await _caller_or_none(bearer)
+    if not username:
+        raise HTTPException(401, detail={
+            "code": "TAPIS_AUTH_REQUIRED",
+            "message": "a valid Tapis bearer token is required to check or plan a flow",
+        })
+    return username
+
+
 def _piece_summary(view: dict[str, Any]) -> dict[str, Any]:
     return {
         "inputs": sorted(flow_graph.piece_inputs(view)),
@@ -2073,6 +2088,7 @@ async def check_flow(body: FlowCheckIn, authorization: str | None = Header(None)
     Pieces are read from the catalog with the caller's token. One the caller
     cannot see is reported as an empty step, the same as one that does not exist.
     """
+    await _require_signed_in(_bearer(authorization))
     h = get_client(_bearer(authorization))
     pieces = await _catalog_pieces(h, [step.etl_process_id for step in body.steps])
     views = {piece_id: _piece_view(spec) for piece_id, spec in pieces.items()}
@@ -2103,6 +2119,7 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
     caller, here and again at submit. A flow grants nothing: it only names pieces.
     """
     bearer = _bearer(authorization)
+    caller = await _require_signed_in(bearer)
     h = get_client(bearer)
     flow = await _load_flow(h, body.flow_id)
     if flow is None:
@@ -2211,7 +2228,6 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             "description": "A dataset the flow takes as an input",
         })
 
-    caller = await _caller_or_none(bearer)
     opt_in = tuple(body.allow_unapproved_piece_ids)
     problems = stored_source.check_plan(plan_json, registry, caller, opt_in)
     if problems:

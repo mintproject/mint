@@ -251,3 +251,16 @@ def test_a_flow_does_not_let_a_user_run_a_piece_they_may_not(monkeypatch):
     response = plan({"in:corpus": data_object("corpus", "tapis://sys/docs")})
     assert response.status_code == 403
     assert response.json()["detail"]["problems"][0]["code"] == "STORED_SOURCE_DISABLED"
+
+
+def test_checking_or_planning_a_flow_needs_a_signed_in_caller(monkeypatch):
+    import asyncio
+    monkeypatch.setattr(settings, "demo_mode", False)
+    monkeypatch.setattr("app.main.tapis.userinfo_username", lambda token: "alice" if token == "good" else None)
+    main_module._CALLER_CACHE.clear()
+    assert asyncio.run(main_module._require_signed_in("good")) == "alice"
+    for token in (None, "unknown"):
+        with pytest.raises(Exception) as caught:
+            asyncio.run(main_module._require_signed_in(token))
+        assert getattr(caught.value, "status_code", None) == 401
+    main_module._CALLER_CACHE.clear()
