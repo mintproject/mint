@@ -2,11 +2,17 @@
 
 ## Status
 
-Approved by the user on 2026-11-19 ("1 approved"), as the second draft: revised after an
-architecture review, a skeptic review, and the user's decision that a flow takes several
-inputs and gives several outputs. Nothing is implemented yet. Replaces steps 3, 4 and 5 of `2026-11-19-public-flows-in-mint.md`. Steps 0 and 1
-of that spec are done; its steps 2, 6 and 7 still stand and are referred to here by those
-numbers.
+Implementing. Approved by the user on 2026-11-19. Replaces steps 3, 4 and 5 of
+`2026-11-19-public-flows-in-mint.md`; that spec's steps 2, 6 and 7 still stand.
+
+| Phase | State |
+|---|---|
+| 0 — fixes and checks | done (#431, #432, #433) |
+| A — flows in the catalog and the adapter | done, live on dev (#434, mcp-suite #13) |
+| B — running a flow from a thread | not started |
+| C to F | not started |
+
+Deviations from the approved text, and what each review changed, are under Decisions.
 
 ## Objective
 
@@ -705,6 +711,29 @@ reordered or dropped without undoing the first four.
   - Tested by running the generated step against a stand-in Tapis: submit, wait, file
     matching, a failed job, a missing or ambiguous file, a rejected token, and that a
     failed submit is not retried.
+
+- 2026-11-19, phase A on dev after #434 deployed:
+  - **The Model Catalog API pod needed the adapter's address set by hand.** A normal
+    deploy swaps images and does not resend a pod's settings. `SVO_ADAPTER_API_URL` was
+    added to `mintdevapi`, with the user's approval; its other settings and its image
+    were unchanged.
+  - **Three flows are registered** through `POST /flows`, under the family "Semantic
+    Sensemaking" and one version: Dictionary (ingest, score, map, report), Narrative
+    (ingest, discover frames, map, report) and Formulation draft (ingest, draft lexicon).
+    Each takes one input, a folder of documents.
+  - **Each plans against the real corpus** as its owner. The corpus location is filled in
+    from the data object and the plan asks only for an output folder.
+  - **The second account is refused** (`FLOW_DOES_NOT_CHECK_OUT`, every step empty),
+    because the pieces are private. The refusal names no piece. It can read the family,
+    the version and the three flows like any model.
+  - **A submit with no output folder is refused** with `INVALID_PARAMETERS`. Nothing ran.
+  - **No flow has been run as a flow yet.**
+  - **The SUBSIDE displacement flow is not registered.** Its three steps are tasks in a
+    SUBSIDE pipeline file, not pieces in the catalog. They have to be registered as
+    pieces first. The catalog shape was checked against it on paper in phase 0.
+  - **Left open by phase A:** the Helm chart does not set `SVO_ADAPTER_API_URL`; an app
+    piece does not renew its token; settings are shared by name across steps; a link from
+    a flow parameter is refused; data objects in the adapter have no owner.
 
 ## User feedback / decisions
 
