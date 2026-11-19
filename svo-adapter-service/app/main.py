@@ -55,11 +55,14 @@ if not logging.getLogger().handlers:
 
 log = logging.getLogger(__name__)
 
-from . import input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis
+from . import flow_graph, input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
     DATA_OBJECT_CONTRACT_QUERY,
+    GET_FLOW,
+    GET_FLOW_PIECES,
+    HasuraClient,
     LIST_DATA_OBJECTS_QUERY,
     MODEL_INPUT_REQUIREMENT_QUERY,
     TRANSFORM_REGISTRY_QUERY,
@@ -70,6 +73,8 @@ from .models import (
     DataObjectContract,
     DataObjectIn,
     DeferredPlanIn,
+    FlowCheckIn,
+    FlowPlanIn,
     GenerateWorkflowIn,
     ModelRunIn,
     PlanIn,
@@ -83,6 +88,7 @@ from .models import (
     TransformSpecIn,
 )
 from .planner import (
+    MANAGED_PARAMS,
     build_model_run_plan_json,
     build_plan_json,
     compatibility,
@@ -1955,6 +1961,280 @@ async def create_plan(body: PlanIn, authorization: str | None = Header(None)):
     await h.execute(INSERT_PROVENANCE, {"obj": {
         "event_type": "plan_generated",
         "payload_json": {"plan_id": created["id"], "steps": len(path)},
+    }})
+    return {"status": "transform_required", "plan_id": created["id"], "plan_json": plan_json}
+
+
+# ---------------------------------------------------------------------------
+# Flows: a graph of pieces stored on a model configuration
+# ---------------------------------------------------------------------------
+def _piece_view(spec: dict[str, Any]) -> dict[str, Any]:
+    """A piece as the flow check reads it, from a registry row or a catalog row.
+
+    The two keep a contract's position in different places, and a piece
+    registered straight into the adapter has none: those are numbered from 1
+    within inputs and within outputs, in the order they were given.
+    """
+    contracts = spec.get("contracts") or []
+    if isinstance(contracts, dict):
+        contracts = contracts.get("data") or []
+    counted = {"input": 0, "output": 0}
+    view: list[dict[str, Any]] = []
+    for contract in contracts:
+        role = contract.get("role")
+        if role not in counted:
+            continue
+        counted[role] += 1
+        position = contract.get("position")
+        if not isinstance(position, int):
+            position = (contract.get("metadata_json") or {}).get("mint_position")
+        if not isinstance(position, int):
+            position = counted[role]
+        view.append({**contract, "position": position})
+    runtime = spec.get("runtime_json") if isinstance(spec.get("runtime_json"), dict) else {}
+    schema = spec.get("parameters_schema_json")
+    if not isinstance(schema, dict):
+        nested = runtime.get("parameters_schema_json")
+        schema = nested if isinstance(nested, dict) else {}
+    runtime = runtime or ((schema.get("metadata") or {}).get("runtime") or {})
+    return {
+        "id": spec.get("mint_etl_process_id") or spec.get("id"),
+        "contracts": view,
+        "parameters_schema_json": schema,
+        "value_outputs": runtime.get("value_outputs") or schema.get("value_outputs") or [],
+    }
+
+
+def _refused_flow_settings() -> set[str]:
+    """Arguments a flow may neither set nor link: the ones the adapter fills in
+    and the ones that carry a credential. A flow is written by one user and run
+    by another."""
+    return set(MANAGED_PARAMS) | set(tapis._INPUT_SECRET_PARAMS)
+
+
+async def _catalog_pieces(h: Any, piece_ids: list[str | None]) -> dict[str, dict[str, Any]]:
+    """Catalog pieces by id, as the CALLER may see them. Read from the catalog
+    itself, not the adapter's synced copy, so a piece registered a minute ago can
+    be put in a flow."""
+    wanted = sorted({piece_id for piece_id in piece_ids if piece_id})
+    if not wanted:
+        return {}
+    if settings.demo_mode:
+        found: dict[str, dict[str, Any]] = {}
+        for spec in await _registry(h, plannable=False):
+            for key in (spec.get("mint_etl_process_id"), spec.get("id")):
+                if key in wanted:
+                    found.setdefault(str(key), spec)
+        return found
+    client = HasuraClient(getattr(h, "_bearer", None), user_scoped=True)
+    rows = (await client.execute(GET_FLOW_PIECES, {"ids": wanted})).get("modelcatalog_etl_process") or []
+    return {str(row["id"]): row for row in rows}
+
+
+async def _load_flow(h: Any, configuration_id: str) -> dict[str, Any] | None:
+    """A configuration's flow as the caller may see it, or None when there is no
+    such configuration or it is a model, not a flow."""
+    if settings.demo_mode:
+        return None
+    client = HasuraClient(getattr(h, "_bearer", None), user_scoped=True)
+    row = (await client.execute(GET_FLOW, {"id": configuration_id})).get("modelcatalog_configuration_by_pk")
+    if not row or not row.get("flow"):
+        return None
+    return {
+        "configuration_id": row["id"],
+        "label": row.get("label"),
+        "parameters": [{"id": p["parameter"]["id"]} for p in row.get("parameters") or [] if p.get("parameter")],
+        "outputs": row["flow"].get("outputs_json") or [],
+        "thread_bindings": row["flow"].get("thread_bindings_json") or {},
+        "steps": [{
+            "position": step.get("position"),
+            "etl_process_id": step.get("etl_process_id"),
+            "settings": step.get("settings_json") or {},
+            "wires": step.get("wires_json") or [],
+            "pause_after": bool(step.get("pause_after")),
+        } for step in row["flow"].get("steps") or []],
+    }
+
+
+def _piece_summary(view: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "inputs": sorted(flow_graph.piece_inputs(view)),
+        "outputs": sorted(flow_graph.piece_outputs(view)),
+        "settings": sorted(flow_graph.piece_arguments(view) - _refused_flow_settings()),
+        "values": sorted(flow_graph.piece_values(view)),
+    }
+
+
+@app.post("/flows/check", tags=["Core: Planning"])
+async def check_flow(body: FlowCheckIn, authorization: str | None = Header(None)):
+    """Check a flow before it is registered: every link against the pieces'
+    declared inputs and outputs. Nothing is stored and no data is needed.
+
+    Pieces are read from the catalog with the caller's token. One the caller
+    cannot see is reported as an empty step, the same as one that does not exist.
+    """
+    h = get_client(_bearer(authorization))
+    pieces = await _catalog_pieces(h, [step.etl_process_id for step in body.steps])
+    views = {piece_id: _piece_view(spec) for piece_id, spec in pieces.items()}
+    checked = flow_graph.check({
+        "inputs": body.inputs,
+        "parameters": body.parameters,
+        "steps": [{
+            "position": step.position, "piece": views.get(step.etl_process_id or ""),
+            "settings": step.settings, "wires": step.wires,
+        } for step in body.steps],
+        "outputs": body.outputs,
+        "thread_bindings": body.thread_bindings,
+    }, refused_settings=_refused_flow_settings())
+    return {
+        "ok": checked.ok,
+        "problems": [problem.as_dict() for problem in checked.problems],
+        "depends_on": {str(position): after for position, after in checked.depends_on.items()},
+        "pieces": {piece_id: _piece_summary(view) for piece_id, view in views.items()},
+    }
+
+
+@app.post("/plans/flow", tags=["Core: Planning"])
+async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(None)):
+    """Plan a flow stored on a model configuration, with a data object for each
+    of its inputs. The graph is taken from the flow; nothing is searched for.
+
+    The flow is read with the caller's token and every piece is checked for this
+    caller, here and again at submit. A flow grants nothing: it only names pieces.
+    """
+    bearer = _bearer(authorization)
+    h = get_client(bearer)
+    flow = await _load_flow(h, body.flow_id)
+    if flow is None:
+        raise HTTPException(422, detail={
+            "code": "FLOW_NOT_FOUND", "flow_id": body.flow_id,
+            "message": "no such flow: the configuration does not exist or is not a flow"})
+
+    registry = await _registry(h, plannable=False)
+    by_id: dict[str, dict[str, Any]] = {}
+    for spec in registry:
+        by_id.setdefault(str(spec.get("id")), spec)
+        if spec.get("mint_etl_process_id"):
+            by_id[str(spec["mint_etl_process_id"])] = spec
+
+    rows = sorted(flow["steps"], key=lambda step: step.get("position") or 0)
+    specs = [by_id.get(str(step.get("etl_process_id") or "")) for step in rows]
+
+    # Flow inputs in the order the steps first read them. The first is the
+    # argument a chain calls source_uri, so a piece written for a chain finds it.
+    used: list[str] = []
+    for step in rows:
+        for wire in step.get("wires") or []:
+            source = wire.get("from") if isinstance(wire, dict) else None
+            if (isinstance(source, dict) and isinstance(source.get("flow_input"), str)
+                    and source["flow_input"] not in used):
+                used.append(source["flow_input"])
+    unbound = [input_id for input_id in used if input_id not in body.inputs]
+    if unbound:
+        raise HTTPException(422, detail={
+            "code": "FLOW_INPUT_NOT_BOUND", "inputs": unbound,
+            "message": "the flow needs a data object for each of these inputs"})
+    bound: dict[str, dict[str, Any]] = {}
+    for input_id in used:
+        found = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": body.inputs[input_id]}))["adapter_data_object"]
+        if not found:
+            raise HTTPException(404, detail={
+                "code": "DATA_OBJECT_NOT_FOUND", "input": input_id, "data_object_id": body.inputs[input_id]})
+        bound[input_id] = found[0]
+
+    checked = flow_graph.check({
+        "inputs": [{"id": input_id, "contract": _data_object_to_contract(row)} for input_id, row in bound.items()],
+        "parameters": flow["parameters"],
+        "steps": [{
+            "position": step.get("position"), "piece": _piece_view(spec) if spec else None,
+            "settings": step.get("settings"), "wires": step.get("wires"),
+        } for step, spec in zip(rows, specs)],
+        "outputs": flow["outputs"],
+        "thread_bindings": flow["thread_bindings"],
+    }, refused_settings=_refused_flow_settings())
+    if not checked.ok:
+        raise HTTPException(422, detail={
+            "code": "FLOW_DOES_NOT_CHECK_OUT", "flow_id": body.flow_id,
+            "problems": [problem.as_dict() for problem in checked.problems]})
+    if any("flow_parameter" in (wire.get("from") or {}) for step in rows for wire in step.get("wires") or []):
+        # Arguments are shared by name across a flow's steps, as in a chain, so a
+        # flow parameter has nothing to rename yet.
+        raise HTTPException(422, detail={
+            "code": "FLOW_NOT_SUPPORTED",
+            "message": "a link from a flow parameter is not supported yet; "
+                       "steps that declare the same setting name already share it"})
+
+    args = {input_id: "source_uri" if index == 0 else f"source_uri_{index + 1}"
+            for index, input_id in enumerate(used)}
+    plan_json = build_plan_json(specs)
+    defaults: dict[str, Any] = {}
+    conflicts: set[str] = set()
+    for step_json, step, spec in zip(plan_json["steps"], rows, specs):
+        position = int(step["position"])
+        view = _piece_view(spec)
+        step_json["step"] = position
+        step_json["depends_on"] = checked.depends_on[position]
+        step_json["wires"] = [
+            {"to": wire["to"], "from": ({"arg": args[wire["from"]["flow_input"]]}
+                                        if "flow_input" in wire["from"] else wire["from"])}
+            for wire in step.get("wires") or []]
+        step_json["flow_outputs"] = {
+            "outputs": sorted(flow_graph.piece_outputs(view)),
+            "values": sorted(flow_graph.piece_values(view)),
+        }
+        if step.get("pause_after"):
+            step_json["pause_after"] = True
+        for name, value in (step.get("settings") or {}).items():
+            if name in defaults and defaults[name] != value:
+                conflicts.add(name)
+            defaults[name] = value
+    if conflicts:
+        raise HTTPException(422, detail={
+            "code": "FLOW_SETTING_CONFLICT", "settings": sorted(conflicts),
+            "message": "two steps give different defaults for a setting they share by name"})
+
+    plan_json = _plan_with_parameters(plan_json)
+    by_name = {parameter.get("name"): parameter for parameter in plan_json["parameters"]}
+    for name, value in defaults.items():
+        if name in by_name:
+            # The flow's default. A value sent at submit still wins.
+            by_name[name]["default"] = value
+            by_name[name]["required"] = False
+    for input_id, arg in args.items():
+        definition = by_name.get(arg)
+        if definition is None:
+            definition = {"name": arg, "type": "string"}
+            plan_json["parameters"].append(definition)
+        definition.update({
+            "required": False, "default": bound[input_id].get("resource_uri"),
+            "managed": True, "managed_source": "flow_input",
+            "description": "A dataset the flow takes as an input",
+        })
+
+    caller = await _caller_or_none(bearer)
+    opt_in = tuple(body.allow_unapproved_piece_ids)
+    problems = stored_source.check_plan(plan_json, registry, caller, opt_in)
+    if problems:
+        raise HTTPException(403, detail={"code": "STORED_SOURCE_REFUSED", "problems": problems})
+    if opt_in:
+        plan_json["stored_source_opt_in"] = {"username": caller, "piece_ids": sorted(opt_in)}
+    plan_json["flow"] = {
+        "configuration_id": flow["configuration_id"],
+        "inputs": [{"input_id": input_id, "data_object_id": body.inputs[input_id], "arg": arg}
+                   for input_id, arg in args.items()],
+        "outputs": flow["outputs"],
+        "thread_bindings": flow["thread_bindings"],
+        "pause_after": [int(step["position"]) for step in rows if step.get("pause_after")],
+    }
+    created = (await h.execute(INSERT_PLAN, {"obj": {
+        "source_data_object_id": body.inputs[used[0]] if used else None,
+        "target_model_configuration_id": flow["configuration_id"],
+        "status": "draft",
+        "plan_json": plan_json,
+    }}))["insert_adapter_workflow_plan_one"]
+    await h.execute(INSERT_PROVENANCE, {"obj": {
+        "event_type": "plan_generated",
+        "payload_json": {"plan_id": created["id"], "steps": len(rows), "flow_id": flow["configuration_id"]},
     }})
     return {"status": "transform_required", "plan_id": created["id"], "plan_json": plan_json}
 

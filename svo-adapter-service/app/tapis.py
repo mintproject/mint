@@ -875,6 +875,13 @@ def _flow_inputs(
         inputs[f"SOURCE_{int(wire['to']['input'])}"] = bound
         if index == 0 and "step" in wire["from"]:
             inputs["SOURCE_RESULT"] = dict(bound)
+        elif index == 0:
+            # A piece written for a chain reads its source from the argument
+            # source_uri. Hand it this step's own first input under that name,
+            # which is not the flow's first input for every step.
+            for env, arg in env_map.items():
+                if str(arg) == "source_uri":
+                    inputs[env] = dict(bound)
     for wire in wires:
         if "setting" not in wire["to"]:
             continue

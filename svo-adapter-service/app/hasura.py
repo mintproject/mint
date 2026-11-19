@@ -304,6 +304,33 @@ query ListMintConfigurations($limit: Int!, $offset: Int!) {
 }
 """
 
+# A model configuration and, when it is a flow, its graph. `flow` is null for a model.
+GET_FLOW = """
+query GetFlow($id: String!) {
+  modelcatalog_configuration_by_pk(id: $id) {
+    id label
+    parameters { parameter { id label } }
+    flow {
+      outputs_json thread_bindings_json
+      steps(order_by: {position: asc}) { position etl_process_id settings_json wires_json pause_after }
+    }
+  }
+}
+"""
+
+# Catalog pieces by id, as the caller may see them, for checking a flow.
+GET_FLOW_PIECES = """
+query GetFlowPieces($ids: [String!]!) {
+  modelcatalog_etl_process(where: {id: {_in: $ids}}) {
+    id label version owner_username visibility runtime_kind runtime_json
+    contracts(order_by: [{role: asc}, {position: asc}]) {
+      role position standard_variable_uri unit format dimensionality
+      spatial_type crs_requirement temporal_resolution schema_requirement_json
+    }
+  }
+}
+"""
+
 LIST_MINT_ETL_PROCESSES_QUERY = """
 query ListMintETLProcesses($limit: Int!, $offset: Int!) {
   modelcatalog_etl_process(limit: $limit, offset: $offset, order_by: {id: asc}) {

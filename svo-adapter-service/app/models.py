@@ -94,6 +94,31 @@ class ReadinessCheckIn(BaseModel):
     target_contract: DataObjectContract | None = None
 
 
+class FlowStepIn(BaseModel):
+    position: int
+    etl_process_id: str | None = None
+    settings: dict[str, Any] = Field(default_factory=dict)
+    wires: list[Any] = Field(default_factory=list)
+    pause_after: bool = False
+
+
+class FlowCheckIn(BaseModel):
+    """A flow to check before it is registered. Pieces are named by catalog id."""
+    inputs: list[dict[str, Any]] = Field(default_factory=list)
+    parameters: list[dict[str, Any]] = Field(default_factory=list)
+    steps: list[FlowStepIn] = Field(max_length=24)
+    outputs: list[Any] = Field(default_factory=list)
+    thread_bindings: dict[str, Any] = Field(default_factory=dict)
+
+
+class FlowPlanIn(BaseModel):
+    """Plan a flow stored on a model configuration."""
+    flow_id: str = Field(min_length=1, max_length=500)
+    # flow input id (a dataset specification of the configuration) -> data object id
+    inputs: dict[str, str] = Field(default_factory=dict)
+    allow_unapproved_piece_ids: list[str] = Field(default_factory=list)
+
+
 class PlanIn(BaseModel):
     data_object_id: str
     target_model_configuration_id: str | None = None

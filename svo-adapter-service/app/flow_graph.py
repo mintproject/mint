@@ -132,7 +132,9 @@ def check(
 
     ``flow`` holds:
 
-    - ``inputs``: ``[{"id": ..., "contract": {...}}]``, the datasets the flow takes;
+    - ``inputs``: ``[{"id": ..., "contract": {...}}]``, the datasets the flow takes.
+      The contract is a registry-style dict, or a ``DataObjectContract`` when the
+      flow is checked against real data;
     - ``parameters``: ``[{"id": ...}]``, flow-level settings a wire may read;
     - ``steps``: ``[{"position", "piece", "settings", "wires"}]`` where ``piece`` is
       the piece's catalog row with its contracts, or ``None`` when it was deleted;
@@ -150,8 +152,10 @@ def check(
     flow_inputs: dict[str, DataObjectContract] = {}
     for item in flow.get("inputs") or []:
         if isinstance(item, dict) and isinstance(item.get("id"), str):
+            contract = item.get("contract") or {}
             flow_inputs[item["id"]] = _addressable(
-                _contract_from_registry(item.get("contract") or {}), f"input/{item['id']}")
+                contract if isinstance(contract, DataObjectContract) else _contract_from_registry(contract),
+                f"input/{item['id']}")
     flow_parameters = {item["id"] for item in flow.get("parameters") or []
                        if isinstance(item, dict) and isinstance(item.get("id"), str)}
 
