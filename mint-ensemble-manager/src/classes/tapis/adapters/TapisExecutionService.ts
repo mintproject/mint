@@ -1,3 +1,4 @@
+import { Readable } from "stream";
 import { Apps, Files, Jobs } from "@tapis/tapis-typescript";
 import {
     Execution,
@@ -21,6 +22,7 @@ import errorDecoder from "@/classes/tapis/utils/errorDecoder";
 import { TapisJobSubscriptionService } from "@/classes/tapis/adapters/TapisJobSubscriptionService";
 import {
     BadRequestError,
+    HttpError,
     NoOutputsDeclaredError,
     NotFoundError,
     UnifiedExecutionError
@@ -918,6 +920,65 @@ export class TapisExecutionService implements IExecutionService {
             this.filesClient.listFiles({ systemId, path, recurse: false })
         );
         return (response.result ?? []).filter((file) => file.type !== Files.FileTypeEnum.Dir);
+    }
+
+    /**
+     * Ask Tapis whether a path on a system is a folder, with the token of the
+     * caller. The name of a path cannot tell: a file can have no extension and a
+     * folder can hold a dot.
+     */
+    async isArchiveDirectory(systemId: string, path: string): Promise<boolean> {
+        const response = await errorDecoder<Files.FileStatInfoResponse>(() =>
+            this.filesClient.getStatInfo({ systemId, path })
+        );
+        return response.result?.dir === true;
+    }
+
+    /**
+     * Open the bytes of one file on a Tapis system, as a stream, with the token
+     * of the caller. The method never buffers the file. It does not follow a
+     * redirect to another host, and no error it throws carries the token or the
+     * body that Tapis answered.
+     */
+    async openArchiveFile(
+        systemId: string,
+        path: string
+    ): Promise<{ stream: Readable; contentType: string | null }> {
+        const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+        const url = `${this.baseUrl.replace(/\/$/, "")}/v3/files/content/${encodeURIComponent(systemId)}/${encodedPath}`;
+        let response: Response;
+        try {
+            response = await fetch(url, {
+                headers: { "X-Tapis-Token": this.token },
+                redirect: "manual"
+            });
+        } catch {
+            throw new HttpError(502, "Tapis storage could not be reached.", "TAPIS_UNAVAILABLE");
+        }
+        if (response.status === 401 || response.status === 403) {
+            await response.body?.cancel().catch(() => undefined);
+            throw new HttpError(
+                403,
+                "Your account cannot read this file in Tapis storage.",
+                "TAPIS_FORBIDDEN"
+            );
+        }
+        if (response.status === 404) {
+            await response.body?.cancel().catch(() => undefined);
+            throw new HttpError(404, "Tapis storage has no such file.", "TAPIS_FILE_NOT_FOUND");
+        }
+        if (!response.ok || !response.body) {
+            await response.body?.cancel().catch(() => undefined);
+            throw new HttpError(
+                502,
+                `Tapis storage answered an unexpected status (${response.status}).`,
+                "TAPIS_UNAVAILABLE"
+            );
+        }
+        return {
+            stream: (Readable as any).fromWeb(response.body) as Readable,
+            contentType: response.headers.get("content-type")
+        };
     }
 
     /**

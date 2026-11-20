@@ -1,11 +1,12 @@
 /**
  * Tests for MintResults — results browsing step.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/utils/render';
 import { MintResults } from '../MintResults';
 import { EnsembleManagerError } from '@/lib/ensemble-manager';
+import { setMintConfig } from '@/test/utils/mint-config';
 import type { ThreadExecutionData, ModelExecutionsMap } from '@/graphql/generated/execution';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -415,5 +416,152 @@ describe('MintResults', () => {
       />,
     );
     expect(screen.getByTestId('ingest-results-model-1')).toBeInTheDocument();
+  });
+});
+
+// ─── tapis:// results ─────────────────────────────────────────────────────────
+
+const FILE_URL = 'tapis://cloud.data/home/u/out/summary.md';
+const FOLDER_URL = 'tapis://cloud.data/home/u/out';
+
+function executionsWithResultUrl(url: string): ModelExecutionsMap {
+  return {
+    'model-1': {
+      loading: false,
+      executions: [
+        {
+          id: 'exec-1',
+          modelid: 'model-1',
+          status: 'SUCCESS',
+          bindings: { 'param-1': '5' },
+          results: { 'out-1': { id: 'out-1', name: 'summary', url } },
+        },
+      ],
+    },
+  };
+}
+
+function renderResults(url: string) {
+  return renderWithProviders(
+    <MintResults
+      threadData={mockThreadDataSubmitted}
+      executions={executionsWithResultUrl(url)}
+      canWrite
+      ingestionApiAvailable={false}
+      onContinue={vi.fn()}
+      onFetchRuns={vi.fn()}
+    />,
+  );
+}
+
+describe('MintResults tapis:// results', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  const listing = (kind: 'file' | 'folder', url: string) => ({
+    ok: true,
+    status: 200,
+    json: () =>
+      Promise.resolve({
+        files: [
+          {
+            name: 'summary.md',
+            path: 'home/u/out/summary.md',
+            size: 12,
+            url: 'tapis://cloud.data/home/u/out/summary.md',
+          },
+        ],
+        results: [{ name: 'summary', url, kind }],
+      }),
+  });
+
+  beforeEach(() => {
+    setMintConfig({ ENSEMBLE_MANAGER_API: 'http://ensemble' });
+    localStorage.setItem('mint.access_token', 'user-token');
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    URL.createObjectURL = vi.fn(() => 'blob:fake');
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it('renders Download for a file result, never a tapis: link', async () => {
+    fetchMock.mockResolvedValue(listing('file', FILE_URL));
+    renderResults(FILE_URL);
+
+    expect(await screen.findByTestId('download-file')).toBeInTheDocument();
+    expect(document.querySelector('a[href^="tapis:"]')).toBeNull();
+    expect(screen.getByTestId('copy-location')).toBeInTheDocument();
+  });
+
+  it('downloads through the Ensemble Manager with the user token and saves a blob', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes('/files/content')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'Content-Disposition': 'attachment; filename="summary.md"' }),
+          blob: () => Promise.resolve(new Blob(['hi'])),
+        };
+      }
+      return listing('file', FILE_URL);
+    });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    renderResults(FILE_URL);
+
+    fireEvent.click(await screen.findByTestId('download-file'));
+
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    const call = fetchMock.mock.calls.find(([u]) => String(u).includes('/files/content'))!;
+    expect(String(call[0])).toContain('http://ensemble/executions/exec-1/files/content?');
+    expect(String(call[0])).toContain('systemId=cloud.data');
+    expect(String(call[0])).toContain('path=home%2Fu%2Fout%2Fsummary.md');
+    expect((call[1] as RequestInit).headers).toMatchObject({ Authorization: 'Bearer user-token' });
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    click.mockRestore();
+  });
+
+  it('shows a readable message when Tapis refuses the file', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/files/content')
+        ? { ok: false, status: 403, json: () => Promise.resolve({ message: 'raw' }) }
+        : listing('file', FILE_URL),
+    );
+    renderResults(FILE_URL);
+
+    fireEvent.click(await screen.findByTestId('download-file'));
+
+    expect(await screen.findByTestId('download-file-error')).toHaveTextContent(
+      'Your account cannot read this file in Tapis storage.',
+    );
+  });
+
+  it('renders Open folder for a folder result and opens the files dialog', async () => {
+    fetchMock.mockResolvedValue(listing('folder', FOLDER_URL));
+    renderResults(FOLDER_URL);
+
+    fireEvent.click(await screen.findByTestId('open-folder'));
+
+    expect(await screen.findByTestId('execution-files-dialog')).toBeInTheDocument();
+    expect(await screen.findByTestId('download-home/u/out/summary.md')).toBeInTheDocument();
+  });
+
+  it('shows a javascript: URL as plain text', () => {
+    renderResults('javascript:alert(1)');
+
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByTestId('result-text')).toHaveTextContent('summary');
+  });
+
+  it('keeps an https URL as a link that opens safely in a new tab', () => {
+    renderResults('https://example.com/a.nc');
+
+    const link = screen.getByRole('link', { name: 'summary' });
+    expect(link).toHaveAttribute('href', 'https://example.com/a.nc');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(link).toHaveAttribute('target', '_blank');
   });
 });

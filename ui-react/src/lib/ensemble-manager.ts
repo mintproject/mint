@@ -651,6 +651,123 @@ export async function fetchExecutionFiles(
   return body.files ?? [];
 }
 
+/** A result of an execution that points at Tapis storage, marked by Tapis. */
+export interface ExecutionResultLocation {
+  name: string;
+  /** The `tapis://` URI of the result. */
+  url: string;
+  /** Whether Tapis says the URI is a file or a folder. */
+  kind: 'file' | 'folder';
+}
+
+/**
+ * List an execution's archived files together with its results, each marked a
+ * file or a folder by Tapis (the server asks with the user's own token).
+ */
+export async function fetchExecutionListing(
+  ensembleManagerApi: string,
+  executionId: string,
+  signal?: AbortSignal,
+): Promise<{ files: ExecutionFile[]; results: ExecutionResultLocation[] }> {
+  const url = `${ensembleManagerApi}/executions/${encodeURIComponent(executionId)}/files`;
+  const resp = await fetch(url, { signal, headers: ensembleManagerHeaders() });
+  if (!resp.ok) {
+    throw await toEnsembleManagerError(resp);
+  }
+  const body = (await resp.json()) as {
+    files?: ExecutionFile[];
+    results?: ExecutionResultLocation[];
+  };
+  return { files: body.files ?? [], results: body.results ?? [] };
+}
+
+/** Split a `tapis://<system>/<path>` URI into its system and path, or null. */
+/**
+ * Whether the download route will serve a listed file: it serves a run's result
+ * files, what lies inside a result folder, and the files beside a result file.
+ * The server decides; this only keeps a button from being offered that it
+ * would refuse, as for a model job's archive that holds no result.
+ */
+export function isResultDownload(fileUrl: string, results: ExecutionResultLocation[]): boolean {
+  const file = parseTapisUri(fileUrl);
+  if (!file) return false;
+  const parent = (path: string) => path.split('/').slice(0, -1).join('/');
+  return results.some((result) => {
+    const at = parseTapisUri(result.url);
+    if (!at || at.systemId !== file.systemId) return false;
+    if (file.path === at.path || file.path.startsWith(`${at.path}/`)) return true;
+    return (
+      result.kind === 'file' && parent(at.path) !== '' && parent(at.path) === parent(file.path)
+    );
+  });
+}
+
+export function parseTapisUri(uri: string): { systemId: string; path: string } | null {
+  if (!uri.startsWith('tapis://')) return null;
+  try {
+    const parsed = new URL(uri);
+    const path = parsed.pathname
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => decodeURIComponent(segment))
+      .join('/');
+    return parsed.hostname && path ? { systemId: parsed.hostname, path } : null;
+  } catch {
+    return null;
+  }
+}
+
+const FORBIDDEN_FILE_MESSAGE = 'Your account cannot read this file in Tapis storage.';
+
+function filenameFromDisposition(header: string | null, fallbackPath: string): string {
+  const star = header?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (star) {
+    try {
+      return decodeURIComponent(star);
+    } catch {
+      // fall through to the plain form
+    }
+  }
+  const plain = header?.match(/filename="([^"]+)"/i)?.[1];
+  return plain ?? fallbackPath.split('/').pop() ?? 'download';
+}
+
+/**
+ * Fetch one result file through the Ensemble Manager, with the user's token.
+ * The server streams it from Tapis; the browser cannot open a `tapis://` URI.
+ */
+export async function downloadExecutionFile(
+  ensembleManagerApi: string,
+  executionId: string,
+  file: { systemId: string; path: string },
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; filename: string }> {
+  const query = new URLSearchParams({ path: file.path, systemId: file.systemId });
+  const url = `${ensembleManagerApi}/executions/${encodeURIComponent(executionId)}/files/content?${query}`;
+  const resp = await fetch(url, { signal, headers: ensembleManagerHeaders() });
+  if (!resp.ok) {
+    const error = await toEnsembleManagerError(resp);
+    if (resp.status === 403) {
+      throw new EnsembleManagerError(403, FORBIDDEN_FILE_MESSAGE, error.code, error.details);
+    }
+    throw error;
+  }
+  return {
+    blob: await resp.blob(),
+    filename: filenameFromDisposition(resp.headers?.get('Content-Disposition') ?? null, file.path),
+  };
+}
+
+/** Save a blob as a file through a temporary object URL. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(objectUrl);
+}
+
 /** Fetch the raw log text for one execution. Caller handles ANSI cleanup. */
 export async function fetchExecutionLog(
   ensembleManagerApi: string,

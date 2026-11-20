@@ -24,6 +24,7 @@ import {
   publishResults,
   submitRuns,
   submitExecutionPlan,
+  isResultDownload,
 } from '@/lib/ensemble-manager';
 
 function lastRequest(): [string, RequestInit] {
@@ -438,5 +439,24 @@ describe('ensemble-manager', () => {
       (globalThis.fetch as unknown as Mock).mockResolvedValue({ ok: false, status: 404 });
       await expect(fetchExecutionLog('http://ensemble', 'exec-1')).rejects.toThrow('HTTP 404');
     });
+  });
+});
+
+describe('isResultDownload', () => {
+  const folder = { name: 'Run folder', url: 'tapis://sys/home/u/out', kind: 'folder' as const };
+  const file = { name: 'Report', url: 'tapis://sys/home/u/out/summary.md', kind: 'file' as const };
+
+  it('offers a result file, what is inside a result folder, and files beside a result file', () => {
+    expect(isResultDownload('tapis://sys/home/u/out/summary.md', [file])).toBe(true);
+    expect(isResultDownload('tapis://sys/home/u/out/tables/a.csv', [folder])).toBe(true);
+    expect(isResultDownload('tapis://sys/home/u/out/counts.csv', [file])).toBe(true);
+  });
+
+  it('does not offer a file outside the results', () => {
+    expect(isResultDownload('tapis://sys/home/u/other/a.csv', [folder])).toBe(false);
+    expect(isResultDownload('tapis://sys/home/u/outside.csv', [folder])).toBe(false);
+    expect(isResultDownload('tapis://other/home/u/out/a.csv', [folder])).toBe(false);
+    expect(isResultDownload('tapis://sys/home/u/out/a.csv', [])).toBe(false);
+    expect(isResultDownload('https://example.org/a.csv', [folder])).toBe(false);
   });
 });
