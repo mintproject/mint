@@ -78,9 +78,9 @@ const catalogModelToModelWithParameters = (
 ): ModelWithParameters => {
     // Secret parameters carry the owner-provided credentials a model declares;
     // they are never bound by the thread, so the binder must not demand them.
-    const parameters = ((model as any).parameters || [])
-        .filter((row: any) => row.parameter.parameter_type !== SECRET_PARAMETER_TYPE)
-        .map((row: any) => ({
+    const parameters = (model.parameters || [])
+        .filter((row) => row.parameter.parameter_type !== SECRET_PARAMETER_TYPE)
+        .map((row) => ({
             id: row.parameter.id,
             has_fixed_value: row.parameter.has_fixed_value
         }));

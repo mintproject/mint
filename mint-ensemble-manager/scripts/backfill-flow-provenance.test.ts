@@ -57,8 +57,8 @@ const FLOW_RUN = {
 };
 
 function fixture(over: { runs?: unknown[]; plan?: unknown; bindings?: unknown[] } = {}) {
-    const writes: { query: string; variables: any }[] = [];
-    const gql: Gql = async (query, variables: any) => {
+    const writes: { query: string; variables: Record<string, unknown> }[] = [];
+    const gql: Gql = async (query, variables) => {
         if (query.includes("mutation")) {
             writes.push({ query, variables });
             return {};
@@ -134,8 +134,11 @@ describe("backfilling flow provenance", () => {
         await backfillFlowProvenance(gql, { apply: true });
 
         expect(writes).toHaveLength(2);
-        const data = writes[0].variables.objects;
-        expect(data.map((row: any) => row.resource_id ?? row.resource.data.url)).toEqual([
+        const data = writes[0].variables.objects as Array<{
+            resource_id?: string;
+            resource: { data: { url: string } };
+        }>;
+        expect(data.map((row) => row.resource_id ?? row.resource.data.url)).toEqual([
             "res-a",
             "res-b",
             "https://ckan/edit.json"

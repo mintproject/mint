@@ -29,13 +29,21 @@ export class RegionGeometryError extends Error {
 
 type Polygon = number[][][];
 
-function polygonsOf(geometry: any): Polygon[] {
-    const candidate = geometry?.type === "Feature" ? geometry.geometry : geometry;
+/** A GeoJSON object as far as the polygon reader looks at it. */
+interface GeoJsonLike {
+    type?: string;
+    geometry?: GeoJsonLike;
+    coordinates?: unknown;
+}
+
+function polygonsOf(geometry: unknown): Polygon[] {
+    const shape = geometry as GeoJsonLike | null | undefined;
+    const candidate = shape?.type === "Feature" ? shape.geometry : shape;
     if (candidate?.type === "Polygon" && Array.isArray(candidate.coordinates)) {
-        return [candidate.coordinates];
+        return [candidate.coordinates as Polygon];
     }
     if (candidate?.type === "MultiPolygon" && Array.isArray(candidate.coordinates)) {
-        return candidate.coordinates;
+        return candidate.coordinates as Polygon[];
     }
     throw new RegionGeometryError(
         `region geometry must be a Polygon or MultiPolygon, got ${candidate?.type ?? "none"}`

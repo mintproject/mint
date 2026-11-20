@@ -43,15 +43,28 @@ async function configurationFlow(configurationId: string) {
     return result?.data?.modelcatalog_configuration_flow_by_pk || null;
 }
 
+/** What a bound input holds once resolved: a file as a resource, a parameter as its value. */
+interface ModelInputBinding {
+    id?: unknown;
+    name?: unknown;
+    url?: unknown;
+}
+
+/** What the write rule reads of a thread: who was granted write, and who created it. */
+interface ThreadAccess {
+    permissions?: { write?: boolean; user_id?: string }[];
+    events?: { event?: string; userid?: string }[];
+}
+
 /** May this user change the thread? The same rule the database applies to a write. */
-function mayWrite(thread: any, username: string): boolean {
+function mayWrite(thread: ThreadAccess, username: string): boolean {
     const granted = (thread.permissions || []).some(
-        (permission: any) =>
+        (permission) =>
             permission?.write === true &&
             (permission.user_id === username || permission.user_id === "*")
     );
     const created = (thread.events || []).some(
-        (event: any) => event?.event === "CREATE" && event.userid === username
+        (event) => event?.event === "CREATE" && event.userid === username
     );
     return granted || created;
 }
@@ -69,7 +82,7 @@ async function loadThreadAs(
 ): Promise<{ thread: Thread; caller: string }> {
     const token = getTokenFromAuthorizationHeader(authorization);
     const caller = await usernameFromToken(token);
-    const response: any = await getThread(threadId, token);
+    const response = await getThread(threadId, token);
     if (!response) throw new NotFoundError("Thread not found");
     if (access === "write" && !mayWrite(response, caller)) {
         throw new ForbiddenError("You may not run models in this thread");
@@ -105,7 +118,7 @@ const executionsFlowService: FlowThreadService = {
         // The same resolution a model run uses: a bound dataset becomes its selected files.
         const region = thread.regionid ? await getRegionDetails(thread.regionid) : null;
         const [bound] = ExecutionCreation.getModelInputBindings(model, thread, region) as [
-            { bindings: Record<string, any[]> },
+            { bindings: Record<string, ModelInputBinding[]> },
             string[]
         ];
         return {
@@ -177,7 +190,8 @@ const executionsFlowService: FlowThreadService = {
         // What the run reads and the settings it uses, as a model run records them.
         const bindings: Execution["bindings"] = {};
         for (const input of provenance?.inputs || []) {
-            bindings[input.model_io_id] = input.resources as any;
+            bindings[input.model_io_id] =
+                input.resources as unknown as Execution["bindings"][string];
         }
         for (const parameter of provenance?.parameters || []) {
             bindings[parameter.model_parameter_id] = parameter.value;
@@ -239,7 +253,7 @@ const executionsFlowService: FlowThreadService = {
                     url: output.url
                 };
             }
-            execution.results = results as any;
+            execution.results = results as unknown as Execution["results"];
             await updateExecutionStatusResultsAndSummary(execution, threadModelId);
         })();
         finishing.set(executionId, work);

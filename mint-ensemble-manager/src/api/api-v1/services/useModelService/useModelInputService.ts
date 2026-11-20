@@ -3,6 +3,7 @@ import { AddDataRequest, DataInput } from "../../paths/problemStatements/tasks/s
 import { uuidv4 } from "@/classes/graphql/graphql_adapter";
 import { BadRequestError, NotFoundError } from "@/classes/common/errors";
 import { convertApiUrlToW3Id } from "@/classes/mint/model-catalog-graphql-adapter";
+import type { Modelcatalog_Parameter } from "@/classes/graphql/graphql";
 
 // Local types for catalog model data from unified modelcatalog_configuration table
 interface CatalogDatasetSpec {
@@ -13,7 +14,13 @@ interface CatalogDatasetSpec {
     position?: number;
 }
 
-interface CatalogModelConfiguration {
+/** A parameter of a catalog model configuration, as the catalog query returns it. */
+export type CatalogParameterSpec = Pick<
+    Modelcatalog_Parameter,
+    "id" | "label" | "has_fixed_value" | "has_default_value" | "parameter_type"
+>;
+
+export interface CatalogModelConfiguration {
     id: string;
     label?: string;
     description?: string;
@@ -22,7 +29,7 @@ interface CatalogModelConfiguration {
     model_configuration_id?: string | null;
     inputs?: Array<{ input: CatalogDatasetSpec }>;
     outputs?: Array<{ output: CatalogDatasetSpec }>;
-    parameters?: Array<{ parameter: any }>;
+    parameters?: Array<{ parameter: CatalogParameterSpec }>;
 }
 
 // Alias: both configurations and setups now come from the same unified table
@@ -35,7 +42,7 @@ import getModelcatalogConfigurationGQL from "@/classes/graphql/queries/model/get
 // Note: hasFixedResource is not in the new Hasura schema; all inputs from Hasura are treated as non-fixed
 interface ModelInput {
     id: string;
-    hasFixedResource?: any[];
+    hasFixedResource?: unknown[];
 }
 
 // Inline interface for model with inputs (compatible with both old and new shapes)
@@ -92,7 +99,7 @@ const createDataSlice = (dataInput: DataInput, thread: Thread): Dataslice => {
     return dataslice;
 };
 
-const hasInputHasFixedResource = (input: { hasFixedResource?: any[] }) => {
+const hasInputHasFixedResource = (input: { hasFixedResource?: unknown[] }) => {
     return input.hasFixedResource && input.hasFixedResource.length > 0;
 };
 
@@ -105,7 +112,7 @@ const findDataSpecificationByRequest = (input: { id: string }, data: AddDataRequ
 };
 
 const createBinding = (
-    input: { id: string; hasFixedResource?: any[] },
+    input: { id: string; hasFixedResource?: unknown[] },
     data: AddDataRequest,
     thread: Thread
 ): Dataslice => {
@@ -174,7 +181,7 @@ const matchInputs = async (
 const catalogModelToModelWithInputs = (
     model: CatalogModelConfiguration | CatalogModelConfigurationSetup
 ): ModelWithInputs => {
-    const inputs = ((model as any).inputs || []).map((row: any) => ({
+    const inputs = (model.inputs || []).map((row) => ({
         id: row.input.id,
         hasFixedResource: [] // No fixed resource in new Hasura schema
     }));

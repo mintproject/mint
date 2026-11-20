@@ -1,5 +1,5 @@
 import { ModelThread } from "@/classes/api";
-import { ModelSecretDeclaration, Region } from "@/classes/mint/mint-types";
+import { Execution, ModelSecretDeclaration, Region } from "@/classes/mint/mint-types";
 import { TapisExecutionService } from "@/classes/tapis/adapters/TapisExecutionService";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { getConfiguration } from "@/classes/mint/mint-functions";
@@ -11,7 +11,7 @@ import {
     getExecution as getExecutionById,
     updateExecutionStatusResultsAndSummary
 } from "@/classes/graphql/graphql_functions";
-import { SubmissionResult } from "@/interfaces/IExecutionService";
+import { ExecutionJob, SubmissionResult } from "@/interfaces/IExecutionService";
 import { applyExecutionInputOverrides } from "@/classes/common/execution-input-overrides";
 
 type AdapterAwareModelThread = ModelThread & {
@@ -66,8 +66,8 @@ export interface ExecutionsTapisService {
             url: string;
         }
     ): Promise<void>;
-    getExecution(executionId: string, token: string): Promise<any>;
-    getJobStatus(jobId: string, token: string): Promise<any>;
+    getExecution(executionId: string, token: string): Promise<Execution>;
+    getJobStatus(jobId: string, token: string): Promise<ExecutionJob>;
 }
 
 const compositeFinalizationInFlight = new Map<string, Promise<void>>();
@@ -123,12 +123,12 @@ const executionsTapisService = {
             }
         }
     },
-    async getExecution(executionId: string, _authorization: string): Promise<any> {
+    async getExecution(executionId: string): Promise<Execution> {
         const execution = await getExecutionById(executionId);
         if (!execution) throw new NotFoundError("Execution not found");
         return execution;
     },
-    async getJobStatus(jobId: string, authorization: string): Promise<any> {
+    async getJobStatus(jobId: string, authorization: string): Promise<ExecutionJob> {
         const token = getTokenFromAuthorizationHeader(authorization);
         if (!token) throw new Error("Unauthorized");
         const prefs = getConfiguration();

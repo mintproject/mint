@@ -1,7 +1,5 @@
 import {
     Thread,
-    Model,
-    DataResource,
     ProblemStatement,
     Task,
     Dataset,
@@ -33,19 +31,44 @@ import { fetchMintConfig } from "@/classes/mint/mint-functions";
 import { KeycloakAdapter } from "@/config/keycloak-adapter";
 import { GraphQL } from "@/config/graphql";
 import getModelcatalogConfigurationGQL from "@/classes/graphql/queries/model/get-modelcatalog-configuration.graphql";
-import { createResponse } from "./util";
+import { createResponse, GenericResponse } from "./util";
+import type { CatalogModelConfiguration } from "./useModelService/useModelInputService";
 
 // ./api-v1/services/threadsService.js
 
-function flatten(array) {
-    if (array.length == 0) return array;
-    else if (Array.isArray(array[0])) return flatten(array[0]).concat(flatten(array.slice(1)));
-    else return [array[0]].concat(flatten(array.slice(1)));
+/** A period as the create-thread request gives it. */
+interface RequestPeriod {
+    from: string;
+    to: string;
+}
+
+/** The create-thread request: the problem statement, task and thread to find or make. */
+export interface CreateThreadRequest {
+    problem_statement: {
+        id?: string;
+        name?: string;
+        regionid?: string;
+        time_period?: RequestPeriod;
+    };
+    task: {
+        id?: string;
+        name?: string;
+        regionid?: string;
+        indicatorid?: string;
+        interventionid?: string;
+        time_period?: RequestPeriod;
+    };
+    thread: {
+        name?: string;
+        modelid: string;
+        datasets?: Record<string, string | string[]>;
+        parameters?: Record<string, string | string[]>;
+    };
 }
 
 export interface ThreadsService {
     getThread(thread_id: string): Promise<Thread>;
-    createThread(desc: any): Promise<any>;
+    createThread(desc: CreateThreadRequest): Promise<GenericResponse>;
 }
 
 const threadsService: ThreadsService = {
@@ -55,7 +78,7 @@ const threadsService: ThreadsService = {
         return await getThreadV2(thread_id);
     },
 
-    async createThread(desc: any) {
+    async createThread(desc: CreateThreadRequest) {
         const mint_prefs = await fetchMintConfig();
         KeycloakAdapter.signIn(mint_prefs.graphql.username, mint_prefs.graphql.password);
 
@@ -145,7 +168,7 @@ const threadsService: ThreadsService = {
         if (!catalogSetup) {
             throw new Error(`Model configuration setup not found for id: ${modelW3Id}`);
         }
-        const model = catalogSetup;
+        const model: CatalogModelConfiguration = catalogSetup;
         // Create thread_model row directly with modelcatalog_configuration_id FK
         await setThreadModels([{ id: modelW3Id }], "Added models", thread);
 
@@ -159,8 +182,8 @@ const threadsService: ThreadsService = {
 
         // Fetch dataset details from the Data Catalog
         // model.inputs is the new GraphQL shape: [{input: {id, label, ...}}]
-        const modelInputs = (model.inputs || []).map((row: any) => row.input);
-        for (var i = 0; i < modelInputs.length; i++) {
+        const modelInputs = (model.inputs || []).map((row) => row.input);
+        for (let i = 0; i < modelInputs.length; i++) {
             const input_file = modelInputs[i];
             // New shape uses flat fields; no hasFixedResource in new schema so treat all as non-fixed
             let datasetids = thread_desc.datasets[input_file.label];
@@ -203,8 +226,8 @@ const threadsService: ThreadsService = {
         // Set Thread Parameters
         const execution_summary: IdMap<ExecutionSummary> = {};
         // model.parameters is the new GraphQL shape: [{parameter: {id, label, has_fixed_value, has_default_value, ...}}]
-        const modelParameters = (model.parameters || []).map((row: any) => row.parameter);
-        for (var i = 0; i < modelParameters.length; i++) {
+        const modelParameters = (model.parameters || []).map((row) => row.parameter);
+        for (let i = 0; i < modelParameters.length; i++) {
             const input_parameter = modelParameters[i];
             // New shape uses flat scalar fields (not array-wrapped)
             if (!input_parameter.has_fixed_value) {
@@ -217,8 +240,8 @@ const threadsService: ThreadsService = {
         // Get total number of configs to run using a compatible shape
         const modelForConfigs = {
             id: modelW3Id,
-            hasInput: modelInputs.map((inp: any) => ({ id: inp.id, hasFixedResource: [] })),
-            hasParameter: modelParameters.map((p: any) => ({
+            hasInput: modelInputs.map((inp) => ({ id: inp.id, hasFixedResource: [] })),
+            hasParameter: modelParameters.map((p) => ({
                 id: p.id,
                 hasFixedValue: p.has_fixed_value ? [p.has_fixed_value] : []
             }))

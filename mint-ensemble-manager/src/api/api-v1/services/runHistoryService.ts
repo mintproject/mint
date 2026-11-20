@@ -28,6 +28,22 @@ type LegacyExecution = {
     results?: Array<{ model_io_id: string; resource?: { id: string; name: string } | null }>;
 };
 
+/** A thread as the thread query returns it: its thread models and their catalog configuration. */
+interface ThreadRows {
+    thread_models?: Array<{
+        id: string;
+        modelcatalog_configuration_id: string;
+        modelcatalog_configuration?: { label?: string } | null;
+    }>;
+}
+
+/** A run signal as the adapter lists it. */
+interface SignalEvent {
+    event_type?: string;
+    created_at?: string;
+    data_object_id?: string;
+}
+
 type ModelHistory = {
     id: string;
     modelId: string;
@@ -271,20 +287,20 @@ async function loadModels(
     token: string,
     modelId?: string
 ): Promise<ModelHistory[]> {
-    const thread: any = await getThread(threadId, token);
+    const thread = (await getThread(threadId, token)) as unknown as ThreadRows | null;
     if (!thread) throw new NotFoundError("Subtask not found");
     const modelRows = (thread.thread_models || []).filter(
-        (row: any) => !modelId || row.modelcatalog_configuration_id === modelId
+        (row) => !modelId || row.modelcatalog_configuration_id === modelId
     );
     return Promise.all(
-        modelRows.map(async (row: any) => {
+        modelRows.map(async (row) => {
             const history = await getExecutionHistory(row.id, token, EXECUTION_FETCH_LIMIT);
             return {
                 id: row.id,
                 modelId: row.modelcatalog_configuration_id,
                 modelName: row.modelcatalog_configuration?.label || null,
                 executions: (history?.executions || [])
-                    .map((entry: any) => entry.execution)
+                    .map((entry) => entry.execution as LegacyExecution)
                     .filter(Boolean)
             } as ModelHistory;
         })
@@ -410,7 +426,7 @@ async function loadWorkflowEvents(
                 );
                 if (!response.ok) return [];
                 const body = await response.json().catch(() => ({}));
-                return (body.events || []).map((event: any) => ({
+                return ((body.events || []) as SignalEvent[]).map((event) => ({
                     type: String(event.event_type || "unknown"),
                     availability: "available" as const,
                     captured_at: event.created_at || null,

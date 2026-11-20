@@ -108,20 +108,6 @@ const mockCatalogSetup = {
     ]
 };
 
-const mockCatalogSetupWithFixed = {
-    id: bindingRequest.model_id,
-    parameters: [
-        { parameter: { id: "https://w3id.org/okn/i/mint/parameter1", has_fixed_value: null } },
-        { parameter: { id: "https://w3id.org/okn/i/mint/parameter2", has_fixed_value: null } },
-        {
-            parameter: {
-                id: "https://w3id.org/okn/i/mint/parameter3",
-                has_fixed_value: "fixed-value"
-            }
-        }
-    ]
-};
-
 const mockApolloClient = {
     query: jest.fn()
 };

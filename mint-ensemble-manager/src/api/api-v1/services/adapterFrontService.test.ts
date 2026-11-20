@@ -342,9 +342,11 @@ describe("the allowlisted adapter forward", () => {
     ])("refuses %s %s with 404 and never calls the adapter", async (method, path) => {
         expect(isForwardable(method, path)).toBe(false);
         const forward = answer();
-        const res = await send(forward)
-            [method.toLowerCase() as "get"](`/v1/adapter${path}`)
-            .set("Authorization", BEARER);
+        const agent = send(forward);
+        const res = await agent[method.toLowerCase() as "get"](`/v1/adapter${path}`).set(
+            "Authorization",
+            BEARER
+        );
         expect(res.status).toBe(404);
         expect(forward).not.toHaveBeenCalled();
     });

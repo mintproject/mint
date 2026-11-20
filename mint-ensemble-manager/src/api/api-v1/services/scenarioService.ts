@@ -2,6 +2,8 @@ import { createHash } from "crypto";
 import { UnifiedExecutionError } from "@/classes/common/errors";
 import { ForbiddenError, NotFoundError } from "@/classes/common/errors";
 import { GraphQL } from "@/config/graphql";
+import type { Modelcatalog_Parameter } from "@/classes/graphql/graphql";
+import type { UnifiedRequestBody } from "./unifiedExecutionService";
 import getModelcatalogConfigurationGQL from "@/classes/graphql/queries/model/get-modelcatalog-configuration.graphql";
 import getConfigurationResponseVariablesGQL from "@/classes/graphql/queries/model/get-configuration-response-variables.graphql";
 import { getRegionWithGeometries } from "@/classes/graphql/graphql_functions_v2";
@@ -31,6 +33,14 @@ const MAX_LIST_LIMIT = 200;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_PARAMETERS = ["START_DATE", "END_DATE"] as const;
 
+/** A parameter row of a model configuration, as the catalog query returns it. */
+interface ConfigurationParameterRow {
+    parameter: Pick<
+        Modelcatalog_Parameter,
+        "id" | "label" | "has_default_value" | "has_fixed_value" | "parameter_type"
+    >;
+}
+
 export interface CatalogParameter {
     id: string;
     label: string;
@@ -47,10 +57,26 @@ export interface ScenarioCatalog {
     getModelSpec(modelId: string, token: string): Promise<ScenarioModelSpec>;
 }
 
+/** The plan the unified service answers with, as far as a scenario reads it. */
+interface ScenarioPlan {
+    [key: string]: unknown;
+    plan_id?: string;
+    parameters?: { name: string }[];
+    post_model_adapter?: unknown;
+}
+
+/** The run the unified service answers submit with, as far as a scenario reads it. */
+interface ScenarioRun {
+    [key: string]: unknown;
+    run_id?: string;
+    status?: string;
+    tapis_workflow_definition?: unknown;
+}
+
 export interface ScenarioDeps {
     unified: {
-        createPlan(body: any, authorization?: string): Promise<any>;
-        submit(body: any, authorization: string | undefined): Promise<any>;
+        createPlan(body: UnifiedRequestBody, authorization?: string): Promise<ScenarioPlan>;
+        submit(body: UnifiedRequestBody, authorization: string | undefined): Promise<ScenarioRun>;
     };
     store: UnifiedExecutionStore;
     problemStatements: Pick<
@@ -153,7 +179,7 @@ const nonEmptyString = (value: unknown, field: string, max = 200): string => {
     return value.trim();
 };
 
-const parseRequest = (body: any): ScenarioRequest => {
+const parseRequest = (body: unknown): ScenarioRequest => {
     if (!isRecord(body)) throw badRequest("A JSON request body is required", "INVALID_REQUEST");
     const region = body.region;
     if (!isRecord(region)) {
@@ -344,7 +370,10 @@ export const bboxOfGeometries = (
             }
         }
         const g = parsed as { coordinates?: unknown; geometries?: unknown[] } | null;
-        if (g?.geometries) g.geometries.forEach((inner) => visit((inner as any)?.coordinates));
+        if (g?.geometries)
+            g.geometries.forEach((inner) =>
+                visit((inner as { coordinates?: unknown } | null)?.coordinates)
+            );
         else visit(g?.coordinates);
     }
     return Number.isFinite(west) ? [west, south, east, north] : null;
@@ -409,7 +438,7 @@ export function createScenarioService(deps: ScenarioDeps) {
 
     // Every row is readable by every user, like the rest of the DYNAMO API; the
     // CREATE event (createdBy) is what makes a run the caller's own.
-    const standingPermissions = (_username: string): MintPermission[] => sharedPermissions();
+    const standingPermissions = (): MintPermission[] => sharedPermissions();
 
     /** The caller's own thread for an earlier request with this key, as a response. */
     const reuse = async (
@@ -448,7 +477,7 @@ export function createScenarioService(deps: ScenarioDeps) {
     };
 
     return {
-        async createScenario(body: any, authorization?: string) {
+        async createScenario(body: unknown, authorization?: string) {
             const token = getTokenFromAuthorizationHeader(authorization);
             const username = await usernameFromToken(token);
             const created: CreatedIds = {};
@@ -456,7 +485,7 @@ export function createScenarioService(deps: ScenarioDeps) {
             try {
                 const request = parseRequest(body);
                 const psId = standingProblemStatementId(request.app_label);
-                const permissions = standingPermissions(username);
+                const permissions = standingPermissions();
                 const modelId = convertApiUrlToW3Id(request.model_id);
 
                 step = "idempotency";
@@ -723,9 +752,12 @@ export const catalogFromGraphql: ScenarioCatalog = {
             );
         }
         const parameters: CatalogParameter[] = (configuration.parameters || [])
-            .map((row: any) => row.parameter)
-            .filter((p: any) => p.parameter_type !== SECRET_PARAMETER_TYPE && !p.has_fixed_value)
-            .map((p: any) => ({
+            .map((row: ConfigurationParameterRow) => row.parameter)
+            .filter(
+                (p: ConfigurationParameterRow["parameter"]) =>
+                    p.parameter_type !== SECRET_PARAMETER_TYPE && !p.has_fixed_value
+            )
+            .map((p: ConfigurationParameterRow["parameter"]) => ({
                 id: p.id,
                 label: p.label,
                 defaultValue: p.has_default_value ?? null

@@ -40,8 +40,34 @@ import {
     inputsFromPlan,
     settingsFromPlan
 } from "../src/api/api-v1/services/flowProvenance";
+import type { AdapterPlanJson } from "../src/api/api-v1/services/adapterTypes";
+import type { FlowPause, FlowReplacement } from "../src/api/api-v1/services/flowExecution";
+import type { UnifiedExecutionRecord } from "../src/api/api-v1/services/unifiedExecutionStore";
 
-export type Gql = (query: string, variables?: Record<string, unknown>) => Promise<any>;
+/** The rows the backfill reads, under the root field each query asks for. */
+export interface GqlData {
+    unified_execution?: UnifiedExecutionRecord[];
+    execution_by_pk?: {
+        id: string;
+        data_bindings: { model_io_id: string; resource_id: string }[];
+        parameter_bindings: { model_parameter_id: string }[];
+    } | null;
+    adapter_workflow_plan_by_pk?: { id: string; plan_json?: AdapterPlanJson | null } | null;
+    resource?: { id: string; url: string; name?: string }[];
+    modelcatalog_configuration_by_pk?: {
+        parameters?: {
+            parameter?: { id: string; label?: string; parameter_type?: string | null };
+        }[];
+    } | null;
+}
+
+export type Gql = (query: string, variables?: Record<string, unknown>) => Promise<GqlData>;
+
+/** The part of a flow run's first child the backfill reads. */
+interface BackfillChild {
+    replacement?: FlowReplacement | null;
+    last_pause?: FlowPause | null;
+}
 
 export interface BackfillOptions {
     apply: boolean;
@@ -108,7 +134,7 @@ mutation InsertParams($objects: [execution_parameter_binding_insert_input!]!) {
 }`;
 
 /** The plan id's payload. Read without checking its signature: this only reads. */
-export function planOf(planId: string): any | null {
+export function planOf(planId: string): { flow?: { adapter_plan_id?: string } } | null {
     if (typeof planId !== "string" || !planId.startsWith("em_")) return null;
     try {
         const encoded = planId.slice(3).split(".")[0];
@@ -134,7 +160,11 @@ function skipped(run_id: string, execution_id: string | null, reason: string): B
     };
 }
 
-async function rebuildOne(gql: Gql, record: any, apply: boolean): Promise<BackfillReport | null> {
+async function rebuildOne(
+    gql: Gql,
+    record: UnifiedExecutionRecord,
+    apply: boolean
+): Promise<BackfillReport | null> {
     const plan = planOf(record.plan_id);
     if (!plan?.flow?.adapter_plan_id) return null; // not a flow run
     const runId = `ue_${record.id}`;
@@ -143,10 +173,10 @@ async function rebuildOne(gql: Gql, record: any, apply: boolean): Promise<Backfi
     const execution = (await gql(EXECUTION, { id: executionId })).execution_by_pk;
     if (!execution) return skipped(runId, executionId, "the execution row no longer exists");
 
-    const child = (record.adapter_run_ids || [])[0] || {};
+    const child = ((record.adapter_run_ids || [])[0] || {}) as BackfillChild;
     const hasInputs = execution.data_bindings.length > 0;
     const havingParams = new Set<string>(
-        execution.parameter_bindings.map((row: any) => row.model_parameter_id)
+        execution.parameter_bindings.map((row) => row.model_parameter_id)
     );
 
     const stored = (await gql(PLAN, { id: plan.flow.adapter_plan_id })).adapter_workflow_plan_by_pk;
@@ -157,7 +187,7 @@ async function rebuildOne(gql: Gql, record: any, apply: boolean): Promise<Backfi
     const urls = [...new Set(inputs.flatMap((input) => input.files.map((file) => file.url)))];
     const resources = new Map<string, { id: string; name?: string }>();
     if (urls.length) {
-        for (const row of (await gql(RESOURCES, { urls })).resource) {
+        for (const row of (await gql(RESOURCES, { urls })).resource || []) {
             // Several catalog rows for one url: the lowest id, so a rerun picks the same.
             if (!resources.has(row.url)) resources.set(row.url, { id: row.id, name: row.name });
         }
@@ -195,14 +225,17 @@ async function rebuildOne(gql: Gql, record: any, apply: boolean): Promise<Backfi
         }));
 
     // The file a person edited at a pause, as an input of the resumed part.
-    const replacement = child.replacement || record.model_result?.replacement || null;
+    const replacement =
+        child.replacement ||
+        (record.model_result as { replacement?: FlowReplacement } | null)?.replacement ||
+        null;
     const editIo: string | undefined = child.last_pause?.model_io_id || undefined;
     let edit: BackfillReport["edit"] = null;
     let editObject: Record<string, unknown> | null = null;
     if (replacement?.url && editIo) {
         const resourceId = md5(replacement.url);
         const present = execution.data_bindings.some(
-            (row: any) => row.model_io_id === editIo && row.resource_id === resourceId
+            (row) => row.model_io_id === editIo && row.resource_id === resourceId
         );
         if (!present) {
             edit = { model_io_id: editIo, url: replacement.url };
@@ -270,7 +303,8 @@ export async function backfillFlowProvenance(
 ): Promise<BackfillReport[]> {
     const where: Record<string, unknown> = { plan_id: { _like: "em_%" } };
     if (options.threadId) where.thread_id = { _eq: options.threadId };
-    const rows = (await gql(UNIFIED, { where, limit: options.limit ?? null })).unified_execution;
+    const rows =
+        (await gql(UNIFIED, { where, limit: options.limit ?? null })).unified_execution || [];
     const reports: BackfillReport[] = [];
     for (const record of rows) {
         const report = await rebuildOne(gql, record, options.apply);
@@ -286,7 +320,7 @@ function hasuraClient(url: string, secret: string): Gql {
             headers: { "Content-Type": "application/json", "X-Hasura-Admin-Secret": secret },
             body: JSON.stringify({ query, variables })
         });
-        const body: any = await response.json();
+        const body = (await response.json()) as { data: GqlData; errors?: unknown };
         if (!response.ok || body.errors) {
             throw new Error(`Hasura refused: ${JSON.stringify(body.errors || response.status)}`);
         }

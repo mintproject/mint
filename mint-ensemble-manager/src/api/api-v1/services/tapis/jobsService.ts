@@ -4,9 +4,14 @@ import { getTokenFromAuthorizationHeader } from "@/utils/authUtils";
 import { getConfiguration } from "@/classes/mint/mint-functions";
 import { ExecutionJob } from "@/interfaces/IExecutionService";
 import { Jobs } from "@tapis/tapis-typescript/dist";
+/** The part of a Tapis job webhook the service reads. */
+export interface TapisWebhookEvent {
+    event: { type: string };
+}
+
 export interface JobsService {
     webhookJobStatusChange(
-        webHookEvent: any,
+        webHookEvent: TapisWebhookEvent,
         executionId: string,
         thread_id: string
     ): Promise<Execution | undefined>;
@@ -25,7 +30,7 @@ const jobsService = {
     },
 
     async webhookJobStatusChange(
-        webHookEvent: any,
+        webHookEvent: TapisWebhookEvent,
         executionId: string,
         thread_id: string
     ): Promise<Execution | undefined> {

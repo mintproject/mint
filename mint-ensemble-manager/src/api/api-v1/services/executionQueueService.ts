@@ -1,10 +1,16 @@
 import Queue from "bull";
 import { EXECUTION_QUEUE_NAME, REDIS_URL } from "@/config/redis";
-import { createResponse } from "./util";
+import { createResponse, GenericResponse } from "./util";
+
+export interface QueueResponse {
+    result: string;
+    message?: string;
+    data?: unknown;
+}
 
 export interface ExecutionQueueService {
-    emptyExecutionQueue(): Promise<any>;
-    getExecutionQueue(thread: any): Promise<any>;
+    emptyExecutionQueue(): Promise<GenericResponse>;
+    getExecutionQueue(thread: unknown): Promise<QueueResponse>;
 }
 
 // ./api-v1/services/executionsLocalService.js
@@ -27,7 +33,7 @@ const executionQueueService = {
         cleanQueue(executionQueue);
         return createResponse("success", "Queues emptied");
     },
-    async getExecutionQueue(thread: any) {
+    async getExecutionQueue() {
         const executionQueue = new Queue(EXECUTION_QUEUE_NAME, REDIS_URL);
         const count = await executionQueue.getActiveCount();
         return createResponse("success", "Number of Active Jobs: " + count);
