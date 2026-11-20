@@ -310,29 +310,29 @@ describe('StandardVariableCombobox scope', () => {
   it('offers the whole catalog by default, so registration forms are unchanged', async () => {
     renderCombobox({});
     await openList();
-    await waitFor(() => expect(screen.getByText('drawdown')).toBeInTheDocument());
-    expect(screen.getByText('100hr_dead_moisture')).toBeInTheDocument();
-    expect(screen.getByText('soil__porosity')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Drawdown')).toBeInTheDocument());
+    expect(screen.getByText('100hr dead moisture')).toBeInTheDocument();
+    expect(screen.getByText('Soil — Porosity')).toBeInTheDocument();
   });
 
   it('places preferred variables before the alphabetical catalog order', async () => {
     renderCombobox({ preferredIds: ['sv-poro', 'sv-draw'] });
     await openList();
-    await waitFor(() => expect(screen.getByText('soil__porosity')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Soil — Porosity')).toBeInTheDocument());
 
     const labels = screen.getAllByRole('option').map((option) => option.textContent);
-    expect(labels[0]).toContain('soil__porosity');
-    expect(labels[1]).toContain('drawdown');
+    expect(labels[0]).toContain('Soil — Porosity');
+    expect(labels[1]).toContain('Drawdown');
   });
 
   it('offers only producible variables under scope="indicator"', async () => {
     renderCombobox({ scope: 'indicator' });
     await openList();
-    await waitFor(() => expect(screen.getByText('drawdown')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Drawdown')).toBeInTheDocument());
     // Reaches no model, so it must not be offered.
-    expect(screen.queryByText('100hr_dead_moisture')).not.toBeInTheDocument();
+    expect(screen.queryByText('100hr dead moisture')).not.toBeInTheDocument();
     // An input-only variable is not an indicator either.
-    expect(screen.queryByText('soil__porosity')).not.toBeInTheDocument();
+    expect(screen.queryByText('Soil — Porosity')).not.toBeInTheDocument();
   });
 
   it('offers SVOs produced by registered adapter transforms as outcomes', async () => {
@@ -342,25 +342,25 @@ describe('StandardVariableCombobox scope', () => {
       </MockedProvider>,
     );
     await openList();
-    await waitFor(() => expect(screen.getByText('spring__volume_flow_rate')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Spring — Volume flow rate')).toBeInTheDocument());
   });
 
   it('unions inputs and parameter-adjusted variables under scope="driver"', async () => {
     renderCombobox({ scope: 'driver' });
     await openList();
     // soil__porosity arrives through inputs, drawdown through a parameter.
-    await waitFor(() => expect(screen.getByText('soil__porosity')).toBeInTheDocument());
-    expect(screen.getByText('drawdown')).toBeInTheDocument();
-    expect(screen.queryByText('100hr_dead_moisture')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Soil — Porosity')).toBeInTheDocument());
+    expect(screen.getByText('Drawdown')).toBeInTheDocument();
+    expect(screen.queryByText('100hr dead moisture')).not.toBeInTheDocument();
   });
 
   it('infers drivers from a selected outcome across model and ETL steps', async () => {
     renderCombobox({ scope: 'driver', driverOutcomeId: 'sv-draw' });
     await openList();
-    await waitFor(() => expect(screen.getByText('middle')).toBeInTheDocument());
-    expect(screen.getByText('sv-forcing')).toBeInTheDocument();
-    expect(screen.queryByText('soil__porosity')).not.toBeInTheDocument();
-    expect(screen.queryByText('drawdown')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Middle')).toBeInTheDocument());
+    expect(screen.getByText('Sv-forcing')).toBeInTheDocument();
+    expect(screen.queryByText('Soil — Porosity')).not.toBeInTheDocument();
+    expect(screen.queryByText('Drawdown')).not.toBeInTheDocument();
   });
 
   it('limits outcome inference to the selected model configurations', async () => {
@@ -370,8 +370,8 @@ describe('StandardVariableCombobox scope', () => {
       driverConfigurationIds: ['cfg-outcome'],
     });
     await openList();
-    await waitFor(() => expect(screen.getByText('middle')).toBeInTheDocument());
-    expect(screen.queryByText('air__temperature')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Middle')).toBeInTheDocument());
+    expect(screen.queryByText('Air — Temperature')).not.toBeInTheDocument();
   });
 
   it('falls back to outcome-producing models when a retained model is incompatible', async () => {
@@ -381,9 +381,9 @@ describe('StandardVariableCombobox scope', () => {
       driverConfigurationIds: ['cfg-incompatible'],
     });
     await openList();
-    await waitFor(() => expect(screen.getByText('middle')).toBeInTheDocument());
-    expect(screen.getByText('air__temperature')).toBeInTheDocument();
-    expect(screen.queryByText('only_incompatible')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Middle')).toBeInTheDocument());
+    expect(screen.getByText('Air — Temperature')).toBeInTheDocument();
+    expect(screen.queryByText('Only incompatible')).not.toBeInTheDocument();
   });
 
   it('keeps model inference when the optional adapter registry is unavailable', async () => {
@@ -412,20 +412,20 @@ describe('StandardVariableCombobox scope', () => {
       </MockedProvider>,
     );
     await openList();
-    await waitFor(() => expect(screen.getByText('middle')).toBeInTheDocument());
-    expect(screen.queryByText('air__temperature')).not.toBeInTheDocument();
-    expect(screen.queryByText('soil__porosity')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Middle')).toBeInTheDocument());
+    expect(screen.queryByText('Air — Temperature')).not.toBeInTheDocument();
+    expect(screen.queryByText('Soil — Porosity')).not.toBeInTheDocument();
   });
 
   it('widens to the whole catalog when the escape link is clicked', async () => {
     renderCombobox({ scope: 'indicator', scopeLabel: 'a model produces' });
     const user = await openList();
-    await waitFor(() => expect(screen.getByText('drawdown')).toBeInTheDocument());
-    expect(screen.queryByText('100hr_dead_moisture')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Drawdown')).toBeInTheDocument());
+    expect(screen.queryByText('100hr dead moisture')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /show every standard variable/i }));
 
-    await waitFor(() => expect(screen.getByText('100hr_dead_moisture')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('100hr dead moisture')).toBeInTheDocument());
   });
 
   it('names the scope and its size in the escape link', async () => {
@@ -446,9 +446,9 @@ describe('StandardVariableCombobox scope', () => {
       value: { id: 'sv-dead', label: '100hr_dead_moisture', description: null },
     });
     await openList();
-    await waitFor(() => expect(screen.getByText('drawdown')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Drawdown')).toBeInTheDocument());
     // The trigger also prints the stored label, so assert on the option row.
     const options = screen.getAllByRole('option').map((o) => o.textContent);
-    expect(options).toContain('100hr_dead_moisture');
+    expect(options).toContain('100hr dead moisture');
   });
 });

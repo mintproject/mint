@@ -44,14 +44,14 @@ describe('StandardVariableCombobox unlabeled rows', () => {
   it('shows a readable name, never the bare id', async () => {
     await open();
     expect(await screen.findByText('…83d62379 (no label)')).toBeInTheDocument();
-    expect(screen.getByText('drawdown')).toBeInTheDocument();
+    expect(screen.getByText('Drawdown')).toBeInTheDocument();
     expect(screen.queryByText(/Catalog ID/)).not.toBeInTheDocument();
     expect(screen.queryByText(UUID)).not.toBeInTheDocument();
   });
 
   it('leaves unlabeled rows out when the caller needs a label', async () => {
     await open({ requireLabel: true });
-    expect(await screen.findByText('drawdown')).toBeInTheDocument();
+    expect(await screen.findByText('Drawdown')).toBeInTheDocument();
     expect(screen.queryByText(/no label/)).not.toBeInTheDocument();
   });
 });
