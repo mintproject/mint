@@ -66,9 +66,10 @@ const run = (id: string, over: Partial<Execution> = {}): Execution => ({
   status: 'SUCCESS',
   bindings: { 'in-1': { id: 'r1', name: 'a.txt', url: 'https://x/a.txt' }, 'p-mode': 'shortest' },
   results: {
-    'o-report': { id: 'o-report', name: 'report.md', url: REPORT },
-    'o-table': { id: 'o-table', name: 'scores.csv', url: TABLE },
-    'o-lexicon': { id: 'o-lexicon', name: 'lexicon.json', url: LEXICON },
+    // Named by their labels, as runs name them: the preview kind comes from the location.
+    'o-report': { id: 'o-report', name: 'Sensemaking report', url: REPORT },
+    'o-table': { id: 'o-table', name: 'Scores', url: TABLE },
+    'o-lexicon': { id: 'o-lexicon', name: 'Lexicon', url: LEXICON },
   },
   ...over,
 });

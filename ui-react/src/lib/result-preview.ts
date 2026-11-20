@@ -27,6 +27,28 @@ export function previewKind(name: string): PreviewKind | null {
   return null;
 }
 
+/** The preview a declared output format allows ("md", "Markdown", "csv", "json"), or null. */
+export function previewKindFromFormat(format: string | null | undefined): PreviewKind | null {
+  const value = (format ?? '').trim().toLowerCase();
+  if (value === 'md' || value === 'markdown' || value === 'text/markdown') return 'markdown';
+  if (value === 'csv' || value === 'text/csv') return 'csv';
+  if (value === 'json' || value === 'application/json') return 'json';
+  return null;
+}
+
+/**
+ * What an output can be previewed as. A result's name is usually its label
+ * ("Sensemaking report"), so the file's own location decides first, then the
+ * name, then the format the output declares.
+ */
+export function outputPreviewKind(
+  url: string,
+  name: string,
+  format?: string | null,
+): PreviewKind | null {
+  return previewKind(url) ?? previewKind(name) ?? previewKindFromFormat(format);
+}
+
 /** Decode the bytes of a file's start as text (a cut multi-byte character becomes a replacement mark). */
 export function decodePreviewText(bytes: Uint8Array): string {
   return new TextDecoder('utf-8').decode(bytes);

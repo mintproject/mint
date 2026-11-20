@@ -111,3 +111,14 @@ describe('prettyJson', () => {
     expect(prettyJson(ok).note).toBeUndefined();
   });
 });
+
+describe('outputPreviewKind', () => {
+  it('reads the kind from the location first, as a result is named by its label', async () => {
+    const { outputPreviewKind } = await import('@/lib/result-preview');
+    expect(outputPreviewKind('tapis://s/out/summary.md', 'Sensemaking report')).toBe('markdown');
+    expect(outputPreviewKind('tapis://s/out/x', 'weights.csv')).toBe('csv');
+    expect(outputPreviewKind('tapis://s/out/x', 'Lexicon', 'json')).toBe('json');
+    expect(outputPreviewKind('tapis://s/out/x', 'Report', 'Markdown')).toBe('markdown');
+    expect(outputPreviewKind('tapis://s/out/model.tif', 'Raster', 'GeoTIFF')).toBeNull();
+  });
+});
