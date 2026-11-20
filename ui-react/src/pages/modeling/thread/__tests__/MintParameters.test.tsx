@@ -205,14 +205,10 @@ describe('MintParameters', () => {
     expect(
       screen.getByRole('option', { name: 'TWDB Statewide GMA Boundaries' }),
     ).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: '8 — Gulf Coast' })).toBeInTheDocument();
-      expect(
-        Array.from(
-          screen.getByLabelText('Spatial boundary feature').querySelectorAll('option'),
-        ).map((option) => option.textContent),
-      ).toEqual(['All boundaries', '2 — Central High Plains', '8 — Gulf Coast']);
-    });
+    const picker = await screen.findByRole('combobox', { name: 'Spatial boundary feature' });
+    fireEvent.click(picker);
+    expect(await screen.findByText('2 — Central High Plains')).toBeInTheDocument();
+    expect(screen.getByText('8 — Gulf Coast')).toBeInTheDocument();
     // The layers come from the Ensemble Manager; the browser does not call the adapter.
     expect(fetchMock).toHaveBeenCalledWith(
       'http://em/v1/spatial/layers',
@@ -326,7 +322,9 @@ describe('MintParameters', () => {
     fireEvent.change(screen.getByLabelText('Spatial boundary layer'), {
       target: { value: 'mint_registered_ground_water_availability_models' },
     });
-    expect(await screen.findByRole('option', { name: 'gams_12 — GMA 12' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Spatial boundary feature' }));
+    expect(await screen.findByText('GMA 12')).toBeInTheDocument();
+    expect(screen.queryByText(/gams_12/)).not.toBeInTheDocument();
 
     vi.unstubAllGlobals();
     Reflect.deleteProperty(window, '__MINT_CONFIG__');
