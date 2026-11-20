@@ -17,7 +17,9 @@ from . import tapis
 REPORT_KEY = "svo_flow_outputs"
 # A report line is a handful of ids and locations. Anything longer is not one.
 _MAX_REPORT_LINE = 100_000
-_MAX_VALUE = 20_000
+MAX_VALUE = 20_000
+# The gather task a resumed run starts with: it fetches the edited file (flow_segments).
+EDIT_GATHER_ID = "gather-edit"
 _MAX_LOCATION = 2_000
 
 _STATUS = {
@@ -71,12 +73,36 @@ def location(value: Any) -> str | None:
     return text if text and len(text) <= _MAX_LOCATION else None
 
 
-def view(plan_json: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | None:
+def _edit_file(editable: dict[str, Any], value: str | None) -> str | None:
+    """Where the file to edit is: the place the step's summary names under the
+    editable's ``key``, else that file's name in the folder the step wrote to, else
+    the output's own location (a file written by an app)."""
+    summary = None
+    if isinstance(value, str) and value.strip().startswith("{"):
+        try:
+            summary = json.loads(value)
+        except Exception:
+            summary = None
+    key = editable.get("key")
+    if isinstance(summary, dict) and isinstance(key, str) and isinstance(summary.get(key), str):
+        found = summary[key]
+        return found if len(found) <= _MAX_LOCATION else None
+    folder = location(value)
+    if folder and isinstance(summary, dict) and isinstance(editable.get("file"), str):
+        return f"{folder.rstrip('/')}/{editable['file']}"
+    return folder
+
+
+def view(plan_json: dict[str, Any], detail: dict[str, Any], *, awaiting_edit: bool = False) -> dict[str, Any] | None:
     """Steps and outputs of a flow run, or None when the plan is not a flow.
 
     ``detail`` is tapis.get_run_detail's answer. A step Tapis has not started yet
     is ``pending``. An output whose step has not reported is given with no value.
     ``value`` is what the step reported; ``location`` is where the output is.
+
+    ``awaiting_edit`` is a run stopped at its pause: the steps that have not run are
+    ``waiting``, not ``pending``, and an editable output carries ``key`` (how a
+    resume names it) and ``file_location`` (the file to download and edit).
     """
     flow = plan_json.get("flow")
     if not isinstance(flow, dict):
@@ -98,11 +124,19 @@ def view(plan_json: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | 
             "status": _STATUS.get(str(task.get("status") or "").lower(), "pending"),
             "message": task.get("last_message"),
         })
+    if EDIT_GATHER_ID in tasks:
+        task = tasks[EDIT_GATHER_ID]
+        steps.append({
+            "step": EDIT_GATHER_ID, "name": "Fetch the edited file", "task_id": EDIT_GATHER_ID,
+            "depends_on": [], "status": _STATUS.get(str(task.get("status") or "").lower(), "pending"),
+            "message": task.get("last_message"),
+        })
     for step in plan_json.get("steps") or []:
         number = int(step["step"])
         task = tasks.get(task_id(step)) or {}
         by_number[number] = step
         reported[number] = reported_outputs(task.get("stdout"))
+        status = _STATUS.get(str(task.get("status") or "").lower(), "pending")
         steps.append({
             "step": number,
             "name": step.get("name"),
@@ -110,7 +144,7 @@ def view(plan_json: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | 
             # What it waits for: the gather tasks of the collections it reads, then
             # the steps it follows.
             "depends_on": [*tapis.gather_ids(step), *(step.get("depends_on") or [])],
-            "status": _STATUS.get(str(task.get("status") or "").lower(), "pending"),
+            "status": "waiting" if awaiting_edit and status == "pending" else status,
             "message": task.get("last_message"),
         })
     outputs = []
@@ -126,6 +160,11 @@ def view(plan_json: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | 
         else:
             output_id = None  # a published record: reported by the publication, not here
         value = reported.get(declared["step"], {}).get(output_id) if output_id else None
-        value = value if isinstance(value, str) and len(value) <= _MAX_VALUE else None
-        outputs.append({**declared, "value": value, "location": location(value)})
+        value = value if isinstance(value, str) and len(value) <= MAX_VALUE else None
+        entry = {**declared, "value": value, "location": location(value)}
+        if isinstance(declared.get("editable"), dict):
+            entry["key"] = f"{declared['step']}:{declared.get('output')}"
+            if awaiting_edit:
+                entry["file_location"] = _edit_file(declared["editable"], value)
+        outputs.append(entry)
     return {"configuration_id": flow.get("configuration_id"), "steps": steps, "outputs": outputs}

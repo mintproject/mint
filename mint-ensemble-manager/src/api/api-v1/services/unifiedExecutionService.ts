@@ -15,6 +15,7 @@ import {
     flowStages,
     planFlow,
     reconcileFlow,
+    resumeFlow,
     submitFlow
 } from "./flowExecution";
 
@@ -714,7 +715,21 @@ function parentResponse(record: UnifiedExecutionRecord) {
         output_handoff: record.output_handoff || null,
         failure_code: record.failure_code || null,
         model_result: record.model_result || null,
-        error_message: record.error_message || null
+        error_message: record.error_message || null,
+        ...(plan.flow ? { started_by: plan.flow.planned_by, ...flowPauseFields(record) } : {})
+    };
+}
+
+/**
+ * What a run stopped for an edit shows, and the edit a run continued on: the file
+ * to download and where to send the replacement, and later who replaced it, when,
+ * and the hash of what the run fetched. Both are null when there is none.
+ */
+function flowPauseFields(record: UnifiedExecutionRecord) {
+    const child = ((record.adapter_run_ids || []) as Array<Record<string, any>>)[0];
+    return {
+        pause: record.status === "awaiting_edit" ? child?.pause || null : null,
+        replacement: child?.replacement || (record.model_result as any)?.replacement || null
     };
 }
 
@@ -2518,6 +2533,31 @@ export function createUnifiedExecutionService(
             }
             await persistWorkflowStages(latest);
             return parentResponse(latest);
+        },
+
+        async resumeRun(runId: string, body: any, authorization?: string) {
+            const deps = flowDeps();
+            const record = runId.startsWith("ue_") ? await store.getById(runId.slice(3)) : null;
+            if (!record) {
+                throw new UnifiedExecutionError(404, "execution run not found", "RUN_NOT_FOUND");
+            }
+            const plan = decodePlan(record.plan_id);
+            if (!deps || !plan.flow) {
+                throw new UnifiedExecutionError(
+                    409,
+                    "only a flow run can be resumed",
+                    "RUN_NOT_RESUMABLE"
+                );
+            }
+            const resumed = await resumeFlow(
+                deps,
+                { thread_id: plan.thread_id, model_id: plan.model_id, flow: plan.flow },
+                record,
+                body,
+                authorization
+            );
+            await persistWorkflowStages(resumed);
+            return parentResponse(resumed);
         },
 
         async submit(body: any, authorization: string | undefined) {

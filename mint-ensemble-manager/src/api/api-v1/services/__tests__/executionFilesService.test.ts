@@ -11,6 +11,11 @@ jest.mock("@/classes/mint/mint-functions", () => ({
     getConfiguration: jest.fn().mockReturnValue({})
 }));
 jest.mock("@/classes/tapis/adapters/TapisExecutionService");
+// A flow run's record says whether it waits for an edit; no run does unless a test says so.
+const mockRunRecord = jest.fn().mockResolvedValue(null);
+jest.mock("@/api/api-v1/services/unifiedExecutionStore", () => ({
+    createHasuraUnifiedExecutionStore: () => ({ getById: (id: string) => mockRunRecord(id) })
+}));
 
 const AUTH = "Bearer test-token";
 const EXECUTION_ID = "execution-1";
@@ -437,5 +442,78 @@ describe("executionFilesService.openFile", () => {
         );
 
         expect(error).toMatchObject({ statusCode: 401 });
+    });
+});
+
+describe("executionFilesService.openFile, for the file a flow run waits for an edit of", () => {
+    const WAITING = "tapis://ls6/scratch/alice/out/lexicon_draft.json";
+    const waitingRecord = (over: Record<string, unknown> = {}) => ({
+        status: "awaiting_edit",
+        adapter_run_ids: [{ pause: { file_location: WAITING } }],
+        ...over
+    });
+
+    beforeEach(() => {
+        (getConfiguration as jest.Mock).mockReturnValue(TAPIS_CONFIG);
+        (getExecution as jest.Mock).mockResolvedValue({
+            id: EXECUTION_ID,
+            runid: "ue_run-1",
+            results: {}
+        });
+        mockRunRecord.mockResolvedValue(waitingRecord());
+    });
+
+    afterEach(() => {
+        jest.clearAllMocks();
+    });
+
+    const open = (path: string, system?: string) => {
+        const mocks = tapisListsFiles([]);
+        mocks.openArchiveFile.mockResolvedValue({ stream: "s", contentType: "application/json" });
+        return {
+            mocks,
+            result: executionFilesService.openFile(EXECUTION_ID, AUTH, path, system)
+        };
+    };
+
+    it("streams that file, as the caller, though nothing is filed as a result yet", async () => {
+        const { mocks, result } = open("scratch/alice/out/lexicon_draft.json", "ls6");
+        expect(await result).toMatchObject({
+            filename: "lexicon_draft.json",
+            contentType: "application/json"
+        });
+        expect(mocks.openArchiveFile).toHaveBeenCalledWith(
+            "ls6",
+            "scratch/alice/out/lexicon_draft.json"
+        );
+        expect(mockRunRecord).toHaveBeenCalledWith("run-1");
+    });
+
+    it.each([
+        ["another file in that folder", "scratch/alice/out/other.json", "ls6"],
+        ["the folder", "scratch/alice/out", "ls6"],
+        ["the file on another system", "scratch/alice/out/lexicon_draft.json", "corral"],
+        ["the file with no system given", "scratch/alice/out/lexicon_draft.json", undefined]
+    ])("refuses %s", async (_name, path, system) => {
+        const { mocks, result } = open(path, system);
+        await expect(result).rejects.toMatchObject({ code: expect.stringMatching(/^FILE_/) });
+        expect(mocks.openArchiveFile).not.toHaveBeenCalled();
+    });
+
+    it("serves nothing once the run is no longer waiting", async () => {
+        mockRunRecord.mockResolvedValue(waitingRecord({ status: "adapter_running" }));
+        const { mocks, result } = open("scratch/alice/out/lexicon_draft.json", "ls6");
+        await expect(result).rejects.toMatchObject({ code: "FILE_NOT_IN_RESULTS" });
+        expect(mocks.openArchiveFile).not.toHaveBeenCalled();
+    });
+
+    it("serves nothing when the run's record cannot be read, or names no file", async () => {
+        mockRunRecord.mockRejectedValue(new Error("down"));
+        let attempt = open("scratch/alice/out/lexicon_draft.json", "ls6");
+        await expect(attempt.result).rejects.toBeTruthy();
+        mockRunRecord.mockResolvedValue(waitingRecord({ adapter_run_ids: [{ pause: {} }] }));
+        attempt = open("scratch/alice/out/lexicon_draft.json", "ls6");
+        await expect(attempt.result).rejects.toBeTruthy();
+        expect(attempt.mocks.openArchiveFile).not.toHaveBeenCalled();
     });
 });

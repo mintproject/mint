@@ -46,6 +46,7 @@ import {
   createExecutionPlan,
   EnsembleManagerError,
   cancelUnifiedRun,
+  resumeUnifiedRun,
   fetchUnifiedRun,
   isUnifiedRunTerminal,
   publishExecution,
@@ -1040,6 +1041,24 @@ export function MintThread({
   );
 
   /**
+   * Send a flow run's edited file on. The run was started by this user, and the
+   * Ensemble Manager and the adapter check that again. A refusal is thrown to the
+   * paused panel, which says why in its own words; the run stays paused.
+   */
+  const handleResumeWorkflow = useCallback(
+    async (modelId: string, edit: { url: string; dataset_id: string; resource_id: string }) => {
+      const run = unifiedRuns[modelId];
+      const ensembleManagerApi = window.__MINT_CONFIG__?.ENSEMBLE_MANAGER_API ?? '';
+      if (!run?.run_id?.startsWith('ue_') || !run.pause || !ensembleManagerApi) return;
+      rememberUnifiedRun(
+        modelId,
+        await resumeUnifiedRun(ensembleManagerApi, run.run_id, run.pause.output_key, edit),
+      );
+    },
+    [rememberUnifiedRun, unifiedRuns],
+  );
+
+  /**
    * Register this thread's run outputs, then read the counters back.
    *
    * `MintResults` treats the absence of this prop as "publishing is not
@@ -1221,6 +1240,8 @@ export function MintThread({
             workflowRefreshing={unifiedRunRefreshing}
             onCancelWorkflow={handleCancelWorkflow}
             workflowCancelling={unifiedRunCancelling}
+            onResumeWorkflow={handleResumeWorkflow}
+            currentUsername={user?.username ?? ''}
             onPublishExecution={handlePublishExecution}
             onOutputsChanged={handleOutputsChanged}
             adapterPlansLoading={adapterPlansLoading}

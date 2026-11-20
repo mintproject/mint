@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     # runner's token, as a bearer credential, to this host and no other, so it can
     # read private catalog files. Empty disables it.
     flow_collection_catalog_host: str = ""
+    # A flow may stop after a step for the user to edit a file (design:
+    # docs/design/2026-11-20-flow-pause-for-edit.md). Off by default: with it off a
+    # flow runs through its pause as it always did, and no run can be resumed.
+    flow_pause_enabled: bool = False
+    # The largest edited file a resume accepts, in bytes. The gather step that
+    # fetches it holds to this, and counts the bytes itself.
+    flow_edit_max_bytes: int = 5 * 1024 * 1024
+    # A run left paused this long is cancelled by the sweep, in days.
+    flow_pause_max_days: int = 14
 
     # Tapis Workflows. Submission emulates SUBSIDE's manager so adapter-generated
     # pipelines are interchangeable with SUBSIDE's: same pipeline shape, registered

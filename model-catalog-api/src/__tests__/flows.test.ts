@@ -268,3 +268,92 @@ describe('the username in a token', () => {
     expect(usernameFromBearer(bearer({ 'tapis/username': '' }))).toBeUndefined()
   })
 })
+
+describe('a pause for the person to edit a file', () => {
+  const EDITABLE = { file: 'lexicon_draft.json', check: 'lexicon', key: 'lexicon_uri' }
+  const paused = (over: Record<string, unknown> = {}) => ({
+    ...BODY(),
+    steps: [
+      { ...BODY().steps[0], pause_after: true },
+      BODY().steps[1],
+    ],
+    outputs: [{ step: 1, output: 0, label: 'Draft lexicon', editable: EDITABLE }, { step: 2, output: 0, label: 'Counts' }],
+    ...over,
+  })
+
+  it('is accepted when the paused step has one editable file output, and the file is stored with the flow', () => {
+    const body = paused()
+    const plan = planRegistration(body)
+    expect(plan.check.steps[0].pause_after).toBe(true)
+    expect(plan.check.outputs[0]).toEqual({ step: 1, output: 0, editable: EDITABLE })
+    const rows = buildRows(body, plan, PIECES, 'alice')
+    expect(rows.flow.outputs_json[0]).toEqual({ step: 1, output: 0, editable: EDITABLE, output_id: `${C}_output_1` })
+    expect(rows.flow.steps.data[0].pause_after).toBe(true)
+  })
+
+  it('takes a file name alone', () => {
+    expect(() => planRegistration(paused({ outputs: [{ step: 1, output: 0, label: 'x', editable: { file: 'a.json' } }] })))
+      .not.toThrow()
+  })
+
+  const refused = (body: unknown) => {
+    try {
+      planRegistration(body as any)
+    } catch (error: any) {
+      expect(error).toBeInstanceOf(FlowError)
+      expect([error.status, error.code]).toEqual([422, 'FLOW_DOES_NOT_CHECK_OUT'])
+      return error.details.problems.map((p: any) => p.message).join(' | ')
+    }
+    throw new Error('was accepted')
+  }
+
+  it('is refused with no editable output on the paused step', () => {
+    expect(refused(paused({ outputs: [{ step: 2, output: 0, label: 'Counts' }] }))).toContain('exactly one file output marked editable')
+  })
+
+  it('is refused when the editable output is on another step, or there are two', () => {
+    expect(refused(paused({ outputs: [{ step: 2, output: 0, label: 'x', editable: EDITABLE }] }))).toContain('exactly one')
+    expect(refused(paused({ outputs: [
+      { step: 1, output: 0, label: 'a', editable: EDITABLE }, { step: 1, output: 1, label: 'b', editable: EDITABLE }] }))).toContain('exactly one')
+  })
+
+  it('is refused when the editable output is a value, not a file', () => {
+    expect(refused(paused({ outputs: [{ step: 1, value: 'draft', editable: EDITABLE }] }))).toContain('exactly one')
+  })
+
+  it('is refused when more than one step pauses', () => {
+    const body = paused()
+    body.steps[1] = { ...body.steps[1], pause_after: true } as any
+    expect(refused(body)).toContain('pause only once')
+  })
+
+  it('is refused when an output is editable and nothing pauses', () => {
+    expect(refused({ ...BODY(), outputs: [{ step: 1, output: 0, label: 'x', editable: EDITABLE }] })).toContain('no step pauses')
+  })
+
+  it.each([
+    [{ file: '' }], [{ file: 'a/b.json' }], [{ file: '..\\a' }], [{ file: '.hidden' }], [{ file: 'x'.repeat(201) }],
+    [{ file: 'a.json', check: 'yaml' }], [{ file: 'a.json', key: 'Bad Key' }], [{ file: 'a.json', other: 1 }], [null], ['a.json'],
+  ])('is refused when editable is malformed: %j', (editable) => {
+    expect(refused(paused({ outputs: [{ step: 1, output: 0, label: 'x', editable }, { step: 2, output: 0, label: 'y' }] }))).toBeTruthy()
+  })
+
+  it('is refused by POST /flows before the adapter is asked or anything is written', async () => {
+    const fetchMock = adapterAnswers({ ok: true, problems: [], pieces: PIECES })
+    const reply = makeReply()
+    await custom_flows_post(makeReq(paused({ outputs: [{ step: 2, output: 0, label: 'Counts' }] })), reply)
+    expect(reply._status).toBe(422)
+    expect(reply._body.problems[0].code).toBe('FLOW_PAUSE')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(mockMutate).not.toHaveBeenCalled()
+  })
+
+  it('is registered by POST /flows when it is sound', async () => {
+    adapterAnswers({ ok: true, problems: [], pieces: PIECES })
+    const reply = makeReply()
+    await custom_flows_post(makeReq(paused()), reply)
+    expect(reply._status).toBe(201)
+    const { variables } = mockMutate.mock.calls[0][0]
+    expect(variables.flow.outputs_json[0].editable).toEqual(EDITABLE)
+  })
+})

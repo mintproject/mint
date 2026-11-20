@@ -26,6 +26,15 @@ interface UploadFilesProps {
   username: string;
   /** A model (not a flow) reads its files itself, with no token, so they must be public. */
   forcePublic?: boolean;
+  /** The files are the user's own edit of a run's output: private, with no choice. */
+  forcePrivate?: boolean;
+  /** For a file that is no input's data: no standard variable is needed or recorded. */
+  variableOptional?: boolean;
+  /** What the dataset is for, in its catalog notes. */
+  datasetNotes?: string;
+  /** The text of the button that opens the form, and of the line beside it. */
+  buttonLabel?: string;
+  hint?: string;
   disabled?: boolean;
   onUploaded: (dataset: UploadedDataset) => void;
 }
@@ -54,6 +63,11 @@ export function UploadFiles({
   regionGeometry,
   username,
   forcePublic = false,
+  forcePrivate = false,
+  variableOptional = false,
+  datasetNotes,
+  buttonLabel = 'Upload files',
+  hint,
   disabled,
   onUploaded,
 }: UploadFilesProps) {
@@ -90,12 +104,14 @@ export function UploadFiles({
       const dataset = await uploadFilesToCatalog({
         files: chosen,
         organizationId: orgId,
-        isPublic: forcePublic || isPublic,
+        isPublic: !forcePrivate && (forcePublic || isPublic),
         flowName,
         inputName,
         variables,
         format,
         multiple,
+        variableOptional,
+        notes: datasetNotes,
         startDate,
         endDate,
         regionGeometry,
@@ -126,12 +142,13 @@ export function UploadFiles({
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
-          Upload files
+          {buttonLabel}
         </button>
         <span className="text-slate-500">
-          {multiple
-            ? `Up to ${UPLOAD_FILE_CAP} files, 2 GB in all, read together.`
-            : 'This input takes one file.'}
+          {hint ??
+            (multiple
+              ? `Up to ${UPLOAD_FILE_CAP} files, 2 GB in all, read together.`
+              : 'This input takes one file.')}
         </span>
       </div>
       {open && (
@@ -159,15 +176,17 @@ export function UploadFiles({
                   ))}
                 </select>
               </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={forcePublic || isPublic}
-                  disabled={busy || forcePublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                />
-                <span>Make these files public</span>
-              </label>
+              {!forcePrivate && (
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={forcePublic || isPublic}
+                    disabled={busy || forcePublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                  />
+                  <span>Make these files public</span>
+                </label>
+              )}
               {forcePublic && (
                 <p className="text-slate-600" data-testid="upload-public-only">
                   {UPLOAD_MODEL_PUBLIC_NOTE}

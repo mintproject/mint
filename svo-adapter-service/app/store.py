@@ -109,6 +109,39 @@ class InMemoryHasura:
     def _op_GetRun(self, v):
         return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
 
+    def _op_GetRunSegment(self, v):
+        return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
+
+    def _op_ResumeRunIf(self, v):
+        # Compare-and-set: only a completed run that nothing has resumed yet.
+        row = STORE.run.get(v["id"])
+        if row and row.get("status") == "completed" and not row.get("resumed_run_id"):
+            row["resumed_run_id"] = v["child"]
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
+
+    def _op_ResumeRollbackIf(self, v):
+        row = STORE.run.get(v["id"])
+        if row and row.get("resumed_run_id") == v["child"]:
+            row["resumed_run_id"] = v.get("was")
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
+
+    def _op_ResumeRetryIf(self, v):
+        row = STORE.run.get(v["id"])
+        if row and row.get("status") == "completed" and row.get("resumed_run_id") == v["was"]:
+            row["resumed_run_id"] = v["child"]
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
+
+    def _op_GetRunStatus(self, v):
+        return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
+
+    def _op_ListPausedRuns(self, v):
+        return {"adapter_workflow_run": [
+            r for r in STORE.run.values()
+            if r.get("paused_after_step") is not None and r.get("status") == "completed"]}
+
     def _op_GetRunByIdempotency(self, v):
         rows = [
             row for row in STORE.run.values()

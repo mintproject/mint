@@ -1020,6 +1020,12 @@ interface MintRunsProps {
   workflowRefreshErrors?: Record<string, string>;
   workflowRefreshing?: Record<string, boolean>;
   onCancelWorkflow?: (modelId: string) => Promise<void>;
+  /** Send a flow run's edited file on and continue it. */
+  onResumeWorkflow?: (
+    modelId: string,
+    edit: { url: string; dataset_id: string; resource_id: string },
+  ) => Promise<void>;
+  currentUsername?: string;
   workflowCancelling?: Record<string, boolean>;
   onContinue: () => void;
   onFetchRuns: (modelId: string, page: number, pageSize: number) => void;
@@ -1055,6 +1061,8 @@ export function MintRuns({
   workflowRefreshErrors,
   workflowRefreshing,
   onCancelWorkflow,
+  onResumeWorkflow,
+  currentUsername,
   workflowCancelling,
   onContinue,
   onFetchRuns,
@@ -1494,6 +1502,13 @@ export function MintRuns({
                           : undefined
                       }
                       cancelling={workflowCancelling?.[mid]}
+                      ensembleManagerApi={ensembleManagerApi}
+                      username={currentUsername}
+                      onResume={
+                        onResumeWorkflow && workflowRun.run_id?.startsWith('ue_')
+                          ? (edit) => onResumeWorkflow(mid, edit)
+                          : undefined
+                      }
                     />
                   ) : workflowRun ? (
                     <UnifiedExecutionPanel

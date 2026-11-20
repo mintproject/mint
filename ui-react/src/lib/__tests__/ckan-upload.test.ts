@@ -168,6 +168,16 @@ describe('uploadBatchProblem', () => {
 
 describe('checkUploadAgainstInput', () => {
   const base = { variables: ['v'], multiple: false, inputName: 'Config' };
+  it('takes no standard variable for a file that belongs to no input', () => {
+    expect(
+      checkUploadAgainstInput({
+        ...base,
+        variables: [],
+        variableOptional: true,
+        files: [{ name: 'a.json' }],
+      }).error,
+    ).toBeNull();
+  });
   it('refuses an input with no standard variable', () => {
     const r = checkUploadAgainstInput({ ...base, variables: [], files: [{ name: 'a.json' }] });
     expect(r.error).toMatch(/names no standard variable/);
@@ -328,6 +338,31 @@ describe('uploadFilesToCatalog', () => {
     expect(result.datasetId).toBe('dynamo-upload-x');
     expect(result.resources.map((r) => r.url)).toEqual([`${CKAN}/d/1`, `${CKAN}/d/2`]);
     expect(progress.mock.calls.at(-1)![0]).toMatchObject({ sent: 8, total: 8, count: 2 });
+  });
+
+  it('takes an edit that belongs to no input: no standard variable asked, none recorded', async () => {
+    const result = await uploadFilesToCatalog({
+      ...BASE,
+      variables: [],
+      variableOptional: true,
+      multiple: false,
+      format: 'json',
+      notes: 'An edited copy.',
+      files: [file('lexicon.json')],
+    });
+    const body = JSON.parse(
+      String(fetchCalls.find((c) => c.url.includes('package_create'))!.init?.body),
+    );
+    expect(body).toMatchObject({ private: true, notes: 'An edited copy.' });
+    expect(sent[0]!.form.has('mint_standard_variables')).toBe(false);
+    expect(result.resources[0]!.url).toBe(`${CKAN}/d/1`);
+  });
+
+  it('still refuses an input with no standard variable unless that is allowed', async () => {
+    await expect(
+      uploadFilesToCatalog({ ...BASE, variables: [], files: [file('a.txt')] }),
+    ).rejects.toThrow(/names no standard variable/);
+    expect(sent).toEqual([]);
   });
 
   it('makes the dataset public only when asked', async () => {

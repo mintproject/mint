@@ -6,6 +6,7 @@ task sends, to which address and with which headers, can be read back.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import ssl
@@ -635,7 +636,9 @@ def test_one_file_for_an_ordinary_input_has_the_file_as_its_result(monkeypatch, 
     outputs = run(monkeypatch, network, [res("https://a.example/one.csv", "")], single=True)
     result = "tapis://ls6/" + FOLDER + "/one.csv"
     assert outputs == {"result": result}
-    assert last_line(capsys)["svo_flow_outputs"] == {"result": result}
+    # One file also reports what was fetched: its hash and size.
+    assert last_line(capsys)["svo_flow_outputs"] == {
+        "result": result, "bytes": 3, "sha256": hashlib.sha256(b"1,2").hexdigest()}
 
 
 def test_the_catalog_header_rule_holds_for_one_file(monkeypatch):
@@ -645,3 +648,124 @@ def test_the_catalog_header_rule_holds_for_one_file(monkeypatch):
     network = Network({("a.example", "/x"): Reply(body=b"x")})
     run(monkeypatch, network, [res("https://a.example/x", "")], single=True, catalog_host=CATALOG)
     assert [auth_of(c) for c in https_calls(network)] == [None]
+
+
+# --- a file the user edited ------------------------------------------------------------
+
+EDIT = "/dataset/d1/resource/r9/download/lexicon.json"
+GOOD = json.dumps({"schema_version": 1, "name": "x", "groups": [{"name": "Water", "terms": ["aquifer"]}]}).encode()
+
+
+def run_edit(monkeypatch, network, body, **over):
+    inputs = {**INPUTS, "CARRIED": json.dumps({"output_uri": "tapis://ls6/o", "lexicon_uri": "tapis://ls6/o/draft.json"})}
+    return run(monkeypatch, network, [res("https://" + CATALOG + EDIT, "")], inputs=inputs,
+               single=True, catalog_host=CATALOG, check="lexicon", **over)
+
+
+def test_an_edited_file_is_fetched_as_the_runner_checked_stored_and_hashed(monkeypatch, capsys):
+    network = Network({(CATALOG, EDIT): Reply(body=GOOD)})
+    outputs = run_edit(monkeypatch, network, GOOD)
+    assert [auth_of(c) for c in https_calls(network)] == ["Bearer " + TOKEN]
+    assert uploads(network) == {"lexicon.json": GOOD}
+    report = last_line(capsys)["svo_flow_outputs"]
+    assert report["sha256"] == hashlib.sha256(GOOD).hexdigest() and report["bytes"] == len(GOOD)
+    assert outputs["result"] == "tapis://ls6/" + FOLDER + "/lexicon.json"
+
+
+def test_an_edited_file_the_loader_would_refuse_stops_the_run_before_it_is_stored(monkeypatch, capsys):
+    bad = b'{"groups": [{"name": "Water", "terms": []}]}'
+    network = Network({(CATALOG, EDIT): Reply(body=bad)})
+    with pytest.raises(SystemExit):
+        run_edit(monkeypatch, network, bad)
+    assert uploads(network) == {}
+    out = last_line(capsys)
+    assert out["code"] == "GATHER_FILE_INVALID" and "no terms" in out["message"]
+    assert TOKEN not in json.dumps(out)
+
+
+def test_the_summary_a_later_step_is_handed_names_the_edited_file(monkeypatch, capsys):
+    network = Network({(CATALOG, EDIT): Reply(body=GOOD)})
+    outputs = run_edit(monkeypatch, network, GOOD, merge_key="lexicon_uri")
+    carried = json.loads(outputs["carried"])
+    assert carried == {"output_uri": "tapis://ls6/o", "lexicon_uri": outputs["result"]}
+    assert json.loads(last_line(capsys)["svo_flow_outputs"]["carried"]) == carried
+
+
+def test_a_value_to_carry_that_is_not_an_object_ends_the_task(monkeypatch, capsys):
+    network = Network({(CATALOG, EDIT): Reply(body=GOOD)})
+    with pytest.raises(SystemExit):
+        run(monkeypatch, network, [res("https://" + CATALOG + EDIT, "")], inputs={**INPUTS, "CARRIED": "tapis://x"},
+            single=True, catalog_host=CATALOG, check="lexicon", merge_key="lexicon_uri")
+    assert last_line(capsys)["code"] == "GATHER_RESOURCE_FAILED"
+
+
+def test_an_edit_over_the_size_cap_is_refused_by_the_task_itself(monkeypatch, capsys):
+    network = Network({(CATALOG, EDIT): Reply(body=GOOD)})
+    with pytest.raises(SystemExit):
+        run_edit(monkeypatch, network, GOOD, max_bytes=10)
+    assert last_line(capsys)["code"] == "GATHER_TOO_LARGE"
+
+
+@pytest.mark.parametrize("name,data,ok", [
+    ("a.json", GOOD, True),
+    ("a.json", b'{"Water": ["aquifer"], "_note": "kept out"}', True),
+    ("a.csv", b"group,term\nWater,aquifer\nWater,well\n", True),
+    ("a.json", b"not json", False),
+    ("a.json", b"[]", False),
+    ("a.json", b'{"Water": []}', False),
+    ("a.json", b'{"Water": ["x", " "]}', False),
+    ("a.json", b'{"_only": "a comment"}', False),
+    ("a.json", b'{"groups": [{"name": "A", "terms": ["x"], "color": "red"}]}', False),
+    ("a.json", b'{"groups": [{"name": "A", "terms": ["x"]}, {"name": "A", "terms": ["y"]}]}', False),
+    ("a.json", b'{"schema_version": 2, "groups": [{"name": "A", "terms": ["x"]}]}', False),
+    ("a.json", b'{"groups": []}', False),
+    ("a.csv", b"term\nx\n", False),
+    ("a.csv", b"group,term\nA,\n", False),
+    ("a.json", b"\xff\xfe", False),
+])
+def test_the_lexicon_check_follows_the_librarys_loader(name, data, ok):
+    if ok:
+        gather_fetch.check_lexicon(data, name)
+    else:
+        with pytest.raises(ValueError):
+            gather_fetch.check_lexicon(data, name)
+
+
+def test_the_lexicon_check_never_repeats_the_files_content():
+    with pytest.raises(ValueError) as caught:
+        gather_fetch.check_lexicon(b'{"secret-looking-key": "token-abc"}', "a.json")
+    assert "token-abc" not in str(caught.value)
+
+
+def test_the_checks_a_flow_may_name():
+    assert gather_fetch.EDIT_CHECKS == ("json", "lexicon")
+    with pytest.raises(ValueError):
+        gather_fetch.check_edit("yaml", b"{}", "a.yaml")
+    gather_fetch.check_edit("json", b"{}", "a.json")
+    gather_fetch.check_edit("", b"anything", "a.bin")
+
+
+def test_the_gather_spec_carries_the_check_the_merge_and_the_cap():
+    from app import tapis
+    task = tapis._gather_task({
+        "gather": "gather-edit", "label": "x", "resources": [], "single": True, "check": "lexicon",
+        "max_bytes": 123, "merge": {"key": "lexicon_uri", "carried_arg": "resume_step3_output_1"}})
+    code = task["code"].replace("\\", "")
+    assert '"check": "lexicon"' in code and '"merge_key": "lexicon_uri"' in code and '"max_bytes": 123' in code
+    assert task["input"]["CARRIED"] == {"type": "string", "value_from": {"args": "resume_step3_output_1"}}
+    assert set(task["output"]) == {"result", "carried"}
+    plain = tapis._gather_task({"gather": "gather-1", "label": "x", "resources": []})
+    assert "CARRIED" not in plain["input"] and set(plain["output"]) == {"result"}
+
+
+def test_an_edited_files_address_is_read_from_a_task_input_not_from_the_plan(monkeypatch, capsys):
+    from app import tapis
+    url = "https://" + CATALOG + EDIT + "?X-Amz-Signature=SIGNED"
+    task = tapis._gather_task({"gather": "gather-edit", "label": "x", "resources": [], "single": True,
+                               "url_arg": "resume_edit_url", "check": "lexicon"})
+    assert task["input"]["EDIT_URL"] == {"type": "string", "value_from": {"args": "resume_edit_url"}}
+    assert "SIGNED" not in task["code"] and "ckan" not in task["code"].split("_SPEC = json.loads")[1].split("\n")[0].replace(CATALOG, "")
+    network = Network({(CATALOG, EDIT + "?X-Amz-Signature=SIGNED"): Reply(body=GOOD)})
+    outputs = run(monkeypatch, network, [], inputs={**INPUTS, "EDIT_URL": url}, single=True,
+                  catalog_host=CATALOG, check="lexicon", url_input=True)
+    assert outputs["result"].endswith("/lexicon.json") and uploads(network) == {"lexicon.json": GOOD}

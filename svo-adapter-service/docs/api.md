@@ -332,6 +332,87 @@ a credential in a setting.
   A piece declares the values it returns in its runtime metadata as `value_outputs`.
   A value name is a plain identifier of at most 64 characters.
 
+### A flow that pauses for an edit
+
+Design: `docs/design/2026-11-20-flow-pause-for-edit.md`. Off unless
+`SVO_ADAPTER_FLOW_PAUSE_ENABLED` is set. With it off, a flow runs whole as it always
+did, a `through_step` is refused (422 `FLOW_PAUSE_DISABLED`), and `resume` answers the
+same.
+
+**Marking the pause.** A flow step with `pause_after` stops the run after that step. One
+output of that step, a file output, carries `editable` in the flow's `outputs`:
+`{"step": 2, "output": 1, "editable": {"file": "lexicon_draft.json", "check": "lexicon",
+"key": "lexicon_uri"}}`. `file` is the plain name of the file to edit. `check` (`json` or
+`lexicon`) is the test the edited file must pass before the run continues. `key` is the
+name under which the step's reported summary holds the file's address. `POST
+/flows/check` and `POST /plans/flow` refuse (`FLOW_PAUSE`) a flow that pauses more than
+once, pauses with no editable output, marks an output of another step editable, or has no
+step after the pause that reads the editable output. A flow whose plan pauses needs a
+staging folder, so it is planned with the managed `flow_staging_uri` argument whether or
+not it gathers anything; a plan made before that must be made again
+(`FLOW_PLAN_PREDATES_PAUSE`).
+
+**Segments.** The run is two Tapis pipelines. `POST /workflows/submit` with pausing on
+builds segment 1 from the paused step and every step it follows (`through_step` may be
+sent, and may only be the pause step; `FLOW_THROUGH_STEP_INVALID` otherwise; sending
+nothing runs to the pause anyway, so no caller can skip it). The pipeline id is
+`<plan id>-seg1`. Its run row has `paused_after_step`, and `segment_json.args` holds the
+arguments segment 2 will start with, less every token and credential. When it ends it is
+`completed` in the adapter's words; it is paused while nothing has resumed it (or what
+resumed it failed). No Tapis run is open during the pause.
+
+**Poll.** `flow.status` is `awaiting_edit`; `flow.steps` after the pause are `waiting`;
+`flow.paused_after_step`, `flow.paused_at` and, after a failed continuation,
+`flow.resume_error` say where and why. The editable output carries `key`
+(`<step>:<output>`) and `file_location` (where to download the file). `completed_at` is
+set when the run first ends and kept: a poll never moves it.
+
+**Resume.** `POST /runs/{run_id}/resume` with
+`{"replacements": {"<key>": {"url", "dataset_id"?, "resource_id"?}}}` and nothing else.
+The file is the user's own upload to the data catalog (a private dataset in an
+organisation they chose). Refusals: 401 no token; 403 `RUN_RESUME_FORBIDDEN` (the
+submitter only, not a cancel admin); 409 `RUN_NOT_AWAITING_EDIT`; 422
+`FLOW_REPLACEMENT_NOT_EDITABLE` (the one key of the paused step, one entry);
+422 `FLOW_REPLACEMENT_REFUSED` (not exactly `https://<catalog host>/dataset/<d>/resource/<resource_id>/download/<file>`;
+`resource_id` is required and must match; no query, fragment, or encoded `/`, `\`, `.`); the
+address reaches the gather task as the run argument `resume_edit_url`, never in the pipeline;
+409 `FLOW_RESUME_VALUE_REFUSED` (a value segment 1 printed is not an allowed location or looks
+like a credential); 409 `FLOW_RESUME_ARGUMENT_CLASH`; a flow that pauses may not have a setting
+named `resume_*` (`FLOW_PARAMETER_RESERVED` at plan time); 409 `FLOW_RESUME_VALUE_MISSING` (the first
+segment reported nothing the rest needs); 409 `RUN_STATUS_CHANGED` (lost the claim: of two
+resumes one wins, by a compare-and-set on `resumed_run_id`). Then segment 2 is built from
+the other steps, as its own run (`parent_run_id`) and pipeline (`<plan id>-seg2`,
+registered afresh every time) under a token minted for the resumer. Every check of a
+submit runs again on its steps: the stored-source check, the secret trust rule, the
+secret conflict rule, `FLOW_PLAN_NOT_YOURS`, `FLOW_SECRET_MISSING` and
+`FLOW_SECRET_CHANGED`; each segment binds the secrets of its own steps when it is
+submitted, with a credential made for its own run and step. Links from segment 2 into
+segment 1 become pipeline arguments (`resume_*`) filled from what segment 1 printed; the
+link to the edited output becomes a link to a gather task, `gather-edit`, that fetches
+the file as the runner (the catalog host is the one host that receives the token),
+refuses it above `SVO_ADAPTER_FLOW_EDIT_MAX_BYTES`, and refuses with
+`GATHER_FILE_INVALID` a file the library's loader would refuse (a `lexicon` check follows
+`semantic_sensemaking.lexicon.io`). It stores the file in the run's own folder, and when
+the step reported a summary naming the file under `key`, hands on the summary with `key`
+pointing at the edit. The original is never overwritten.
+
+A resume that fails before its segment is handed to Tapis gives its claim back (and a claim
+naming a run that was never recorded counts as still paused). A poll of a run that was
+resumed answers `flow.status` `resumed` with `flow.resumed_run_id`, so a client that missed
+the resume can follow the new run. The 14 days count from the later of the pause and the last
+failed continuation; the sweep's `run.cancelled` event and the run's `cancelled` status are
+how the Ensemble Manager learns (its next poll of the run closes the thread's execution).
+
+**A failed continuation** (a refused edit, most often) leaves segment 1 paused again with
+the reason, and `resume` may be sent again; the failed segment 2 stays on record.
+
+**Provenance.** `run.paused` and `run.resumed` on segment 1; on segment 2 `run.input.replaced`
+with the output key, the original file's location, the catalog dataset and resource, who
+replaced it and when, and the SHA-256 and size of the file the gather step fetched (recorded
+at the first poll after it ran). The same record is `flow.replacement` on a poll of
+segment 2. A run left paused for `SVO_ADAPTER_FLOW_PAUSE_MAX_DAYS` (14) is cancelled by the
+poller's sweep (`run.cancelled`, reason `paused_too_long`).
+
 ### Pieces that carry stored Python source
 
 A piece may carry its own Python source instead of running one of the adapter's
@@ -446,7 +527,8 @@ plans through the existing adapter workflow tables.
 | POST | `/runs/{run_id}/poll` | Poll Tapis and persist the run status transition. Also verifies a signalled model job uuid against Tapis (by job name) and clears a `stalled` health verdict when the job exists. Never reverts `cancelled`. |
 | POST | `/runs/{run_id}/signal` | Liveness report from the composite model task (`started`, `job_submitted`, `finished`). Authenticated by `X-Run-Signal-Token` / `X-Run-Signal-Expires`, a per-run HMAC derived from `SVO_ADAPTER_RUN_SIGNAL_SECRETS`. Updates `health`, `started_at`, `last_signal_at` and the job identity; never moves `status` to a terminal value. 503 when signals are not configured; uniform 401 for a bad token or unknown run. |
 | POST | `/runs/{run_id}/token` | Hand the composite model task the run's current per-run Tapis token (token keeper, `SVO_ADAPTER_RUN_TOKEN_KEEPER_ENABLED`). Authenticated by `X-Run-Token-Credential` / `X-Run-Token-Expires`, a per-run HMAC in its own domain derived from `SVO_ADAPTER_RUN_SIGNAL_SECRETS`; uniform 401 for a bad credential or unknown run; 404 `RUN_TOKEN_UNAVAILABLE` when the keeper is off, the run is not `running`/`submitting`, nothing is stored, or the keeper deadline has passed; 429 per-run rate limit. Mints and stores a successor when the stored token is within the renewal margin. Response is `no-store`; the token appears nowhere else. |
-| POST | `/runs/{run_id}/cancel` | Terminate the Workflows run and, when the job uuid has been verified, cancel the Tapis job. Bearer token required; the caller (resolved through Tapis `userinfo`) must be the submitter or in `SVO_ADAPTER_CANCEL_ADMINS`. Moves `cancelling` → `cancelled`; a partial failure stays `cancelling` with the error recorded and returns 502. No-op on terminal runs. |
+| POST | `/runs/{run_id}/cancel` | Terminate the Workflows run and, when the job uuid has been verified, cancel the Tapis job. Bearer token required; the caller (resolved through Tapis `userinfo`) must be the submitter or in `SVO_ADAPTER_CANCEL_ADMINS`. Moves `cancelling` → `cancelled`; a partial failure stays `cancelling` with the error recorded and returns 502. No-op on terminal runs. A run stopped at its pause (see below) has no Tapis run to terminate: it is set `cancelled` with no Tapis call. |
+| POST | `/runs/{run_id}/resume` | Continue a flow run stopped at its pause, on the user's edited file. See "A flow that pauses for an edit". Submitter only. |
 | GET | `/runs/{run_id}/provenance` | Retrieve provenance events for a run. |
 
 #### Run health and staleness

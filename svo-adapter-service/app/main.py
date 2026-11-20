@@ -30,6 +30,7 @@ import time
 import json
 import logging
 import re
+import urllib.parse
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -57,7 +58,7 @@ if not logging.getLogger().handlers:
 
 log = logging.getLogger(__name__)
 
-from . import flow_graph, flow_run, gather_fetch, input_plan, ntgam, piece_authoring, publication, qaqc, run_state, run_tokens, stac, step_secrets, stored_source, tapis
+from . import flow_graph, flow_run, flow_segments, gather_fetch, input_plan, ntgam, piece_authoring, publication, qaqc, run_state, run_tokens, stac, step_secrets, stored_source, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
@@ -95,6 +96,7 @@ from .models import (
     ReadinessResult,
     ReadinessStatus,
     RegisterOutputIn,
+    ResumeRunIn,
     SpecApprovalIn,
     SubmitWorkflowIn,
     TransformSpecIn,
@@ -508,7 +510,49 @@ query GetRun($id: String!) {
     output_data_object_id logs_uri error_message workflow_plan_id execution_id idempotency_key
     created_at dispatched_at signals_armed last_signal_at health
     model_job_uuid model_job_name model_job_verified submitted_by
+    paused_after_step parent_run_id resumed_run_id
   }
+}
+"""
+
+# A paused run's replayed arguments and an edit's record are read only here, and
+# only for the run's own submitter.
+GET_RUN_SEGMENT = """
+query GetRunSegment($id: String!) {
+  adapter_workflow_run_by_pk(id: $id) {
+    id status tapis_workflow_id tapis_run_id completed_at error_message workflow_plan_id
+    execution_id submitted_by paused_after_step parent_run_id resumed_run_id segment_json
+  }
+}
+"""
+
+# Compare-and-set: of two resumes of one paused run, one wins. A retry after a
+# failed continuation names the child it replaces.
+RESUME_RUN_IF = """
+mutation ResumeRunIf($id: String!, $child: String!) {
+  update_adapter_workflow_run(
+    where: {id: {_eq: $id}, status: {_eq: "completed"}, resumed_run_id: {_is_null: true}}
+    _set: {resumed_run_id: $child}
+  ) { affected_rows }
+}
+"""
+
+# Give a claim back (a resume that failed before its segment was submitted).
+RESUME_ROLLBACK_IF = """
+mutation ResumeRollbackIf($id: String!, $child: String!, $was: String) {
+  update_adapter_workflow_run(
+    where: {id: {_eq: $id}, resumed_run_id: {_eq: $child}}
+    _set: {resumed_run_id: $was}
+  ) { affected_rows }
+}
+"""
+
+RESUME_RETRY_IF = """
+mutation ResumeRetryIf($id: String!, $was: String!, $child: String!) {
+  update_adapter_workflow_run(
+    where: {id: {_eq: $id}, status: {_eq: "completed"}, resumed_run_id: {_eq: $was}}
+    _set: {resumed_run_id: $child}
+  ) { affected_rows }
 }
 """
 
@@ -2604,7 +2648,7 @@ async def check_flow(body: FlowCheckIn, authorization: str | None = Header(None)
         "parameters": body.parameters,
         "steps": [{
             "position": step.position, "piece": views.get(step.etl_process_id or ""),
-            "settings": step.settings, "wires": step.wires,
+            "settings": step.settings, "wires": step.wires, "pause_after": step.pause_after,
         } for step in body.steps],
         "outputs": body.outputs,
         "thread_bindings": body.thread_bindings,
@@ -2665,6 +2709,34 @@ async def flow_availability(configuration_id: str, authorization: str | None = H
             "reason": reason,
         })
     return {"flow_id": configuration_id, "available": all(step["runnable"] for step in steps), "steps": steps}
+
+
+def _check_pause_builds(plan_json: dict[str, Any], flow_id: str) -> None:
+    """Refuse a flow whose pause cannot be run, or whose segments do not build into
+    pipelines, now rather than when someone runs it."""
+    refused = flow_segments.problem(plan_json)
+    if refused:
+        raise HTTPException(422, detail={**refused, "flow_id": flow_id})
+    clashing = flow_segments.reserved_parameters(plan_json)
+    if clashing:
+        raise HTTPException(422, detail={
+            "code": "FLOW_PARAMETER_RESERVED", "flow_id": flow_id, "parameters": clashing,
+            "message": f"a flow that pauses may not have a setting whose name starts with "
+                       f"{flow_segments.RESERVED_PREFIX}: the resume uses those names"})
+    pause = flow_segments.pause_of(plan_json)
+    try:
+        tapis.generate_tapis_workflow({
+            "id": "check", "plan_json": flow_segments.first_segment(plan_json, pause)})
+        declared = next(d for d in flow_segments.editable_outputs(plan_json) if d.get("step") == pause)
+        key = declared["editable"].get("key")
+        later, _ = flow_segments.second_segment(plan_json, pause, merge_key=key)
+        tapis.generate_tapis_workflow({"id": "check", "plan_json": later})
+    except step_secrets.StepSecretError:
+        raise
+    except (ValueError, KeyError, TypeError) as error:
+        raise HTTPException(422, detail={
+            "code": "FLOW_DOES_NOT_BUILD", "flow_id": flow_id,
+            "message": f"the flow's segments do not build into pipelines: {error}"}) from error
 
 
 async def _flow_secret_plan(steps: list[dict[str, Any]], caller: str) -> dict[str, Any]:
@@ -2776,8 +2848,12 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         "steps": [{
             "position": step.get("position"), "piece": _piece_view(spec) if spec else None,
             "settings": step.get("settings"), "wires": step.get("wires"),
+            # With pausing off a pause is not acted on, so it is not checked either.
+            "pause_after": settings.flow_pause_enabled and step.get("pause_after") is True,
         } for step, spec in zip(rows, specs)],
-        "outputs": flow["outputs"],
+        "outputs": (flow["outputs"] if settings.flow_pause_enabled else [
+            {key: value for key, value in output.items() if key != "editable"} if isinstance(output, dict)
+            else output for output in flow["outputs"]]),
         "thread_bindings": flow["thread_bindings"],
     }, refused_settings=_refused_flow_settings())
     if not checked.ok:
@@ -2877,7 +2953,10 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
          {"input": input_id, "label": input_id, "gather": gather_id, "single": True,
           "resources": [{"name": "", "url": str(bound[input_id]["resource_uri"])}]})
         for input_id, gather_id in gathers.items()]
-    if flow_collections:
+    # A flow that pauses keeps its staging folder for the whole run: the edited file
+    # is stored there when the run resumes, whether or not the flow gathers anything.
+    pausing = settings.flow_pause_enabled and any(step.get("pause_after") for step in rows)
+    if flow_collections or pausing:
         # Filled in at submit, never by the caller: the run's own folder in the
         # runner's storage, where the gather tasks put what they copy.
         plan_json["parameters"].append({
@@ -2923,6 +3002,8 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         "thread_bindings": flow["thread_bindings"],
         "pause_after": [int(step["position"]) for step in rows if step.get("pause_after")],
     }
+    if pausing:
+        _check_pause_builds(plan_json, body.flow_id)
     plan_json["planned_by"] = caller
     plan_json.update(await _flow_secret_plan(plan_json["steps"], caller))
     created = (await h.execute(INSERT_PLAN, {"obj": {
@@ -3920,6 +4001,77 @@ async def _resolve_flow_secrets(
          "name": d["name"], "env": d["env"]} for d in step["secrets"]]) for step in steps]
 
 
+async def _bind_flow_secrets_and_check_conflict(
+    h: Any, token: str | None, plan_json: dict[str, Any], *, has_model_task: bool, dry_run: bool,
+) -> list[dict[str, Any]]:
+    """Bind the submitter's secrets to the steps of ``plan_json`` and refuse a run
+    that conflicts with another of theirs. Shared by a submit and a resume, so a
+    resumed segment keeps every check a first segment has. Returns the bound steps."""
+    flow_bound: list[dict[str, Any]] = []
+    if step_secrets.secret_steps(plan_json):
+        flow_bound = await _resolve_flow_secrets(
+            h, plan_json, await _registry(h, plannable=False), await _caller_or_none(token),
+            has_model_task=has_model_task, dry_run=dry_run)
+
+    if not dry_run:
+        submitter_now = await _caller_or_none(token)
+        if submitter_now and (flow_bound or any(
+                step.get("python_source") or step.get("tapis_app_id") for step in plan_json.get("steps") or [])):
+            registry_now = await _registry(h, plannable=False)
+            await _check_run_conflict(
+                h, submitter_now, registry_now, this_run=None, secrets_here=bool(flow_bound),
+                untrusted_here=_untrusted_step(plan_json, registry_now, submitter_now) is not None)
+    return flow_bound
+
+
+def _pause_for_submit(plan_json: dict[str, Any], body: SubmitWorkflowIn) -> int | None:
+    """The step this submission runs through when the flow pauses, else None.
+
+    With pausing off, a flow runs whole as it always did and a ``through_step`` is
+    refused. With it on, a plan that pauses is run up to its pause whether or not
+    ``through_step`` is sent, so no caller can skip a pause by leaving it out.
+    """
+    pauses = flow_segments.paused_steps(plan_json)
+    if body.through_step is not None and not settings.flow_pause_enabled:
+        raise HTTPException(422, detail={
+            "code": "FLOW_PAUSE_DISABLED", "message": "this service is not set up to pause flows"})
+    if not (settings.flow_pause_enabled and pauses):
+        if body.through_step is not None:
+            raise HTTPException(422, detail={
+                "code": "FLOW_THROUGH_STEP_INVALID", "message": "this plan does not pause after any step"})
+        return None
+    if body.model_task is not None:
+        raise HTTPException(422, detail={
+            "code": flow_segments.CODE_UNSUPPORTED, "message": "a composite model run cannot pause"})
+    refused = flow_segments.problem(plan_json)
+    if refused:
+        raise HTTPException(422, detail=refused)
+    pause = pauses[0]
+    if "flow_staging_uri" not in {p.get("name") for p in plan_json.get("parameters") or []}:
+        raise HTTPException(409, detail={
+            "code": "FLOW_PLAN_PREDATES_PAUSE",
+            "message": "this plan was made before the service could pause flows; plan the flow again"})
+    if body.through_step is not None and body.through_step != pause:
+        raise HTTPException(422, detail={
+            "code": "FLOW_THROUGH_STEP_INVALID", "through_step": body.through_step,
+            "message": f"the flow pauses after step {pause}; through_step may only be that step"})
+    return pause
+
+
+def _replayable_args(args: dict[str, Any]) -> dict[str, Any]:
+    """The arguments a resume starts the next segment with: what the submit validated,
+    less anything that is a credential. Tokens, step-secret credentials and the
+    run's own identifiers are made again at the resume, for the person resuming."""
+    keep: dict[str, Any] = {}
+    for name, entry in args.items():
+        value = entry.get("value") if isinstance(entry, dict) else entry
+        if (name in tapis._INPUT_SECRET_PARAMS or step_secrets.is_managed_argument(str(name))
+                or "token" in str(name).lower() or run_tokens.looks_like_secret(str(value))):
+            continue
+        keep[name] = entry
+    return keep
+
+
 @app.post("/workflows/submit", tags=["Core: Workflows"])
 async def submit_workflow(
     body: SubmitWorkflowIn,
@@ -4011,21 +4163,14 @@ async def submit_workflow(
                 "idempotent_replay": True,
             }
 
-    flow_bound: list[dict[str, Any]] = []
-    if step_secrets.secret_steps(plan.get("plan_json") or {}):
-        flow_bound = await _resolve_flow_secrets(
-            h, plan.get("plan_json") or {}, await _registry(h, plannable=False), await _caller_or_none(token),
-            has_model_task=body.model_task is not None, dry_run=body.dry_run)
-
-    if not body.dry_run:
-        submitter_now = await _caller_or_none(token)
-        plan_now = plan.get("plan_json") or {}
-        if submitter_now and (flow_bound or any(
-                step.get("python_source") or step.get("tapis_app_id") for step in plan_now.get("steps") or [])):
-            registry_now = await _registry(h, plannable=False)
-            await _check_run_conflict(
-                h, submitter_now, registry_now, this_run=None, secrets_here=bool(flow_bound),
-                untrusted_here=_untrusted_step(plan_now, registry_now, submitter_now) is not None)
+    # The steps this submission runs: all of them, or for a flow that pauses, the
+    # ones up to the pause. Secrets are bound, and conflicts judged, for these only;
+    # the rest are bound the same way when the run is resumed.
+    pause = _pause_for_submit(plan.get("plan_json") or {}, body)
+    submit_plan_json = (flow_segments.first_segment(plan.get("plan_json") or {}, pause)
+                        if pause is not None else plan.get("plan_json") or {})
+    flow_bound = await _bind_flow_secrets_and_check_conflict(
+        h, token, submit_plan_json, has_model_task=body.model_task is not None, dry_run=body.dry_run)
 
     service_args = dict(body.args or {})
     source_id = plan.get("source_data_object_id")
@@ -4148,7 +4293,7 @@ async def submit_workflow(
         # default can stand in for it.
         service_args["tapis_base_url"] = settings.tapis_base_url
     flow_staging: str | None = None
-    if (plan_json_now.get("flow") or {}).get("collections") and not body.dry_run:
+    if ((plan_json_now.get("flow") or {}).get("collections") or pause is not None) and not body.dry_run:
         flow_staging = await _resolve_flow_staging(token, run_id)
         service_args["flow_staging_uri"] = flow_staging
         run_folder_defaults = [
@@ -4169,6 +4314,11 @@ async def submit_workflow(
                 "model_task": body.model_task,
             },
         }
+    elif pause is not None:
+        # Segment 1 is its own pipeline: the steps up to the pause, under an id of
+        # its own so that segment 2's registration can never replace it.
+        workflow_plan = {**plan, "id": flow_segments.segment_pipeline_id(stored_plan_id, 1),
+                         "plan_json": submit_plan_json}
     else:
         workflow_plan = plan
 
@@ -4177,6 +4327,7 @@ async def submit_workflow(
         workflow_plan.get("plan_json") or {}, service_args, token, require_required=not body.dry_run
     )
     secret_report, bound_secrets = await _resolve_run_secrets(h, body, token)
+    segment_args = _replayable_args(args) if pause is not None else None
     if not body.dry_run:
         args = await _with_run_token(args, token)
 
@@ -4208,6 +4359,11 @@ async def submit_workflow(
         run_obj["bound_secrets"] = bound_secrets
     if flow_bound and not body.dry_run:
         run_obj["bound_secrets"] = {"steps": flow_bound}
+    if pause is not None:
+        # Segment 1 of a flow that pauses: where it ends, and what its successor
+        # is started with. Never a token or a secret.
+        run_obj["paused_after_step"] = pause
+        run_obj["segment_json"] = {"args": segment_args}
     run = (await h.execute(INSERT_RUN, {"obj": run_obj}))["insert_adapter_workflow_run_one"]
     for item in bound_secrets:
         await secrets_store.record_event(
@@ -4229,6 +4385,7 @@ async def submit_workflow(
     await h.execute(INSERT_PROVENANCE, {"obj": {
         "workflow_run_id": run["id"], "event_type": "workflow_submit_requested",
         "payload_json": {"plan_id": body.plan_id, "dry_run": body.dry_run,
+                         **({"through_step": pause} if pause is not None else {}),
                          **({"framing": framing} if framing else {})},
     }})
     if stored_source_audit is not None and not body.dry_run:
@@ -4261,7 +4418,7 @@ async def submit_workflow(
                     "message": "a real submission finds your scratch folder on "
                                f"{settings.tapis_exec_system} and stages gathered inputs under "
                                "dynamo-runs/<run id>/inputs/"}}
-                   if (plan_json_now.get("flow") or {}).get("collections") else {}),
+                   if (plan_json_now.get("flow") or {}).get("collections") or pause is not None else {}),
                 **({"secrets": secret_report} if secret_report is not None else {})}
 
     if flow_bound:
@@ -4472,8 +4629,13 @@ async def poll_run(
         raise HTTPException(401, "log in with a Tapis token to poll this run")
 
     detail = await run_in_threadpool(tapis.get_run_detail, pipeline_id, run_uuid, token=token)
+    status_before = str(run.get("status") or "")
     tapis_status = str(detail.get("status") or "").upper()
     adapter_status, update = _terminal_update_set(tapis_status, detail)
+    if run.get("completed_at"):
+        # Set when the run first ended and kept: a run paused for an edit is
+        # polled for days, and its timeout counts from the moment it paused.
+        update.pop("completed_at", None)
     if adapter_status is None and tapis_status and str(run.get("status") or "").lower() in {
         "submitting", "generated"
     }:
@@ -4505,12 +4667,40 @@ async def poll_run(
     response = {**run, **detail}
     plan_row = (await h.execute(GET_PLAN, {"id": run.get("workflow_plan_id")}))["adapter_workflow_plan_by_pk"] \
         if run.get("workflow_plan_id") else None
-    flow_view = flow_run.view((plan_row or {}).get("plan_json") or {}, detail)
+    plan_json_now = (plan_row or {}).get("plan_json") or {}
+    awaiting = await _awaiting_state(h, run)
+    if (adapter_status == "completed" and status_before != "completed"
+            and run.get("paused_after_step") is not None and awaiting is not None):
+        await h.execute(INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run_id, "event_type": "run.paused",
+            "payload_json": {"after_step": run.get("paused_after_step")}}})
+    view_detail = detail
+    segment: dict[str, Any] | None = None
+    if run.get("parent_run_id"):
+        # A resumed run shows the whole flow: its parent's steps, then its own.
+        view_detail = await _with_parent_detail(h, run, detail, token)
+        segment = (await h.execute(GET_RUN_SEGMENT, {"id": run_id}))["adapter_workflow_run_by_pk"]
+        await _record_replacement(h, segment, detail)
+    flow_view = flow_run.view(plan_json_now, view_detail, awaiting_edit=awaiting is not None)
     if flow_view is not None:
         # One entry per step with its status, and where each of the flow's outputs is.
         # The run's status in the adapter's own words: Tapis's raw status is also
         # in this response, and a caller following a flow must not have to map it.
         response["flow"] = {**flow_view, "status": str(run.get("status") or "")}
+        if awaiting is None and run.get("paused_after_step") is not None and run.get("resumed_run_id") \
+                and str(run.get("status") or "") == "completed":
+            # This run paused and has been resumed: what follows is the other run.
+            response["flow"]["status"] = "resumed"
+            response["flow"]["resumed_run_id"] = run["resumed_run_id"]
+        if awaiting is not None:
+            response["flow"]["status"] = "awaiting_edit"
+            response["flow"]["paused_after_step"] = run.get("paused_after_step")
+            response["flow"]["paused_at"] = run.get("completed_at") or update.get("completed_at")
+            if awaiting.get("error"):
+                response["flow"]["resume_error"] = awaiting["error"]
+        replacement = ((segment or {}).get("segment_json") or {}).get("replacement")
+        if replacement:
+            response["flow"]["replacement"] = replacement
     outcome = await _record_run_publication(h, run, detail)
     if outcome:
         response["publication"] = outcome
@@ -4536,6 +4726,61 @@ async def poll_run(
         if output_uri:
             response["output_uri"] = output_uri
     return response
+
+
+async def _awaiting_state(h: Any, run: dict[str, Any]) -> dict[str, Any] | None:
+    """Whether a run is stopped at its pause for an edit, and why a resume failed.
+
+    A run that paused is ``completed`` in the adapter's words (its Tapis run did
+    finish). It is waiting while nothing has resumed it, and again when what resumed
+    it failed. Returns None for any other run, else ``{"error": <message or None>}``.
+    """
+    if run.get("paused_after_step") is None or str(run.get("status") or "") != "completed":
+        return None
+    child_id = run.get("resumed_run_id")
+    if not child_id:
+        return {"error": None}
+    child = (await h.execute(GET_RUN, {"id": child_id}))["adapter_workflow_run_by_pk"]
+    if not child:
+        # The claim was made but the run after it was never recorded: still paused.
+        return {"error": "the run after the edit was not started"}
+    if str(child.get("status") or "") == "failed":
+        return {"error": child.get("error_message") or "the run after the edit failed"}
+    return None
+
+
+async def _with_parent_detail(h: Any, run: dict[str, Any], detail: dict[str, Any], token: str | None) -> dict[str, Any]:
+    """This segment's task detail joined to its parent's, so the steps that ran
+    before the pause still show. If the parent cannot be read, this segment alone."""
+    parent = (await h.execute(GET_RUN, {"id": run["parent_run_id"]}))["adapter_workflow_run_by_pk"]
+    if not (parent and parent.get("tapis_workflow_id") and parent.get("tapis_run_id") and token):
+        return detail
+    try:
+        earlier = await run_in_threadpool(
+            tapis.get_run_detail, parent["tapis_workflow_id"], parent["tapis_run_id"], token=token)
+    except Exception:  # noqa: BLE001 — the view is best effort; this segment's own status is not
+        return detail
+    return flow_segments.merged_detail(earlier, detail)
+
+
+async def _record_replacement(h: Any, segment: dict[str, Any] | None, detail: dict[str, Any]) -> None:
+    """Once the gather step has fetched the edited file, record what it fetched: its
+    hash and size, with who replaced what and when. Recorded once."""
+    replacement = ((segment or {}).get("segment_json") or {}).get("replacement")
+    if not replacement or replacement.get("sha256"):
+        return
+    task = next((t for t in detail.get("tasks") or []
+                 if isinstance(t, dict) and t.get("task_id") == flow_run.EDIT_GATHER_ID), None)
+    reported = flow_run.reported_outputs((task or {}).get("stdout"))
+    digest = reported.get("sha256")
+    if not (isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest)):
+        return
+    recorded = {**replacement, "sha256": digest, "bytes": reported.get("bytes"),
+                "stored_as": reported.get("result")}
+    await h.execute(UPDATE_RUN, {"id": segment["id"], "set": {
+        "segment_json": {**segment["segment_json"], "replacement": recorded}}})
+    await h.execute(INSERT_PROVENANCE, {"obj": {
+        "workflow_run_id": segment["id"], "event_type": "run.input.replaced", "payload_json": recorded}})
 
 
 async def _published_model_output(h, run: dict[str, Any]) -> str | None:
@@ -5272,7 +5517,9 @@ async def cancel_run(run_id: str, request: Request, authorization: str | None = 
     if not run:
         raise HTTPException(404, "run not found")
     status = str(run.get("status") or "")
-    if status in run_state.TERMINAL_STATUSES:
+    # A run stopped at its pause is `completed` in the adapter's words but is not over.
+    awaiting = await _awaiting_state(h, run)
+    if status in run_state.TERMINAL_STATUSES and awaiting is None:
         return {"run_id": run_id, "status": status, "already_terminal": True}
 
     username = await run_in_threadpool(tapis.userinfo_username, token)
@@ -5282,6 +5529,18 @@ async def cancel_run(run_id: str, request: Request, authorization: str | None = 
     if not run_state.may_cancel(run, username):
         raise HTTPException(403, detail={"code": "RUN_CANCEL_FORBIDDEN",
                                          "message": "only the submitter or a cancel admin may cancel this run"})
+    if awaiting is not None:
+        # No Tapis run is open during a pause, so there is nothing to terminate.
+        now = datetime.now(tz=timezone.utc)
+        claimed = await h.execute(UPDATE_RUN_IF, {"id": run_id, "status": status, "set": {
+            "status": "cancelled", "error_message": f"Cancelled by {username}"}})
+        if (claimed.get("update_adapter_workflow_run") or {}).get("affected_rows", 0) != 1:
+            raise HTTPException(409, detail={"code": "RUN_STATUS_CHANGED",
+                                             "message": "the run changed state; reload and retry"})
+        await h.execute(INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run_id, "event_type": "run.cancelled",
+            "payload_json": {"username": username, "awaiting_edit": True, "requested_at": now.isoformat()}}})
+        return {"run_id": run_id, "status": "cancelled", "terminated": False, "awaiting_edit": True}
     pipeline_id = run.get("tapis_workflow_id")
     run_uuid = run.get("tapis_run_id")
     if not (pipeline_id and run_uuid):
@@ -5338,6 +5597,271 @@ async def cancel_run(run_id: str, request: Request, authorization: str | None = 
         "code": "RUN_CANCEL_INCOMPLETE", "message": failure,
         "terminated": terminated, "job_cancelled": job_cancelled, "status": "cancelling",
     })
+
+
+_CKAN_DOWNLOAD = re.compile(r"^/dataset/([^/]+)/resource/([^/]+)/download/([^/]+)$")
+
+
+def _check_replacement_url(url: str, replacement: Any) -> None:
+    """The edited file must be exactly a data-catalog resource download: an https
+    address on the catalog's own host (the one host the gather step sends the runner's
+    token to), ``/dataset/<dataset>/resource/<resource id>/download/<file>``, with the
+    resource id given and the same as the address's. No query, no fragment: a signed
+    link is not accepted. The path is decoded before it is judged, so ``%2e%2e`` and
+    ``%2f`` are what they would be."""
+    refuse = lambda message: HTTPException(422, detail={  # noqa: E731
+        "code": "FLOW_REPLACEMENT_REFUSED", "message": message})
+    catalog = (settings.flow_collection_catalog_host or "").strip().lower()
+    try:
+        place = gather_fetch.check_url(url)
+    except ValueError as error:
+        raise refuse(f"the edited file's address is not allowed: {error}")
+    if place["scheme"] != "https" or not catalog or place["host"] != catalog:
+        raise refuse("the edited file must be uploaded to the data catalog, and given by its catalog address")
+    if "?" in url or "#" in url or "?" in place["target"]:
+        raise refuse("the edited file's address may not carry a query or a fragment")
+    for name in ("dataset_id", "resource_id"):
+        value = getattr(replacement, name)
+        if value is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,199}", value):
+            raise refuse(f"{name} is not a catalog id")
+    if not replacement.resource_id:
+        raise refuse("resource_id is required: it is the resource at the address")
+    if re.search(r"%(2f|5c|2e|00)", place["target"], re.IGNORECASE):
+        # An encoded slash, backslash, dot or NUL has no place in a catalog file address.
+        raise refuse("the edited file's address must be a catalog resource download: "
+                     "/dataset/<dataset>/resource/<resource id>/download/<file>")
+    decoded = urllib.parse.unquote(place["target"])
+    found = _CKAN_DOWNLOAD.match(decoded)
+    if not found or any(part in (".", "..") for part in found.groups()) or "\\" in decoded:
+        raise refuse("the edited file's address must be a catalog resource download: "
+                     "/dataset/<dataset>/resource/<resource id>/download/<file>")
+    if found.group(2) != replacement.resource_id:
+        raise refuse("resource_id is not the resource at that address")
+
+
+@app.post("/runs/{run_id}/resume", tags=["Core: Runs"])
+async def resume_run(run_id: str, body: ResumeRunIn, request: Request, authorization: str | None = Header(None)):
+    """Continue a run stopped at its pause, on the user's edited copy of its file.
+
+    Only the run's submitter may resume it. The edit is a file the submitter
+    uploaded to the data catalog; the next segment's first step fetches it as the
+    runner, refuses a file the pieces could not load, and stores it in the run's
+    folder. Segment 2 is its own pipeline and its own run, started under a token
+    minted now, with the secrets of its own steps bound now. A resume after a
+    failed continuation starts another segment 2; the earlier one stays on record.
+    """
+    if not settings.flow_pause_enabled:
+        raise HTTPException(422, detail={"code": "FLOW_PAUSE_DISABLED",
+                                         "message": "this service is not set up to pause flows"})
+    token = _bearer(authorization)
+    if not token:
+        raise HTTPException(401, "log in with a Tapis token to resume this run")
+    h = get_client(token)
+    run = (await h.execute(GET_RUN_SEGMENT, {"id": run_id}))["adapter_workflow_run_by_pk"]
+    if not run:
+        raise HTTPException(404, "run not found")
+    username = await _caller_or_none(token)
+    if not username:
+        raise HTTPException(401, detail={"code": "TAPIS_AUTH_REQUIRED",
+                                         "message": "Tapis did not confirm the caller's identity"})
+    if run.get("submitted_by") != username:
+        raise HTTPException(403, detail={"code": "RUN_RESUME_FORBIDDEN",
+                                         "message": "only the user who started this run may resume it"})
+    # What the claim below is made against: the run as it was when it was found paused.
+    previous = run.get("resumed_run_id")
+    awaiting = await _awaiting_state(h, run)
+    if awaiting is None:
+        raise HTTPException(409, detail={"code": "RUN_NOT_AWAITING_EDIT",
+                                         "message": "this run is not stopped at a pause"})
+
+    plan = (await h.execute(GET_PLAN, {"id": run.get("workflow_plan_id")}))["adapter_workflow_plan_by_pk"]
+    plan_json = (plan or {}).get("plan_json") or {}
+    pause = run.get("paused_after_step")
+    refused = flow_segments.problem(plan_json)
+    if refused or flow_segments.pause_of(plan_json) != pause:
+        raise HTTPException(422, detail=refused or {
+            "code": flow_segments.CODE_INVALID, "message": "the plan no longer pauses where this run did"})
+    declared = next(d for d in flow_segments.editable_outputs(plan_json) if d.get("step") == pause)
+    key = flow_segments.output_key(declared)
+    if set(body.replacements) != {key}:
+        raise HTTPException(422, detail={
+            "code": "FLOW_REPLACEMENT_NOT_EDITABLE", "editable": [key],
+            "message": "a resume replaces the one editable output of the paused step, and nothing else"})
+    replacement = body.replacements[key]
+    _check_replacement_url(replacement.url, replacement)
+
+    # What the first segment reported, read as the runner.
+    if not (run.get("tapis_workflow_id") and run.get("tapis_run_id")):
+        raise HTTPException(409, detail={"code": "RUN_NOT_DISPATCHED", "message": "this run has no Tapis run to read"})
+    try:
+        detail = await run_in_threadpool(
+            tapis.get_run_detail, run["tapis_workflow_id"], run["tapis_run_id"], token=token)
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(502, detail={
+            "code": "FLOW_RESUME_REPORT_UNAVAILABLE",
+            "message": safe_error_message(f"could not read what the first part of the run reported: {error}")})
+    steps = {int(step["step"]): step for step in plan_json.get("steps") or []}
+    edited_id = (tapis.flow_output_ids(steps[pause]) or {"outputs": {}})["outputs"].get(str(declared["output"]))
+    task = next((t for t in detail.get("tasks") or []
+                 if isinstance(t, dict) and t.get("task_id") == flow_run.task_id(steps[pause])), None)
+    paused_value = flow_run.reported_outputs((task or {}).get("stdout")).get(edited_id)
+    try:
+        later, needed = flow_segments.second_segment(
+            plan_json, pause, merge_key=flow_segments.merge_key_for(plan_json, pause, paused_value))
+    except (ValueError, KeyError, TypeError) as error:
+        raise HTTPException(422, detail={"code": "FLOW_DOES_NOT_BUILD", "message": str(error)}) from error
+    values, missing = flow_segments.resume_values(plan_json, needed, detail)
+    if missing or not isinstance(paused_value, str):
+        raise HTTPException(409, detail={
+            "code": "FLOW_RESUME_VALUE_MISSING", "arguments": missing,
+            "message": "the first part of the run did not report a value the rest needs"})
+    # What the first segment printed is data from a piece: it is passed on only if it
+    # is a location the gather rules allow, and holds nothing that looks like a credential.
+    unusable = flow_segments.refused_values(values, needed)
+    if unusable:
+        raise HTTPException(409, detail={
+            "code": "FLOW_RESUME_VALUE_REFUSED", "arguments": unusable,
+            "message": "the first part of the run reported a value that cannot be passed on"})
+
+    # The checks a submit makes, on the steps this segment runs and the pieces as
+    # they are now: stored source, then secrets and conflicts.
+    registry = await _registry(h, plannable=False)
+    recorded = plan_json.get("stored_source_opt_in") or {}
+    opt_in = recorded.get("piece_ids") or [] if recorded.get("username") == username else []
+    problems = stored_source.check_plan(plan_json, registry, username, opt_in)
+    if problems:
+        raise HTTPException(403, detail={"code": "STORED_SOURCE_REFUSED", "problems": problems})
+    flow_bound = await _bind_flow_secrets_and_check_conflict(
+        h, token, later, has_model_task=False, dry_run=False)
+
+    service_args = dict((run.get("segment_json") or {}).get("args") or {})
+    taken = sorted((set(values) | {flow_segments.EDIT_URL_ARG}) & set(service_args))
+    if taken:
+        # A user's value is never replaced by a reported one.
+        raise HTTPException(409, detail={
+            "code": "FLOW_RESUME_ARGUMENT_CLASH", "arguments": taken,
+            "message": "the run was started with a value for an argument the resume sets itself"})
+    service_args.update(values)
+    service_args[flow_segments.EDIT_URL_ARG] = replacement.url
+    service_args["tapis_base_url"] = settings.tapis_base_url
+    if not _staging_given(service_args):
+        raise HTTPException(409, detail={"code": "FLOW_STAGING_UNRESOLVED",
+                                         "message": "the first part of the run left no staging folder to continue in"})
+    child_id = str(uuid.uuid4())
+    pipeline = tapis.generate_tapis_workflow({
+        **plan, "id": flow_segments.segment_pipeline_id(plan["id"], 2), "plan_json": later})
+    args = _validate_plan_args(later, service_args, token, require_required=True)
+
+    # Claim the resume before anything is recorded or submitted: of two at once, one wins.
+    claimed = await h.execute(
+        RESUME_RETRY_IF if previous else RESUME_RUN_IF,
+        {"id": run_id, "child": child_id, **({"was": previous} if previous else {})})
+    if (claimed.get("update_adapter_workflow_run") or {}).get("affected_rows", 0) != 1:
+        raise HTTPException(409, detail={"code": "RUN_STATUS_CHANGED",
+                                         "message": "the run was resumed or cancelled meanwhile; reload"})
+    try:
+        return await _start_second_segment(
+            h, token, username, run, run_id, previous, child_id, pipeline, args, later, flow_bound,
+            plan_json, detail, key, declared, replacement)
+    except BaseException:
+        # Whatever went wrong before the next segment was handed to Tapis, the run is
+        # let go: it is paused again, and the user may try again. (A refusal by Tapis
+        # itself is recorded as a failed segment two, which also pauses it again.)
+        await _release_resume_claim(h, run_id, child_id, previous)
+        raise
+
+
+async def _release_resume_claim(h: Any, run_id: str, child_id: str, previous: str | None) -> None:
+    """Undo the claim of a resume that did not get as far as a submitted segment. The
+    child row, if it was written, is marked failed; the guarded write only moves the
+    claim this resume made."""
+    try:
+        await h.execute(UPDATE_RUN_IF, {"id": child_id, "status": "submitting", "set": {
+            "status": "failed", "error_message": "the resume did not complete"}})
+    except Exception:  # noqa: BLE001 — there may be no such row
+        pass
+    try:
+        await h.execute(RESUME_ROLLBACK_IF, {"id": run_id, "child": child_id, "was": previous})
+    except Exception:  # noqa: BLE001 — the awaiting state also treats a missing child as paused
+        log.warning("could not release the resume claim of run %s", run_id)
+
+
+async def _start_second_segment(
+    h: Any, token: str | None, username: str, run: dict[str, Any], run_id: str, previous: str | None,
+    child_id: str, pipeline: dict[str, Any], args: dict[str, Any], later: dict[str, Any],
+    flow_bound: list[dict[str, Any]], plan_json: dict[str, Any], detail: dict[str, Any], key: str,
+    declared: dict[str, Any], replacement: Any,
+) -> dict[str, Any]:
+    """Record segment two, bind its credentials and hand it to Tapis. Called after the
+    claim, so that the run token is minted only for a resume that won it."""
+    args = await _with_run_token(args, token)
+    now = datetime.now(tz=timezone.utc)
+    shown = flow_run.view(plan_json, detail, awaiting_edit=True) or {"outputs": []}
+    original = next((o.get("file_location") for o in shown["outputs"] if o.get("key") == key), None)
+    edit = {"output": key, "file": declared["editable"].get("file"),
+            "check": declared["editable"].get("check") or None, "url": replacement.url.split("?", 1)[0],
+            "dataset_id": replacement.dataset_id, "resource_id": replacement.resource_id,
+            "replaced_by": username, "replaced_at": now.isoformat(),
+            "original": original}
+    run_obj: dict[str, Any] = {
+        "id": child_id, "workflow_plan_id": run["workflow_plan_id"], "tapis_workflow_id": pipeline["id"],
+        "status": "submitting", "submitted_by": username, "parent_run_id": run_id,
+        "segment_json": {"replacement": edit},
+    }
+    if run.get("execution_id"):
+        run_obj["execution_id"] = run["execution_id"]
+    if flow_bound:
+        run_obj["bound_secrets"] = {"steps": flow_bound}
+    child = (await h.execute(INSERT_RUN, {"obj": run_obj}))["insert_adapter_workflow_run_one"]
+    for entry in flow_bound:
+        for item in entry["secrets"]:
+            await secrets_store.record_event(
+                h, "bound", {"id": item["id"], "scope": secrets_store.SCOPE_USER, "name": item["name"],
+                             "owner_username": username, "configuration_id": ""},
+                run_id=child["id"], actor=username, version=item["version"])
+    await h.execute(INSERT_PROVENANCE, {"obj": {
+        "workflow_run_id": run_id, "event_type": "run.resumed",
+        "payload_json": {"resumed_by": username, "run_id": child["id"], "at": now.isoformat(),
+                         "retry_of": previous}}})
+    await h.execute(INSERT_PROVENANCE, {"obj": {
+        "workflow_run_id": child["id"], "event_type": "workflow_submit_requested",
+        "payload_json": {"plan_id": run["workflow_plan_id"], "dry_run": False, "resumes": run_id}}})
+    if flow_bound:
+        expires = int(time.time()) + step_secrets.pipeline_seconds(
+            pipeline, settings.stored_source_max_exec_seconds) + step_secrets.CREDENTIAL_SLACK_SECONDS
+        args[step_secrets.RUN_ID_ARG] = {"value": child["id"]}
+        args[step_secrets.ADAPTER_URL_ARG] = {"value": settings.public_base_url.rstrip("/")}
+        for entry in flow_bound:
+            args[f"{step_secrets.TOKEN_ARG_PREFIX}{entry['step']}"] = {"value": step_secrets.make_credential(
+                settings.step_secret_key, child["id"], entry["step"], entry["secrets"], expires)}
+    try:
+        # The edited file is part of this segment's gather task, so it is registered
+        # afresh every time: a retry after a failed edit must not run the old one.
+        result = await run_in_threadpool(
+            tapis.submit_tapis_workflow, pipeline, args, token=token, run_name=None, recreate=True)
+    except Exception as exc:  # noqa: BLE001
+        error_message = safe_error_message(f"{type(exc).__name__}: {exc}")
+        await h.execute(UPDATE_RUN, {"id": child["id"], "set": {"status": "failed", "error_message": error_message}})
+        await h.execute(INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": child["id"], "event_type": "workflow_submit_failed",
+            "payload_json": {"code": "TAPIS_WORKFLOW_SUBMISSION_FAILED", "error_message": error_message}}})
+        raise HTTPException(502, detail={
+            "code": "TAPIS_WORKFLOW_SUBMISSION_FAILED", "message": "Tapis Workflows submission failed",
+            "error_message": error_message, "run_id": child["id"]})
+    try:
+        await h.execute(UPDATE_RUN, {"id": child["id"], "set": {
+            "status": "running", "tapis_run_id": result.get("uuid"),
+            "dispatched_at": datetime.now(tz=timezone.utc).isoformat()}})
+    except Exception:  # noqa: BLE001
+        # Segment two is running in Tapis. Nothing after this point may undo the claim.
+        log.warning("could not record the dispatch of resumed run %s", child["id"])
+    return {"run_id": child["id"], "paused_run_id": run_id, "status": "running", **result}
+
+
+def _staging_given(args: dict[str, Any]) -> bool:
+    """Whether the replayed arguments carry the run's staging folder."""
+    entry = args.get("flow_staging_uri")
+    return bool(entry.get("value") if isinstance(entry, dict) else entry)
 
 
 @app.get("/runs/{run_id}/provenance", tags=["Core: Runs"])
