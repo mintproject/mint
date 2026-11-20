@@ -86,6 +86,36 @@ describe('CredentialsPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/saved/i);
   });
 
+  it('shows a typed value on request, warns about spaces and quotes, and saves it trimmed', async () => {
+    const fetchMock = stubAdapter();
+    renderWithProviders(<CredentialsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /add a model server/i }));
+    const key = screen.getByLabelText('Value 1');
+    fireEvent.change(key, { target: { value: ' sk-abc ' } });
+    expect(screen.getByText(/starts or ends with a space/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show value 1' }));
+    expect(key).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Hide value 1' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Hide value 1' }));
+    expect(key).toHaveAttribute('type', 'password');
+    // The other values stay hidden.
+    expect(screen.getByLabelText('Value 2')).toHaveAttribute('type', 'password');
+
+    fireEvent.change(screen.getByLabelText('Value 2'), { target: { value: '"https://chat"' } });
+    expect(screen.getByText(/starts or ends with a quote mark/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Value 2'), { target: { value: 'https://chat' } });
+    fireEvent.change(screen.getByLabelText('Value 3'), { target: { value: 'https://embed' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => expect(calls(fetchMock, 'PUT')).toHaveLength(1));
+    const [, init] = calls(fetchMock, 'PUT')[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).fields.api_key).toBe('sk-abc');
+  });
+
   it('checks the rules before sending', async () => {
     const fetchMock = stubAdapter();
     renderWithProviders(<CredentialsPage />);

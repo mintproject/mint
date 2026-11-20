@@ -107,6 +107,22 @@ export async function deleteUserSecret(name: string): Promise<void> {
 }
 
 /** The first rule a credential breaks, as a sentence, or null when it is fine. */
+/**
+ * What may be wrong with a typed value, shown under its box, or null. Spaces at
+ * either end are removed when the value is saved; quote marks are kept (a value
+ * may hold them), but usually come from copying a key out of a config file.
+ */
+export function credentialValueWarning(value: string): string | null {
+  if (value === '') return null;
+  if (value !== value.trim()) {
+    return 'This value starts or ends with a space. Spaces at either end are removed when it is saved.';
+  }
+  if (/^["'`]|["'`]$/.test(value)) {
+    return 'This value starts or ends with a quote mark. Remove it unless the quote is part of the value.';
+  }
+  return null;
+}
+
 export function validateUserSecret(
   name: string,
   fields: Array<{ name: string; value: string }>,
@@ -123,7 +139,7 @@ export function validateUserSecret(
     }
     if (seen.has(f.name)) return 'Each field name can be used only once.';
     seen.add(f.name);
-    if (f.value === '') return `Enter a value for "${f.name}".`;
+    if (f.value.trim() === '') return `Enter a value for "${f.name}".`;
   }
   const bytes = fields.reduce(
     (n, f) =>

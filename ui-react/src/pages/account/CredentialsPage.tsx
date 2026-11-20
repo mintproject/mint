@@ -3,8 +3,11 @@
  *
  * A value is typed into a password field, sent once and never shown again, so
  * replacing a credential means entering every field again. Values live only in
- * this form's state and are dropped as soon as the save succeeds.
+ * this form's state and are dropped as soon as the save succeeds. "Show" reveals
+ * only what is typed in the form, so the person can check it before saving; a
+ * stored value is never read back.
  */
+import { Eye, EyeOff } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -12,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  credentialValueWarning,
   deleteUserSecret,
   listUserSecrets,
   MODEL_SERVER_PRESET,
@@ -53,6 +57,8 @@ export function CredentialsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [toDelete, setToDelete] = useState<string | null>(null);
+  // Which typed values are shown in clear, by field key. Reset with the form.
+  const [shown, setShown] = useState<Record<number, boolean>>({});
 
   const reload = useCallback(async () => {
     try {
@@ -69,6 +75,7 @@ export function CredentialsPage() {
 
   const open = (next: FormState) => {
     setForm(next);
+    setShown({});
     setFormError(null);
     setNotice(null);
   };
@@ -85,6 +92,7 @@ export function CredentialsPage() {
 
   const close = () => {
     setForm(null);
+    setShown({});
     setFormError(null);
   };
 
@@ -104,11 +112,14 @@ export function CredentialsPage() {
     setFormError(null);
     try {
       const fields: Record<string, string> = {};
-      for (const f of form.fields) fields[f.name] = f.value;
+      // Spaces at either end are never part of a key or an address; sent, they make
+      // a server reject a key that looks right.
+      for (const f of form.fields) fields[f.name] = f.value.trim();
       await saveUserSecret(form.name, fields);
       const verb = form.mode === 'replace' ? 'replaced' : 'saved';
       // Drop every typed value from state before anything else happens.
       setForm(null);
+      setShown({});
       setNotice(`Credential "${form.name}" ${verb}.`);
       await reload();
     } catch (error) {
@@ -237,13 +248,34 @@ export function CredentialsPage() {
               </div>
               <div className="flex-1 space-y-1">
                 <Label htmlFor={`field-value-${f.key}`}>Value {index + 1}</Label>
-                <Input
-                  id={`field-value-${f.key}`}
-                  type="password"
-                  value={f.value}
-                  autoComplete="off"
-                  onChange={(e) => patchField(f.key, { value: e.target.value })}
-                />
+                <div className="flex gap-1">
+                  <Input
+                    id={`field-value-${f.key}`}
+                    type={shown[f.key] ? 'text' : 'password'}
+                    value={f.value}
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-describedby={
+                      credentialValueWarning(f.value) ? `field-warning-${f.key}` : undefined
+                    }
+                    onChange={(e) => patchField(f.key, { value: e.target.value })}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`${shown[f.key] ? 'Hide' : 'Show'} value ${index + 1}`}
+                    aria-pressed={Boolean(shown[f.key])}
+                    onClick={() => setShown((s) => ({ ...s, [f.key]: !s[f.key] }))}
+                  >
+                    {shown[f.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                {credentialValueWarning(f.value) && (
+                  <p id={`field-warning-${f.key}`} className="text-xs text-amber-700">
+                    {credentialValueWarning(f.value)}
+                  </p>
+                )}
               </div>
               {form.mode === 'add' && form.fields.length > 1 && (
                 <Button

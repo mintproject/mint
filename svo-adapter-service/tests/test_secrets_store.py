@@ -124,11 +124,19 @@ def test_bad_secret_names_are_rejected(name):
 
 
 @pytest.mark.parametrize("fields", [
-    {}, {"Bad": "x"}, {"a" * 33: "x"}, {"a": ""}, {"a": "x\ny"}, {"a": "x\x00y"},
+    {}, {"Bad": "x"}, {"a" * 33: "x"}, {"a": ""}, {"a": "   "}, {"a": "x\ny"}, {"a": "x\x00y"},
     {f"f{i}": "v" for i in range(17)}, {"a": "x" * 4097}])
 def test_bad_field_sets_are_rejected(fields):
     with pytest.raises(secrets_store.SecretValidationError):
         secrets_store.validate_fields(fields)
+
+
+def test_values_are_stored_without_spaces_at_either_end():
+    # A pasted " sk-abc " reaches the model server as the key it is, not with the spaces.
+    assert secrets_store.validate_fields({"api_key": " sk-abc\t", "url": "https://x "}) == {
+        "api_key": "sk-abc", "url": "https://x"}
+    # Spaces inside a value are kept.
+    assert secrets_store.validate_fields({"note": " a b "}) == {"note": "a b"}
 
 
 def test_rotation_reencrypts_under_the_new_key_and_the_old_key_can_go(monkeypatch):

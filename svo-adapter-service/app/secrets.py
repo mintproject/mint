@@ -110,23 +110,32 @@ def validate_name(name: str) -> str:
 
 
 def validate_fields(fields: dict[str, str]) -> dict[str, str]:
-    """Field names ``[a-z0-9_]{1,32}``, at most 16, 4 KiB total, no NUL/newline."""
+    """Field names ``[a-z0-9_]{1,32}``, at most 16, 4 KiB total, no NUL/newline.
+
+    Returns the fields with spaces at either end of each value removed: they are
+    never part of a key or an address, and sent along they make a server reject a
+    key that looks right (a pasted " sk-..."). Store what this returns."""
     if not isinstance(fields, dict) or not fields:
         raise SecretValidationError("fields must be a non-empty object")
     if len(fields) > MAX_FIELDS:
         raise SecretValidationError(f"at most {MAX_FIELDS} fields are allowed")
     total = 0
+    cleaned: dict[str, str] = {}
     for key, value in fields.items():
         if not isinstance(key, str) or not FIELD_RE.match(key):
             raise SecretValidationError("field names must match [a-z0-9_]{1,32}")
-        if not isinstance(value, str) or not value:
+        if not isinstance(value, str):
             raise SecretValidationError(f"field {key!r} must be a non-empty string")
         if "\x00" in value or "\n" in value or "\r" in value:
             raise SecretValidationError(f"field {key!r} must not contain NUL or newlines")
+        value = value.strip()
+        if not value:
+            raise SecretValidationError(f"field {key!r} must be a non-empty string")
+        cleaned[key] = value
         total += len(key.encode()) + len(value.encode())
     if total > MAX_TOTAL_BYTES:
         raise SecretValidationError(f"fields exceed {MAX_TOTAL_BYTES} bytes in total")
-    return fields
+    return cleaned
 
 
 # --------------------------------------------------------------------------
@@ -215,7 +224,7 @@ class FernetSecretStore:
     async def put(self, *, scope, owner, name, configuration_id, pinned_app_id,
                   pinned_app_version, fields, actor) -> dict[str, Any]:
         validate_name(name)
-        validate_fields(fields)
+        fields = validate_fields(fields)
         existing = await self.find(scope, owner, name, configuration_id)
         now = datetime.now(tz=timezone.utc).isoformat()
         row = {
