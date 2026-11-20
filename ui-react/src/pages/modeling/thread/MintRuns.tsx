@@ -1049,6 +1049,87 @@ interface MintRunsProps {
 
 const PAGE_SIZE = 100;
 
+interface RunParam {
+  id?: string | null;
+  name?: string | null;
+  default?: string | null;
+}
+
+function humanizeName(name?: string | null): string {
+  return (name ?? '').replace(/[-_]/g, ' ');
+}
+
+/** The value a run shows for a parameter: its binding, else the default. */
+function runParamValue(param: RunParam, execution: Execution): string {
+  let value = execution.bindings[param.id ?? ''] as unknown;
+  if (value == null) value = param.default ?? null;
+  if (typeof value === 'string' && value.startsWith('__region_geojson')) {
+    return 'Region GeoJSON';
+  }
+  if (value == null || value === '') return '—';
+  return String(value);
+}
+
+/**
+ * Split parameters into those that tell the listed runs apart (they get a
+ * column) and those every run shares (they are summarised above the table).
+ */
+function splitRunParams<P extends RunParam>(
+  params: P[],
+  executions: Execution[],
+): { varying: P[]; common: Array<{ param: P; value: string }> } {
+  const varying: P[] = [];
+  const common: Array<{ param: P; value: string }> = [];
+  for (const param of params) {
+    const values = new Set(executions.map((e) => runParamValue(param, e)));
+    if (values.size > 1) {
+      varying.push(param);
+    } else {
+      const value = executions[0] ? runParamValue(param, executions[0]) : '—';
+      if (value !== '—') common.push({ param, value });
+    }
+  }
+  return { varying, common };
+}
+
+const SAME_FOR_EVERY_RUN_LIMIT = 6;
+
+function SameForEveryRun({
+  items,
+  testId,
+}: {
+  items: Array<{ param: RunParam; value: string }>;
+  testId: string;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  if (items.length === 0) return null;
+  const truncated = items.length > SAME_FOR_EVERY_RUN_LIMIT && !showAll;
+  const shown = truncated ? items.slice(0, SAME_FOR_EVERY_RUN_LIMIT) : items;
+  return (
+    <p className="break-words text-xs text-gray-600" data-testid={testId}>
+      <span className="font-medium">Same for every run:</span>{' '}
+      {shown.map(({ param, value }, i) => (
+        <span key={param.id ?? i}>
+          {i > 0 && ' · '}
+          {humanizeName(param.name)} <span className="text-gray-900">{value}</span>
+        </span>
+      ))}
+      {items.length > SAME_FOR_EVERY_RUN_LIMIT && (
+        <>
+          {' '}
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="text-blue-600 hover:underline"
+          >
+            {showAll ? 'show fewer' : `show all ${items.length}`}
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
 export function MintRuns({
   threadId,
   threadData,
@@ -1351,7 +1432,11 @@ export function MintRuns({
 
           // ── adjustable inputs / params for column headers ─────────────
           const adjustableInputs = model.input_files.filter((f) => !f.value);
-          const adjustableParams = userParameters(model).filter((p) => !p.value);
+          const settableParams = userParameters(model).filter((p) => !p.value);
+          const { varying: adjustableParams, common: sameParams } = splitRunParams(
+            settableParams,
+            grouped.executions,
+          );
 
           return (
             <li key={mid}>
@@ -1568,8 +1653,10 @@ export function MintRuns({
                     </div>
                   </div>
 
-                  {/* Runs table */}
-                  <div className="max-h-96 overflow-auto border border-gray-200">
+                  {/* Runs table: paged, so it grows with the step pane instead of
+                      adding a scroll box of its own. */}
+                  <SameForEveryRun items={sameParams} testId={`same-for-every-run-${mid}`} />
+                  <div className="overflow-x-auto border border-gray-200">
                     {grouped.loading ? (
                       <div className="flex items-center justify-center py-8">
                         <span className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
@@ -1579,7 +1666,7 @@ export function MintRuns({
                         className="w-full border-collapse text-xs"
                         data-testid={`runs-table-${mid}`}
                       >
-                        <thead className="sticky top-0 bg-gray-100">
+                        <thead className="bg-gray-100">
                           <tr>
                             <th colSpan={5} className="px-2 py-1 text-left font-semibold">
                               Run
@@ -1617,7 +1704,7 @@ export function MintRuns({
                             ))}
                             {adjustableParams.map((p) => (
                               <th key={p.id} className="px-2 py-1 font-medium">
-                                {(p.name ?? '').replace(/[-_]/g, ' ')}
+                                {humanizeName(p.name)}
                               </th>
                             ))}
                           </tr>
@@ -1643,10 +1730,6 @@ export function MintRuns({
                             </tr>
                           ) : (
                             grouped.executions.map((execution: Execution) => {
-                              const paramDefaults: Record<string, string | null | undefined> = {};
-                              userParameters(model).forEach(
-                                (p) => (paramDefaults[p.id ?? ''] = p.default ?? null),
-                              );
                               return (
                                 <tr key={execution.id} className="odd:bg-white even:bg-gray-50">
                                   <td className="px-2 py-1">
@@ -1713,24 +1796,11 @@ export function MintRuns({
                                       </td>
                                     );
                                   })}
-                                  {adjustableParams.map((param) => {
-                                    let pval = execution.bindings[param.id ?? ''] as
-                                      | string
-                                      | null
-                                      | undefined;
-                                    if (pval == null) pval = paramDefaults[param.id ?? ''];
-                                    if (
-                                      typeof pval === 'string' &&
-                                      pval.startsWith('__region_geojson')
-                                    ) {
-                                      pval = 'Region GeoJSON';
-                                    }
-                                    return (
-                                      <td key={param.id} className="px-2 py-1">
-                                        {pval ?? '—'}
-                                      </td>
-                                    );
-                                  })}
+                                  {adjustableParams.map((param) => (
+                                    <td key={param.id} className="px-2 py-1">
+                                      {runParamValue(param, execution)}
+                                    </td>
+                                  ))}
                                 </tr>
                               );
                             })
