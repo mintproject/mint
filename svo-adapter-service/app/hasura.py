@@ -403,6 +403,25 @@ query FindSecret($scope: String!, $owner: String!, $name: String!, $cfg: String!
 }
 """ % _SECRET_META
 
+LIST_USER_SECRETS = """
+query ListUserSecrets($owner: String!) {
+  adapter_secret(
+    where: {scope: {_eq: "user"}, owner_username: {_eq: $owner}}
+    order_by: {name: asc}
+  ) { %s }
+}
+""" % _SECRET_META
+
+# Does this user submit any run that has not finished? Guards the user's secrets.
+USER_ACTIVE_RUN = """
+query UserActiveRun($user: String!) {
+  adapter_workflow_run(
+    where: {submitted_by: {_eq: $user}, status: {_in: ["submitting", "running"]}}
+    limit: 1
+  ) { id }
+}
+"""
+
 GET_SECRET = """
 query GetSecret($id: uuid!) {
   adapter_secret_by_pk(id: $id) { %s ciphertext }

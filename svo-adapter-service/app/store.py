@@ -269,6 +269,18 @@ class InMemoryHasura:
                 and r["name"] == v["name"] and r["configuration_id"] == v["cfg"]]
         return {"adapter_secret": [{k: x for k, x in r.items() if k != "ciphertext"} for r in rows[:1]]}
 
+    def _op_ListUserSecrets(self, v):
+        rows = [r for r in STORE.secret.values()
+                if r["scope"] == "user" and r["owner_username"] == v["owner"]]
+        return {"adapter_secret": [{k: x for k, x in r.items() if k != "ciphertext"}
+                                   for r in sorted(rows, key=lambda r: r["name"])]}
+
+    def _op_UserActiveRun(self, v):
+        rows = [{"id": r["id"]} for r in STORE.run.values()
+                if r.get("submitted_by") == v["user"]
+                and r.get("status") in ("submitting", "running")]
+        return {"adapter_workflow_run": rows[:1]}
+
     def _op_GetSecret(self, v):
         return {"adapter_secret_by_pk": STORE.secret.get(v["id"])}
 

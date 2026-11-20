@@ -26,10 +26,12 @@ from typing import Any, Protocol
 from .config import settings
 from .hasura import (
     DELETE_SECRET, FIND_SECRET, GET_SECRET, GET_SECRET_CONFIGURATION,
-    INSERT_SECRET, INSERT_SECRET_EVENT, TOUCH_SECRET, UPDATE_SECRET,
+    INSERT_SECRET, INSERT_SECRET_EVENT, LIST_USER_SECRETS, TOUCH_SECRET, UPDATE_SECRET,
+    USER_ACTIVE_RUN,
 )
 
 SCOPE_MODEL_OWNER = "model_owner"
+SCOPE_USER = "user"  # a runner's own secret: configuration_id is always ""
 SOURCE_OWNER_ONLY = "owner_only"
 SECRET_PARAMETER_TYPE = "secret"
 
@@ -256,6 +258,17 @@ class FernetSecretStore:
     async def touch(self, secret_id: str) -> None:
         await self._h.execute(TOUCH_SECRET, {
             "id": secret_id, "at": datetime.now(tz=timezone.utc).isoformat()})
+
+
+async def list_user_secrets(hasura, owner: str) -> list[dict[str, Any]]:
+    """The caller's own ``user``-scope rows, metadata only, sorted by name."""
+    rows = (await hasura.execute(LIST_USER_SECRETS, {"owner": owner}))["adapter_secret"]
+    return [_metadata(r) for r in rows]
+
+
+async def user_has_active_run(hasura, username: str) -> bool:
+    """True when ``username`` submitted a run that is still ``submitting`` or ``running``."""
+    return bool((await hasura.execute(USER_ACTIVE_RUN, {"user": username}))["adapter_workflow_run"])
 
 
 async def record_event(hasura, event: str, row: dict[str, Any], *, run_id: str | None = None,
