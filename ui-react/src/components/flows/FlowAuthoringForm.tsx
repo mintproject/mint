@@ -192,7 +192,9 @@ export function FlowAuthoringForm({
     draft.configuration.label.trim() !== '' &&
     (draft.software.id !== '' || draft.software.label.trim() !== '') &&
     (draft.version.id !== '' || draft.version.label.trim() !== '') &&
-    draft.inputs.every((input) => input.key !== '' && input.standardVariable !== '') &&
+    draft.inputs.every(
+      (input) => input.key !== '' && (input.standardVariable !== '' || input.format !== ''),
+    ) &&
     draft.outputs.every((item) => item.kind !== 'output' || item.label.trim() !== '') &&
     pausing.length === 0;
   const canSave = Boolean(token) && !saving && complete && current?.ok === true;

@@ -89,6 +89,17 @@ def humanize_variable(uri: str | None) -> str:
     return (qty or obj or name).replace("_", " ").capitalize()
 
 
+def _output_label(contract: dict[str, Any]) -> str | None:
+    """What a model's output is called: the label synced from the catalog (the
+    presentation's, else the dataset specification's), else its variable's label.
+    None when it names neither; the form then falls back to the format."""
+    label = (contract.get("metadata_json") or {}).get("label")
+    if isinstance(label, str) and label.strip():
+        return label.strip()
+    uri = contract.get("standard_variable_uri")
+    return humanize_variable(uri) if uri else None
+
+
 def _is_uri(text: str) -> bool:
     return "://" in text or text.startswith("urn:")
 
@@ -210,7 +221,7 @@ def _providers(ctx: _Context, contract: dict[str, Any]) -> dict[str, list[dict[s
                 models.append({"configuration_id": model["configuration_id"], "label": model.get("label"),
                                "output": position, "format": out.get("format"),
                                "variable": out.get("standard_variable_uri"),
-                               "output_label": humanize_variable(out.get("standard_variable_uri"))})
+                               "output_label": _output_label(out)})
     datasets: list[dict[str, Any]] = []
     for dataset in ctx.datasets:
         if any(_fits(have, target) for have in dataset.get("contracts") or []):
@@ -371,12 +382,13 @@ def _propose(flow, pieces, purpose, approvals, max_chain, max_results, max_expan
                     met = bool(direct or chains)
                     needs.append({"input": in_position, "direct": direct, "chains": chains, "met": met,
                                   "variable": contract.get("standard_variable_uri"),
-                                  "variable_label": humanize_variable(contract.get("standard_variable_uri")),
+                                  "variable_label": humanize_variable(contract.get("standard_variable_uri"))
+                                  if contract.get("standard_variable_uri") else None,
                                   "format": contract.get("format"), "unit": contract.get("unit"),
                                   "providers": dict(_NO_PROVIDERS) if met else _providers(ctx, contract)})
                 variable = out.get("standard_variable_uri")
                 produces.append({**ctx.piece_ref(piece_id), "output": out_position, "inputs": needs,
-                                 "output_variable": variable, "output_label": humanize_variable(variable),
+                                 "output_variable": variable, "output_label": humanize_variable(variable) if variable else None,
                                  "output_format": out.get("format"), "output_unit": out.get("unit"),
                                  # Same variable in and out: it converts, it does not make.
                                  "converter": bool(variable) and any(

@@ -165,7 +165,11 @@ export function planRegistration(body: Json): FlowRegistration {
       throw new FlowError(400, 'FLOW_REQUEST_INVALID', `inputs[${index}].key must be a unique plain name`)
     }
     text(input.label, `inputs[${index}].label`, 300)
-    text(input.standard_variable, `inputs[${index}].standard_variable`)
+    // A format may stand alone: a piece can take, say, a budget file without naming a variable.
+    if (!text(input.standard_variable, `inputs[${index}].standard_variable`, 500, false) &&
+        !text(input.format, `inputs[${index}].format`, 500, false)) {
+      throw new FlowError(400, 'FLOW_REQUEST_INVALID', `inputs[${index}] needs a standard_variable or a format`)
+    }
     inputIds[key] = `${configurationId}_input_${index + 1}`
   })
 
@@ -203,7 +207,7 @@ export function planRegistration(body: Json): FlowRegistration {
     check: {
       inputs: inputs.map((input) => ({
         id: inputIds[input.key],
-        contract: { standard_variable_uri: input.standard_variable, format: input.format ?? null },
+        contract: { standard_variable_uri: input.standard_variable ?? null, format: input.format ?? null },
       })),
       steps: checkedSteps,
       outputs: checkedOutputs,
@@ -235,7 +239,7 @@ export function buildRows(body: Json, plan: FlowRegistration, pieces: Json, user
               data: {
                 id: `${inputIds[input.key]}_variable`,
                 label: input.label,
-                has_standard_variable: input.standard_variable,
+                has_standard_variable: input.standard_variable ?? null,
               },
             },
           }],

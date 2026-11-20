@@ -4,6 +4,8 @@ import { emptyDraft } from '../flow-authoring';
 import {
   applyRoute,
   datasetName,
+  formatName,
+  needName,
   groupRoutes,
   readableName,
   uniqueDatasets,
@@ -148,5 +150,44 @@ describe('applyRoute', () => {
     const draft = applyRoute(emptyDraft(), conv, { input: 1, kind: 'dataset', dataset });
     expect(draft.inputs[0]).toMatchObject({ label: 'Barton flow', format: 'parquet' });
     expect(draft.steps[0]?.wires[0]?.from).toEqual({ flow_input: 'Barton_flow' });
+  });
+});
+
+describe('format-only inputs', () => {
+  const formatOnly = need({
+    variable: null,
+    variable_label: null,
+    format: 'cbc-mf6',
+    providers: { models: [{ ...model, variable: null, output_label: null }], datasets: [] },
+  });
+
+  it('names an input by its model output label, else the format, never "input 0"', () => {
+    expect(needName(formatOnly)).toBe('MODFLOW 6 cell-by-cell budget (cbc-mf6)');
+    const labelled = need({
+      ...formatOnly,
+      providers: {
+        models: [{ ...model, variable: null, output_label: 'Cell-by-cell budget' }],
+        datasets: [],
+      },
+    });
+    expect(needName(labelled)).toBe('Cell-by-cell budget (cbc-mf6)');
+    expect(needName(need({ variable: null, variable_label: null, format: 'weird' }))).toBe(
+      'a weird file',
+    );
+    expect(formatName('gma-scalar')).toBe('GMA summary value');
+  });
+
+  it('adds a flow input bound by format alone, wired to the extractor', () => {
+    const extractor = entry('extract', { inputs: [formatOnly] });
+    const mf6 = { ...model, format: 'cbc-mf6', variable: null, output_label: null };
+    const draft = applyRoute(emptyDraft(), extractor, { input: 1, kind: 'model', model: mf6 });
+    expect(draft.inputs[0]).toMatchObject({
+      label: 'MODFLOW 6 cell-by-cell budget',
+      standardVariable: '',
+      format: 'cbc-mf6',
+    });
+    expect(draft.steps[0]?.wires[0]?.from).toEqual({
+      flow_input: draft.inputs[0]?.key,
+    });
   });
 });

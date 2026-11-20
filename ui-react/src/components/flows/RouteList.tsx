@@ -15,6 +15,7 @@ import {
   groupRoutes,
   isConverter,
   modelOutputName,
+  needName,
   readableName,
   uniqueDatasets,
   uniqueModels,
@@ -57,7 +58,7 @@ export function RouteList({
       <Group
         title={
           groups.data.every(isConverter)
-            ? `Convert ${wantedLabel} data you already have${example ? ` (e.g. ${nameOf(example)})` : ''}`
+            ? `Convert ${groups.data[0]?.output_label || wantedLabel} data you already have${example ? ` (e.g. ${nameOf(example)})` : ''}`
             : 'From data you already have'
         }
         entries={groups.data}
@@ -105,11 +106,6 @@ const withFormat = (text: string, format?: string | null) =>
   format ? `${text} (${format})` : text;
 const approvalNote = (approval?: string | null) =>
   approval === 'denied' ? ' (you cannot run this piece yet)' : '';
-
-function needName(need: RouteNeed): string {
-  const variable = need.variable_label || (need.variable ? slugFromUri(need.variable) : '');
-  return withFormat(variable || `input ${need.input}`, need.format);
-}
 
 function Entry({
   entry,
@@ -193,7 +189,7 @@ function Providers({
   if (models.length === 0 && datasets.length === 0) {
     return <span className="text-muted-foreground"> nothing provides it yet</span>;
   }
-  const canAdd = Boolean(need.variable);
+  const canAdd = Boolean(need.variable || need.format);
   return (
     <ul className="ml-4 list-disc text-muted-foreground" data-testid="need-providers">
       {models.slice(0, MAX_PROVIDERS).map((model) => {
