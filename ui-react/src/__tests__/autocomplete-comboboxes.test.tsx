@@ -88,7 +88,7 @@ describe('StandardVariableCombobox', () => {
     expect(screen.getByRole('combobox')).not.toBeDisabled();
   });
 
-  it('shows selected human-readable description when a value is provided', async () => {
+  it('shows the humanized title when a value is provided', async () => {
     const selected = {
       id: 'https://w3id.org/okn/i/mint/sv1',
       label: 'Precipitation',
@@ -99,7 +99,7 @@ describe('StandardVariableCombobox', () => {
     });
     // Wait for loading to complete
     await waitFor(() => {
-      expect(screen.getByText('Amount of precipitation')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveTextContent('Precipitation');
     });
   });
 

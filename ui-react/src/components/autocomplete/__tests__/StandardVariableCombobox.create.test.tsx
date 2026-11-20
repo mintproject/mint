@@ -94,7 +94,7 @@ describe('StandardVariableCombobox create', () => {
         description: null,
       }),
     );
-    expect(screen.getByRole('combobox')).toHaveTextContent(/zzz_new/i);
+    expect(screen.getByRole('combobox')).toHaveTextContent(/zzz new/i);
   });
 
   it('does not offer create unless asked to', async () => {

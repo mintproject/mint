@@ -1,3 +1,5 @@
+import { humanizeStandardVariable } from '@/lib/standard-variable-grammar';
+
 /**
  * How a standard variable reads in a list.
  *
@@ -40,4 +42,43 @@ export function standardVariableName(sv: VariableLike): string {
 export function standardVariableDescription(sv: VariableLike): string | null {
   const text = (sv.description ?? '').trim();
   return text && !text.startsWith(CATALOG_ID_PREFIX) ? text : null;
+}
+
+/**
+ * The title an option leads with: the label, humanized ("Document lexicon group
+ * — Term count" from `document_lexicon_group__term_count`). A row with no label
+ * borrows the id's tail when that is grammar-shaped, else reads as unnamed.
+ */
+export function standardVariableTitle(sv: VariableLike): string {
+  const source = isUnlabeledStandardVariable(sv) ? idTail(sv.id) : sv.label!.trim();
+  if (isUnlabeledStandardVariable(sv) && !source.includes('__')) return standardVariableName(sv);
+  const { phenomenon, property } = humanizeStandardVariable(source);
+  if (phenomenon) return `${phenomenon} — ${property}`;
+  // Not grammar (no `__`): the label is the whole name, so only spell out its joiners.
+  const spaced = property.replace(/[~_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** A key that makes two rows naming the same variable collide; null for unlabeled rows. */
+export function standardVariableLabelKey(sv: VariableLike): string | null {
+  return isUnlabeledStandardVariable(sv) ? null : sv.label!.trim().toLowerCase();
+}
+
+/** Drop repeats by id, then (for labeled rows) by label, keeping the first seen. */
+export function dedupeStandardVariables<T extends VariableLike>(
+  rows: ReadonlyArray<T>,
+  { byLabel = false }: { byLabel?: boolean } = {},
+): T[] {
+  const ids = new Set<string>();
+  const labels = new Set<string>();
+  const kept: T[] = [];
+  for (const row of rows) {
+    if (ids.has(row.id)) continue;
+    const key = byLabel ? standardVariableLabelKey(row) : null;
+    if (key !== null && labels.has(key)) continue;
+    ids.add(row.id);
+    if (key !== null) labels.add(key);
+    kept.push(row);
+  }
+  return kept;
 }

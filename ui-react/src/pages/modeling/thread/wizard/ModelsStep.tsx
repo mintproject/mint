@@ -130,6 +130,31 @@ function rowFromConfig(cfg: ModelConfigInfo | ModelSetupInfo, parent?: ModelConf
   };
 }
 
+type OutcomeMatch = 'produces' | 'transforms';
+
+/** The part of a standard-variable id or label that names it, lower-cased. */
+function outcomeName(value: string): string {
+  return slugFromUri(value.trim()).toLowerCase();
+}
+
+/**
+ * True when the row declares the outcome as one of its outputs. The id is
+ * compared first; the name (the URI slug or the label) bridges a flow whose
+ * output was registered under another namespace for the same variable.
+ */
+function rowProducesOutcome(
+  row: Pick<ModelRow, 'producesIds' | 'producesLabels'>,
+  outcome: string,
+  outcomeLabel?: string | null,
+): boolean {
+  if (row.producesIds.includes(outcome)) return true;
+  const names = new Set([outcomeName(outcome), outcomeLabel ? outcomeName(outcomeLabel) : '']);
+  names.delete('');
+  return [...row.producesIds, ...row.producesLabels].some(
+    (value) => value && names.has(outcomeName(value)),
+  );
+}
+
 function flattenToRows(
   data: ReturnType<typeof useGetModelTreeWithRegionsQuery>['data'],
 ): ModelRow[] {
@@ -153,10 +178,15 @@ function ModelCard({
   row,
   checked,
   onToggle,
+  outcomeMatch,
+  outcomeLabel,
 }: {
   row: ModelRow;
   checked: boolean;
   onToggle: (id: string, checked: boolean) => void;
+  /** How the row reaches the chosen outcome, when one is chosen. */
+  outcomeMatch?: OutcomeMatch | null;
+  outcomeLabel?: string | null;
 }) {
   // Asked only for a flow, and only once per flow per session. An unanswered or
   // failed check leaves the card pickable: plan and submit still refuse correctly.
@@ -185,6 +215,19 @@ function ModelCard({
           {row.name}
           {row.isFlow && <FlowBadge />}
         </div>
+        {outcomeMatch && outcomeLabel && (
+          <div
+            className={cn(
+              'text-xs font-medium',
+              outcomeMatch === 'produces' ? 'text-green-800' : 'text-blue-800',
+            )}
+            data-testid="outcome-reason"
+          >
+            {outcomeMatch === 'produces'
+              ? `Produces ${outcomeLabel}`
+              : `Can be transformed into ${outcomeLabel}`}
+          </div>
+        )}
         {row.takesCollection && (
           <div className="text-xs text-purple-800">Takes a set of files as one input</div>
         )}
@@ -711,9 +754,11 @@ export function ModelsStep({
   const indicatorRows = useMemo(
     () =>
       indicator
-        ? allRows.filter((r) => r.producesIds.includes(indicator) || inferredModelIds.has(r.id))
+        ? allRows.filter(
+            (r) => rowProducesOutcome(r, indicator, indicatorLabel) || inferredModelIds.has(r.id),
+          )
         : allRows,
-    [allRows, indicator, inferredModelIds],
+    [allRows, indicator, indicatorLabel, inferredModelIds],
   );
   const dataFeasibleRows = useMemo(() => {
     if (!hasRegionGeometry || availabilityLoading || availabilityError) return indicatorRows;
@@ -756,22 +801,46 @@ export function ModelsStep({
     );
   }, [dataFilteredRows, searchText]);
 
-  const searchedRows = useMemo(() => {
+  const matchedRows = useMemo(() => {
     if (!debouncedSearchText.trim() || !semanticSearch.results) return localSearchedRows;
     const rankById = new Map(semanticSearch.results.map((result, index) => [result.id, index]));
+    const semanticRank = (row: ModelRow) =>
+      Math.min(
+        Infinity,
+        ...row.searchIds
+          .map((id) => rankById.get(id))
+          .filter((rank): rank is number => rank !== undefined),
+      );
+    // The index may not carry a row (a flow's outputs, for one), so a row the
+    // plain text filter finds is kept and follows the semantic hits.
+    const found = new Set(localSearchedRows.map((row) => row.id));
     return dataFilteredRows
-      .map((row) => ({
-        row,
-        rank: Math.min(
-          ...row.searchIds
-            .map((id) => rankById.get(id))
-            .filter((rank): rank is number => rank !== undefined),
-        ),
-      }))
-      .filter((item) => Number.isFinite(item.rank))
-      .sort((a, b) => a.rank - b.rank)
+      .map((row) => ({ row, rank: semanticRank(row) }))
+      .filter((item) => Number.isFinite(item.rank) || found.has(item.row.id))
+      .sort((a, b) => (a.rank === b.rank ? 0 : a.rank < b.rank ? -1 : 1))
       .map((item) => item.row);
   }, [dataFilteredRows, debouncedSearchText, localSearchedRows, semanticSearch.results]);
+
+  // Rows that declare the outcome as an output come first, models and flows
+  // alike, whatever the search ranked them; then the rows reachable by a
+  // transform. The sort is stable, so each group keeps its own order.
+  const outcomeMatchById = useMemo(() => {
+    const matches = new Map<string, OutcomeMatch>();
+    if (!indicator) return matches;
+    for (const row of allRows) {
+      if (rowProducesOutcome(row, indicator, indicatorLabel)) matches.set(row.id, 'produces');
+      else if (inferredModelIds.has(row.id)) matches.set(row.id, 'transforms');
+    }
+    return matches;
+  }, [allRows, indicator, indicatorLabel, inferredModelIds]);
+  const searchedRows = useMemo(() => {
+    if (outcomeMatchById.size === 0) return matchedRows;
+    const tier = (row: ModelRow) => {
+      const match = outcomeMatchById.get(row.id);
+      return match === 'produces' ? 0 : match === 'transforms' ? 1 : 2;
+    };
+    return [...matchedRows].sort((a, b) => tier(a) - tier(b));
+  }, [matchedRows, outcomeMatchById]);
 
   const threadRegionId = thread.region_id ?? null;
   const { regionRows, otherRows } = useMemo(() => {
@@ -793,10 +862,10 @@ export function ModelsStep({
     return allRows.filter(
       (row) =>
         selected.has(row.id) &&
-        !row.producesIds.includes(indicator) &&
+        !rowProducesOutcome(row, indicator, indicatorLabel) &&
         !inferredModelIds.has(row.id),
     );
-  }, [allRows, indicator, inferredModelIds, selectedIds]);
+  }, [allRows, indicator, indicatorLabel, inferredModelIds, selectedIds]);
 
   const toggleModel = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -1023,6 +1092,8 @@ export function ModelsStep({
                 row={row}
                 checked={selectedIds.has(row.id)}
                 onToggle={toggleModel}
+                outcomeMatch={outcomeMatchById.get(row.id) ?? null}
+                outcomeLabel={indicatorLabel}
               />
             ))
           )}

@@ -46,7 +46,10 @@ import {
   type InferenceTransformKind,
   type VariableTransform,
 } from '@/lib/modeling/outcome-driver-inference';
-import { UNNAMED_STANDARD_VARIABLE } from '@/lib/standard-variable-display';
+import {
+  UNNAMED_STANDARD_VARIABLE,
+  standardVariableLabelKey,
+} from '@/lib/standard-variable-display';
 import { slugFromUri } from '@/lib/uri';
 
 export type StandardVariableScope = 'all' | 'indicator' | 'driver';
@@ -398,7 +401,15 @@ export function useScopedStandardVariables(
             return { id, label: slugFromUri(id), description: null };
           }),
       );
-      return dedupe([...rows.map((r) => r.presentation.standard_variable), ...adapterOutputs]);
+      const catalog = dedupe(rows.map((r) => r.presentation.standard_variable));
+      // An adapter contract names a variable by URI slug, and the catalog holds
+      // the same variable under its own id. Keep the catalog row, which carries
+      // the description, and add only the adapter outputs it does not already list.
+      const listed = new Set(catalog.map((o) => standardVariableLabelKey(o)));
+      return dedupe([
+        ...catalog,
+        ...adapterOutputs.filter((o) => !listed.has(standardVariableLabelKey(o))),
+      ]);
     }
     if (scope === 'driver') {
       const inputs = driverQ.data?.inputs ?? [];
