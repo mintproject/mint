@@ -22,6 +22,7 @@ import type {
 import { loadDatasetResources } from '@/lib/data-catalog';
 import {
   buildThreadDataInsert,
+  collectionDefaultSelection,
   newDatasliceId,
   type ThreadDataInsert,
 } from '@/lib/thread-datasets';
@@ -32,6 +33,7 @@ import { boundingBoxesOverlap, type BoundingBox } from '@/lib/geo/bbox';
 import { spatialCoverageBoundingBox } from '@/lib/datasets/spatial';
 import { cn } from '@/lib/utils';
 import { StepShell } from './StepShell';
+import { COLLECTION_EXPLANATION, CollectionFiles } from './CollectionFiles';
 import { FilteredByBanner } from './FilteredByBanner';
 
 interface RequestedRange {
@@ -784,6 +786,13 @@ export function DatasetsStep({
     Record<string, DataCatalogDataset>
   >({});
 
+  // Files chosen for each collection input, keyed like the input cards. An input
+  // that is not a collection never appears here: all its files are bound.
+  const [collectionPicks, setCollectionPicks] = useState<Record<string, DataCatalogResource[]>>({});
+  const reportCollectionPick = useCallback((key: string, chosen: DataCatalogResource[]) => {
+    setCollectionPicks((prev) => ({ ...prev, [key]: chosen }));
+  }, []);
+
   const [savingArchiveDates, setSavingArchiveDates] = useState(false);
   const [updateThread] = useUpdateThreadMutation();
   const [insertThreadProvenance] = useInsertThreadProvenanceMutation();
@@ -915,6 +924,8 @@ export function DatasetsStep({
     datasetId: string | null,
     dataset?: DataCatalogDataset,
   ) {
+    // The files chosen for the old dataset do not carry over to a new one.
+    setCollectionPicks(({ [inputCardKey(modelId, inputId)]: _dropped, ...rest }) => rest);
     setOverrides((prev) => {
       const bucket = { ...(prev[modelId] ?? {}) };
       bucket[inputId] =
@@ -957,12 +968,19 @@ export function DatasetsStep({
           // binding read back from Hasura already carries its files; a freshly
           // picked dataset does not, and the catalog only narrows resources to
           // the input's variables on demand.
-          const resources =
+          const isCollection = Boolean(model.collectionInputs?.includes(input.id));
+          const picked = isCollection
+            ? collectionPicks[inputCardKey(modelId, input.id)]
+            : undefined;
+          const all =
+            picked ??
             assignment.resources ??
             (await loadDatasetResources({
               datasetId: assignment.datasetId,
               variableNames: input.variables ?? [],
             }));
+          // A collection holds only files the backend can gather, up to its cap.
+          const resources = isCollection && !picked ? collectionDefaultSelection(all) : all;
 
           if (resources.length === 0) {
             toast({
@@ -1117,6 +1135,7 @@ export function DatasetsStep({
                   const key = inputCardKey(modelId, input.id);
                   const collapsed = collapsedInputs[key] ?? false;
                   const panelId = inputCardPanelId(modelId, input.id);
+                  const isCollection = Boolean(model.collectionInputs?.includes(input.id));
                   return (
                     <li key={input.id} className="rounded border bg-white p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1163,6 +1182,14 @@ export function DatasetsStep({
                           </button>
                         </span>
                       </div>
+                      {isCollection && (
+                        <div className="mt-1 text-xs text-purple-900">
+                          <span className="rounded bg-purple-100 px-1.5 py-0.5 font-medium">
+                            Takes a collection
+                          </span>{' '}
+                          {COLLECTION_EXPLANATION}
+                        </div>
+                      )}
                       <div id={panelId} hidden={collapsed}>
                         <InputPicker
                           thread={thread}
@@ -1176,6 +1203,15 @@ export function DatasetsStep({
                           onDatasetMetadata={reportKnownDatasetMetadata}
                           onAssign={(dsId, ds) => assign(modelId, input.id, dsId, ds)}
                         />
+                        {isCollection && current && (
+                          <CollectionFiles
+                            key={current.datasetId}
+                            datasetId={current.datasetId}
+                            variables={input.variables ?? []}
+                            initial={current.resources}
+                            onChange={(chosen) => reportCollectionPick(key, chosen)}
+                          />
+                        )}
                       </div>
                     </li>
                   );

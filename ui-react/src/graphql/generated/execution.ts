@@ -70,6 +70,8 @@ export interface ThreadModel {
   usage_notes?: string | null;
   /** The configuration is a flow: planned once at Run, one value per setting. */
   isFlow?: boolean;
+  /** Ids of the flow's inputs that take a collection: all selected files are one input. */
+  collectionInputs?: string[];
 }
 
 // ─── Ensemble / Execution state ───────────────────────────────────────────────

@@ -35,6 +35,21 @@ export function hashResourceId(url: string): string {
   return Md5.hashStr(url);
 }
 
+/** The most files one collection input can hold (the Ensemble Manager's limit). */
+export const COLLECTION_FILE_CAP = 500;
+
+/** Only https and Tapis storage locations can be gathered; http is refused. */
+export function isGatherableUrl(url: string | null | undefined): boolean {
+  return /^(https|tapis):\/\//i.test((url ?? '').trim());
+}
+
+/** What a collection input keeps from a dataset's files: gatherable ones, up to the cap. */
+export function collectionDefaultSelection(
+  resources: DataCatalogResource[],
+): DataCatalogResource[] {
+  return resources.filter((r) => isGatherableUrl(r.url)).slice(0, COLLECTION_FILE_CAP);
+}
+
 function isoDate(d: Date | null | undefined): string | null {
   if (!d) return null;
   return d.toISOString().split('T')[0] ?? null;

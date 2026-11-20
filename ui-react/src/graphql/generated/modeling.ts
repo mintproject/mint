@@ -1416,7 +1416,7 @@ export type ModelConfigInfo = {
   id: string;
   label?: string | null;
   /** Non-null only when the configuration is a flow. */
-  flow?: { configuration_id: string } | null;
+  flow?: { configuration_id: string; thread_bindings_json?: unknown } | null;
   regions: ConfigRegionRef[];
   inputs: ConfigInputRef[];
   outputs: ConfigOutputRef[];
@@ -1503,7 +1503,7 @@ export const GetModelTreeWithRegionsDocument = gql`
         ) {
           id
           label
-          flow { configuration_id }
+          flow { configuration_id thread_bindings_json }
           regions { configuration_id region_id region { id label } }
           inputs {
             configuration_id

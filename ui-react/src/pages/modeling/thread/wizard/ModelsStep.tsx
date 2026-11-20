@@ -21,6 +21,7 @@ import {
   useSetThreadModelsMutation,
 } from '@/graphql/generated/modeling';
 import { useAuth } from '@/lib/auth/useAuth';
+import { collectionInputsFromFlow } from '@/lib/thread-execution';
 import { diffThreadModels } from '@/lib/thread-models';
 import { slugFromUri } from '@/lib/uri';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -48,6 +49,8 @@ interface ModelRow {
   needs: { name: string; varIds: string[]; varLabels: string[]; optional: boolean }[];
   /** The configuration is a flow (a graph of pieces), not a single model. */
   isFlow: boolean;
+  /** The flow has an input that takes a set of files as one input. */
+  takesCollection: boolean;
 }
 
 export const ModelOutcomeAdapterInferenceDocument = gql`
@@ -96,6 +99,7 @@ interface ModelsStepProps {
 function rowFromConfig(cfg: ModelConfigInfo | ModelSetupInfo, parent?: ModelConfigInfo): ModelRow {
   const io = extractModelIO(cfg);
   const regions = cfg.regions.length > 0 ? cfg.regions : (parent?.regions ?? []);
+  const flow = ('flow' in cfg ? cfg.flow : null) ?? parent?.flow;
   return {
     id: cfg.id,
     searchIds: parent ? [cfg.id, parent.id] : [cfg.id],
@@ -118,7 +122,8 @@ function rowFromConfig(cfg: ModelConfigInfo | ModelSetupInfo, parent?: ModelConf
       varLabels: i.variableLabels,
       optional: i.optional,
     })),
-    isFlow: Boolean(('flow' in cfg ? cfg.flow : null) ?? parent?.flow),
+    isFlow: Boolean(flow),
+    takesCollection: collectionInputsFromFlow(flow).length > 0,
   };
 }
 
@@ -173,6 +178,9 @@ function ModelCard({
             </span>
           )}
         </div>
+        {row.takesCollection && (
+          <div className="text-xs text-purple-800">Takes a set of files as one input</div>
+        )}
         {row.region && <div className="text-xs text-gray-500">{row.region}</div>}
         {row.description && (
           <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{row.description}</p>
