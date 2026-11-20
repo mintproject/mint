@@ -40,6 +40,7 @@ import { flowErrorMessage, type FlowErrorMessage } from '@/lib/flow-errors';
 import { inputResourceCount } from '@/lib/thread-execution';
 import { secretErrorMessage, userParameters } from '@/lib/secret-parameters';
 import { ExecutionFilesDialog } from './ExecutionFilesDialog';
+import { FlowRunPanel } from './FlowRunPanel';
 import { PublishOutputsControl } from './PublishOutputsControl';
 import {
   publishRequestFor,
@@ -1116,10 +1117,31 @@ export function MintRuns({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelIds.join(',')]);
 
+  // A flow's run records are written when the run is submitted and updated when
+  // it finishes, and the mount fetch above runs before either. Read them again
+  // whenever a flow's run appears or changes state, and after it is sent.
+  const flowRunKey = modelIds
+    .filter((mid) => threadData.models[mid]?.isFlow)
+    .map((mid) => `${mid}:${unifiedRuns?.[mid]?.run_id ?? ''}:${unifiedRuns?.[mid]?.status ?? ''}`)
+    .join('|');
+  const flowRunKeySeen = useRef(flowRunKey);
+  useEffect(() => {
+    if (flowRunKeySeen.current === flowRunKey) return;
+    flowRunKeySeen.current = flowRunKey;
+    for (const mid of modelIds) {
+      if (threadData.models[mid]?.isFlow && unifiedRuns?.[mid]) {
+        onFetchRuns(mid, pages[mid] ?? 1, PAGE_SIZE);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowRunKey]);
+
   // Which catalogs each model's output can be published to. A failed lookup
   // just hides the control: publishing is optional and must not block a run.
   const canSubmitRuns = canExecute && canWrite;
+  // A flow's outputs are not published through a plan publisher, so none is asked for.
   const unsubmittedIds = modelIds.filter((mid) => {
+    if (threadData.models[mid]?.isFlow) return false;
     const summary = threadData.execution_summary[mid];
     return !(summary?.submitted_for_execution || summary?.submission_time);
   });
@@ -1162,6 +1184,7 @@ export function MintRuns({
         const publish = publishRequestFor(publishers[mid] ?? [], publishSelections[mid]);
         if (publish) await onSubmitRuns(mid, minutes, publish);
         else await onSubmitRuns(mid, minutes);
+        if (threadData.models[mid]?.isFlow) onFetchRuns(mid, pages[mid] ?? 1, PAGE_SIZE);
       } catch (error) {
         const refusal = threadData.models[mid]?.isFlow ? flowErrorMessage(error) : null;
         if (refusal) {
@@ -1177,7 +1200,15 @@ export function MintRuns({
         setWaiting((w) => ({ ...w, [mid]: false }));
       }
     },
-    [maxMinutes, onSubmitRuns, publishers, publishSelections, threadData.models],
+    [
+      maxMinutes,
+      onFetchRuns,
+      onSubmitRuns,
+      pages,
+      publishers,
+      publishSelections,
+      threadData.models,
+    ],
   );
 
   const handleNextPage = useCallback(
@@ -1280,15 +1311,22 @@ export function MintRuns({
             failedRuns,
             fallbackStatus: workflowRun?.status,
           });
+          const isFlowRun = Boolean(model.isFlow) || workflowRun?.adapter_stage === 'flow';
           const nextAction =
             displayStatus === 'failed'
               ? 'Review the failed run and its diagnostics before trying again.'
               : displayStatus === 'completed'
-                ? 'The model run is complete. Continue to review or publish its results.'
+                ? isFlowRun
+                  ? 'The flow run is complete. Continue to review its results.'
+                  : 'The model run is complete. Continue to review or publish its results.'
                 : displayStatus === 'completing'
-                  ? 'The model finished and its output is being prepared for the next stage.'
+                  ? isFlowRun
+                    ? 'The flow finished and its outputs are being prepared.'
+                    : 'The model finished and its output is being prepared for the next stage.'
                   : displayStatus === 'running'
-                    ? 'The model is running. Results will appear when it completes.'
+                    ? isFlowRun
+                      ? 'The flow is running. Results will appear when it completes.'
+                      : 'The model is running. Results will appear when it completes.'
                     : 'The run is waiting to start.';
 
           // ── count inputs × params for display ──────────────────────────
@@ -1355,21 +1393,26 @@ export function MintRuns({
                   ) : canExecute && canWrite ? (
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-end gap-3">
-                        <label className="flex flex-col gap-1 text-xs text-gray-700">
-                          <span>Maximum run time (minutes)</span>
-                          <input
-                            aria-label={`Maximum run time for ${model.name}`}
-                            data-testid={`max-runtime-${mid}`}
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={maxMinutes[mid] ?? '60'}
-                            onChange={(event) =>
-                              setMaxMinutes((values) => ({ ...values, [mid]: event.target.value }))
-                            }
-                            className="w-32 rounded border border-gray-300 px-2 py-1.5 text-sm"
-                          />
-                        </label>
+                        {!model.isFlow && (
+                          <label className="flex flex-col gap-1 text-xs text-gray-700">
+                            <span>Maximum run time (minutes)</span>
+                            <input
+                              aria-label={`Maximum run time for ${model.name}`}
+                              data-testid={`max-runtime-${mid}`}
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={maxMinutes[mid] ?? '60'}
+                              onChange={(event) =>
+                                setMaxMinutes((values) => ({
+                                  ...values,
+                                  [mid]: event.target.value,
+                                }))
+                              }
+                              className="w-32 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                            />
+                          </label>
+                        )}
                         <button
                           type="button"
                           data-testid={`submit-runs-${mid}`}
@@ -1387,16 +1430,18 @@ export function MintRuns({
                           )}
                         </button>
                       </div>
-                      <PublishOutputsControl
-                        modelId={mid}
-                        publishers={publishers[mid] ?? []}
-                        outputs={model.output_files}
-                        selection={publishSelections[mid] ?? null}
-                        disabled={waiting[mid]}
-                        onChange={(selection) =>
-                          setPublishSelections((current) => ({ ...current, [mid]: selection }))
-                        }
-                      />
+                      {!model.isFlow && (
+                        <PublishOutputsControl
+                          modelId={mid}
+                          publishers={publishers[mid] ?? []}
+                          outputs={model.output_files}
+                          selection={publishSelections[mid] ?? null}
+                          disabled={waiting[mid]}
+                          onChange={(selection) =>
+                            setPublishSelections((current) => ({ ...current, [mid]: selection }))
+                          }
+                        />
+                      )}
                       {flowRefusals[mid] && (
                         <div
                           className="space-y-1 text-xs text-red-700"
@@ -1432,7 +1477,25 @@ export function MintRuns({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {workflowRun ? (
+                  {workflowRun && isFlowRun ? (
+                    <FlowRunPanel
+                      run={workflowRun}
+                      onRefresh={
+                        onRefreshWorkflow &&
+                        (Boolean(unifiedRuns?.[mid]) || workflowRun.run_id?.startsWith('ue_'))
+                          ? () => onRefreshWorkflow(mid)
+                          : undefined
+                      }
+                      refreshing={workflowRefreshing?.[mid]}
+                      refreshError={workflowRefreshErrors?.[mid]}
+                      onCancel={
+                        onCancelWorkflow && workflowRun.run_id?.startsWith('ue_')
+                          ? () => onCancelWorkflow(mid)
+                          : undefined
+                      }
+                      cancelling={workflowCancelling?.[mid]}
+                    />
+                  ) : workflowRun ? (
                     <UnifiedExecutionPanel
                       run={workflowRun}
                       modelName={model.name}
@@ -1549,10 +1612,16 @@ export function MintRuns({
                                 colSpan={5 + adjustableInputs.length + adjustableParams.length}
                                 className="px-2 py-4 text-center text-gray-400"
                               >
-                                <div className="flex items-center justify-center gap-2">
-                                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-                                  Loading run records…
-                                </div>
+                                {model.isFlow ? (
+                                  <span data-testid={`no-run-records-${mid}`}>
+                                    No run records yet. Use Reload once the run has started.
+                                  </span>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-2">
+                                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                                    Loading run records…
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           ) : (
