@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS modelcatalog_standard_variable_label_norm_key;
