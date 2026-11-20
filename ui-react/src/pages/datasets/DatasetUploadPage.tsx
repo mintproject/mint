@@ -49,6 +49,8 @@ import { useAuth } from '@/lib/auth/useAuth';
 /** Wait after typing before the title and description are searched. */
 const SUGGEST_DELAY_MS = 500;
 const SUGGEST_SHOWN = 5;
+/** Shortest title-and-description text that is searched for suggestions. */
+const SUGGEST_MIN_CHARS = 4;
 
 export const UPLOAD_PUBLIC_EXPLANATION =
   'A model run reads its input files directly and can only read public files. A flow can read private files, because it runs with your access.';
@@ -167,8 +169,13 @@ export function DatasetUploadPage() {
     variables: { categoryId },
     skip: mode !== 'region' || !categoryId,
   });
+  // Standard variables suggested from what the user wrote. Never chosen for them.
+  const aboutText = useDebouncedValue(`${title}\n${description}`.trim(), SUGGEST_DELAY_MS);
+  const wantsSuggestions = aboutText.length >= SUGGEST_MIN_CHARS;
+  // The model tree ranks the suggestions as well as listing who can use the
+  // chosen variable, so it loads as soon as either is needed.
   const { data: tree, loading: treeLoading } = useGetModelTreeWithRegionsQuery({
-    skip: !variable,
+    skip: !variable && !wantsSuggestions,
   });
 
   const formats = useMemo(
@@ -180,9 +187,11 @@ export function DatasetUploadPage() {
     [tree, variable, files],
   );
 
-  // Standard variables suggested from what the user wrote. Never chosen for them.
-  const aboutText = useDebouncedValue(`${title}\n${description}`.trim(), SUGGEST_DELAY_MS);
-  const suggested = useSemanticSearch(aboutText, { target: 'svo', limit: 20, minLength: 4 });
+  const suggested = useSemanticSearch(aboutText, {
+    target: 'svo',
+    limit: 20,
+    minLength: SUGGEST_MIN_CHARS,
+  });
   // Ranked by whether a registered flow or model takes these files under the
   // variable, then by how close it is to the text.
   const suggestions = useMemo(
