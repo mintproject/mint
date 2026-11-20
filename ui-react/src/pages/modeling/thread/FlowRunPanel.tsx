@@ -16,7 +16,7 @@ import {
   type WorkflowCanvasPosition,
 } from '@/components/modeling/WorkflowCanvas';
 import { EnsembleManagerError, type UnifiedRunSnapshot } from '@/lib/ensemble-manager';
-import { flowErrorMessage } from '@/lib/flow-errors';
+import { flowErrorMessage, stepErrorText } from '@/lib/flow-errors';
 
 type FlowStage = NonNullable<UnifiedRunSnapshot['workflow_stages']>[number];
 
@@ -282,7 +282,9 @@ export function FlowRunPanel({
                   {STEP_LABEL[state]}
                 </span>
               </div>
-              {stage.error_message && <p className="mt-1 text-red-800">{stage.error_message}</p>}
+              {stage.error_message && (
+                <p className="mt-1 text-red-800">{stepErrorText(stage.error_message)}</p>
+              )}
               {taskId && (
                 <p className="mt-1 text-gray-500">
                   Task <code>{taskId}</code>

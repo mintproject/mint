@@ -76,6 +76,37 @@ describe('flowStageGraph', () => {
   });
 });
 
+describe('gather stages', () => {
+  const gather: Stages = [
+    step('step-gather-1', 'Gather Elevation files', 'running'),
+    step('step-1', 'Sensemaking: ingest corpus', 'pending', ['step-gather-1']),
+  ];
+
+  it('links a gather stage to the step that depends on it', () => {
+    const graph = flowStageGraph(gather);
+    expect(graph.edges.map((e) => [e.source, e.target])).toEqual([['step-gather-1', 'step-1']]);
+    const at = (id: string) => graph.positions.find((p) => p.node.id === id)!;
+    expect(at('step-1').x).toBeGreaterThan(at('step-gather-1').x);
+  });
+
+  it('renders a gather stage and says why one failed in plain words', () => {
+    const failed: Stages = [
+      step('step-gather-1', 'Gather Elevation files', 'failed', [], {
+        error_message: 'GATHER_RESOURCE_NEEDS_LOGIN: file 3 on data.example.org',
+      }),
+      ...gather.slice(1),
+    ];
+    render(<FlowRunPanel run={flowRun({ workflow_stages: failed })} />);
+    expect(screen.getByTestId('flow-step-step-gather-1')).toHaveTextContent(
+      'Gather Elevation files',
+    );
+    expect(screen.getByTestId('flow-step-step-gather-1')).toHaveTextContent(
+      'file 3 on data.example.org',
+    );
+    expect(screen.getByTestId('flow-step-step-1')).toBeInTheDocument();
+  });
+});
+
 describe('flowStepState', () => {
   it('maps the reported words', () => {
     expect(flowStepState('pending')).toBe('waiting');

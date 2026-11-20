@@ -82,6 +82,31 @@ export function bindingsFromGQL(tm: ThreadModelRow): IOBindings {
   return bindings;
 }
 
+/**
+ * The flow's inputs that take a collection, from its `thread_bindings_json`.
+ *
+ * `collections` is a list of input ids. Anything else (no flow, no marker, not
+ * an array, non-string entries) reads as "none": unknown keys are ignored.
+ */
+export function collectionInputsFromFlow(
+  flow: { thread_bindings_json?: unknown } | null | undefined,
+): string[] {
+  const raw = flow?.thread_bindings_json;
+  const parsed = typeof raw === 'string' ? safeParse(raw) : raw;
+  if (!parsed || typeof parsed !== 'object') return [];
+  const collections = (parsed as { collections?: unknown }).collections;
+  if (!Array.isArray(collections) || !collections.every((c) => typeof c === 'string')) return [];
+  return collections as string[];
+}
+
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 /** The configuration a thread model points at, as the model the steps render. */
 export function threadModelFromGQL(tm: ThreadModelRow): ThreadModel | null {
   const cfg = tm.modelcatalog_configuration;
@@ -92,6 +117,7 @@ export function threadModelFromGQL(tm: ThreadModelRow): ThreadModel | null {
     name: cfg.label ?? cfg.id,
     usage_notes: cfg.usage_notes ?? null,
     isFlow: Boolean(cfg.flow),
+    collectionInputs: collectionInputsFromFlow(cfg.flow),
     // The data catalog filters by standard-variable NAME, so inputs carry the
     // labels. Outputs carry the ids, because the response variable they are
     // matched against is an id. Same split as the model-tree path.
@@ -224,6 +250,8 @@ export function totalConfigs(
 ): number {
   let total = 1;
   for (const io of model.input_files) {
+    // A collection input is one input however many files it holds: one run.
+    if (model.collectionInputs?.includes(io.id)) continue;
     if (io.value) {
       total *= (io.value.resources ?? []).filter((r) => r.selected !== false).length || 1;
       continue;
@@ -253,6 +281,8 @@ export function totalConfigs(
 export function inputResourceCount(model: ThreadModel, bindings: Record<string, string[]>): number {
   return model.input_files
     .map((input) => {
+      // A collection input contributes the neutral factor: its files are one input.
+      if (model.collectionInputs?.includes(input.id)) return 1;
       if (input.value) {
         return (input.value.resources ?? []).filter((resource) => resource.selected !== false)
           .length;

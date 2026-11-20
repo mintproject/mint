@@ -8,6 +8,7 @@ import type {
 } from '@/graphql/generated/thread-execution';
 import {
   bindingsFromGQL,
+  collectionInputsFromFlow,
   datasetsComplete,
   executionFromGQL,
   hasUnfinishedRuns,
@@ -15,6 +16,7 @@ import {
   parametersComplete,
   runsComplete,
   threadExecutionFromGQL,
+  threadModelFromGQL,
   totalConfigs,
 } from '@/lib/thread-execution';
 
@@ -465,5 +467,81 @@ describe('inputResourceCount', () => {
     };
 
     expect(inputResourceCount(model, {})).toBe(0);
+  });
+});
+
+describe('collectionInputsFromFlow', () => {
+  it('reads the list of input ids', () => {
+    expect(collectionInputsFromFlow({ thread_bindings_json: { collections: ['inA'] } })).toEqual([
+      'inA',
+    ]);
+  });
+
+  it('ignores unknown keys and reads a JSON string', () => {
+    expect(
+      collectionInputsFromFlow({
+        thread_bindings_json: JSON.stringify({ region: { input: 'x' }, collections: ['a', 'b'] }),
+      }),
+    ).toEqual(['a', 'b']);
+  });
+
+  it('is empty when absent, malformed, or not a flow', () => {
+    expect(collectionInputsFromFlow(null)).toEqual([]);
+    expect(collectionInputsFromFlow({})).toEqual([]);
+    expect(collectionInputsFromFlow({ thread_bindings_json: null })).toEqual([]);
+    expect(collectionInputsFromFlow({ thread_bindings_json: { region: {} } })).toEqual([]);
+    expect(collectionInputsFromFlow({ thread_bindings_json: { collections: 'inA' } })).toEqual([]);
+    expect(collectionInputsFromFlow({ thread_bindings_json: { collections: ['a', 3] } })).toEqual(
+      [],
+    );
+    expect(collectionInputsFromFlow({ thread_bindings_json: '{not json' })).toEqual([]);
+  });
+
+  it('is carried onto the thread model of a flow only', () => {
+    const base = threadModel();
+    const cfg = base.modelcatalog_configuration!;
+    const flow = threadModelFromGQL({
+      ...base,
+      modelcatalog_configuration: {
+        ...cfg,
+        flow: { configuration_id: 'cfgA', thread_bindings_json: { collections: ['inA'] } },
+      },
+    });
+    expect(flow?.isFlow).toBe(true);
+    expect(flow?.collectionInputs).toEqual(['inA']);
+    expect(threadModelFromGQL(base)?.collectionInputs).toEqual([]);
+  });
+});
+
+describe('run counting with a collection input', () => {
+  const inputs = [
+    { id: 'inA', name: 'Files' },
+    { id: 'inB', name: 'Config' },
+  ];
+  const flow = {
+    id: 'f',
+    name: 'Flow',
+    isFlow: true,
+    input_files: inputs,
+    output_files: [],
+    input_parameters: [],
+  };
+  const data = {
+    s1: { id: 's1', selected_resources: 40 },
+    s2: { id: 's2', selected_resources: 1 },
+  };
+  const bindings = { inA: ['s1'], inB: ['s2'] };
+
+  it('is one run when the 40 files are a collection', () => {
+    expect(totalConfigs({ ...flow, collectionInputs: ['inA'] }, bindings, data)).toBe(1);
+    expect(inputResourceCount({ ...flow, collectionInputs: ['inA'] }, bindings)).toBe(1);
+  });
+
+  it('is 40 runs without the marker', () => {
+    expect(totalConfigs(flow, bindings, data)).toBe(40);
+  });
+
+  it('leaves a model that is not a flow unchanged', () => {
+    expect(totalConfigs({ ...flow, isFlow: false }, bindings, data)).toBe(40);
   });
 });

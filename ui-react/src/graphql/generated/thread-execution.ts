@@ -78,7 +78,7 @@ export type ThreadModelRow = {
     description?: string | null;
     usage_notes?: string | null;
     /** Non-null only when the configuration is a flow. */
-    flow?: { configuration_id: string } | null;
+    flow?: { configuration_id: string; thread_bindings_json?: unknown } | null;
     inputs: Array<{
       configuration_id?: string;
       input_id?: string;
@@ -220,6 +220,7 @@ export const GetThreadExecutionDocument = gql`
           usage_notes
           flow {
             configuration_id
+            thread_bindings_json
           }
           inputs {
             configuration_id

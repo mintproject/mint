@@ -5,6 +5,7 @@ import {
   FLOW_ERROR_CODES,
   FlowSettingsMissingError,
   missingFlowSettings,
+  stepErrorText,
 } from '@/lib/flow-errors';
 
 const refuse = (code: string, details?: unknown) =>
@@ -122,5 +123,50 @@ describe('settings a flow run must supply', () => {
       }),
     );
     expect(m?.lines).toContain('output_uri: required');
+  });
+});
+
+describe('collection and gather refusals', () => {
+  it('names the input and reason a collection was refused, nested once or twice', () => {
+    const m = refuse('FLOW_COLLECTION_REFUSED', { details: { input: 'dem', reason: 'too many' } });
+    expect(m?.lines.join(' ')).toContain('"dem"');
+    expect(m?.lines.join(' ')).toContain('too many');
+  });
+
+  it('says which file was refused, counting from one', () => {
+    const m = refuse('FLOW_COLLECTION_RESOURCE_REFUSED', { index: 2, reason: 'http is refused' });
+    expect(m?.lines.join(' ')).toContain('File 3');
+    expect(m?.lines.join(' ')).toContain('http is refused');
+  });
+
+  it('explains an unresolved scratch folder and keeps the server message', () => {
+    const m = flowErrorMessage(
+      new EnsembleManagerError(409, 'no scratch for alice', 'FLOW_STAGING_UNRESOLVED'),
+    );
+    expect(m?.lines.join(' ')).toContain('Run any job there once');
+    expect(m?.lines.join(' ')).toContain('no scratch for alice');
+  });
+
+  it('names the file and host for a login failure', () => {
+    const m = refuse('GATHER_RESOURCE_NEEDS_LOGIN', { index: 4, host: 'data.example.org' });
+    expect(m?.lines[0]).toBe(
+      'One of the files needs a login this flow does not have: file 4 on data.example.org',
+    );
+  });
+
+  it('has a title for every other gather code', () => {
+    for (const code of [
+      'GATHER_ADDRESS_REFUSED',
+      'GATHER_TOO_LARGE',
+      'GATHER_RESOURCE_FAILED',
+      'GATHER_STAGING_FAILED',
+    ]) {
+      expect(refuse(code)?.title, code).toBeTruthy();
+    }
+  });
+
+  it('rewrites a step error that carries a gather code and leaves others alone', () => {
+    expect(stepErrorText('GATHER_TOO_LARGE: 2 GB')).toContain('too large');
+    expect(stepErrorText('plain failure')).toBe('plain failure');
   });
 });

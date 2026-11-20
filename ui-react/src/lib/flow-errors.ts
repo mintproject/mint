@@ -27,6 +27,14 @@ export const FLOW_ERROR_CODES = [
   'FLOW_REGION_INVALID',
   'FLOW_OUTPUTS_UNREPORTED',
   'FLOW_FAILED',
+  'FLOW_COLLECTION_REFUSED',
+  'FLOW_COLLECTION_RESOURCE_REFUSED',
+  'FLOW_STAGING_UNRESOLVED',
+  'GATHER_RESOURCE_NEEDS_LOGIN',
+  'GATHER_ADDRESS_REFUSED',
+  'GATHER_TOO_LARGE',
+  'GATHER_RESOURCE_FAILED',
+  'GATHER_STAGING_FAILED',
 ] as const;
 
 type Details = Record<string, unknown>;
@@ -113,6 +121,47 @@ export function missingFlowSettings(plan: {
     .filter((p) => p.required && !p.managed && (p.default === undefined || p.default === null))
     .filter((p) => given[p.name] === undefined || given[p.name] === null || given[p.name] === '')
     .map((p) => p.name);
+}
+
+const GATHER_TITLES: Record<string, string> = {
+  GATHER_RESOURCE_NEEDS_LOGIN: 'A file needs a login this flow does not have',
+  GATHER_ADDRESS_REFUSED: 'A file location was refused',
+  GATHER_TOO_LARGE: 'The files are too large to gather',
+  GATHER_RESOURCE_FAILED: 'A file could not be fetched',
+  GATHER_STAGING_FAILED: 'The files could not be placed on the computing system',
+};
+
+/** A failed gather step: the title for its code, with the file and host when known. */
+function gatherMessage(code: string, serverMessage: string, details: unknown): FlowErrorMessage {
+  const lines: string[] = [];
+  if (code === 'GATHER_RESOURCE_NEEDS_LOGIN') {
+    const file = text(field(details, 'index') ?? field(details, 'file'));
+    const host = text(field(details, 'host'));
+    const found = /file\s+(\d+)\s+on\s+(\S+)/i.exec(serverMessage);
+    const n = file || found?.[1];
+    const on = host || found?.[2];
+    lines.push(
+      n && on
+        ? `One of the files needs a login this flow does not have: file ${n} on ${on}`
+        : 'One of the files needs a login this flow does not have.',
+    );
+  } else if (serverMessage) {
+    lines.push(serverMessage);
+  }
+  if (lines.length === 0) lines.push('Open the run to see which file.');
+  return { title: GATHER_TITLES[code] ?? code, lines };
+}
+
+const GATHER_CODE = /\bGATHER_[A-Z_]+\b/;
+
+/**
+ * A failed step's error text in plain words when it carries a gather code,
+ * otherwise the text unchanged.
+ */
+export function stepErrorText(raw: string): string {
+  const code = GATHER_CODE.exec(raw)?.[0];
+  if (!code || !(code in GATHER_TITLES)) return raw;
+  return flowErrorText(gatherMessage(code, raw, undefined));
 }
 
 /** The message for a flow refusal, or null for an error that is not one. */
@@ -227,6 +276,42 @@ export function flowErrorMessage(error: unknown): FlowErrorMessage | null {
         title: 'The flow failed',
         lines: serverMessage ? [serverMessage] : ['A step failed. Open the run to see which one.'],
       };
+    case 'FLOW_COLLECTION_REFUSED': {
+      const input = text(field(details, 'input'));
+      const reason = text(field(details, 'reason')) || serverMessage;
+      return {
+        title: 'The files chosen for this input cannot be read together',
+        lines: [
+          input ? `Input "${input}": ${reason}` : reason,
+          'Change the selection in the data step, then run again.',
+        ].filter(Boolean),
+      };
+    }
+    case 'FLOW_COLLECTION_RESOURCE_REFUSED': {
+      const index = field(details, 'index');
+      const reason = text(field(details, 'reason')) || serverMessage;
+      const which = typeof index === 'number' ? `File ${index + 1}` : 'One of the files';
+      return {
+        title: 'One of the files cannot be used',
+        lines: [`${which}: ${reason}`, 'Deselect it in the data step, then run again.'].filter(
+          Boolean,
+        ),
+      };
+    }
+    case 'FLOW_STAGING_UNRESOLVED':
+      return {
+        title: 'Your scratch folder was not found',
+        lines: [
+          'We could not find your scratch folder on the computing system. Run any job there once, then try again.',
+          ...(serverMessage ? [serverMessage] : []),
+        ],
+      };
+    case 'GATHER_RESOURCE_NEEDS_LOGIN':
+    case 'GATHER_ADDRESS_REFUSED':
+    case 'GATHER_TOO_LARGE':
+    case 'GATHER_RESOURCE_FAILED':
+    case 'GATHER_STAGING_FAILED':
+      return gatherMessage(code, serverMessage, details);
     case 'INVALID_PARAMETERS': {
       // The adapter's answer when a setting is missing or has the wrong form.
       const wrong = Object.entries(asDetails(field(details, 'parameters'))).map(
