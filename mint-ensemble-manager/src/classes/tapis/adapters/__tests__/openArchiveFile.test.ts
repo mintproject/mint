@@ -80,7 +80,7 @@ describe("TapisExecutionService.openArchiveFile", () => {
                 body: "raw tapis body secret-token",
                 headers: { location: "http://evil" }
             });
-            const error: any = await service()
+            const error: { statusCode?: number; message?: string } = await service()
                 .openArchiveFile(SYSTEM, "a/b")
                 .catch((e) => e);
             expect(error.statusCode).toBe(502);
@@ -90,9 +90,11 @@ describe("TapisExecutionService.openArchiveFile", () => {
     });
 
     it("maps a network failure to 502 without the cause", async () => {
-        global.fetch = jest.fn().mockRejectedValue(new Error("connect secret-token")) as any;
+        global.fetch = jest
+            .fn()
+            .mockRejectedValue(new Error("connect secret-token")) as unknown as typeof fetch;
 
-        const error: any = await service()
+        const error: { statusCode?: number; message?: string } = await service()
             .openArchiveFile(SYSTEM, "a/b")
             .catch((e) => e);
 

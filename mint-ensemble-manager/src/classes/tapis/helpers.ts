@@ -143,7 +143,7 @@ export async function downloadInputsFile(resources: RegisteredResource[], prefs:
 
 const _downloadFile = (url: string, filepath: string): Promise<void> => {
     const file = fs.createWriteStream(filepath);
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve) => {
         request.get(url).on("response", (res) => {
             res.pipe(file);
             res.on("end", function () {

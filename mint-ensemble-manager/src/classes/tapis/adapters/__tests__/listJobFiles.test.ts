@@ -141,8 +141,11 @@ describe("TapisExecutionService.listCompositeWorkflowFiles", () => {
             }
         });
         const listJobFiles = jest.fn().mockResolvedValue([{ name: "mfsim.lst" }]);
-        (service as any).jobsClient.getJobList = getJobList;
-        (service as any).jobsClient.getJob = getJob;
+        const internals = service as unknown as {
+            jobsClient: { getJobList: unknown; getJob: unknown };
+        };
+        internals.jobsClient.getJobList = getJobList;
+        internals.jobsClient.getJob = getJob;
         service.listJobFiles = listJobFiles;
 
         const files = await service.listCompositeWorkflowFiles(
@@ -166,7 +169,7 @@ describe("TapisExecutionService.listCompositeWorkflowFiles", () => {
             .fn()
             .mockResolvedValue([
                 { name: "BARTON_SPRINGS.cbc", url: "tapis://ls6/archive/BARTON_SPRINGS.cbc" }
-            ] as any);
+            ]);
 
         await expect(
             service.resolveCompositeWorkflowOutput(

@@ -203,7 +203,7 @@ export const runKubernetesPod = async (
                 await delay(wait_for);
 
                 // Wait until the Pod is finished (Failed or Succeeded)
-                while (true) {
+                for (;;) {
                     await delay(wait_for);
 
                     // Check the status of Pod

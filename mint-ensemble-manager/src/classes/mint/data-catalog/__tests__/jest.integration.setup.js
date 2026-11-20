@@ -1,3 +1,4 @@
+/* eslint-env node, jest */
 // Integration test setup
 // This file can be used to set up any global configuration needed for integration tests
 

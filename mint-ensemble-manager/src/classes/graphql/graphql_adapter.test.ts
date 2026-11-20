@@ -5,7 +5,7 @@ import {
     modelIOFromCatalogGQL,
     modelFromGQL
 } from "@/classes/graphql/graphql_adapter";
-import { Execution } from "@/classes/mint/mint-types";
+import { DataResource, Execution } from "@/classes/mint/mint-types";
 
 const makeExecution = (overrides: Partial<Execution> = {}): Execution => ({
     id: "abc123",
@@ -67,7 +67,9 @@ describe("modelIOFromCatalogGQL", () => {
 });
 
 describe("executionFromGQL", () => {
-    const makeGQLExecution = (overrides: Record<string, any> = {}) => ({
+    const makeGQLExecution = (
+        overrides: Record<string, unknown> = {}
+    ): Parameters<typeof executionFromGQL>[0] => ({
         id: "abc-123",
         modelcatalog_configuration_id: "https://w3id.org/okn/i/mint/test-config",
         status: "SUCCESS",
@@ -163,8 +165,8 @@ describe("a collection input on an execution", () => {
                     "in-corpus": [
                         { id: "r1", name: "a" },
                         { id: "r2", name: "b" }
-                    ] as any,
-                    "in-one": { id: "r3", name: "c" } as any
+                    ] as unknown as DataResource[],
+                    "in-one": { id: "r3", name: "c" } as unknown as DataResource
                 }
             })
         );
@@ -179,10 +181,12 @@ describe("a collection input on an execution", () => {
             start_time: "2026-11-20T00:00:00",
             parameter_bindings: [],
             results: [],
-            data_bindings: written.data_bindings.data.map((row: any) => ({
-                model_io_id: row.model_io_id,
-                resource: { id: row.resource_id }
-            }))
+            data_bindings: written.data_bindings.data.map(
+                (row: { model_io_id: string; resource_id: string }) => ({
+                    model_io_id: row.model_io_id,
+                    resource: { id: row.resource_id }
+                })
+            )
         });
         expect(read.bindings["in-corpus"]).toEqual([{ id: "r1" }, { id: "r2" }]);
         expect(read.bindings["in-one"]).toEqual({ id: "r3" });

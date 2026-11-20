@@ -6,9 +6,9 @@ export interface WingsTemplatePackage {
     constraints: WingsTemplateConstraint[];
 }
 export interface WingsTemplateConstraint {
-    subject: any;
-    predicate: any;
-    object: any;
+    subject: unknown;
+    predicate: unknown;
+    object: unknown;
 }
 export interface WingsTemplate extends IdNameObject {
     Nodes: IdMap<WingsNode>;
@@ -20,9 +20,9 @@ export interface WingsTemplate extends IdNameObject {
     version: number;
     onturl: string;
     wflowns: string;
-    props: Object;
-    rules: Object;
-    subtemplates: Object;
+    props: Record<string, unknown>;
+    rules: Record<string, unknown>;
+    subtemplates: Record<string, unknown>;
     metadata: WingsTemplateMetadata;
 }
 export interface WingsTemplateMetadata {
@@ -92,7 +92,7 @@ export interface WingsComponentArgument extends IdNameObject {
     prefix: string;
     isParam?: boolean;
     dimensionality?: number;
-    paramDefaultValue?: any;
+    paramDefaultValue?: string;
 }
 export interface WingsComponentRequirement {
     storageGB: number;
@@ -123,7 +123,7 @@ export interface URIBinding extends IdNameObject {
 }
 export interface ValueBinding {
     type: string;
-    value: any;
+    value: unknown;
 }
 
 export interface WingsPlannerResults {
@@ -154,7 +154,35 @@ export interface WingsParameterTypes {
 
 export interface WingsTemplateSeed {
     tid?: string;
-    datasets: any;
-    parameters: any;
-    paramtypes: any;
+    datasets: Record<string, string[]>;
+    parameters: Record<string, string>;
+    paramtypes: WingsParameterTypes;
+}
+
+/** What Wings reports of a run: its status, among other runtime details. */
+export interface WingsRuntimeInfo {
+    [key: string]: unknown;
+    status?: "FAILURE" | "SUCCESS" | "RUNNING" | "WAITING";
+}
+
+/** Runtime info of Wings runs, by run id. */
+export type WingsRunStatuses = Record<string, WingsRuntimeInfo>;
+
+/** A file of a run's plan. */
+export interface WingsRunFile {
+    [key: string]: unknown;
+    id: string;
+}
+
+/** A step of a run's plan, with the files it reads and writes. */
+export interface WingsRunStep {
+    id: string;
+    inputFiles: WingsRunFile[];
+    outputFiles: WingsRunFile[];
+}
+
+/** A step of a run's queue, with its log. */
+export interface WingsQueueStep {
+    id: string;
+    runtimeInfo: { log: string };
 }

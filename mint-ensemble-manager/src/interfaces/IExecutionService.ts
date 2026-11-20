@@ -14,7 +14,7 @@ export enum Status {
 export interface ExecutionJob {
     id: string;
     status: Status;
-    result?: any;
+    result?: unknown;
     error?: string;
 }
 

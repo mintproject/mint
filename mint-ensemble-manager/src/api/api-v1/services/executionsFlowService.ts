@@ -253,7 +253,7 @@ const executionsFlowService: FlowThreadService = {
                     url: output.url
                 };
             }
-            execution.results = results as unknown as Execution["results"];
+            execution.results = results;
             await updateExecutionStatusResultsAndSummary(execution, threadModelId);
         })();
         finishing.set(executionId, work);

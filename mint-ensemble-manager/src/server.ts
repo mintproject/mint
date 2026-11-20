@@ -1,5 +1,5 @@
 import bodyParser from "body-parser";
-import express, { Request, Response, ErrorRequestHandler } from "express";
+import express from "express";
 import cors from "cors";
 import { createBullBoard } from "@bull-board/api";
 import { BullAdapter } from "@bull-board/api/bullAdapter";

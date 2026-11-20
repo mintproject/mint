@@ -29,6 +29,254 @@ import * as crypto from "crypto";
 import { UnifiedExecutionError } from "@/classes/common/errors";
 import { KeycloakAdapter } from "@/config/keycloak-adapter";
 
+// Rows as the GraphQL queries return them. A query selects some of a table's
+// columns, so every field is optional and only the ones read here are named.
+interface EventRow {
+    event?: string;
+    userid?: string;
+    timestamp?: string;
+    notes?: string;
+}
+
+interface PermissionRow {
+    user_id?: string;
+    read?: boolean;
+    write?: boolean;
+    execute?: boolean;
+}
+
+interface RegionRow {
+    id?: string;
+    name?: string;
+    category_id?: string;
+    geometries?: Array<{ geometry: unknown }>;
+    model_catalog_uri?: string;
+}
+
+interface VariableRow {
+    id?: string;
+    name?: string;
+    categories?: Array<{ category: string }>;
+    is_adjustment_variable?: boolean;
+    is_indicator?: boolean;
+    description?: string;
+    intervention?: Variable["intervention"];
+}
+
+interface ResourceRow {
+    id?: string;
+    name?: string;
+    url?: string;
+    spatial_coverage?: string;
+    start_date?: string;
+    end_date?: string;
+}
+
+interface DatasliceRow {
+    id?: string;
+    dataset?: {
+        id?: string;
+        name?: string;
+        start_date?: string;
+        end_date?: string;
+        resource_count?: number;
+    };
+    total_resources?: { aggregate?: { count?: number } };
+    selected_resources?: { aggregate?: { count?: number } };
+    resources?: Array<{ selected?: boolean; resource?: ResourceRow }>;
+}
+
+interface PresentationRow {
+    presentation?: { has_standard_variable?: unknown };
+}
+
+/** A parameter of a catalog model configuration. */
+interface CatalogParameterRow {
+    id?: string;
+    label?: string;
+    description?: string;
+    parameter_type?: string;
+    has_data_type?: string;
+    has_minimum_accepted_value?: string;
+    has_maximum_accepted_value?: string;
+    has_default_value?: string;
+    has_fixed_value?: string;
+    has_accepted_values?: unknown[];
+    usage_notes?: string;
+    position?: number;
+}
+
+/** An input or output of a catalog model configuration, alone or in its junction row. */
+interface CatalogIORow {
+    id?: string;
+    label?: string;
+    has_format?: string;
+    position?: number;
+    presentations?: PresentationRow[];
+    is_optional?: boolean;
+    app_input_name?: string | null;
+    archived_file?: string | null;
+    input?: CatalogIORow;
+    output?: CatalogIORow;
+}
+
+interface ConfigurationRow {
+    id?: string;
+    label?: string;
+    description?: string;
+    model_configuration_id?: string;
+    has_software_image?: string;
+    has_component_location?: string;
+    parameters?: Array<{ parameter: CatalogParameterRow }>;
+    inputs?: CatalogIORow[];
+    outputs?: CatalogIORow[];
+}
+
+interface DataBindingRow {
+    model_io?: { id?: string; name?: string };
+    model_io_id?: string;
+    dataslice_id?: string;
+    resource?: ResourceRow;
+}
+
+interface ParameterBindingRow {
+    modelcatalog_parameter?: { id?: string; label?: string };
+    model_parameter_id?: string;
+    parameter_value?: string;
+}
+
+interface ExecutionResultRow {
+    model_output?: { name?: string };
+    model_io_id?: string;
+    resource?: ResourceRow;
+}
+
+interface ExecutionSummaryRow {
+    total_runs?: number;
+    submitted_runs?: number;
+    successful_runs?: number;
+    failed_runs?: number;
+    ingested_runs?: number;
+    registered_runs?: number;
+    published_runs?: number;
+    submission_time?: Date;
+    submitted_for_execution?: boolean;
+    fetched_run_outputs?: number;
+    submitted_for_ingestion?: boolean;
+    submitted_for_publishing?: boolean;
+    submitted_for_registration?: boolean;
+}
+
+interface ThreadModelRow {
+    id?: string;
+    modelcatalog_configuration?: ConfigurationRow;
+    data_bindings?: DataBindingRow[];
+    parameter_bindings?: ParameterBindingRow[];
+    execution_summary?: ExecutionSummaryRow[];
+}
+
+interface ThreadRow {
+    id?: string;
+    task_id?: string;
+    name?: string;
+    dataset_id?: string;
+    start_date?: string;
+    end_date?: string;
+    region_id?: string;
+    driving_variable_id?: string | null;
+    response_variable_id?: string | null;
+    events?: EventRow[];
+    permissions?: PermissionRow[];
+    thread_data?: Array<{ dataslice: DatasliceRow }>;
+    thread_models?: ThreadModelRow[];
+}
+
+interface TaskRow {
+    id?: string;
+    problem_statement_id?: string;
+    region_id?: string;
+    name?: string;
+    start_date?: string;
+    end_date?: string;
+    driving_variable_id?: string | null;
+    response_variable_id?: string | null;
+    events?: EventRow[];
+    permissions?: PermissionRow[];
+    threads?: ThreadRow[];
+}
+
+interface ProblemStatementRow {
+    id?: string;
+    name?: string;
+    start_date?: string;
+    end_date?: string;
+    events?: EventRow[];
+    permissions?: PermissionRow[];
+    tasks?: TaskRow[];
+    preview?: string[];
+}
+
+export interface ExecutionRow {
+    id: string;
+    modelcatalog_configuration_id?: string;
+    status?: Execution["status"];
+    start_time?: string;
+    end_time?: string;
+    execution_engine?: Execution["execution_engine"];
+    run_progress?: number;
+    run_id?: string;
+    parameter_bindings?: ParameterBindingRow[];
+    data_bindings?: DataBindingRow[];
+    results?: ExecutionResultRow[];
+}
+
+interface ParameterRow {
+    id?: string;
+    name?: string;
+    type?: string;
+    accepted_values?: string[];
+    adjustment_variable?: string;
+    default?: string;
+    description?: string;
+    max?: string;
+    min?: string;
+    unit?: string;
+    fixed_value?: string;
+    position?: number;
+}
+
+/** A result of an execution, ready to insert with its resource. */
+interface ExecutionResultInsert {
+    model_io_id: string;
+    resource: {
+        data: {
+            id: string;
+            dcid: string;
+            name: string;
+            url: string;
+            spatial_coverage?: unknown;
+            start_date?: unknown;
+            end_date?: unknown;
+        };
+        on_conflict: { constraint: string; update_columns: string[] };
+    };
+    execution_id?: string;
+}
+
+/** An execution, ready to insert with its bindings and results. */
+interface ExecutionInsert {
+    id: string;
+    modelcatalog_configuration_id: string;
+    status: Execution["status"];
+    start_time: Date;
+    execution_engine: Execution["execution_engine"];
+    run_progress: number;
+    run_id: string;
+    parameter_bindings: { data: Array<{ model_parameter_id: string; parameter_value: string }> };
+    data_bindings: { data: Array<{ model_io_id: string; resource_id: string }> };
+    results: { data: ExecutionResultInsert[] };
+}
+
 export const uuidv4 = () => {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
         const r = (Math.random() * 16) | 0,
@@ -78,7 +326,7 @@ export const regionToGQL = (region: Region) => {
     return regionobj;
 };
 
-export const regionFromGQL = (regionobj: any): Region => {
+export const regionFromGQL = (regionobj: RegionRow): Region => {
     const region = {
         id: regionobj.id,
         name: regionobj.name,
@@ -89,7 +337,7 @@ export const regionFromGQL = (regionobj: any): Region => {
     return region;
 };
 
-export const variableFromGQL = (varobj: any) => {
+export const variableFromGQL = (varobj: VariableRow) => {
     const variable = {
         id: varobj.id,
         name: varobj.name,
@@ -115,7 +363,7 @@ export const eventToGQL = (event: MintEvent) => {
     return eventobj;
 };
 
-export const eventFromGQL = (eventobj: any): MintEvent => {
+export const eventFromGQL = (eventobj: EventRow): MintEvent => {
     const event = {
         event: eventobj.event,
         userid: eventobj.userid,
@@ -125,7 +373,7 @@ export const eventFromGQL = (eventobj: any): MintEvent => {
     return event;
 };
 
-export const permissionFromGQL = (permobj: any): MintPermission => {
+export const permissionFromGQL = (permobj: PermissionRow): MintPermission => {
     const permission = {
         userid: permobj.user_id,
         read: permobj.read ?? false,
@@ -186,7 +434,7 @@ export const problemStatementUpdateToGQL = (problem_statement: ProblemStatementI
     return problemobj;
 };
 
-export const problemStatementFromGQL = (problem: any): ProblemStatement => {
+export const problemStatementFromGQL = (problem: ProblemStatementRow): ProblemStatement => {
     const details = {
         id: problem["id"],
         name: problem["name"],
@@ -200,7 +448,7 @@ export const problemStatementFromGQL = (problem: any): ProblemStatement => {
         preview: problem["preview"]
     } as ProblemStatement;
     if (problem["tasks"] && problem["tasks"].length > 0) {
-        problem["tasks"].forEach((task: any) => {
+        problem["tasks"].forEach((task) => {
             const fbtask = taskFromGQL(task);
             fbtask.problem_statement_id = problem["id"];
             details.tasks[fbtask.id] = fbtask;
@@ -270,7 +518,7 @@ export const taskUpdateToGQL = (task: Task) => {
     return taskGQL;
 };
 
-export const taskFromGQL = (task: any): Task => {
+export const taskFromGQL = (task: TaskRow): Task => {
     const taskobj = {
         id: task["id"],
         problem_statement_id: task["problem_statement_id"],
@@ -287,7 +535,7 @@ export const taskFromGQL = (task: any): Task => {
         permissions: "permissions" in task ? task["permissions"].map(permissionFromGQL) : []
     } as Task;
     if (task["threads"]) {
-        task["threads"].forEach((thread: any) => {
+        task["threads"].forEach((thread) => {
             const fbthread = threadInfoFromGQL(thread);
             fbthread.task_id = task["id"];
             taskobj.threads[fbthread.id] = fbthread;
@@ -346,7 +594,7 @@ export const threadInfoUpdateToGQL = (thread: ThreadInfo) => {
     return threadobj;
 };
 
-export const threadInfoFromGQL = (thread: any) => {
+export const threadInfoFromGQL = (thread: ThreadRow) => {
     return {
         id: thread["id"],
         name: thread["name"],
@@ -363,7 +611,7 @@ export const threadInfoFromGQL = (thread: any) => {
     } as ThreadInfo;
 };
 
-export const threadFromGQL = (thread: any) => {
+export const threadFromGQL = (thread: ThreadRow) => {
     const fbthread = {
         id: thread["id"],
         task_id: thread["task_id"],
@@ -384,13 +632,13 @@ export const threadFromGQL = (thread: any) => {
         model_ensembles: {}
     } as Thread;
 
-    thread["thread_data"].forEach((tm: any) => {
+    thread["thread_data"].forEach((tm) => {
         const m = tm["dataslice"];
         const dataslice: Dataslice = datasliceFromGQL(m);
         fbthread.data[dataslice.id] = dataslice;
     });
 
-    thread["thread_models"].forEach((tm: any) => {
+    thread["thread_models"].forEach((tm) => {
         const m = tm["modelcatalog_configuration"];
         const model: Model = modelFromGQL(m);
 
@@ -410,7 +658,7 @@ export const threadFromGQL = (thread: any) => {
     return fbthread;
 };
 
-export const threadModelExecutionSummaryFromGQL = (tmex: any) => {
+export const threadModelExecutionSummaryFromGQL = (tmex: ExecutionSummaryRow) => {
     return {
         total_runs: tmex["total_runs"],
         submitted_runs: tmex["submitted_runs"],
@@ -443,7 +691,7 @@ export const getTotalConfigs = (model: Model, bindings: ModelIOBindings, thread:
                 totalconfigs *= numresources;
             }
         } else {
-            totalconfigs *= (io.value.resources as any[]).length;
+            totalconfigs *= io.value.resources.length;
         }
     });
 
@@ -455,14 +703,14 @@ export const getTotalConfigs = (model: Model, bindings: ModelIOBindings, thread:
     return totalconfigs;
 };
 
-export const datasliceFromGQL = (d: any) => {
+export const datasliceFromGQL = (d: DatasliceRow) => {
     const ds = d["dataset"];
     return {
         id: d["id"],
         name: ds["name"],
         total_resources: d["total_resources"]?.aggregate?.count ?? 0,
         selected_resources: d["selected_resources"]?.aggregate?.count ?? 0,
-        resources: (d["resources"] ?? []).map((resobj: any) => {
+        resources: (d["resources"] ?? []).map((resobj) => {
             const res = resourceFromGQL(resobj["resource"]);
             res.selected = resobj["selected"];
             return res;
@@ -477,18 +725,23 @@ export const datasliceFromGQL = (d: any) => {
             id: ds["id"],
             name: ds["name"]
         } as Dataset
-    } as Dataslice;
+        // The dates arrive as the strings the query returned; consumers parse them.
+    } as unknown as Dataslice;
 };
 
 export const SECRET_PARAMETER_TYPE = "secret";
 
-const isSecretParameterRow = (p: any): boolean => p?.parameter_type === SECRET_PARAMETER_TYPE;
+const isSecretParameterRow = (p: CatalogParameterRow): boolean =>
+    p?.parameter_type === SECRET_PARAMETER_TYPE;
 
 const SECRET_NAME_PATTERN = /^[a-z0-9_-]{1,64}$/;
 const SECRET_ENV_ENTRY_PATTERN = /^([a-z0-9_]{1,32})=([A-Z][A-Z0-9_]{0,63})$/;
 const SECRET_SOURCES: ModelSecretSource[] = ["owner_only", "user_then_owner", "user_only"];
 
-const invalidSecretDeclaration = (p: any, reason: string): UnifiedExecutionError => {
+const invalidSecretDeclaration = (
+    p: CatalogParameterRow,
+    reason: string
+): UnifiedExecutionError => {
     const message = `Secret parameter "${p?.label || p?.id}" is invalid: ${reason}`;
     console.error(message);
     return new UnifiedExecutionError(422, message, "SECRET_DECLARATION_INVALID");
@@ -498,14 +751,14 @@ const invalidSecretDeclaration = (p: any, reason: string): UnifiedExecutionError
 // holds "<field>=<ENV_KEY>" entries; usage_notes may carry "source=<value>".
 // Validation mirrors the adapter's, and fails at descriptor build time rather
 // than coercing a malformed declaration.
-export const modelSecretFromCatalogGQL = (p: any): ModelSecretDeclaration => {
+export const modelSecretFromCatalogGQL = (p: CatalogParameterRow): ModelSecretDeclaration => {
     const name = String(p.label || p.id || "").trim();
     if (!SECRET_NAME_PATTERN.test(name)) {
         throw invalidSecretDeclaration(p, `name must match ${SECRET_NAME_PATTERN}`);
     }
     const env: Record<string, string> = {};
     const envKeys = new Set<string>();
-    (Array.isArray(p.has_accepted_values) ? p.has_accepted_values : []).forEach((entry: any) => {
+    (Array.isArray(p.has_accepted_values) ? p.has_accepted_values : []).forEach((entry) => {
         const match = SECRET_ENV_ENTRY_PATTERN.exec(String(entry).trim());
         if (!match) {
             throw invalidSecretDeclaration(
@@ -543,10 +796,10 @@ const sortByPosition = (ios: ModelIO[]): ModelIO[] =>
         (a, b) => (a.position ?? 0) - (b.position ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
     );
 
-export const modelFromGQL = (config: any): Model => {
+export const modelFromGQL = (config: ConfigurationRow): Model => {
     // Secret rows are removed from the parameter stream here, once, so no
     // downstream consumer (bindings, seeds, job args) ever sees them.
-    const parameterRows = (config.parameters || []).map((row: any) => row.parameter);
+    const parameterRows = (config.parameters || []).map((row) => row.parameter);
     return {
         id: config.id,
         name: config.label || config.id,
@@ -556,23 +809,21 @@ export const modelFromGQL = (config: any): Model => {
         model_configuration: config.model_configuration_id || null,
         software_image: config.has_software_image || "",
         code_url: config.has_component_location || "",
-        input_files: sortByPosition(
-            (config.inputs || []).map((row: any) => modelIOFromCatalogGQL(row))
-        ),
+        input_files: sortByPosition((config.inputs || []).map((row) => modelIOFromCatalogGQL(row))),
         output_files: sortByPosition(
-            (config.outputs || []).map((row: any) => modelIOFromCatalogGQL(row, "output"))
+            (config.outputs || []).map((row) => modelIOFromCatalogGQL(row, "output"))
         ),
         input_parameters: parameterRows
-            .filter((p: any) => !isSecretParameterRow(p))
-            .map((p: any) => modelParameterFromCatalogGQL(p)),
+            .filter((p) => !isSecretParameterRow(p))
+            .map((p) => modelParameterFromCatalogGQL(p)),
         required_secrets: parameterRows.filter(isSecretParameterRow).map(modelSecretFromCatalogGQL)
     } as Model;
 };
 
 // Distinct standard variable IRIs of a dataset specification's presentations.
-const standardVariablesFromPresentations = (presentations: any): string[] => {
+const standardVariablesFromPresentations = (presentations: unknown): string[] => {
     const uris = (Array.isArray(presentations) ? presentations : [])
-        .map((row: any) => row?.presentation?.has_standard_variable)
+        .map((row: PresentationRow) => row?.presentation?.has_standard_variable)
         .filter((uri: unknown): uri is string => typeof uri === "string" && uri.length > 0);
     return Array.from(new Set(uris));
 };
@@ -580,7 +831,7 @@ const standardVariablesFromPresentations = (presentations: any): string[] => {
 // Maps a catalog input/output junction row.
 // junctionRow has shape { input: {...}, is_optional: boolean } for inputs,
 // or { output: {...} } for outputs (is_optional not present on output junction).
-export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): ModelIO => {
+export const modelIOFromCatalogGQL = (junctionRow: CatalogIORow, entityKey?: string): ModelIO => {
     const key = entityKey ?? "input";
     const io = junctionRow[key] ?? junctionRow;
     return {
@@ -601,7 +852,7 @@ export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): Mod
 };
 
 // Maps a catalog parameter from the unified modelcatalog_configuration junction shape
-export const modelParameterFromCatalogGQL = (p: any): ModelParameter => {
+export const modelParameterFromCatalogGQL = (p: CatalogParameterRow): ModelParameter => {
     return {
         id: p.id,
         name: p.label || p.id,
@@ -617,7 +868,7 @@ export const modelParameterFromCatalogGQL = (p: any): ModelParameter => {
     } as ModelParameter;
 };
 
-export const modelParameterFromGQL = (p: any) => {
+export const modelParameterFromGQL = (p: ParameterRow) => {
     return {
         id: p["id"],
         name: p["name"],
@@ -634,7 +885,10 @@ export const modelParameterFromGQL = (p: any) => {
     } as ModelParameter;
 };
 
-export const modelEnsembleFromGQL = (dbs: any[], pbs: any[]): ModelIOBindings => {
+export const modelEnsembleFromGQL = (
+    dbs: DataBindingRow[],
+    pbs: ParameterBindingRow[]
+): ModelIOBindings => {
     const bindings = {} as ModelIOBindings;
     dbs.forEach((db) => {
         let binding = bindings[db["model_io"]["id"]];
@@ -651,7 +905,7 @@ export const modelEnsembleFromGQL = (dbs: any[], pbs: any[]): ModelIOBindings =>
     return bindings;
 };
 
-export const executionToGQL = (ex: Execution): any => {
+export const executionToGQL = (ex: Execution): ExecutionInsert => {
     const exobj = {
         id: ex.id,
         modelcatalog_configuration_id: ex.modelid,
@@ -661,13 +915,13 @@ export const executionToGQL = (ex: Execution): any => {
         run_progress: ex.run_progress,
         run_id: ex.runid,
         parameter_bindings: {
-            data: [] as any
+            data: [] as ExecutionInsert["parameter_bindings"]["data"]
         },
         data_bindings: {
-            data: [] as any
+            data: [] as ExecutionInsert["data_bindings"]["data"]
         },
         results: {
-            data: [] as any
+            data: [] as ExecutionResultInsert[]
         }
     };
     Object.keys(ex.bindings).forEach((ioid) => {
@@ -689,9 +943,9 @@ export const executionToGQL = (ex: Execution): any => {
     return exobj;
 };
 
-export const executionFromGQL = (ex: any, emulator = false): Execution => {
+export const executionFromGQL = (ex: ExecutionRow, emulator = false): Execution => {
     const exobj = {
-        id: ex.id.replace(/\-/g, ""),
+        id: ex.id.replace(/-/g, ""),
         modelid: ex.modelcatalog_configuration_id,
         status: ex.status,
         start_time: new Date(ex.start_time),
@@ -702,11 +956,11 @@ export const executionFromGQL = (ex: any, emulator = false): Execution => {
         bindings: {},
         results: {}
     } as Execution;
-    ex.parameter_bindings.forEach((param: any) => {
+    ex.parameter_bindings.forEach((param) => {
         exobj.bindings[emulator ? param.modelcatalog_parameter.label : param.model_parameter_id] =
             param.parameter_value;
     });
-    ex.data_bindings.forEach((data: any) => {
+    ex.data_bindings.forEach((data) => {
         const key = emulator ? data.model_io.name : data.model_io_id;
         const resource = data.resource as DataResource;
         const held = exobj.bindings[key];
@@ -715,7 +969,7 @@ export const executionFromGQL = (ex: any, emulator = false): Execution => {
             ? [...(Array.isArray(held) ? held : [held as DataResource]), resource]
             : resource;
     });
-    ex.results.forEach((data: any) => {
+    ex.results.forEach((data) => {
         exobj.results[emulator ? data.model_output.name : data.model_io_id] =
             data.resource as DataResource;
     });
@@ -733,7 +987,7 @@ export const resourceToGQL = (resource: DataResource) => {
     return resourceobj;
 };
 
-export const resourceFromGQL = (resourceobj: any): DataResource => {
+export const resourceFromGQL = (resourceobj: ResourceRow): DataResource => {
     const resource = {
         id: resourceobj.id,
         name: resourceobj.name,
@@ -855,7 +1109,7 @@ const getDates = (dates) => {
     };
 };
 
-const getResourceData = (data) => {
+const getResourceData = (data: DataResource) => {
     const dates = getDates(data["time_period"]);
     return {
         data: {
@@ -961,10 +1215,11 @@ export const threadParameterBindingsToGQL = (model_ensemble: ModelEnsembleMap, t
     return thread_model_params;
 };
 
-export const executionResultsToGQL = (results: any) => {
-    const data: any = [];
+export const executionResultsToGQL = (results: Execution["results"]) => {
+    const data: ExecutionResultInsert[] = [];
+    const keyed = results as Record<string, DataResource>;
     Object.keys(results).forEach((outid) => {
-        const result = results[outid];
+        const result = keyed[outid];
         data.push({
             model_io_id: outid,
             resource: getResourceData(result)
@@ -974,7 +1229,7 @@ export const executionResultsToGQL = (results: any) => {
 };
 
 export const executionResultsToGQLv2 = (results: Execution_Result[]) => {
-    const data: any = [];
+    const data: ExecutionResultInsert[] = [];
     Object.keys(results).forEach((outid) => {
         const result = results[outid];
         data.push({

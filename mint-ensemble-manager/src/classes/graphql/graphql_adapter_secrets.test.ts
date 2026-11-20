@@ -6,7 +6,7 @@ import {
 import { UnifiedExecutionError } from "@/classes/common/errors";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { getInputsParameters } from "@/classes/tapis/helpers";
-import { Model, Region } from "@/classes/mint/mint-types";
+import { Model, Region, ModelEnsembleMap, Thread } from "@/classes/mint/mint-types";
 import { MockExecutionService } from "@/classes/common/__tests__/mocks/MockExecutionService";
 
 jest.mock("@/classes/mint/mint-functions", () => ({
@@ -34,6 +34,12 @@ const catalogConfig = {
     label: "SUBSIDE",
     parameters: [{ parameter: plainRow }, { parameter: secretRow }]
 };
+
+/** The private steps of ExecutionCreation that the test reaches into. */
+interface CreationInternals {
+    loadComponentFromTapis: (...args: unknown[]) => Promise<unknown>;
+    getModelDetails: (model: unknown) => Promise<{ inputs: Array<{ id: string }> }>;
+}
 
 describe("secret catalog parameters", () => {
     let model: Model;
@@ -84,7 +90,7 @@ describe("secret catalog parameters", () => {
         expect.assertions(3);
         try {
             modelSecretFromCatalogGQL({ ...secretRow, ...override });
-        } catch (error: any) {
+        } catch (error) {
             expect(error).toMatchObject({ statusCode: 422, code: "SECRET_DECLARATION_INVALID" });
         }
         expect(() => modelSecretFromCatalogGQL({ ...secretRow, ...override })).toThrow(
@@ -97,7 +103,10 @@ describe("secret catalog parameters", () => {
     test("getInputsParameters never sees the secret", () => {
         const { parameters, parameterTypes } = getInputsParameters(
             model,
-            { "param/earthdata": ["x"], "param/start_date": ["2024-02-02"] } as any,
+            {
+                "param/earthdata": ["x"],
+                "param/start_date": ["2024-02-02"]
+            } as unknown as Parameters<typeof getInputsParameters>[1],
             {} as Region
         );
         expect(Object.keys(parameters)).toEqual(["param/start_date"]);
@@ -105,7 +114,7 @@ describe("secret catalog parameters", () => {
     });
 
     test("a binding for a secret parameter id is ignored when persisting thread bindings", () => {
-        const thread = { models: { [model.id]: model } } as any;
+        const thread = { models: { [model.id]: model } } as unknown as Thread;
         const bindings = threadParameterBindingsToGQL(
             {
                 [model.id]: {
@@ -115,7 +124,7 @@ describe("secret catalog parameters", () => {
                         "param/earthdata": ["hunter2"]
                     }
                 }
-            } as any,
+            } as unknown as ModelEnsembleMap,
             thread
         );
         expect(bindings).toEqual([
@@ -129,20 +138,21 @@ describe("secret catalog parameters", () => {
 
     test("ExecutionCreation.getModelDetails excludes the secret from component inputs", async () => {
         const creation = new ExecutionCreation(
-            { models: {}, model_ensembles: {} } as any,
+            { models: {}, model_ensembles: {} } as unknown as Thread,
             model.id,
             new MockExecutionService([])
         );
-        jest.spyOn(creation as any, "loadComponentFromTapis").mockResolvedValue({
+        const internals = creation as unknown as CreationInternals;
+        jest.spyOn(internals, "loadComponentFromTapis").mockResolvedValue({
             id: "comp",
             version: "1"
         });
-        const component = await (creation as any).getModelDetails({
+        const component = await internals.getModelDetails({
             ...model,
             code_url: "tapis://app",
             input_files: [],
             output_files: []
         });
-        expect(component.inputs.map((i: any) => i.id)).toEqual(["param/start_date"]);
+        expect(component.inputs.map((i) => i.id)).toEqual(["param/start_date"]);
     });
 });

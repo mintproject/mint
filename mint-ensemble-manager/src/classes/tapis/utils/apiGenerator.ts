@@ -1,20 +1,20 @@
 type BaseApiClass = {
-    new (...args: any[]): any;
+    new (...args: unknown[]): unknown;
 };
 
 type ApiModule = {
     Configuration: {
-        new (...args: any[]): any;
+        new (...args: unknown[]): unknown;
     };
 };
 
-const apiGenerator = <T extends unknown>(
+const apiGenerator = <T>(
     module: ApiModule,
     api: BaseApiClass,
     basePath: string,
     jwt: string | null
 ): T => {
-    const headers: any = {};
+    const headers: Record<string, string> = {};
     if (jwt) {
         headers["X-Tapis-Token"] = jwt;
     }
@@ -27,7 +27,7 @@ const apiGenerator = <T extends unknown>(
     });
 
     // Create an instance of the API
-    const result: T = new api(configuration);
+    const result = new api(configuration) as T;
     return result;
 };
 

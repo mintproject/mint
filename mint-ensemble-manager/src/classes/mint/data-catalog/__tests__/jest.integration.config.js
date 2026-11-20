@@ -1,3 +1,4 @@
+/* eslint-env node, jest */
 module.exports = {
     preset: "ts-jest",
     testEnvironment: "node",

@@ -14,17 +14,18 @@ const errorDecoder = async <T>(func: () => Promise<T>) => {
     } catch (error) {
         // If an exception occurred, try to decode the json response from it and
         // rethrow it
-        if ((error as any).json) {
-            const decoded = await (error as any).json();
-            if (error.status == 404) {
+        const failure = error as { json?: () => Promise<{ message: string }>; status?: number };
+        if (failure.json) {
+            const decoded = await failure.json();
+            if (failure.status == 404) {
                 throw new NotFoundError(decoded.message);
-            } else if (error.status == 401) {
+            } else if (failure.status == 401) {
                 throw new UnauthorizedError(decoded.message);
-            } else if (error.status == 403) {
+            } else if (failure.status == 403) {
                 throw new ForbiddenError(decoded.message);
-            } else if (error.status == 400) {
+            } else if (failure.status == 400) {
                 throw new BadRequestError(decoded.message);
-            } else if (error.status == 500) {
+            } else if (failure.status == 500) {
                 throw new InternalServerError(decoded.message);
             } else {
                 throw new Error(decoded.message);

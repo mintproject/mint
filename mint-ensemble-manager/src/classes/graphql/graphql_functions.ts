@@ -93,18 +93,19 @@ import {
     getMd5Hash,
     regionFromGQL,
     eventToGQL,
-    modelFromGQL
+    modelFromGQL,
+    ExecutionRow
 } from "./graphql_adapter";
 
 // Minimal interfaces for functions that accept model catalog data shapes
 interface CatalogModelInput {
     id: string;
-    hasFixedResource?: any[];
+    hasFixedResource?: unknown[];
 }
 
 interface CatalogModelParameter {
     id: string;
-    hasFixedValue?: any[];
+    hasFixedValue?: unknown[];
 }
 
 interface CatalogModelSetup {
@@ -288,7 +289,7 @@ export const getTotalConfigurations = (
             // Expand a dataset to it's constituent resources
             // FIXME: Create a collection if the model input has dimensionality of 1
             if (bindings[io.id]) {
-                let nexecution: any[] = [];
+                let nexecution: DataResource[] = [];
                 bindings[io.id].map((dsid) => {
                     const ds = data[dsid];
                     let selected_resources = ds.resources.filter((res) => res.selected);
@@ -300,7 +301,7 @@ export const getTotalConfigurations = (
                 totalconfigs *= nexecution.length;
             }
         } else {
-            totalconfigs *= (io.hasFixedResource as any[]).length;
+            totalconfigs *= io.hasFixedResource.length;
         }
     });
 
@@ -313,16 +314,16 @@ export const getTotalConfigurations = (
     return totalconfigs;
 };
 
-const cartProd = (lists: any[]) => {
-    let ps: any[] = [],
-        acc: any[][] = [[]],
+const cartProd = <T>(lists: T[][]): T[][] => {
+    let ps: T[][] = [],
+        acc: T[][] = [[]],
         i = lists.length;
     while (i--) {
-        let subList = lists[i],
-            j = subList.length;
+        const subList = lists[i];
+        let j = subList.length;
         while (j--) {
-            let x = subList[j],
-                k = acc.length;
+            const x = subList[j];
+            let k = acc.length;
             while (k--) ps.push([x].concat(acc[k]));
         }
         acc = ps;
@@ -333,7 +334,7 @@ const cartProd = (lists: any[]) => {
 
 export const getModelInputConfigurations = (threadModel: ThreadModelMap, inputIds: string[]) => {
     const dataBindings = threadModel.bindings;
-    const inputBindings: any[] = [];
+    const inputBindings: string[][] = [];
     let totalproducts = 1;
     inputIds.map((inputid) => {
         inputBindings.push(dataBindings[inputid]);
@@ -352,7 +353,7 @@ export const getModelInputBindings = (model: Model, thread: Thread, region: Regi
         id: me.id,
         bindings: Object.assign({}, me.bindings)
     } as ThreadModelMap;
-    const inputIds: any[] = [];
+    const inputIds: string[] = [];
 
     model.input_files.map((io) => {
         inputIds.push(io.id);
@@ -360,7 +361,7 @@ export const getModelInputBindings = (model: Model, thread: Thread, region: Regi
             // Expand a dataset to it's constituent "selected" resources
             // FIXME: Create a collection if the model input has dimensionality of 1
             if (threadModel.bindings[io.id]) {
-                let nexecution: any[] = [];
+                let nexecution: DataResource[] = [];
                 threadModel.bindings[io.id].map((dsid) => {
                     const ds = thread.data[dsid];
                     let selected_resources = ds.resources.filter((res) => res.selected);
@@ -368,10 +369,10 @@ export const getModelInputBindings = (model: Model, thread: Thread, region: Regi
                     if (selected_resources.length == 0) selected_resources = ds.resources;
                     nexecution = nexecution.concat(selected_resources);
                 });
-                threadModel.bindings[io.id] = nexecution;
+                threadModel.bindings[io.id] = nexecution as unknown as string[];
             }
         } else {
-            threadModel.bindings[io.id] = io.value.resources as any[];
+            threadModel.bindings[io.id] = io.value.resources as unknown as string[];
         }
     });
 
@@ -448,7 +449,7 @@ export const getExecutions = (executionids: string[]): Promise<Execution[]> => {
                 console.log("ERROR");
                 console.log(result);
             } else {
-                return result.data.execution.map((ex: any) => executionFromGQL(ex));
+                return result.data.execution.map((ex: ExecutionRow) => executionFromGQL(ex));
             }
             return null;
         })
@@ -502,8 +503,8 @@ export const listExistingExecutionIdStatus = (
                 console.log("ERROR");
                 console.log(result);
             } else {
-                const idstatus = {};
-                result.data.execution.forEach((ex: any) => {
+                const idstatus: Record<string, string> = {};
+                result.data.execution.forEach((ex: { id: string; status: string }) => {
                     idstatus[ex["id"].replace(/-/g, "")] = ex["status"];
                 });
             }
@@ -530,7 +531,9 @@ export const listSuccessfulExecutionIds = (executionids: string[]): Promise<stri
                 console.log("ERROR");
                 console.log(result);
             } else {
-                return result.data.execution.map((ex: any) => ex["id"].replace(/-/g, ""));
+                return result.data.execution.map((ex: { id: string }) =>
+                    ex["id"].replace(/-/g, "")
+                );
             }
             return null;
         })
@@ -602,7 +605,7 @@ export const updateExecutionStatusAndResults = (execution: Execution) => {
             end_time: execution.end_time,
             run_progress: execution.run_progress,
             status: execution.status,
-            results: executionResultsToGQL(execution.results).map((exres: any) => {
+            results: executionResultsToGQL(execution.results).map((exres) => {
                 exres["execution_id"] = execution.id;
                 return exres;
             })
@@ -627,11 +630,11 @@ export const updateExecutionStatusResultsAndSummary = (
     }
 ) => {
     const APOLLO_CLIENT = GraphQL.instance(KeycloakAdapter.getUser());
-    const results = executionResultsToGQL(execution.results).map((exres: any) => {
+    const results = executionResultsToGQL(execution.results).map((exres) => {
         exres["execution_id"] = execution.id;
         return exres;
     });
-    if (output && !results.some((result: any) => result.model_io_id === output.model_io_id)) {
+    if (output && !results.some((result) => result.model_io_id === output.model_io_id)) {
         results.push({
             execution_id: execution.id,
             model_io_id: output.model_io_id,
@@ -671,26 +674,26 @@ export const updateExecutionStatusAndResultsv2 = (execution: Execution) => {
     The main difference is that it uses the typing from the `execution.results` (Execution_Result[])
     */
     const APOLLO_CLIENT = GraphQL.instance(KeycloakAdapter.getUser());
-    const resultsData: Execution_Result_Insert_Input[] = execution.results.map(
-        (result: Execution_Result) => {
-            const resource: Execution_Result_Insert_Input = {
-                execution_id: execution.id,
-                resource: {
-                    data: {
-                        id: result.resource.id,
-                        name: result.resource.name,
-                        url: result.resource.url
-                    },
-                    on_conflict: {
-                        constraint: Resource_Constraint.ResourcePkey,
-                        update_columns: [Resource_Update_Column.Name, Resource_Update_Column.Url]
-                    }
+    const resultsData: Execution_Result_Insert_Input[] = (
+        execution.results as Execution_Result[]
+    ).map((result) => {
+        const resource: Execution_Result_Insert_Input = {
+            execution_id: execution.id,
+            resource: {
+                data: {
+                    id: result.resource.id,
+                    name: result.resource.name,
+                    url: result.resource.url
                 },
-                model_io_id: result.model_io?.id
-            };
-            return resource;
-        }
-    );
+                on_conflict: {
+                    constraint: Resource_Constraint.ResourcePkey,
+                    update_columns: [Resource_Update_Column.Name, Resource_Update_Column.Url]
+                }
+            },
+            model_io_id: result.model_io?.id
+        };
+        return resource;
+    });
 
     const variables = {
         id: execution.id,
@@ -745,7 +748,9 @@ export const getThreadModelExecutionIds = async (thread_model_id: string): Promi
                 console.log("ERROR");
                 console.log(result);
             } else {
-                return result.data.thread_model_by_pk.executions.map((ex: any) => ex.execution_id);
+                return result.data.thread_model_by_pk.executions.map(
+                    (ex: { execution_id: string }) => ex.execution_id
+                );
             }
             return null;
         })
@@ -953,10 +958,8 @@ export interface InsertOptions {
  * outcome the caller asked for, so it is not a failure.
  */
 export const isAlreadyPresent = (error: unknown): boolean => {
-    const messages = [
-        (error as any)?.message,
-        ...(((error as any)?.graphQLErrors as { message?: string }[]) || []).map((e) => e?.message)
-    ];
+    const failure = error as { message?: string; graphQLErrors?: { message?: string }[] };
+    const messages = [failure?.message, ...(failure?.graphQLErrors || []).map((e) => e?.message)];
     return messages.some(
         (message) => typeof message === "string" && /affects\s*zero\s*rows/i.test(message)
     );
@@ -1240,7 +1243,7 @@ export const getRegionDetails = (regionid: string) => {
                     reject();
                 } else {
                     const region = regionFromGQL(result.data.region_by_pk);
-                    region.bounding_box = _calculateBoundingBox(region.geometries);
+                    region.bounding_box = _calculateBoundingBox(region.geometries as BoxGeometry[]);
                     resolve(region);
                 }
             })
@@ -1309,19 +1312,25 @@ export const getModelOutputsByModelId = async (modelId: string): Promise<ModelOu
     return mapHasuraOutputsToModelOutputs(model.outputs);
 };
 
-const _calculateBoundingBox = (geometries: any[]) => {
+/** A GeoJSON polygon or multipolygon, as far as the bounding box reads it. */
+interface BoxGeometry {
+    type: string;
+    coordinates: number[][][] | number[][][][];
+}
+
+const _calculateBoundingBox = (geometries: BoxGeometry[]) => {
     let xmin = 99999,
         ymin = 99999,
         xmax = -99999,
         ymax = -99999;
     geometries.forEach((geometry) => {
-        let coords_list = geometry.coordinates;
+        let coords_list = geometry.coordinates as number[][][];
         if (geometry.type == "MultiPolygon") {
-            coords_list = coords_list.flat(1);
+            coords_list = (coords_list as unknown as number[][][][]).flat(1);
         }
 
-        coords_list.map((coords: any) => {
-            coords.map((c: any) => {
+        coords_list.map((coords) => {
+            coords.map((c) => {
                 if (c[0] < xmin) xmin = c[0];
                 if (c[1] < ymin) ymin = c[1];
                 if (c[0] > xmax) xmax = c[0];

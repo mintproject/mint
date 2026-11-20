@@ -17,7 +17,13 @@ const zeroRows = (table: string) => {
 };
 
 const dates = { start_date: new Date("2024-01-01"), end_date: new Date("2024-12-31") };
-const statement = { name: "ps", regionid: "r", dates, events: [], permissions: [] } as any;
+const statement = {
+    name: "ps",
+    regionid: "r",
+    dates,
+    events: [],
+    permissions: []
+} as Parameters<typeof addProblemStatement>[0];
 const task = {
     name: "t",
     dates,
@@ -25,7 +31,7 @@ const task = {
     response_variables: [],
     events: [],
     permissions: []
-} as any;
+} as Parameters<typeof addTask>[1];
 
 const client = (mutate: jest.Mock) =>
     (GraphQL.instanceUsingAccessToken as jest.Mock).mockReturnValue({ mutate });

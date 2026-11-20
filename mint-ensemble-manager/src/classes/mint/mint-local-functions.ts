@@ -2,10 +2,10 @@ import {
     Thread,
     Model,
     ThreadModelMap,
-    ProblemStatement,
     MintPreferences,
     ExecutionSummary,
     Execution,
+    InputBindings,
     Dataset
 } from "./mint-types";
 import {
@@ -127,7 +127,7 @@ export const saveAndRunExecutionsForModelLocally = async (
 
                 // Create executions for this batch
                 bindings.map((binding) => {
-                    const inputBindings: any = {};
+                    const inputBindings: InputBindings = {};
                     for (let j = 0; j < inputIds.length; j++) {
                         inputBindings[inputIds[j]] = binding[j];
                     }
@@ -224,7 +224,6 @@ export const deleteModelInputCacheLocally = (
             // There is a hardcoded value in the model itself
             const resources = io.value.resources;
             if (resources.length > 0) {
-                const type = io.type.replace(/^.*#/, "");
                 resources.map((res) => {
                     if (res.url) {
                         let filename = res.url.replace(/^.*(#|\/)/, "");

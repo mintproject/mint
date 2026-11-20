@@ -1,5 +1,5 @@
 import axios, { AxiosResponse } from "axios";
-import { Dataset, MintPreferences } from "./mint-types";
+import { DataResource, Dataset, MintPreferences } from "./mint-types";
 
 const REGISTER_DATA: string = "/datasets/register_datasets";
 const FIND_STDVARS: string = "/knowledge_graph/find_standard_variables";
@@ -9,6 +9,43 @@ const REGISTER_RESOURCES: string = "/datasets/register_resources";
 const RESOURCE_CHUNK_SIZE: number = 500;
 const SYNC_DSMETA: string = "/datasets/sync_dataset_metadata";
 const PROVENANCE_URL: string = "/provenance/register_provenance";
+
+/** A spatial coverage as a dataset keeps it: a point, a bounding box or a polygon. */
+interface SpatialCover {
+    type: string;
+    value?: {
+        x?: unknown;
+        y?: unknown;
+        xmin?: unknown;
+        xmax?: unknown;
+        ymin?: unknown;
+        ymax?: unknown;
+    };
+    coordinates?: unknown[];
+}
+
+/** A standard variable of the internal data catalog. */
+interface StandardVariable {
+    id?: string;
+    name: string;
+    record_id?: string;
+}
+
+/** A variable of a dataset, as it is registered with its standard variables. */
+interface DatasetVariable {
+    name: string;
+    metadata: Record<string, never>;
+    standard_variable_ids: string[];
+    dataset_id?: string;
+}
+
+/** What the internal data catalog answers to the requests made here. */
+interface CatalogResponse {
+    result?: string;
+    datasets?: Array<{ record_id: string }>;
+    standard_variables?: StandardVariable[];
+    variables?: unknown;
+}
 
 export const registerInternalDataset = async (
     dataset: Dataset,
@@ -43,24 +80,24 @@ export const registerInternalDataset = async (
     return true;
 };
 
-function convertSpatialCoverage(cover: any) {
+function convertSpatialCoverage(cover: SpatialCover) {
     const covertype: string = cover.type.toLowerCase();
     if (covertype === "point") {
         return {
             type: "Point",
             value: {
-                x: parseFloat(cover.value?.x || cover.coordinates[0] || 0),
-                y: parseFloat(cover.value?.y || cover.coordinates[1] || 0)
+                x: parseFloat(String(cover.value?.x || cover.coordinates[0] || 0)),
+                y: parseFloat(String(cover.value?.y || cover.coordinates[1] || 0))
             }
         };
     } else if (covertype === "boundingbox") {
         return {
             type: "BoundingBox",
             value: {
-                xmin: parseFloat(cover.value?.xmin || cover.coordinates[0] || 0),
-                xmax: parseFloat(cover.value?.xmax || cover.coordinates[2] || 0),
-                ymin: parseFloat(cover.value?.ymin || cover.coordinates[1] || 0),
-                ymax: parseFloat(cover.value?.ymax || cover.coordinates[3] || 0)
+                xmin: parseFloat(String(cover.value?.xmin || cover.coordinates[0] || 0)),
+                xmax: parseFloat(String(cover.value?.xmax || cover.coordinates[2] || 0)),
+                ymin: parseFloat(String(cover.value?.ymin || cover.coordinates[1] || 0)),
+                ymax: parseFloat(String(cover.value?.ymax || cover.coordinates[3] || 0))
             }
         };
     } else if (covertype === "polygon") {
@@ -96,12 +133,15 @@ async function createDataset(dataset: Dataset, prefs: MintPreferences): Promise<
     return null;
 }
 
-async function createStandardVariables(variables: any, prefs: MintPreferences): Promise<any> {
+async function createStandardVariables(
+    variables: string[],
+    prefs: MintPreferences
+): Promise<DatasetVariable[]> {
     const dcat = prefs.data_catalog_api;
     const provid = prefs.data_catalog_extra.owner_provenance_id;
 
     if (!variables || variables.length === 0) {
-        return {};
+        return [];
     }
 
     const stdvars = variables.map((dsvar: string) => {
@@ -118,14 +158,14 @@ async function createStandardVariables(variables: any, prefs: MintPreferences): 
     };
     const findResult = await submitRequest(dcat + FIND_STDVARS, findExistingJson);
 
-    const curStdVars: { [key: string]: any } = {};
+    const curStdVars: { [key: string]: StandardVariable } = {};
     if (findResult && findResult["standard_variables"].length > 0) {
-        findResult["standard_variables"].forEach((stdvar: any) => {
+        findResult["standard_variables"].forEach((stdvar) => {
             curStdVars[stdvar["name"]] = stdvar;
         });
     }
 
-    const newStdVars = stdvars.filter((stdvar: any) => !(stdvar["name"] in curStdVars));
+    const newStdVars = stdvars.filter((stdvar) => !(stdvar["name"] in curStdVars));
     if (newStdVars.length > 0) {
         const registerJson = {
             standard_variables: newStdVars,
@@ -133,15 +173,15 @@ async function createStandardVariables(variables: any, prefs: MintPreferences): 
         };
         const registerResult = await submitRequest(dcat + REGISTER_STDVARS, registerJson);
         if (registerResult && registerResult["standard_variables"].length > 0) {
-            registerResult["standard_variables"].forEach((stdvar: any) => {
+            registerResult["standard_variables"].forEach((stdvar) => {
                 stdvar["id"] = stdvar["record_id"];
                 curStdVars[stdvar["name"]] = stdvar;
             });
         }
     }
 
-    const newDsVars = variables.map((dsvar: any) => {
-        const newDsVar = {
+    const newDsVars = variables.map((dsvar) => {
+        const newDsVar: DatasetVariable = {
             name: "ds_" + dsvar,
             metadata: {},
             standard_variable_ids: [curStdVars[dsvar]?.["id"]]
@@ -154,13 +194,13 @@ async function createStandardVariables(variables: any, prefs: MintPreferences): 
 
 async function createDatasetVariables(
     datasetId: string,
-    datasetVariables: any,
+    datasetVariables: DatasetVariable[],
     prefs: MintPreferences
-): Promise<any> {
+): Promise<unknown> {
     const dcat = prefs.data_catalog_api;
 
     if (datasetId && datasetVariables && datasetVariables.length > 0) {
-        datasetVariables.forEach((dsvar: any) => {
+        datasetVariables.forEach((dsvar) => {
             dsvar["dataset_id"] = datasetId;
         });
         const response = await submitRequest(dcat + REGISTER_DSVARS, {
@@ -190,13 +230,14 @@ async function createProvenanceId(provenanceId: string, prefs: MintPreferences):
     try {
         const response = await axios.post(dcat + PROVENANCE_URL, provenanceDefinition);
         response.data; // If needed, handle the response data
-    } catch (error: any) {
-        if (error.response) {
+    } catch (error) {
+        const failure = error as { response?: { data: unknown }; message?: string };
+        if (failure.response) {
             // The server responded with a status code outside the 2xx range
-            console.error("Error data:", error.response.data);
+            console.error("Error data:", failure.response.data);
         } else {
             // An error occurred in setting up the request
-            console.error("Error:", error.message);
+            console.error("Error:", failure.message);
         }
         throw error; // Re-throwing the error for the caller to handle
     }
@@ -205,7 +246,7 @@ async function createProvenanceId(provenanceId: string, prefs: MintPreferences):
 async function createResources(
     datasetId: string,
     dataset: Dataset,
-    resources: any,
+    resources: DataResource[],
     prefs: MintPreferences
 ): Promise<void> {
     const dcat = prefs.data_catalog_api;
@@ -213,10 +254,8 @@ async function createResources(
 
     if (datasetId && resources && resources.length > 0) {
         const resourceChunks = divideChunks(resources, RESOURCE_CHUNK_SIZE);
-        let chunkId = 1;
         for (const chunk of resourceChunks) {
             //console.log(`Registering resource chunk ${chunkId}`);
-            chunkId++;
             const chunkList = chunk.map((res) => {
                 return {
                     provenance_id: provid,
@@ -258,7 +297,11 @@ function* divideChunks<T>(array: T[], chunkSize: number): Generator<T[]> {
     }
 }
 
-async function submitRequest(url: string, payload: any, skipReturn: boolean = false): Promise<any> {
+async function submitRequest(
+    url: string,
+    payload: unknown,
+    skipReturn: boolean = false
+): Promise<CatalogResponse | null> {
     try {
         const fullUrl = url;
         const response: AxiosResponse = await axios.post(fullUrl, payload);
@@ -272,7 +315,7 @@ async function submitRequest(url: string, payload: any, skipReturn: boolean = fa
                 console.error(`Response is not success: ${JSON.stringify(result)}`);
             }
         }
-    } catch (error: any) {
+    } catch (error) {
         // Logging the error message
         console.error(error);
         throw error;

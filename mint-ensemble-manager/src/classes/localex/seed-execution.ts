@@ -1,6 +1,5 @@
 import yaml from "js-yaml";
-import fetch from "node-fetch";
-import { basename } from "path";
+import type { Job } from "bull";
 import fs from "fs-extra";
 import { Md5 } from "ts-md5";
 import child_process from "child_process";
@@ -28,6 +27,46 @@ import { KeycloakAdapter } from "@/config/keycloak-adapter";
 import { fetchMintConfig } from "@/classes/mint/mint-functions";
 import { uuidv4 } from "@/classes/graphql/graphql_adapter";
 
+/** An output file of a component run. */
+interface SeedResult extends DataResource {
+    role?: string;
+}
+
+/** An output file of a CWL run: what to name it, and where the run left it. */
+interface CwlOutput {
+    basename: string;
+    path: string;
+}
+
+/** A file given to a CWL run by name. */
+interface CwlValueFile {
+    class: string;
+    location: string;
+}
+
+/** The part of a CWL document that the Kubernetes run reads. */
+interface CwlDocument {
+    hints: { DockerRequirement: { dockerImageId: string } };
+    baseCommand: string | string[];
+    inputs: Record<string, { inputBinding: { prefix: string } }>;
+    outputs: Record<string, { outputBinding: { glob: string } }>;
+}
+
+/** A CWL run as the Kubernetes pod needs it: image, command and its inputs and outputs. */
+interface CwlDetails {
+    image: string;
+    command: string | string[];
+    inputs: Record<string, { prefix: string; value: string | number | boolean | CwlValueFile }>;
+    outputs: Record<string, { glob: string; value: CwlValueFile }>;
+}
+
+/** What a seed job carries: the seed, the local execution settings and the thread model. */
+interface SeedJobData {
+    seed: ComponentSeed;
+    prefs: LocalExecutionPreferences;
+    thread_model_id: string;
+}
+
 const _uploadS3File = (
     filepath: string,
     filekey: string,
@@ -51,14 +90,15 @@ const _uploadS3File = (
         Body: fs.createReadStream(filepath)
     });
 
-    return new Promise<void>(async (resolve, reject) => {
+    // eslint-disable-next-line no-async-promise-executor -- a failed send leaves this pending (kept as is)
+    return new Promise<void>(async (resolve) => {
         const data = await client.send(cmd);
         console.log(data);
         resolve();
     });
 };
 
-module.exports = async (job: any) => {
+module.exports = async (job: Job<SeedJobData>) => {
     // Run the model seed (model config + bindings)
 
     // Clone the job data object
@@ -114,7 +154,7 @@ module.exports = async (job: any) => {
 
         // Set the Input file/parameter arguments for the command
         let time_period: DateRange = null;
-        let spatial_coverage: any = null;
+        let spatial_coverage: string = null;
         comp.inputs.map((input: ComponentArgument) => {
             args.push(input.prefix);
             plainargs.push(input.prefix);
@@ -147,7 +187,7 @@ module.exports = async (job: any) => {
         // Set the output file arguments for the command
         // Create the output file suffix based on a hash of inputs
         const opsuffix = "-" + Md5.hashAsciiStr(seed.execution.modelid + plainargs.join());
-        const results: any = {};
+        const results: Record<string, SeedResult> = {};
         comp.outputs.map((output: ComponentArgument) => {
             args.push(output.prefix);
             const opid = output.id + opsuffix;
@@ -175,7 +215,7 @@ module.exports = async (job: any) => {
         let statusCode = 0;
 
         const cwl_file = comp.rundir + "/run.cwl";
-        let cwl_outputs: any = {};
+        let cwl_outputs: Record<string, CwlOutput> = {};
         let is_cwl = false;
         let relative_outputdir = null;
 
@@ -255,7 +295,7 @@ module.exports = async (job: any) => {
                 });
 
                 let stdout = "";
-                const promise = new Promise<void>(async (resolve, reject) => {
+                const promise = new Promise<void>((resolve) => {
                     spawnResult.on("close", (code) => {
                         statusCode = code;
                         resolve();
@@ -375,7 +415,7 @@ module.exports = async (job: any) => {
             // Process Results
             const uploadOutputPromises = [];
 
-            Object.values(results).map((result: any) => {
+            Object.values(results).map((result) => {
                 // Rename temporary output files to desired output name
                 let desired_output_file = null;
                 let tmp_output_file = null;
@@ -453,20 +493,25 @@ module.exports = async (job: any) => {
     }
 };
 
-const get_details_from_cwl = (comp: Component, seed: any, results: any, cwl_file: string) => {
+const get_details_from_cwl = (
+    comp: Component,
+    seed: ComponentSeed,
+    results: Record<string, SeedResult>,
+    cwl_file: string
+): CwlDetails => {
     const file = fs.readFileSync(cwl_file, "utf8");
-    const cwl = yaml.load(file);
+    const cwl = yaml.load(file) as CwlDocument;
     const image = cwl["hints"]["DockerRequirement"]["dockerImageId"];
     const command = cwl["baseCommand"];
 
     const input_values = get_input_values(comp, seed);
-    const output_values = {};
-    Object.values(results).map((result: any) => {
+    const output_values: Record<string, CwlValueFile> = {};
+    Object.values(results).map((result) => {
         output_values[result.role] = { class: "File", location: result.name };
     });
 
-    const inputs = {};
-    const outputs = {};
+    const inputs: CwlDetails["inputs"] = {};
+    const outputs: CwlDetails["outputs"] = {};
     for (const input_id in cwl["inputs"]) {
         const input_cwl = cwl["inputs"][input_id];
         const input_value = input_values[input_id];
@@ -493,26 +538,22 @@ const get_details_from_cwl = (comp: Component, seed: any, results: any, cwl_file
     };
 };
 
-const get_input_values = (comp: Component, seed: any) => {
-    interface CwlValueFile {
-        class: string;
-        location: string;
-    }
-    const data: Record<string, string | CwlValueFile> = {};
-    comp.inputs.map((input: any) => {
+const get_input_values = (comp: Component, seed: ComponentSeed) => {
+    const data: Record<string, string | number | boolean | CwlValueFile> = {};
+    comp.inputs.map((input) => {
         if (input.isParam) {
             const paramtype = seed.paramtypes[input.id];
-            let paramvalue = seed.parameters[input.id];
+            let paramvalue: string | number | boolean = seed.parameters[input.id];
             if (!paramvalue) paramvalue = input.paramDefaultValue;
-            if (paramtype == "int") paramvalue = parseInt(paramvalue);
-            else if (paramtype == "float") paramvalue = parseFloat(paramvalue);
+            if (paramtype == "int") paramvalue = parseInt(paramvalue as string);
+            else if (paramtype == "float") paramvalue = parseFloat(paramvalue as string);
             else if (paramtype == "boolean")
                 paramvalue = paramvalue.toString().toLowerCase() == "true";
             else paramvalue = paramvalue.toString();
             data[input.role] = paramvalue;
         } else {
             const datasets = seed.datasets[input.id] || [];
-            datasets.map((ds: string) => {
+            datasets.map((ds) => {
                 // Copy input files to tempdir
                 data[input.role] = { class: "File", location: ds["name"] };
             });
@@ -522,14 +563,15 @@ const get_input_values = (comp: Component, seed: any) => {
     return data;
 };
 
-const write_cwl_values = (comp: Component, seed: any, results: any, tempdir: string) => {
-    interface CwlValueFile {
-        class: string;
-        location: string;
-    }
-    const data: Record<string, string | CwlValueFile> = get_input_values(comp, seed);
+const write_cwl_values = (
+    comp: Component,
+    seed: ComponentSeed,
+    results: Record<string, SeedResult>,
+    tempdir: string
+) => {
+    const data = get_input_values(comp, seed);
     // Set output file names
-    Object.values(results).map((result: any) => {
+    Object.values(results).map((result) => {
         data[result.role] = { class: "File", location: result.name };
     });
 
@@ -540,7 +582,7 @@ const write_cwl_values = (comp: Component, seed: any, results: any, tempdir: str
     return valuesFile;
 };
 
-const get_commandline_for_cwl_details = (details: any) => {
+const get_commandline_for_cwl_details = (details: CwlDetails) => {
     const cmd = [];
     cmd.push(details["command"]);
     for (const input_id in details["inputs"]) {
@@ -560,8 +602,8 @@ const get_commandline_for_cwl_details = (details: any) => {
     return cmd;
 };
 
-const get_cwl_outputs = (details: any, tempdir: string) => {
-    const cwl_outputs = {};
+const get_cwl_outputs = (details: CwlDetails, tempdir: string) => {
+    const cwl_outputs: Record<string, CwlOutput> = {};
     for (const output_id in details["outputs"]) {
         const output = details["outputs"][output_id];
         const output_value = output["value"];

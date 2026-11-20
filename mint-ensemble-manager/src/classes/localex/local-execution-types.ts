@@ -35,6 +35,6 @@ export interface ComponentArgument {
     format?: string;
     isParam?: boolean;
     dimensionality?: number;
-    paramDefaultValue?: any;
+    paramDefaultValue?: string;
     testValue?: string;
 }
