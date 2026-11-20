@@ -109,27 +109,42 @@ The pieces are registered again as new revisions, because their declaration chan
 which the run form reads, carries the same keys. **[unverified]** where that list is built; the
 implementation finds it first.
 
-### 4. The flow's author sets defaults, fixes values, and shows advanced settings
+### 4. The flow's author sets defaults, fixes values, and chooses what runners see
 
 Each setting in the flow builder's step card renders from the description: a dropdown with
-explanations, or a number box with bounds. Next to each setting, the author picks one of:
+explanations, or a number box with bounds. For each setting the author gives a **value** and a
+**visibility**.
+
+The value is one of:
 
 - **Default:** the runner sees this value and can change it. It is saved in the step's
   `settings_json` (as today) and copied to the flow parameter row's `has_default_value`.
-- **Fixed:** the runner sees the value read-only, in the existing "selected by the expert"
-  table. It is copied to `has_fixed_value`.
-- **Show always:** an advanced setting the author wants runners to see. It is stored on the flow
-  parameter row **[open question: which field; see Open questions]**.
+- **Fixed:** the runner cannot change it. It is copied to `has_fixed_value`.
+
+The visibility is one of:
+
+- **Shown:** in the main settings list.
+- **Advanced:** inside "Advanced settings". The piece's `x-advanced` gives the initial choice.
+- **Hidden:** not shown to the runner at all. The run uses the fixed value, else the author's
+  default, else the piece's default. A hidden setting with none of these, and required by the
+  piece, is refused by the flow check.
+
+Visibility is stored per flow in a new column, `modelcatalog_configuration_flow.settings_json`
+(jsonb, default `{}`), as `{"<setting name>": {"visibility": "shown" | "advanced" | "hidden"}}`.
+It sits on the flow, not on a step, because one setting name used by several steps is one
+flow parameter. `parameter_type` is not reused: it already holds `adjustment`, `model_param`,
+`secret` and `standard`.
 
 When a run starts, a setting takes the first value found in this order:
 
 1. a fixed value from the flow's author;
-2. the runner's value;
+2. the runner's value (refused for a fixed or hidden setting);
 3. the flow author's default;
 4. the piece's default.
 
-The adapter already rejects a run value for a setting wired from an earlier step. That rule
-stays.
+The refusal in step 2 is enforced by the adapter's flow-run check, not only by the form.
+Otherwise fixed and hidden settings could still be overridden through the API. The adapter
+already rejects a run value for a setting wired from an earlier step, and that rule stays.
 
 ### 5. The run form renders the description
 
@@ -141,14 +156,57 @@ In `MintParameters.tsx`, for flows:
 - Titles replace raw names.
 - `x-advanced` settings are inside a collapsed "Advanced settings" section.
 
-Models keep their comma-separated multi-value text boxes, where several values mean several
-runs. A model parameter with `has_accepted_values` may later get a multi-select, but that is
-outside this spec.
+For models:
+
+- A parameter with `has_accepted_values` becomes a multi-select. Picking several values still
+  means several runs, as comma-separated values do today.
+- Its default is pre-selected.
+- Choices show without per-choice explanations, because a model parameter row has nowhere to
+  hold them (see Alternatives).
+- Parameters without accepted values keep their comma-separated text boxes.
 
 ### 6. Re-register the Sensemaking flows
 
 Re-register the three Sensemaking flows' settings with the new pieces and with author defaults
 chosen with the user. This is a dev catalog write, and waits for "we are testing".
+
+The library's own defaults, read from `Semantic-Sensemaking/src/semantic_sensemaking/core/config.py`,
+are the starting proposal:
+
+| Setting | Library default | Choices / bounds | Proposed visibility |
+|---|---|---|---|
+| `match_mode` | `auto` | `auto`, `word_boundary`, `longest_match` | shown |
+| `mapping_method` | `legacy` | `legacy`, `subdiscipline_aware`, `embedding` | shown |
+| `unmapped_groups` | `drop` | `drop`, `keep` | advanced |
+| `max_files` | 200 | ≥ 1 | advanced |
+| `min_chars` | 200 | ≥ 0 | advanced |
+| `segment_words` (Narrative) | 200 | ≥ 10 | advanced |
+| `max_frames` (Narrative) | 12 | ≥ 1 | shown |
+| `grounding` (Formulation) | `keyword` | `keyword`, `semantic`, `none` | shown |
+| `embedding_kind`, `chat_kind` | none set (`kind: "none"`) | see library | advanced |
+| `embedding_model`, `chat_model` | none set | free text | advanced |
+| `output_uri` | set by DYNAMO | — | hidden |
+| `problem_statement` (Formulation) | — | free text | shown |
+
+Choice meanings already traced in the code:
+
+- **`match_mode` (`MatchMode`):**
+  - `auto` counts terms containing a space or hyphen as substrings, and other terms on word
+    boundaries. Every term counts independently, so "land subsidence" also counts as
+    "subsidence".
+  - `longest_match` stops that double counting.
+  - `word_boundary`: **[unverified]**, to be traced in the scoring code.
+- **`mapping_method` (`taxonomy/mapping.py`):**
+  - `legacy` gives every subdiscipline of a matching domain the domain's score, then keeps the
+    top 3 pairs. Usually that is one domain's first three subdisciplines.
+  - `subdiscipline_aware` keeps the top domains and splits each domain's score across its
+    subdisciplines, favouring names that overlap the terms.
+  - `embedding` maps by embedding similarity and needs an embedding backend. On map-and-project
+    that means the `model_server` credential, which r1 does not declare (see the backbone gap
+    noted 2026-11-20).
+
+`unmapped_groups`, `grounding` and the backend kinds are traced the same way during
+implementation.
 
 ## Files likely affected
 
@@ -163,7 +221,9 @@ chosen with the user. This is a dev catalog write, and waits for "we are testing
 
 ## API/schema changes
 
-- No database migration.
+- One additive migration: `modelcatalog_configuration_flow.settings_json jsonb NOT NULL DEFAULT
+  '{}'`. The Hasura metadata exposes it to the same roles and columns as `thread_bindings_json`.
+  The flow-authoring save and the adapter's flow read include it.
 - `parameters_schema_json` gains optional keys. Older pieces without them render as they do
   today.
 - `setting_details` in the adapter's piece summary gains optional keys. This is additive.
@@ -189,7 +249,11 @@ run: fixed > runner > author default > piece default
 ## Risks and tradeoffs
 
 - **Per-choice explanations live only in the piece schema.** The form has to reach the piece
-  for each step, not only the flow parameter row. That is one more lookup, but no schema change.
+  for each step, not only the flow parameter row. That is one more lookup, and it avoids a
+  column for explanations (the only migration is the visibility column).
+- **Hidden settings hide mistakes.** A wrong hidden default affects every run without anyone
+  seeing it. The run's parameter bindings record the value used, and the flow page lists hidden
+  settings with their values for whoever can edit the flow.
 - **Two places hold an author default** (step `settings_json` and the parameter row). They must
   be written together by one save path, or they drift.
 - **New piece revisions** need approval again before they run, as for r2.
@@ -235,27 +299,33 @@ run: fixed > runner > author default > piece default
 The work ships as three PRs, none merged until "we are testing":
 
 1. the library (pieces and tests), on the Semantic-Sensemaking PR branch;
-2. the adapter and the UI;
+2. the migration, the adapter and the UI (one PR per the one-PR-per-phase rule);
 3. a dev registration of the new piece revisions and the flows' settings.
 
 The old pieces stay registered, so rolling back means pointing the flows back at them.
 
 ## Open questions
 
-1. Where to store "show this advanced setting" for a flow. One option is `parameter_type`
-   (today null for flow settings). Another is the step's `settings_json` under a reserved key.
-2. Should the author be able to hide a setting entirely, beyond fixing it?
-3. Which defaults should the three Sensemaking flows use? To be chosen with the user once the
-   library defaults are traced.
-4. Should models' parameters also get dropdowns from `has_accepted_values` now, or later?
+1. Are the proposed defaults and visibilities for the Sensemaking flows (section 6) right?
+2. Should `output_uri` stay hidden on every flow? DYNAMO sets it today. **[unverified]** whether a
+   runner ever needs to change it.
 
 ## Decisions
 
 - 2026-11-20: Per-choice explanations go in the piece's JSON Schema (`oneOf`), not in a new
-  catalog column. The reason: no migration, and the schema already exists on every piece.
+  catalog column. The schema already exists on every piece.
+- 2026-11-20 (user): an author can hide a setting entirely. Hidden and fixed settings are
+  enforced by the adapter, not only by the form.
+- 2026-11-20 (user): model parameters get dropdowns now, from `has_accepted_values`, as a
+  multi-select so that several values still mean several runs.
+- 2026-11-20: visibility is stored in a new `modelcatalog_configuration_flow.settings_json`
+  column. Rejected: `parameter_type`, which is already used for other meanings, and step
+  `settings_json`, because one setting can span several steps.
 
 ## User feedback / decisions
 
 - 2026-11-20: the user asked for settings "similar to how app.jsons are configured with optional
   dropdowns and actual explanations of what each mean", and for "the data scientist" to "be able
   to configure defaults for the flow".
+- 2026-11-20: asked whether an author can hide a setting entirely: "yes". Asked whether models
+  get dropdowns now or later: "yes now".
