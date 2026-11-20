@@ -1,0 +1,7 @@
+query get_execution_thread_ids($id: uuid!) {
+    thread_model_execution(where: { execution_id: { _eq: $id } }) {
+        thread_model {
+            thread_id
+        }
+    }
+}
