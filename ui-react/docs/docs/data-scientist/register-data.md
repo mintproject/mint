@@ -1,6 +1,6 @@
 # Register data
 
-Datasets are added to DYNAMO through your organisation's data catalog, not through a form in DYNAMO. Ask your data catalog administrator to publish the dataset, and give them the details below. These details decide whether people can find your data and match it to a model, so send them together with the files.
+You can add a dataset yourself, from **Datasets → Upload a dataset**. The form asks for the same details listed below, and [Upload a dataset](upload-a-dataset.md) explains each field. Datasets you cannot upload this way are added through your organisation's data catalog. In that case, ask your data catalog administrator to publish the dataset, and give them the details below. These details decide whether people can find your data and match it to a model, so send them together with the files.
 
 For each file, provide:
 
@@ -15,7 +15,9 @@ If a file holds several variables, list all of them. Each one you list lets the 
 
 ## Check it appeared
 
-New data is not visible straight away. After it is published, the catalog needs to be refreshed before DYNAMO shows it. Ask your administrator to arrange that, then open **Datasets → Browse** and search for your dataset to confirm it is there.
+If you uploaded the dataset on the upload page, that page reads it back from the catalog and shows **Open the dataset page**. Otherwise, open **Datasets → Browse** and search for your dataset to confirm it is there.
+<!-- To confirm before publishing: the original guide said new data is not visible until the catalog is refreshed, and that an administrator must arrange it. Check this against the current catalog before keeping the sentence below. -->
+New data that an administrator publishes may not be visible straight away. If it is missing, ask your administrator to refresh the catalog.
 
 ![A dataset card showing its description, standard variable tags, source, coverage, and format](../assets/images/dataset-detail.png)
 
