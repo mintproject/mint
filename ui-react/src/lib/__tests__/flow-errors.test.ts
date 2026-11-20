@@ -65,11 +65,11 @@ describe('flowErrorMessage', () => {
   it("lists the author's settings", () => {
     const m = refuse('FLOW_SETTINGS_NOT_ACCEPTED', {
       defaults: { title: 'Dictionary', n: 3 },
-      links: [{ from: 'a.out', to: 'b.in' }],
+      links: [{ step: 3, setting: 'lexicon_uri', from: { step: 2, output: 0 } }],
     });
     expect(m?.lines.join('\n')).toContain("chosen by the flow's author");
     expect(m?.lines).toEqual(
-      expect.arrayContaining(['title: Dictionary', 'n: 3', 'b.in is taken from a.out']),
+      expect.arrayContaining(['title: Dictionary', 'n: 3', "Step 3 - lexicon uri: taken from step 2's output 1"]),
     );
   });
 

@@ -866,7 +866,9 @@ export function MintThread({
         const secretsNotReady = flowPlan.secrets_ready === false;
         if (secretsNotReady || hasAuthorSettings || sendsDataTo.length > 0) {
           const proceed = await askFlowAcceptance({
-            ...(hasAuthorSettings ? { settings: authorSettings } : {}),
+            ...(hasAuthorSettings
+              ? { settings: authorSettings, steps: flowPlan.flow_steps ?? [] }
+              : {}),
             ...(sendsDataTo.length > 0 ? { sendsDataTo } : {}),
             ...(secretsNotReady ? { requiredSecrets: flowPlan.required_secrets ?? [] } : {}),
           });

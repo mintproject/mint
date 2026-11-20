@@ -1327,15 +1327,17 @@ export function MintRuns({
                 ? isFlowRun
                   ? 'The flow run is complete. Continue to review its results.'
                   : 'The model run is complete. Continue to review or publish its results.'
-                : displayStatus === 'completing'
-                  ? isFlowRun
-                    ? 'The flow finished and its outputs are being prepared.'
-                    : 'The model finished and its output is being prepared for the next stage.'
-                  : displayStatus === 'running'
+                : displayStatus === 'paused'
+                  ? 'The flow is paused for your edit. Download the file below, change it, upload your copy and resume.'
+                  : displayStatus === 'completing'
                     ? isFlowRun
-                      ? 'The flow is running. Results will appear when it completes.'
-                      : 'The model is running. Results will appear when it completes.'
-                    : 'The run is waiting to start.';
+                      ? 'The flow finished and its outputs are being prepared.'
+                      : 'The model finished and its output is being prepared for the next stage.'
+                    : displayStatus === 'running'
+                      ? isFlowRun
+                        ? 'The flow is running. Results will appear when it completes.'
+                        : 'The model is running. Results will appear when it completes.'
+                      : 'The run is waiting to start.';
 
           // ── count inputs × params for display ──────────────────────────
           const nParameters = userParameters(model)

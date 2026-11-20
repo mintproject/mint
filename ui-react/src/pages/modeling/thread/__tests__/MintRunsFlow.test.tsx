@@ -187,6 +187,27 @@ describe('MintRuns for a flow', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('heads a run stopped for an edit as waiting for the user, not running', () => {
+    renderRuns({
+      unifiedRuns: {
+        'flow-1': {
+          ...run,
+          status: 'awaiting_edit',
+          started_by: 'alice',
+          model_child_id: 'exec-1',
+        },
+      },
+    });
+    expect(screen.getByText('Waiting for your edit')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The flow is paused for your edit. Download the file below, change it, upload your copy and resume.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/the flow is running/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/the flow run is complete/i)).not.toBeInTheDocument();
+  });
+
   it('before sending: no publishers request, no maximum run time, no publish controls', () => {
     renderRuns({ threadData: threadData(false), unifiedRuns: undefined });
     expect(screen.getByTestId('submit-runs-flow-1')).toBeInTheDocument();

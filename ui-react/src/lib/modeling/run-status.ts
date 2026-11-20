@@ -1,6 +1,7 @@
 export type RunDisplayStatus =
   | 'waiting'
   | 'running'
+  | 'paused'
   | 'completing'
   | 'completed'
   | 'failed'
@@ -27,6 +28,8 @@ const RUNNING_STATUSES = [
   'in_progress',
   'submitting',
 ];
+/** A flow stopped for the person's edit; the run is not finished. */
+const PAUSED_STATUSES = ['awaiting_edit'];
 const WAITING_STATUSES = ['planned', 'queued', 'pending', 'waiting', 'not_started'];
 
 function normalized(value: unknown): string {
@@ -47,6 +50,7 @@ export function normalizeRunStatus(raw: unknown): RunDisplayStatus {
   if (includesStatus(value, CANCELLED_STATUSES)) return 'cancelled';
   if (includesStatus(value, FAILURE_STATUSES)) return 'failed';
   if (COMPLETED_STATUSES.includes(value)) return 'completed';
+  if (PAUSED_STATUSES.includes(value)) return 'paused';
   if (COMPLETING_STATUSES.includes(value)) return 'completing';
   if (RUNNING_STATUSES.includes(value)) return 'running';
   if (WAITING_STATUSES.includes(value)) return 'waiting';
@@ -73,6 +77,8 @@ export function displayStatusLabel(status: RunDisplayStatus | StageDisplayStatus
       return 'Waiting to start';
     case 'running':
       return 'Running';
+    case 'paused':
+      return 'Waiting for your edit';
     case 'completing':
       return 'Completing';
     case 'completed':
@@ -129,6 +135,7 @@ export function aggregateRunStatus({
   if (failedRuns > 0 && finishedRuns >= totalRuns && totalRuns > 0) return 'failed';
   if (successfulRuns >= totalRuns && totalRuns > 0) return 'completed';
   if (fallback === 'failed' || fallback === 'cancelled') return fallback;
+  if (fallback === 'paused') return 'paused';
   if (submittedRuns > 0 || fallback === 'running' || fallback === 'completing') {
     return fallback === 'completing' ? 'completing' : 'running';
   }
