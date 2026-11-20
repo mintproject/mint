@@ -7,8 +7,8 @@
  *
  * Legacy: ui/src/screens/modeling/thread/mint-runs.ts
  */
-import { ExternalLink, FolderOpen, RefreshCw, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ExternalLink, FolderOpen, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import {
@@ -23,10 +23,12 @@ import {
   type WorkflowCanvasEdge,
   type WorkflowCanvasPosition,
 } from '@/components/modeling/WorkflowCanvas';
-import { RunConfigurationSummary } from '@/components/modeling/runs/RunConfigurationSummary';
+import { CollapsibleCard } from '@/components/common/CollapsibleCard';
 import { RunAnswerCard } from '@/components/modeling/runs/RunAnswerCard';
+import { RunFailureNotice } from '@/components/modeling/runs/RunFailureNotice';
 import { RunStageTimeline } from '@/components/modeling/runs/RunStageTimeline';
-import { RunStatusSummary } from '@/components/modeling/runs/RunStatusSummary';
+import { SameForEveryRun } from '@/components/modeling/runs/SameForEveryRun';
+import { SettingsUsed } from '@/components/modeling/runs/SettingsUsed';
 import {
   fetchExecutionLog,
   fetchPlanPublishers,
@@ -35,7 +37,22 @@ import {
   type UnifiedRunSnapshot,
 } from '@/lib/ensemble-manager';
 import { adapterParametersComplete, type ThreadAdapterPlan } from '@/lib/adapter-execution';
-import { aggregateRunStatus, stageStatusFromLegacyState } from '@/lib/modeling/run-status';
+import {
+  aggregateRunStatus,
+  displayStatusLabel,
+  formatDateValue,
+  normalizeRunStatus,
+  stageStatusFromLegacyState,
+  statusPillClasses,
+  type RunDisplayStatus,
+} from '@/lib/modeling/run-status';
+import {
+  DEFAULT_MAX_MINUTES,
+  humanizeName,
+  runDuration,
+  runParamValue,
+  splitRunParams,
+} from '@/lib/modeling/run-settings';
 import { flowErrorMessage, type FlowErrorMessage } from '@/lib/flow-errors';
 import { inputResourceCount } from '@/lib/thread-execution';
 import { secretErrorMessage, userParameters } from '@/lib/secret-parameters';
@@ -663,6 +680,11 @@ interface UnifiedExecutionPanelProps {
   refreshError?: string;
   onCancel?: () => Promise<void>;
   cancelling?: boolean;
+  /** Sends the model again after it failed or was cancelled. */
+  onRestart?: () => void;
+  restarting?: boolean;
+  /** Why the last send was refused, shown beside Restart. */
+  restartProblem?: ReactNode;
 }
 
 /**
@@ -705,6 +727,9 @@ function UnifiedExecutionPanel({
   refreshError,
   onCancel,
   cancelling = false,
+  onRestart,
+  restarting = false,
+  restartProblem,
 }: UnifiedExecutionPanelProps) {
   const adapterRuns = run.adapter_runs ?? [];
   const health = runHealth(run);
@@ -988,20 +1013,20 @@ function UnifiedExecutionPanel({
           <WorkflowGraph run={run} modelName={modelName} adapterPlans={adapterPlans} />
         </div>
       </details>
-      {(run.failure_code || run.error_message) && (
-        <div className="rounded border border-red-200 bg-red-50 px-2 py-2 text-red-800">
-          {run.failure_code && <div className="font-medium">Failure: {run.failure_code}</div>}
-          {run.error_message && <div>{run.error_message}</div>}
-        </div>
+      {(run.failure_code || run.error_message || onRestart) && (
+        <RunFailureNotice
+          run={run}
+          cancelled={normalizeRunStatus(run.status) === 'cancelled'}
+          onRestart={onRestart}
+          restarting={restarting}
+          problem={restartProblem}
+        />
       )}
       {refreshError && (
         <div className="rounded border border-amber-200 bg-amber-50 px-2 py-2 text-amber-800">
           Showing the last saved workflow state. Refresh failed: {refreshError}
         </div>
       )}
-      <p className="text-[11px] text-blue-700">
-        Application logs and files remain available from the run records below.
-      </p>
     </div>
   );
 }
@@ -1049,83 +1074,258 @@ interface MintRunsProps {
 
 const PAGE_SIZE = 100;
 
-interface RunParam {
-  id?: string | null;
-  name?: string | null;
-  default?: string | null;
+// ─── Run card pieces ──────────────────────────────────────────────────────────
+
+/** A model's card opens by itself when it needs attention, or when it is the only one. */
+function defaultCardOpen(status: RunDisplayStatus | null, modelCount: number): boolean {
+  return modelCount === 1 || status !== 'completed';
 }
 
-function humanizeName(name?: string | null): string {
-  return (name ?? '').replace(/[-_]/g, ' ');
-}
-
-/** The value a run shows for a parameter: its binding, else the default. */
-function runParamValue(param: RunParam, execution: Execution): string {
-  let value = execution.bindings[param.id ?? ''] as unknown;
-  if (value == null) value = param.default ?? null;
-  if (typeof value === 'string' && value.startsWith('__region_geojson')) {
-    return 'Region GeoJSON';
-  }
-  if (value == null || value === '') return '—';
-  return String(value);
-}
-
-/**
- * Split parameters into those that tell the listed runs apart (they get a
- * column) and those every run shares (they are summarised above the table).
- */
-function splitRunParams<P extends RunParam>(
-  params: P[],
-  executions: Execution[],
-): { varying: P[]; common: Array<{ param: P; value: string }> } {
-  const varying: P[] = [];
-  const common: Array<{ param: P; value: string }> = [];
-  for (const param of params) {
-    const values = new Set(executions.map((e) => runParamValue(param, e)));
-    if (values.size > 1) {
-      varying.push(param);
-    } else {
-      const value = executions[0] ? runParamValue(param, executions[0]) : '—';
-      if (value !== '—') common.push({ param, value });
-    }
-  }
-  return { varying, common };
-}
-
-const SAME_FOR_EVERY_RUN_LIMIT = 6;
-
-function SameForEveryRun({
-  items,
-  testId,
+/** Why the last send of a model was refused. */
+function SubmitProblems({
+  modelId,
+  refusal,
+  error,
+  onOpenFlowRun,
 }: {
-  items: Array<{ param: RunParam; value: string }>;
-  testId: string;
+  modelId: string;
+  refusal?: FlowErrorMessage;
+  error?: string;
+  onOpenFlowRun?: (modelId: string, runId: string) => Promise<void>;
 }) {
-  const [showAll, setShowAll] = useState(false);
-  if (items.length === 0) return null;
-  const truncated = items.length > SAME_FOR_EVERY_RUN_LIMIT && !showAll;
-  const shown = truncated ? items.slice(0, SAME_FOR_EVERY_RUN_LIMIT) : items;
+  if (!refusal && !error) return null;
   return (
-    <p className="break-words text-xs text-gray-600" data-testid={testId}>
-      <span className="font-medium">Same for every run:</span>{' '}
-      {shown.map(({ param, value }, i) => (
-        <span key={param.id ?? i}>
-          {i > 0 && ' · '}
-          {humanizeName(param.name)} <span className="text-gray-900">{value}</span>
-        </span>
-      ))}
-      {items.length > SAME_FOR_EVERY_RUN_LIMIT && (
-        <>
-          {' '}
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            className="text-blue-600 hover:underline"
-          >
-            {showAll ? 'show fewer' : `show all ${items.length}`}
-          </button>
-        </>
+    <>
+      {refusal && (
+        <div className="space-y-1 text-xs text-red-700" data-testid={`flow-refusal-${modelId}`}>
+          <p className="font-medium">{refusal.title}</p>
+          <ul className="list-disc pl-4">
+            {refusal.lines.map((line, index) => (
+              <li key={index}>{line}</li>
+            ))}
+          </ul>
+          {refusal.runId && onOpenFlowRun && (
+            <button
+              type="button"
+              className="text-blue-700 underline"
+              onClick={() => void onOpenFlowRun(modelId, refusal.runId!)}
+            >
+              Open the run in progress
+            </button>
+          )}
+        </div>
       )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </>
+  );
+}
+
+/** The runs of a model that ran more than once: one row each, with a Restart on a failed row. */
+function RunsTable({
+  modelId,
+  isFlow,
+  loading,
+  executions,
+  inputs,
+  params,
+  onViewLog,
+  onViewFiles,
+  onRestart,
+  restarting,
+}: {
+  modelId: string;
+  isFlow: boolean;
+  loading: boolean;
+  executions: Execution[];
+  inputs: Array<{ id: string; name?: string | null }>;
+  params: Array<{ id?: string | null; name?: string | null; default?: string | null }>;
+  onViewLog: (executionId: string) => void;
+  onViewFiles: (executionId: string) => void;
+  /** Present only when the model has ended and the viewer may run it. */
+  onRestart?: () => void;
+  restarting?: boolean;
+}) {
+  const showRestart = Boolean(onRestart) && executions.some((e) => e.status === 'FAILURE');
+  const fixedColumns = 5 + (showRestart ? 1 : 0);
+  return (
+    <div className="overflow-x-auto border border-gray-200">
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <span className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+        </div>
+      ) : (
+        <table className="w-full border-collapse text-xs" data-testid={`runs-table-${modelId}`}>
+          <thead className="bg-gray-100">
+            <tr>
+              <th colSpan={fixedColumns} className="px-2 py-1 text-left font-semibold">
+                Run
+              </th>
+              {inputs.length > 0 && (
+                <th colSpan={inputs.length} className="px-2 py-1 text-left font-semibold">
+                  Inputs
+                </th>
+              )}
+              {params.length > 0 && (
+                <th colSpan={params.length} className="px-2 py-1 text-left font-semibold">
+                  Parameters
+                </th>
+              )}
+            </tr>
+            <tr>
+              <th className="px-2 py-1 font-medium">Status</th>
+              <th className="px-2 py-1 font-medium">Start</th>
+              <th className="px-2 py-1 font-medium">End</th>
+              <th className="px-2 py-1 font-medium">Log</th>
+              <th className="px-2 py-1 font-medium">Files</th>
+              {showRestart && <th className="px-2 py-1" />}
+              {inputs.length + params.length === 0 && <th className="px-2 py-1" />}
+              {inputs.map((f) => (
+                <th key={f.id} className="px-2 py-1 font-medium">
+                  {humanizeName(f.name)}
+                </th>
+              ))}
+              {params.map((p) => (
+                <th key={p.id} className="px-2 py-1 font-medium">
+                  {humanizeName(p.name)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {executions.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={fixedColumns + inputs.length + params.length}
+                  className="px-2 py-4 text-center text-gray-400"
+                >
+                  {isFlow ? (
+                    <span data-testid={`no-run-records-${modelId}`}>
+                      No run records yet. Use Reload once the run has started.
+                    </span>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                      Loading run records…
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ) : (
+              executions.map((execution) => (
+                <tr key={execution.id} className="odd:bg-white even:bg-gray-50">
+                  <td className="px-2 py-1">
+                    <StatusBar status={execution.status} progress={execution.run_progress} />
+                  </td>
+                  <td className="px-2 py-1 text-gray-500">
+                    {toDateTimeString(execution.start_time)}
+                  </td>
+                  <td className="px-2 py-1 text-gray-500">
+                    {toDateTimeString(execution.end_time)}
+                  </td>
+                  <td className="px-2 py-1">
+                    <button
+                      type="button"
+                      onClick={() => onViewLog(execution.id)}
+                      className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs hover:bg-gray-50"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Log
+                    </button>
+                  </td>
+                  <td className="px-2 py-1">
+                    <button
+                      type="button"
+                      data-testid={`view-files-${execution.id}`}
+                      onClick={() => onViewFiles(execution.id)}
+                      className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs hover:bg-gray-50"
+                    >
+                      <FolderOpen className="h-3 w-3" />
+                      Files
+                    </button>
+                  </td>
+                  {showRestart && (
+                    <td className="px-2 py-1">
+                      {execution.status === 'FAILURE' && (
+                        <button
+                          type="button"
+                          data-testid={`restart-run-${execution.id}`}
+                          title="Sends this model's runs again"
+                          onClick={onRestart}
+                          disabled={restarting}
+                          className="flex items-center gap-1 rounded border border-red-300 px-1.5 py-0.5 text-xs text-red-800 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          Restart
+                        </button>
+                      )}
+                    </td>
+                  )}
+                  {inputs.length + params.length === 0 && (
+                    <td className="px-2 py-1 text-gray-400">No inputs or parameters</td>
+                  )}
+                  {inputs.map((input) => {
+                    const res = execution.bindings[input.id] as {
+                      name?: string;
+                      url?: string;
+                      location?: string;
+                    } | null;
+                    const url = res ? getResourceUrl(res) : '';
+                    return (
+                      <td key={input.id} className="px-2 py-1">
+                        {res && url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {res.name ?? url}
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    );
+                  })}
+                  {params.map((param) => (
+                    <td key={param.id} className="px-2 py-1">
+                      {runParamValue(param, execution)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/** One line of counters for a model that ran more than once. */
+function RunCounters({
+  testId,
+  total,
+  successful,
+  failed,
+  running,
+  pending,
+}: {
+  testId: string;
+  total: number;
+  successful: number;
+  failed: number;
+  running: number;
+  pending: number;
+}) {
+  return (
+    <p className="text-xs text-gray-700" data-testid={testId}>
+      <span className="font-medium text-gray-900">
+        {successful} of {total} completed
+      </span>
+      {failed > 0 && <span className="text-red-700"> · {failed} failed</span>}
+      {running > 0 && <span> · {running} running</span>}
+      {pending > 0 && <span> · {pending} waiting</span>}
     </p>
   );
 }
@@ -1190,6 +1390,9 @@ export function MintRuns({
   const [publishSelections, setPublishSelections] = useState<
     Record<string, PublishSelection | null>
   >({});
+  // A card the user opened or closed keeps that choice; until then it follows
+  // its model's state (see `defaultCardOpen`).
+  const [cardOpen, setCardOpen] = useState<Record<string, boolean>>({});
   const [logDialogOpen, setLogDialogOpen] = useState(false);
   const [logContent, setLogContent] = useState<string | null>(null);
   const logAbortRef = useRef<AbortController | null>(null);
@@ -1250,7 +1453,7 @@ export function MintRuns({
 
   const handleSubmit = useCallback(
     async (mid: string) => {
-      const minutes = Number(maxMinutes[mid] ?? '60');
+      const minutes = Number(maxMinutes[mid] ?? String(DEFAULT_MAX_MINUTES));
       if (!Number.isInteger(minutes) || minutes < 1) {
         setRuntimeErrors((errors) => ({
           ...errors,
@@ -1363,9 +1566,8 @@ export function MintRuns({
           </Link>
         )}
       </div>
-      <h3 className="mb-3 text-sm font-semibold">Runs</h3>
 
-      <ul className="space-y-4">
+      <ul className="space-y-3">
         {modelIds.map((mid) => {
           const summary = threadData.execution_summary[mid]!;
           const model = threadData.models[mid];
@@ -1401,24 +1603,32 @@ export function MintRuns({
             fallbackStatus: workflowRun?.status,
           });
           const isFlowRun = Boolean(model.isFlow) || workflowRun?.adapter_stage === 'flow';
+          const isSingleRun = summary.total_runs <= 1;
+          const ended = displayStatus === 'failed' || displayStatus === 'cancelled';
           const nextAction =
             displayStatus === 'failed'
-              ? 'Review the failed run and its diagnostics before trying again.'
-              : displayStatus === 'completed'
-                ? isFlowRun
-                  ? 'The flow run is complete. Continue to review its results.'
-                  : 'The model run is complete. Continue to review or publish its results.'
-                : displayStatus === 'paused'
-                  ? 'The flow is paused for your edit. Download the file below, change it, upload your copy and resume.'
-                  : displayStatus === 'completing'
-                    ? isFlowRun
-                      ? 'The flow finished and its outputs are being prepared.'
-                      : 'The model finished and its output is being prepared for the next stage.'
-                    : displayStatus === 'running'
+              ? canSubmitRuns
+                ? 'The run failed. Read the reason below, then restart it.'
+                : 'The run failed. Read the reason below and open its log.'
+              : displayStatus === 'cancelled'
+                ? canSubmitRuns
+                  ? 'The run was cancelled. Restart it to run it again.'
+                  : 'The run was cancelled.'
+                : displayStatus === 'completed'
+                  ? isFlowRun
+                    ? 'The flow run is complete. Continue to review its results.'
+                    : 'The model run is complete. Continue to review or publish its results.'
+                  : displayStatus === 'paused'
+                    ? 'The flow is paused for your edit. Download the file, change it, upload your copy and resume.'
+                    : displayStatus === 'completing'
                       ? isFlowRun
-                        ? 'The flow is running. Results will appear when it completes.'
-                        : 'The model is running. Results will appear when it completes.'
-                      : 'The run is waiting to start.';
+                        ? 'The flow finished and its outputs are being prepared.'
+                        : 'The model finished and its output is being prepared for the next stage.'
+                      : displayStatus === 'running'
+                        ? isFlowRun
+                          ? 'The flow is running. Results will appear when it completes.'
+                          : 'The model is running. Results will appear when it completes.'
+                        : 'The run is waiting to start.';
 
           // ── count inputs × params for display ──────────────────────────
           const nParameters = userParameters(model)
@@ -1438,379 +1648,323 @@ export function MintRuns({
             grouped.executions,
           );
 
+          // ── the card's header ─────────────────────────────────────────
+          const startedAt =
+            latestExecution?.start_time ?? (typeof submitted === 'string' ? submitted : undefined);
+          const finishedAt = grouped.executions
+            .map((execution) => execution.end_time)
+            .filter((time): time is string => Boolean(time))
+            .sort()
+            .at(-1);
+          const took =
+            displayStatus === 'completed' || ended ? runDuration(startedAt, finishedAt) : null;
+          const headerStatus: RunDisplayStatus | null = submitted ? displayStatus : null;
+          const open = cardOpen[mid] ?? defaultCardOpen(headerStatus, modelIds.length);
+
+          // ── Restart: send this model again, only after it ended ───────
+          const restart =
+            canSubmitRuns && submitted && ended ? () => void handleSubmit(mid) : undefined;
+          const problems = (
+            <SubmitProblems
+              modelId={mid}
+              refusal={flowRefusals[mid]}
+              error={runtimeErrors[mid]}
+              onOpenFlowRun={onOpenFlowRun}
+            />
+          );
+          const refreshRun =
+            onRefreshWorkflow &&
+            (Boolean(unifiedRuns?.[mid]) || workflowRun?.run_id?.startsWith('ue_'))
+              ? async () => {
+                  await onRefreshWorkflow(mid);
+                  onFetchRuns(mid, currentPage, PAGE_SIZE);
+                }
+              : undefined;
+          const cancelRun =
+            onCancelWorkflow && workflowRun?.run_id?.startsWith('ue_')
+              ? () => onCancelWorkflow(mid)
+              : undefined;
+          // A model run many times with no run of its own record is just its table.
+          const showPanel =
+            Boolean(workflowRun) &&
+            (isSingleRun ||
+              isFlowRun ||
+              Boolean(unifiedRuns?.[mid]) ||
+              Boolean(workflowRun?.run_id?.startsWith('ue_')));
+
           return (
             <li key={mid}>
-              {summary.total_runs > 0 && submitted && (
-                <RunStatusSummary
-                  modelName={model.name ?? mid}
-                  status={displayStatus}
-                  totalRuns={summary.total_runs}
-                  submittedRuns={submittedRuns}
-                  successfulRuns={successfulRuns}
-                  failedRuns={failedRuns}
-                  runningRuns={runningRuns}
-                  pendingRuns={pendingRuns}
-                  startedAt={
-                    latestExecution?.start_time ??
-                    (typeof submitted === 'string' ? submitted : undefined)
-                  }
-                  nextAction={nextAction}
-                  context={
-                    <RunConfigurationSummary
-                      inputResources={nInputs}
-                      parameterCombinations={nParameters}
-                      outputsPerRun={model.output_files.length}
-                    />
-                  }
-                />
-              )}
-
-              {!summary.total_runs ? (
-                <div className="text-sm text-orange-600">
-                  🚨 No runs configured. Please go back to the Data and Parameters steps.
-                </div>
-              ) : !submitted ? (
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">{model.name ?? mid}</div>
-                  <p className="text-sm text-gray-600">
-                    The parameter settings require {summary.total_runs} runs ({nInputs} input
-                    resources × {nParameters} parameters).{' '}
-                    {model.output_files.length * summary.total_runs} output files will be generated.
-                  </p>
-                  {!paramsDone ? (
-                    <p className="text-xs text-orange-600">
-                      {adapterPlanError
-                        ? 'SVO adapter plan discovery failed; return to Parameters and retry.'
-                        : adapterPlansLoading
-                          ? 'Waiting for SVO adapter plan discovery to finish.'
-                          : 'Complete the required model and SVO adapter parameters before sending runs.'}
-                    </p>
-                  ) : canExecute && canWrite ? (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-end gap-3">
-                        {!model.isFlow && (
-                          <label className="flex flex-col gap-1 text-xs text-gray-700">
-                            <span>Maximum run time (minutes)</span>
-                            <input
-                              aria-label={`Maximum run time for ${model.name}`}
-                              data-testid={`max-runtime-${mid}`}
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={maxMinutes[mid] ?? '60'}
-                              onChange={(event) =>
-                                setMaxMinutes((values) => ({
-                                  ...values,
-                                  [mid]: event.target.value,
-                                }))
-                              }
-                              className="w-32 rounded border border-gray-300 px-2 py-1.5 text-sm"
-                            />
-                          </label>
-                        )}
-                        <button
-                          type="button"
-                          data-testid={`submit-runs-${mid}`}
-                          onClick={() => void handleSubmit(mid)}
-                          disabled={waiting[mid]}
-                          className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          {waiting[mid] ? (
-                            <>
-                              Submitting…{' '}
-                              <span className="inline-block h-3 w-3 animate-spin rounded border-2 border-white border-t-transparent" />
-                            </>
-                          ) : (
-                            'Send Runs'
-                          )}
-                        </button>
-                      </div>
-                      {!model.isFlow && (
-                        <PublishOutputsControl
-                          modelId={mid}
-                          publishers={publishers[mid] ?? []}
-                          outputs={model.output_files}
-                          selection={publishSelections[mid] ?? null}
-                          disabled={waiting[mid]}
-                          onChange={(selection) =>
-                            setPublishSelections((current) => ({ ...current, [mid]: selection }))
-                          }
-                        />
-                      )}
-                      {flowRefusals[mid] && (
-                        <div
-                          className="space-y-1 text-xs text-red-700"
-                          data-testid={`flow-refusal-${mid}`}
-                        >
-                          <p className="font-medium">{flowRefusals[mid].title}</p>
-                          <ul className="list-disc pl-4">
-                            {flowRefusals[mid].lines.map((line, index) => (
-                              <li key={index}>{line}</li>
-                            ))}
-                          </ul>
-                          {flowRefusals[mid].runId &&
-                            (onOpenFlowRun ? (
-                              <button
-                                type="button"
-                                className="text-blue-700 underline"
-                                onClick={() => void onOpenFlowRun(mid, flowRefusals[mid]!.runId!)}
-                              >
-                                Open the run in progress
-                              </button>
-                            ) : null)}
-                        </div>
-                      )}
-                      {runtimeErrors[mid] && (
-                        <p className="text-xs text-red-600">{runtimeErrors[mid]}</p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-500">
-                      You don&apos;t have permission to send runs on this sub-task.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {workflowRun && isFlowRun ? (
-                    <FlowRunPanel
-                      run={workflowRun}
-                      onRefresh={
-                        onRefreshWorkflow &&
-                        (Boolean(unifiedRuns?.[mid]) || workflowRun.run_id?.startsWith('ue_'))
-                          ? () => onRefreshWorkflow(mid)
-                          : undefined
-                      }
-                      refreshing={workflowRefreshing?.[mid]}
-                      refreshError={workflowRefreshErrors?.[mid]}
-                      onCancel={
-                        onCancelWorkflow && workflowRun.run_id?.startsWith('ue_')
-                          ? () => onCancelWorkflow(mid)
-                          : undefined
-                      }
-                      cancelling={workflowCancelling?.[mid]}
-                      ensembleManagerApi={ensembleManagerApi}
-                      username={currentUsername}
-                      onResume={
-                        onResumeWorkflow && workflowRun.run_id?.startsWith('ue_')
-                          ? (edit) => onResumeWorkflow(mid, edit)
-                          : undefined
-                      }
-                    />
-                  ) : workflowRun ? (
-                    <UnifiedExecutionPanel
-                      run={workflowRun}
-                      modelName={model.name}
-                      adapterPlans={threadData.adapter_plans?.[mid] ?? []}
-                      onRefresh={
-                        onRefreshWorkflow &&
-                        (Boolean(unifiedRuns?.[mid]) || workflowRun.run_id?.startsWith('ue_'))
-                          ? () => onRefreshWorkflow(mid)
-                          : undefined
-                      }
-                      refreshing={workflowRefreshing?.[mid]}
-                      refreshError={workflowRefreshErrors?.[mid]}
-                      onCancel={
-                        onCancelWorkflow && workflowRun.run_id?.startsWith('ue_')
-                          ? () => onCancelWorkflow(mid)
-                          : undefined
-                      }
-                      cancelling={workflowCancelling?.[mid]}
-                    />
-                  ) : null}
-
-                  {/* Pagination + Reload bar */}
-                  <div className="flex items-center gap-2 border border-gray-200 px-2 py-1 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => handleNextPage(mid, -1)}
-                      disabled={currentPage <= 1}
-                      className="rounded border px-2 py-0.5 hover:bg-gray-50 disabled:opacity-40"
-                    >
-                      Back
-                    </button>
-                    <span>
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleNextPage(mid, 1)}
-                      disabled={currentPage >= totalPages}
-                      className="rounded border px-2 py-0.5 hover:bg-gray-50 disabled:opacity-40"
-                    >
-                      Next
-                    </button>
-                    <div className="ml-auto flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => onFetchRuns(mid, currentPage, PAGE_SIZE)}
-                        className="flex items-center gap-1 rounded border px-2 py-0.5 hover:bg-gray-50"
-                        title="Reload"
+              <CollapsibleCard
+                testId={`run-card-${mid}`}
+                open={open}
+                onOpenChange={(next) => setCardOpen((current) => ({ ...current, [mid]: next }))}
+                title={model.name ?? mid}
+                summary={
+                  <>
+                    {headerStatus ? (
+                      <span
+                        className={`rounded px-2 py-0.5 ${statusPillClasses(headerStatus)}`}
+                        data-testid={`run-status-${mid}`}
                       >
-                        <RefreshCw className="h-3 w-3" />
-                        Reload
-                      </button>
-                    </div>
+                        {displayStatusLabel(headerStatus)}
+                      </span>
+                    ) : (
+                      summary.total_runs > 0 && (
+                        <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-700">
+                          Not sent yet
+                        </span>
+                      )
+                    )}
+                    {took ? (
+                      <span>took {took}</span>
+                    ) : startedAt && submitted ? (
+                      <span>Started {formatDateValue(startedAt)}</span>
+                    ) : null}
+                  </>
+                }
+              >
+                {!summary.total_runs ? (
+                  <div className="text-sm text-orange-600">
+                    🚨 No runs configured. Please go back to the Data and Parameters steps.
                   </div>
-
-                  {/* Runs table: paged, so it grows with the step pane instead of
-                      adding a scroll box of its own. */}
-                  <SameForEveryRun items={sameParams} testId={`same-for-every-run-${mid}`} />
-                  <div className="overflow-x-auto border border-gray-200">
-                    {grouped.loading ? (
-                      <div className="flex items-center justify-center py-8">
-                        <span className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                ) : !submitted ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-600">
+                      The parameter settings require {summary.total_runs} runs ({nInputs} input
+                      resources × {nParameters} parameters).{' '}
+                      {model.output_files.length * summary.total_runs} output files will be
+                      generated.
+                    </p>
+                    {!paramsDone ? (
+                      <p className="text-xs text-orange-600">
+                        {adapterPlanError
+                          ? 'SVO adapter plan discovery failed; return to Parameters and retry.'
+                          : adapterPlansLoading
+                            ? 'Waiting for SVO adapter plan discovery to finish.'
+                            : 'Complete the required model and SVO adapter parameters before sending runs.'}
+                      </p>
+                    ) : canExecute && canWrite ? (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-end gap-3">
+                          {!model.isFlow && (
+                            <label className="flex flex-col gap-1 text-xs text-gray-700">
+                              <span>Maximum run time (minutes)</span>
+                              <input
+                                aria-label={`Maximum run time for ${model.name}`}
+                                data-testid={`max-runtime-${mid}`}
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={maxMinutes[mid] ?? String(DEFAULT_MAX_MINUTES)}
+                                onChange={(event) =>
+                                  setMaxMinutes((values) => ({
+                                    ...values,
+                                    [mid]: event.target.value,
+                                  }))
+                                }
+                                className="w-32 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                              />
+                            </label>
+                          )}
+                          <button
+                            type="button"
+                            data-testid={`submit-runs-${mid}`}
+                            onClick={() => void handleSubmit(mid)}
+                            disabled={waiting[mid]}
+                            className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {waiting[mid] ? (
+                              <>
+                                Submitting…{' '}
+                                <span className="inline-block h-3 w-3 animate-spin rounded border-2 border-white border-t-transparent" />
+                              </>
+                            ) : (
+                              'Send Runs'
+                            )}
+                          </button>
+                        </div>
+                        {!model.isFlow && (
+                          <PublishOutputsControl
+                            modelId={mid}
+                            publishers={publishers[mid] ?? []}
+                            outputs={model.output_files}
+                            selection={publishSelections[mid] ?? null}
+                            disabled={waiting[mid]}
+                            onChange={(selection) =>
+                              setPublishSelections((current) => ({ ...current, [mid]: selection }))
+                            }
+                          />
+                        )}
+                        {problems}
                       </div>
                     ) : (
-                      <table
-                        className="w-full border-collapse text-xs"
-                        data-testid={`runs-table-${mid}`}
-                      >
-                        <thead className="bg-gray-100">
-                          <tr>
-                            <th colSpan={5} className="px-2 py-1 text-left font-semibold">
-                              Run
-                            </th>
-                            {adjustableInputs.length > 0 && (
-                              <th
-                                colSpan={adjustableInputs.length}
-                                className="px-2 py-1 text-left font-semibold"
-                              >
-                                Inputs
-                              </th>
-                            )}
-                            {adjustableParams.length > 0 && (
-                              <th
-                                colSpan={adjustableParams.length}
-                                className="px-2 py-1 text-left font-semibold"
-                              >
-                                Parameters
-                              </th>
-                            )}
-                          </tr>
-                          <tr>
-                            <th className="px-2 py-1 font-medium">Status</th>
-                            <th className="px-2 py-1 font-medium">Start</th>
-                            <th className="px-2 py-1 font-medium">End</th>
-                            <th className="px-2 py-1 font-medium">Log</th>
-                            <th className="px-2 py-1 font-medium">Files</th>
-                            {adjustableInputs.length + adjustableParams.length === 0 && (
-                              <th className="px-2 py-1" />
-                            )}
-                            {adjustableInputs.map((f) => (
-                              <th key={f.id} className="px-2 py-1 font-medium">
-                                {(f.name ?? '').replace(/[-_]/g, ' ')}
-                              </th>
-                            ))}
-                            {adjustableParams.map((p) => (
-                              <th key={p.id} className="px-2 py-1 font-medium">
-                                {humanizeName(p.name)}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {grouped.executions.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan={5 + adjustableInputs.length + adjustableParams.length}
-                                className="px-2 py-4 text-center text-gray-400"
-                              >
-                                {model.isFlow ? (
-                                  <span data-testid={`no-run-records-${mid}`}>
-                                    No run records yet. Use Reload once the run has started.
-                                  </span>
-                                ) : (
-                                  <div className="flex items-center justify-center gap-2">
-                                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-                                    Loading run records…
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          ) : (
-                            grouped.executions.map((execution: Execution) => {
-                              return (
-                                <tr key={execution.id} className="odd:bg-white even:bg-gray-50">
-                                  <td className="px-2 py-1">
-                                    <StatusBar
-                                      status={execution.status}
-                                      progress={execution.run_progress}
-                                    />
-                                  </td>
-                                  <td className="px-2 py-1 text-gray-500">
-                                    {toDateTimeString(execution.start_time)}
-                                  </td>
-                                  <td className="px-2 py-1 text-gray-500">
-                                    {toDateTimeString(execution.end_time)}
-                                  </td>
-                                  <td className="px-2 py-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => void handleViewLog(execution.id)}
-                                      className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs hover:bg-gray-50"
-                                    >
-                                      <ExternalLink className="h-3 w-3" />
-                                      View Log
-                                    </button>
-                                  </td>
-                                  <td className="px-2 py-1">
-                                    <button
-                                      type="button"
-                                      data-testid={`view-files-${execution.id}`}
-                                      onClick={() =>
-                                        setFilesFor({ executionId: execution.id, modelId: mid })
-                                      }
-                                      className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs hover:bg-gray-50"
-                                    >
-                                      <FolderOpen className="h-3 w-3" />
-                                      Files
-                                    </button>
-                                  </td>
-                                  {adjustableInputs.length + adjustableParams.length === 0 && (
-                                    <td className="px-2 py-1 text-gray-400">
-                                      No inputs or parameters
-                                    </td>
-                                  )}
-                                  {adjustableInputs.map((input) => {
-                                    const res = execution.bindings[input.id ?? ''] as {
-                                      name?: string;
-                                      url?: string;
-                                      location?: string;
-                                    } | null;
-                                    const url = res ? getResourceUrl(res) : '';
-                                    return (
-                                      <td key={input.id} className="px-2 py-1">
-                                        {res && url ? (
-                                          <a
-                                            href={url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-blue-600 hover:underline"
-                                          >
-                                            {res.name ?? url}
-                                          </a>
-                                        ) : (
-                                          '—'
-                                        )}
-                                      </td>
-                                    );
-                                  })}
-                                  {adjustableParams.map((param) => (
-                                    <td key={param.id} className="px-2 py-1">
-                                      {runParamValue(param, execution)}
-                                    </td>
-                                  ))}
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
+                      <p className="text-xs text-gray-500">
+                        You don&apos;t have permission to send runs on this sub-task.
+                      </p>
                     )}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-700">{nextAction}</p>
+
+                    {!isSingleRun && (
+                      <RunCounters
+                        testId={`run-counters-${mid}`}
+                        total={summary.total_runs}
+                        successful={successfulRuns}
+                        failed={failedRuns}
+                        running={runningRuns}
+                        pending={pendingRuns}
+                      />
+                    )}
+
+                    {showPanel && workflowRun && isFlowRun ? (
+                      <FlowRunPanel
+                        run={workflowRun}
+                        onRefresh={refreshRun}
+                        refreshing={workflowRefreshing?.[mid]}
+                        refreshError={workflowRefreshErrors?.[mid]}
+                        onCancel={cancelRun}
+                        cancelling={workflowCancelling?.[mid]}
+                        ensembleManagerApi={ensembleManagerApi}
+                        username={currentUsername}
+                        onResume={
+                          onResumeWorkflow && workflowRun.run_id?.startsWith('ue_')
+                            ? (edit) => onResumeWorkflow(mid, edit)
+                            : undefined
+                        }
+                        onRestart={restart}
+                        restarting={waiting[mid]}
+                        restartProblem={problems}
+                      />
+                    ) : showPanel && workflowRun ? (
+                      <UnifiedExecutionPanel
+                        run={workflowRun}
+                        modelName={model.name}
+                        adapterPlans={threadData.adapter_plans?.[mid] ?? []}
+                        onRefresh={refreshRun}
+                        refreshing={workflowRefreshing?.[mid]}
+                        refreshError={workflowRefreshErrors?.[mid]}
+                        onCancel={cancelRun}
+                        cancelling={workflowCancelling?.[mid]}
+                        onRestart={restart}
+                        restarting={waiting[mid]}
+                        restartProblem={problems}
+                      />
+                    ) : ended ? (
+                      <RunFailureNotice
+                        cancelled={displayStatus === 'cancelled'}
+                        stepErrors={[
+                          `${failedRuns} of ${summary.total_runs} runs failed. Open a run's log below for why.`,
+                        ]}
+                        onRestart={restart}
+                        restarting={waiting[mid]}
+                        problem={problems}
+                      />
+                    ) : null}
+
+                    {isSingleRun ? (
+                      <div className="space-y-2" data-testid={`single-run-${mid}`}>
+                        {latestExecution ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              data-testid={`view-log-${latestExecution.id}`}
+                              onClick={() => void handleViewLog(latestExecution.id)}
+                              className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Log
+                            </button>
+                            <button
+                              type="button"
+                              data-testid={`view-files-${latestExecution.id}`}
+                              onClick={() =>
+                                setFilesFor({ executionId: latestExecution.id, modelId: mid })
+                              }
+                              className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                            >
+                              <FolderOpen className="h-3 w-3" />
+                              Files
+                            </button>
+                          </div>
+                        ) : grouped.loading ? (
+                          <span className="inline-flex items-center gap-2 text-xs text-gray-500">
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                            Loading run records…
+                          </span>
+                        ) : (
+                          <span
+                            className="text-xs text-gray-500"
+                            data-testid={`no-run-records-${mid}`}
+                          >
+                            No run records yet. Refresh once the run has started.
+                          </span>
+                        )}
+                        <SettingsUsed
+                          params={settableParams}
+                          execution={latestExecution}
+                          testId={`settings-used-${mid}`}
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {/* Reload, and a pager only when there is more than one page. */}
+                        <div className="flex items-center gap-2 text-xs">
+                          {totalPages > 1 && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleNextPage(mid, -1)}
+                                disabled={currentPage <= 1}
+                                className="rounded border px-2 py-0.5 hover:bg-gray-50 disabled:opacity-40"
+                              >
+                                Back
+                              </button>
+                              <span>
+                                Page {currentPage} of {totalPages}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleNextPage(mid, 1)}
+                                disabled={currentPage >= totalPages}
+                                className="rounded border px-2 py-0.5 hover:bg-gray-50 disabled:opacity-40"
+                              >
+                                Next
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => onFetchRuns(mid, currentPage, PAGE_SIZE)}
+                            className="ml-auto flex items-center gap-1 rounded border px-2 py-0.5 hover:bg-gray-50"
+                            title="Reload"
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Reload
+                          </button>
+                        </div>
+
+                        {/* Runs table: paged, so it grows with the step pane instead of
+                            adding a scroll box of its own. */}
+                        <SameForEveryRun items={sameParams} testId={`same-for-every-run-${mid}`} />
+                        <RunsTable
+                          modelId={mid}
+                          isFlow={Boolean(model.isFlow)}
+                          loading={grouped.loading}
+                          executions={grouped.executions}
+                          inputs={adjustableInputs}
+                          params={adjustableParams}
+                          onViewLog={(id) => void handleViewLog(id)}
+                          onViewFiles={(id) => setFilesFor({ executionId: id, modelId: mid })}
+                          onRestart={restart}
+                          restarting={waiting[mid]}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </CollapsibleCard>
             </li>
           );
         })}

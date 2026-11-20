@@ -111,7 +111,8 @@ describe('MintResults', () => {
         onFetchRuns={vi.fn()}
       />,
     );
-    expect(screen.getByText(/Results/)).toBeInTheDocument();
+    expect(screen.getByTestId('mint-results')).toBeInTheDocument();
+    expect(screen.getByText('HydroModel')).toBeInTheDocument();
   });
 
   it('renders the model name', () => {
@@ -228,7 +229,7 @@ describe('MintResults', () => {
     expect(onContinue).toHaveBeenCalledOnce();
   });
 
-  it('shows fetch results button when runs are finished', () => {
+  it('shows the Refresh button when runs are finished', () => {
     const threadDataFinished: ThreadExecutionData = {
       ...mockThreadDataSubmitted,
       execution_summary: {
@@ -253,7 +254,7 @@ describe('MintResults', () => {
         onPublishResults={vi.fn()}
       />,
     );
-    expect(screen.getByTestId('fetch-results-model-1')).toBeInTheDocument();
+    expect(screen.getByTestId('refresh-results-model-1')).toBeInTheDocument();
   });
 
   // ── #110: the button used to make no request, and a failure said nothing ──
@@ -289,11 +290,11 @@ describe('MintResults', () => {
     );
   }
 
-  it('calls onPublishResults when Fetch results is clicked', async () => {
+  it('calls onPublishResults when Refresh is clicked', async () => {
     const onPublishResults = vi.fn().mockResolvedValue(undefined);
     renderFinished(onPublishResults);
 
-    fireEvent.click(screen.getByTestId('fetch-results-model-1'));
+    fireEvent.click(screen.getByTestId('refresh-results-model-1'));
 
     await waitFor(() => expect(onPublishResults).toHaveBeenCalledWith('model-1'));
   });
@@ -308,7 +309,7 @@ describe('MintResults', () => {
     // The mount effect loads page 1 once; the publish must load it again.
     await waitFor(() => expect(onFetchRuns).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByTestId('fetch-results-model-1'));
+    fireEvent.click(screen.getByTestId('refresh-results-model-1'));
 
     await waitFor(() => expect(onFetchRuns).toHaveBeenCalledTimes(2));
     expect(onFetchRuns).toHaveBeenLastCalledWith('model-1', 1, expect.any(Number));
@@ -320,7 +321,7 @@ describe('MintResults', () => {
 
     await waitFor(() => expect(onFetchRuns).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByTestId('fetch-results-model-1'));
+    fireEvent.click(screen.getByTestId('refresh-results-model-1'));
 
     expect(await screen.findByTestId('publish-error-model-1')).toBeInTheDocument();
     expect(onFetchRuns).toHaveBeenCalledTimes(1);
@@ -334,7 +335,7 @@ describe('MintResults', () => {
       );
     renderFinished(onPublishResults);
 
-    fireEvent.click(screen.getByTestId('fetch-results-model-1'));
+    fireEvent.click(screen.getByTestId('refresh-results-model-1'));
 
     expect(await screen.findByTestId('publish-error-model-1')).toHaveTextContent(
       'No executions found to publish',
@@ -367,7 +368,7 @@ describe('MintResults', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('fetch-results-model-1'));
+    fireEvent.click(screen.getByTestId('refresh-results-model-1'));
 
     expect(await screen.findByTestId('publish-error-model-1')).toHaveTextContent(
       /declares no output/i,
@@ -383,7 +384,7 @@ describe('MintResults', () => {
         .mockRejectedValue(new EnsembleManagerError(403, 'Ensemble manager returned 403: nope')),
     );
 
-    fireEvent.click(screen.getByTestId('fetch-results-model-1'));
+    fireEvent.click(screen.getByTestId('refresh-results-model-1'));
 
     expect(await screen.findByTestId('publish-error-model-1')).toHaveTextContent(
       'Ensemble manager returned 403: nope',

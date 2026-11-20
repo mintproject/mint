@@ -856,7 +856,7 @@ describe('MintRuns log fetch authentication', () => {
         onSubmitRuns={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /view log/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^log$/i }));
   }
 
   function fetchInit(): RequestInit {

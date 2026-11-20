@@ -2,7 +2,7 @@
  * Tests for FlowRunPanel and the flow graph it draws from `workflow_stages`.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 import type { UnifiedRunSnapshot } from '@/lib/ensemble-manager';
 import { FlowRunPanel, flowStageGraph, flowStepState } from '../FlowRunPanel';
@@ -96,14 +96,13 @@ describe('gather stages', () => {
       }),
       ...gather.slice(1),
     ];
-    render(<FlowRunPanel run={flowRun({ workflow_stages: failed })} />);
-    expect(screen.getByTestId('flow-step-step-gather-1')).toHaveTextContent(
+    render(<FlowRunPanel run={flowRun({ status: 'failed', workflow_stages: failed })} />);
+    expect(screen.getByTestId('flow-node-step-gather-1')).toHaveTextContent(
       'Gather Elevation files',
     );
-    expect(screen.getByTestId('flow-step-step-gather-1')).toHaveTextContent(
-      'file 3 on data.example.org',
-    );
-    expect(screen.getByTestId('flow-step-step-1')).toBeInTheDocument();
+    expect(screen.getByTestId('run-step-errors')).toHaveTextContent('Gather Elevation files: ');
+    expect(screen.getByTestId('run-step-errors')).toHaveTextContent('file 3 on data.example.org');
+    expect(screen.getByTestId('flow-node-step-1')).toBeInTheDocument();
   });
 });
 
@@ -118,15 +117,18 @@ describe('flowStepState', () => {
 });
 
 describe('FlowRunPanel', () => {
-  it('lists every step by name with its status', () => {
+  it('shows every step once, by name with its status', () => {
     render(<FlowRunPanel run={flowRun()} />);
-    const list = screen.getByTestId('flow-step-list');
-    expect(list.children).toHaveLength(4);
-    expect(screen.getByTestId('flow-step-step-1')).toHaveTextContent('Sensemaking: ingest corpus');
-    expect(screen.getByTestId('flow-step-step-1')).toHaveTextContent('Completed');
-    expect(screen.getByTestId('flow-step-step-2')).toHaveTextContent('Running');
-    expect(screen.getByTestId('flow-step-step-3')).toHaveTextContent('Waiting');
+    expect(screen.getByTestId('flow-node-step-1')).toHaveTextContent('Sensemaking: ingest corpus');
+    expect(screen.getByTestId('flow-node-step-1')).toHaveTextContent('Completed');
+    expect(screen.getByTestId('flow-node-step-2')).toHaveTextContent('Running');
+    expect(screen.getByTestId('flow-node-step-3')).toHaveTextContent('Waiting');
     expect(screen.getByTestId('flow-node-step-4')).toBeInTheDocument();
+    // No second, visible list of the same steps: the only list is the task ids
+    // inside the collapsed Technical details.
+    expect(screen.getByTestId('flow-technical-details')).toContainElement(
+      screen.getByTestId('flow-step-list'),
+    );
     expect(screen.queryByText(/run model/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/pass inputs to model/i)).not.toBeInTheDocument();
   });
@@ -148,7 +150,6 @@ describe('FlowRunPanel', () => {
       ['step-2', 'Completed'],
       ['step-3', 'Running'],
     ] as const) {
-      expect(screen.getByTestId(`flow-step-${id}`)).toHaveTextContent(word);
       expect(screen.getByTestId(`flow-node-${id}`)).toHaveTextContent(word);
     }
   });
@@ -170,8 +171,7 @@ describe('FlowRunPanel', () => {
         })}
       />,
     );
-    expect(screen.getAllByText('Starting the flow').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('flow-step-list').children).toHaveLength(1);
+    expect(screen.getAllByText('Starting the flow')).toHaveLength(1);
   });
 
   it('shows a failed step with its error message', () => {
@@ -186,8 +186,8 @@ describe('FlowRunPanel', () => {
         })}
       />,
     );
-    expect(screen.getByTestId('flow-step-step-2')).toHaveTextContent('Failed');
-    expect(screen.getByTestId('flow-step-step-2')).toHaveTextContent('out of memory');
+    expect(screen.getByTestId('flow-node-step-2')).toHaveTextContent('Failed');
+    expect(screen.getByTestId('run-step-errors')).toHaveTextContent('Embed: out of memory');
   });
 
   it('shows a readable run-level message once', () => {
@@ -214,11 +214,45 @@ describe('FlowRunPanel', () => {
     expect(screen.getByText('boom')).toBeInTheDocument();
   });
 
-  it('keeps the Tapis ids under Technical identifiers and each step task id', () => {
+  it('keeps the Tapis ids and each step task id under a collapsed Technical details', () => {
     render(<FlowRunPanel run={flowRun()} />);
-    expect(screen.getByText('wr-1')).toBeInTheDocument();
-    expect(screen.getByText('wf-1')).toBeInTheDocument();
+    const details = screen.getByTestId('flow-technical-details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(within(details).getByText('wr-1')).toBeInTheDocument();
+    expect(within(details).getByText('wf-1')).toBeInTheDocument();
     expect(screen.getByTestId('flow-step-step-2')).toHaveTextContent('task-step-2');
+  });
+
+  it('offers Restart on a failed run, disables it while sending, and not on a running one', () => {
+    const onRestart = vi.fn();
+    const failed = flowRun({ status: 'failed', failure_code: 'FLOW_FAILED', error_message: 'x' });
+    const { rerender } = render(<FlowRunPanel run={failed} onRestart={onRestart} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Restart' }));
+    expect(onRestart).toHaveBeenCalledTimes(1);
+
+    rerender(<FlowRunPanel run={failed} onRestart={onRestart} restarting />);
+    expect(screen.getByRole('button', { name: /restarting/i })).toBeDisabled();
+
+    rerender(<FlowRunPanel run={flowRun()} />);
+    expect(screen.queryByRole('button', { name: /restart/i })).not.toBeInTheDocument();
+  });
+
+  it('puts the edit controls first for a paused run, before the step diagram', () => {
+    const paused = flowRun({
+      status: 'awaiting_edit',
+      started_by: 'alice',
+      model_child_id: 'exec-1',
+      pause: {
+        output_key: '1:1',
+        file: 'draft.json',
+        file_location: 'tapis://ls6/scratch/alice/draft.json',
+        paused_after_step: 1,
+        paused_at: null,
+      },
+    });
+    render(<FlowRunPanel run={paused} username="alice" />);
+    const panel = screen.getByTestId('flow-run-panel');
+    expect(panel.firstElementChild).toBe(screen.getByTestId('flow-paused'));
   });
 
   it('offers cancel while the run is active and not after it ends', () => {

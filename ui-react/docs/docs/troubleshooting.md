@@ -53,7 +53,7 @@ Some settings have no default and no value. Give each one a value in the **Param
 
 ## A flow says it is already running
 
-The message gives the name of the run already in progress. Wait for that run to finish, or cancel it in the **Flow steps** panel, then run again.
+The message gives the name of the run already in progress. Wait for that run to finish, or cancel it from the flow's card in the Runs step, then run again.
 
 ## A step says Not runnable for you
 

@@ -81,6 +81,7 @@ import { MintParameters } from './thread/MintParameters';
 import type { PublishRequest } from '@/lib/publish-outputs';
 import type { SpatialSelection } from './thread/SpatialScopeMap';
 import { MintRuns } from './thread/MintRuns';
+import { DEFAULT_MAX_MINUTES } from '@/lib/modeling/run-settings';
 import { MintResults } from './thread/MintResults';
 import { WizardRail, type ThreadStepNav } from './thread/wizard/WizardRail';
 import { deriveStepStates } from './thread/wizard/deriveStepStates';
@@ -1299,6 +1300,10 @@ export function MintThread({
             onFetchRuns={handleFetchRuns}
             onPublishResults={handlePublishResults}
             onPromoteOutputs={() => setCurrentSection('runs')}
+            onOpenRuns={() => setCurrentSection('runs')}
+            onRestartRuns={
+              perm.write ? (modelId) => handleSubmitRuns(modelId, DEFAULT_MAX_MINUTES) : undefined
+            }
           />
         );
       case 'summary':

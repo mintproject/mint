@@ -4,10 +4,12 @@
  * A flow runs as a graph of steps, not as one model job, so the model-shaped
  * "prepare inputs / run model / hand off" rows do not describe it. This panel
  * draws the run's own `workflow_stages`: one node per step, joined by
- * `depends_on`, with a plain list of the same steps underneath.
+ * `depends_on`, once. A run stopped for an edit puts its controls first; a run
+ * that failed says why and offers Restart; step task ids sit under a collapsed
+ * "Technical details".
  */
 import { RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import {
   WorkflowCanvas,
@@ -15,8 +17,10 @@ import {
   type WorkflowCanvasPosition,
 } from '@/components/modeling/WorkflowCanvas';
 import { FLOW_LAYOUT_OPTIONS, flowCanvasHeight, layoutFlowGraph } from '@/lib/flow-graph-layout';
-import { EnsembleManagerError, type UnifiedRunSnapshot } from '@/lib/ensemble-manager';
-import { flowErrorMessage, stepErrorText } from '@/lib/flow-errors';
+import { RunFailureNotice } from '@/components/modeling/runs/RunFailureNotice';
+import type { UnifiedRunSnapshot } from '@/lib/ensemble-manager';
+import { stepErrorText } from '@/lib/flow-errors';
+import { normalizeRunStatus } from '@/lib/modeling/run-status';
 import { EditedInputNote } from './EditedInputNote';
 import { PausedFlowStep, type PausedEdit } from './PausedFlowStep';
 
@@ -41,15 +45,6 @@ const STEP_NODE_CLASS: Record<FlowStepState, string> = {
   failed: 'border-red-200 bg-red-50 text-red-800',
   cancelled: 'border-red-200 bg-red-50 text-red-800',
   skipped: 'border-gray-200 bg-gray-50 text-gray-500',
-};
-
-const STEP_PILL_CLASS: Record<FlowStepState, string> = {
-  waiting: 'bg-gray-100 text-gray-700',
-  running: 'bg-blue-100 text-blue-800',
-  completed: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  cancelled: 'bg-red-100 text-red-800',
-  skipped: 'bg-gray-100 text-gray-500',
 };
 
 const TERMINAL_RUN_STATUSES = ['completed', 'failed', 'cancelled'];
@@ -118,34 +113,6 @@ function FlowStepNode({ node }: { node: FlowGraphNode }) {
   );
 }
 
-/** The run-level refusal text for a failed flow, once. */
-function RunFailure({ run }: { run: UnifiedRunSnapshot }) {
-  if (!run.failure_code && !run.error_message) return null;
-  const known = run.failure_code
-    ? flowErrorMessage(new EnsembleManagerError(0, run.error_message ?? '', run.failure_code))
-    : null;
-  return (
-    <div
-      className="rounded border border-red-200 bg-red-50 px-2 py-2 text-red-800"
-      data-testid="flow-run-failure"
-    >
-      {known ? (
-        <>
-          <div className="font-medium">{known.title}</div>
-          {known.lines.map((line, index) => (
-            <div key={index}>{line}</div>
-          ))}
-        </>
-      ) : (
-        <>
-          {run.failure_code && <div className="font-medium">Failure: {run.failure_code}</div>}
-          {run.error_message && <div>{run.error_message}</div>}
-        </>
-      )}
-    </div>
-  );
-}
-
 export interface FlowRunPanelProps {
   run: UnifiedRunSnapshot;
   onRefresh?: () => Promise<void>;
@@ -158,6 +125,11 @@ export interface FlowRunPanelProps {
   username?: string;
   /** Sends the user's edited file on and continues the run. */
   onResume?: (edit: PausedEdit) => Promise<void>;
+  /** Sends the flow again after it failed or was cancelled. */
+  onRestart?: () => void;
+  restarting?: boolean;
+  /** Why the last send was refused, shown beside Restart. */
+  restartProblem?: ReactNode;
 }
 
 export function FlowRunPanel({
@@ -170,6 +142,9 @@ export function FlowRunPanel({
   ensembleManagerApi = '',
   username = '',
   onResume,
+  onRestart,
+  restarting = false,
+  restartProblem,
 }: FlowRunPanelProps) {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const stages: FlowStage[] = run.workflow_stages?.length
@@ -188,38 +163,15 @@ export function FlowRunPanel({
   const tapisWorkflow = run.tapis_workflow;
   const active = !TERMINAL_RUN_STATUSES.includes(String(run.status ?? ''));
   const canvasHeight = flowCanvasHeight(graph.positions);
+  const outcome = normalizeRunStatus(run.status);
+  const ended = outcome === 'failed' || outcome === 'cancelled';
+  const stepErrors = stages.flatMap((stage) =>
+    stage.error_message ? [`${flowStepLabel(stage)}: ${stepErrorText(stage.error_message)}`] : [],
+  );
+  const tasks = stages.filter((stage) => stage.provider_ids?.task_id);
 
   return (
-    <div
-      className="space-y-3 rounded border border-blue-200 bg-blue-50 px-3 py-3 text-xs"
-      data-testid="flow-run-panel"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-semibold text-blue-900">Flow steps</span>
-        {onRefresh && (
-          <button
-            type="button"
-            onClick={() => void onRefresh()}
-            disabled={refreshing}
-            className="flex items-center gap-1 rounded border border-blue-300 bg-white px-2 py-1 text-blue-800 hover:bg-blue-100 disabled:opacity-50"
-            data-testid="refresh-workflow"
-          >
-            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing…' : 'Refresh workflow'}
-          </button>
-        )}
-      </div>
-
-      <WorkflowCanvas
-        positions={graph.positions}
-        edges={graph.edges}
-        renderNode={(node) => <FlowStepNode node={node} />}
-        height={canvasHeight}
-        layoutOptions={FLOW_LAYOUT_OPTIONS}
-        markerId={`flow-graph-arrow-${run.run_id ?? 'current'}`}
-        testId="flow-graph-canvas"
-      />
-
+    <div className="space-y-3 text-xs" data-testid="flow-run-panel">
       {run.status === 'awaiting_edit' && run.pause && (
         <PausedFlowStep
           run={run}
@@ -233,34 +185,42 @@ export function FlowRunPanel({
       )}
       {run.replacement && <EditedInputNote replacement={run.replacement} />}
 
-      <ol className="space-y-1" data-testid="flow-step-list">
-        {stages.map((stage) => {
-          const state = flowStepState(stage.status);
-          const taskId = stage.provider_ids?.task_id;
-          return (
-            <li
-              key={stage.stage_id}
-              className="rounded border border-gray-200 bg-white px-2 py-2"
-              data-testid={`flow-step-${stage.stage_id}`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="font-medium text-gray-900">{flowStepLabel(stage)}</span>
-                <span className={`rounded px-2 py-0.5 text-[11px] ${STEP_PILL_CLASS[state]}`}>
-                  {STEP_LABEL[state]}
-                </span>
-              </div>
-              {stage.error_message && (
-                <p className="mt-1 text-red-800">{stepErrorText(stage.error_message)}</p>
-              )}
-              {taskId && (
-                <p className="mt-1 text-gray-500">
-                  Task <code>{taskId}</code>
-                </p>
-              )}
-            </li>
-          );
-        })}
-      </ol>
+      {(ended || run.failure_code || run.error_message || onRestart) && (
+        <RunFailureNotice
+          run={run}
+          stepErrors={stepErrors}
+          cancelled={outcome === 'cancelled'}
+          onRestart={onRestart}
+          restarting={restarting}
+          problem={restartProblem}
+        />
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-gray-900">Steps</span>
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={refreshing}
+            className="flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-gray-800 hover:bg-gray-100 disabled:opacity-50"
+            data-testid="refresh-workflow"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        )}
+      </div>
+
+      <WorkflowCanvas
+        positions={graph.positions}
+        edges={graph.edges}
+        renderNode={(node) => <FlowStepNode node={node} />}
+        height={canvasHeight}
+        layoutOptions={FLOW_LAYOUT_OPTIONS}
+        markerId={`flow-graph-arrow-${run.run_id ?? 'current'}`}
+        testId="flow-graph-canvas"
+      />
 
       {active && onCancel && (
         <div className="flex flex-wrap items-center gap-2">
@@ -305,10 +265,8 @@ export function FlowRunPanel({
         </div>
       )}
 
-      <RunFailure run={run} />
-
-      <details className="rounded border border-blue-200 bg-white px-2 py-2 text-blue-800">
-        <summary className="cursor-pointer font-medium">Technical identifiers</summary>
+      <details className="text-gray-700" data-testid="flow-technical-details">
+        <summary className="cursor-pointer font-medium text-gray-800">Technical details</summary>
         <div className="mt-2 space-y-1">
           <div>
             Tapis workflow run ID: <code>{tapisWorkflow?.run_id ?? 'not submitted yet'}</code>
@@ -323,6 +281,15 @@ export function FlowRunPanel({
               Execution ID: <code>{run.run_id}</code>
             </div>
           )}
+          {tasks.length > 0 && (
+            <ul className="space-y-0.5" data-testid="flow-step-list">
+              {tasks.map((stage) => (
+                <li key={stage.stage_id} data-testid={`flow-step-${stage.stage_id}`}>
+                  {flowStepLabel(stage)}: task <code>{stage.provider_ids?.task_id}</code>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </details>
 
@@ -331,9 +298,6 @@ export function FlowRunPanel({
           Showing the last saved workflow state. Refresh failed: {refreshError}
         </div>
       )}
-      <p className="text-[11px] text-blue-700">
-        Application logs and files remain available from the run records below.
-      </p>
     </div>
   );
 }
