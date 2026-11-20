@@ -16,7 +16,7 @@ export const registerInternalDataset = async (
 ): Promise<boolean> => {
     //console.log(dataset);
 
-    let provid = prefs.data_catalog_extra.owner_provenance_id;
+    const provid = prefs.data_catalog_extra.owner_provenance_id;
     await createProvenanceId(provid, prefs);
 
     let dsid: string | null = null;
@@ -44,7 +44,7 @@ export const registerInternalDataset = async (
 };
 
 function convertSpatialCoverage(cover: any) {
-    let covertype: string = cover.type.toLowerCase();
+    const covertype: string = cover.type.toLowerCase();
     if (covertype === "point") {
         return {
             type: "Point",
@@ -69,8 +69,8 @@ function convertSpatialCoverage(cover: any) {
 }
 
 async function createDataset(dataset: Dataset, prefs: MintPreferences): Promise<string | null> {
-    let dcat = prefs.data_catalog_api;
-    let provid = prefs.data_catalog_extra.owner_provenance_id;
+    const dcat = prefs.data_catalog_api;
+    const provid = prefs.data_catalog_extra.owner_provenance_id;
     const payload = {
         datasets: [
             {
@@ -97,8 +97,8 @@ async function createDataset(dataset: Dataset, prefs: MintPreferences): Promise<
 }
 
 async function createStandardVariables(variables: any, prefs: MintPreferences): Promise<any> {
-    let dcat = prefs.data_catalog_api;
-    let provid = prefs.data_catalog_extra.owner_provenance_id;
+    const dcat = prefs.data_catalog_api;
+    const provid = prefs.data_catalog_extra.owner_provenance_id;
 
     if (!variables || variables.length === 0) {
         return {};
@@ -118,7 +118,7 @@ async function createStandardVariables(variables: any, prefs: MintPreferences): 
     };
     const findResult = await submitRequest(dcat + FIND_STDVARS, findExistingJson);
 
-    let curStdVars: { [key: string]: any } = {};
+    const curStdVars: { [key: string]: any } = {};
     if (findResult && findResult["standard_variables"].length > 0) {
         findResult["standard_variables"].forEach((stdvar: any) => {
             curStdVars[stdvar["name"]] = stdvar;
@@ -157,7 +157,7 @@ async function createDatasetVariables(
     datasetVariables: any,
     prefs: MintPreferences
 ): Promise<any> {
-    let dcat = prefs.data_catalog_api;
+    const dcat = prefs.data_catalog_api;
 
     if (datasetId && datasetVariables && datasetVariables.length > 0) {
         datasetVariables.forEach((dsvar: any) => {
@@ -172,7 +172,7 @@ async function createDatasetVariables(
 }
 
 async function createProvenanceId(provenanceId: string, prefs: MintPreferences): Promise<void> {
-    let dcat = prefs.data_catalog_api;
+    const dcat = prefs.data_catalog_api;
 
     const provenanceDefinition = {
         provenance: {
@@ -208,8 +208,8 @@ async function createResources(
     resources: any,
     prefs: MintPreferences
 ): Promise<void> {
-    let dcat = prefs.data_catalog_api;
-    let provid = prefs.data_catalog_extra.owner_provenance_id;
+    const dcat = prefs.data_catalog_api;
+    const provid = prefs.data_catalog_extra.owner_provenance_id;
 
     if (datasetId && resources && resources.length > 0) {
         const resourceChunks = divideChunks(resources, RESOURCE_CHUNK_SIZE);
@@ -244,8 +244,8 @@ async function createResources(
 }
 
 async function syncDatasetMetadata(dsid: string, prefs: MintPreferences): Promise<void> {
-    let dcat = prefs.data_catalog_api;
-    let payload = {
+    const dcat = prefs.data_catalog_api;
+    const payload = {
         dataset_id: dsid,
         provenance_id: prefs.data_catalog_extra.owner_provenance_id
     };

@@ -17,10 +17,10 @@ async function get_ensemble_manager_node_name(namespace) {
         if (process.env.POD_NAME) {
             em_podname = process.env.POD_NAME;
         } else {
-            let pods = await k8sApi.listNamespacedPod(namespace);
-            for (let i in pods.body.items) {
-                let pod = pods.body.items[i];
-                let podname = pod.metadata.name;
+            const pods = await k8sApi.listNamespacedPod(namespace);
+            for (const i in pods.body.items) {
+                const pod = pods.body.items[i];
+                const podname = pod.metadata.name;
                 if (podname.match("ensemble-manager")) {
                     em_podname = podname;
                 }
@@ -67,8 +67,8 @@ async function get_volumes_and_mounts(
     jobname,
     mountPath = null
 ): Promise<[Array<k8s.V1Volume>, Array<k8s.V1VolumeMount>]> {
-    let volumes = [];
-    let mounts = [];
+    const volumes = [];
+    const mounts = [];
 
     let ensemble_manager_pvc_name = "mint-ensemble-manager";
     let ensemble_manager_pvc_mount = "/home/node/app/data";
@@ -81,17 +81,17 @@ async function get_volumes_and_mounts(
     if (process.env.ENSEMBLE_MANAGER_PVC) {
         ensemble_manager_pvc_name = process.env.ENSEMBLE_MANAGER_PVC;
     } else {
-        let pvcs = await k8sApi.listNamespacedPersistentVolumeClaim(namespace);
-        for (let i in pvcs.body.items) {
-            let pvc = pvcs.body.items[i];
-            let pvcname = pvc.metadata.name;
+        const pvcs = await k8sApi.listNamespacedPersistentVolumeClaim(namespace);
+        for (const i in pvcs.body.items) {
+            const pvc = pvcs.body.items[i];
+            const pvcname = pvc.metadata.name;
             if (pvcname.match("ensemble-manager")) {
                 ensemble_manager_pvc_name = pvcname;
             }
         }
     }
 
-    let volume_name = jobname + "-volume";
+    const volume_name = jobname + "-volume";
     volumes.push({
         name: volume_name,
         persistentVolumeClaim: {
@@ -118,8 +118,8 @@ export const runKubernetesPod = async (
     cpu_limit: string = "200m",
     memory_limit: string = "2048Mi"
 ) => {
-    let container_name = jobname + "-container";
-    let [volumes, mounts] = await get_volumes_and_mounts(namespace, jobname);
+    const container_name = jobname + "-container";
+    const [volumes, mounts] = await get_volumes_and_mounts(namespace, jobname);
 
     // Create the Job
     let jobManifest = {
@@ -159,7 +159,7 @@ export const runKubernetesPod = async (
     };
 
     if (use_node_affinity) {
-        let em_node_name = await get_ensemble_manager_node_name(namespace);
+        const em_node_name = await get_ensemble_manager_node_name(namespace);
         if (em_node_name) {
             jobManifest = add_node_affinity(jobManifest, em_node_name);
         }
@@ -173,7 +173,7 @@ export const runKubernetesPod = async (
 
         // Wait for a second, and check Pods for the Job
         await delay(1000);
-        let jobpods = await k8sApi.listNamespacedPod(
+        const jobpods = await k8sApi.listNamespacedPod(
             namespace,
             undefined,
             false,
@@ -184,8 +184,8 @@ export const runKubernetesPod = async (
 
         // Get Pod Name
         let podname = null;
-        for (let i in jobpods.body.items) {
-            let pod = jobpods.body.items[i];
+        for (const i in jobpods.body.items) {
+            const pod = jobpods.body.items[i];
             podname = pod.metadata.name;
             break;
         }
@@ -207,8 +207,8 @@ export const runKubernetesPod = async (
                     await delay(wait_for);
 
                     // Check the status of Pod
-                    let res = await k8sApi.readNamespacedPodStatus(podname, namespace);
-                    let status = res.body.status.phase;
+                    const res = await k8sApi.readNamespacedPodStatus(podname, namespace);
+                    const status = res.body.status.phase;
 
                     if (status != "Pending" && !started_log) {
                         // Start logging

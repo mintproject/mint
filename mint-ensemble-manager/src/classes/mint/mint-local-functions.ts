@@ -374,8 +374,8 @@ export const registerExecutionOutputsInCatalog = async (
             // Copy any input's spatial/temporal input (if any)
             let spatial = null;
             let temporal = {};
-            for (let inputid in execution.bindings) {
-                let input = execution.bindings[inputid];
+            for (const inputid in execution.bindings) {
+                const input = execution.bindings[inputid];
                 if (input["spatial_coverage"]) {
                     spatial = JSON.stringify(input["spatial_coverage"]);
                 }

@@ -46,12 +46,12 @@ if (prefs.execution_engine === "localex") {
 });*/
 
 const _downloadS3File = (url: string, filepath: string, prefs: MintPreferences): Promise<void> => {
-    var bucket = prefs.data_server_extra["bucket"];
-    var access_key = prefs.data_server_extra["access_key"];
-    var secret_key = prefs.data_server_extra["secret_access_key"];
-    var region = prefs.data_server_extra["region"];
+    const bucket = prefs.data_server_extra["bucket"];
+    const access_key = prefs.data_server_extra["access_key"];
+    const secret_key = prefs.data_server_extra["secret_access_key"];
+    const region = prefs.data_server_extra["region"];
 
-    var fileKey = url.substring(5 + bucket.length + 1);
+    const fileKey = url.substring(5 + bucket.length + 1);
 
     const client = new S3Client({
         region: region,
@@ -427,10 +427,10 @@ export const queueModelExecutionsLocally = async (
     });
 
     // Add Download Job to Queue (if it doesn't already exist)
-    for (let resid in registered_resources) {
-        let args = registered_resources[resid];
-        let inputpath = prefs.localex.datadir + "/" + args[0];
-        let inputurl = args[2];
+    for (const resid in registered_resources) {
+        const args = registered_resources[resid];
+        const inputpath = prefs.localex.datadir + "/" + args[0];
+        const inputurl = args[2];
         if (!fs.existsSync(inputpath)) {
             console.log("Downloading " + inputpath + " ...");
             if (inputurl.toLowerCase().startsWith("http")) {
