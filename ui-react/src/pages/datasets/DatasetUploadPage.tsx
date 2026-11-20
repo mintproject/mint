@@ -492,6 +492,7 @@ export function DatasetUploadPage() {
             onChange={setVariable}
             disabled={busy}
             requireLabel
+            allowCreate
           />
           {variable && <StandardVariableDetails variable={variable} />}
           <p className="text-sm text-muted-foreground">

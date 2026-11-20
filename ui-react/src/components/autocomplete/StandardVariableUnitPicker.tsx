@@ -26,10 +26,9 @@ import { ChevronsUpDown, Plus, Search } from 'lucide-react';
 import { usePrefetchReferenceDataQuery } from '@/graphql/generated/graphql';
 import { useRecentStandardVariables } from '@/hooks/useRecentStandardVariables';
 import { useVariableUnits, type UnitOption } from '@/hooks/useVariableUnits';
-import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 import { buildPhenomenonGroups } from '@/lib/standard-variable-browse';
 import { humanizeStandardVariable } from '@/lib/standard-variable-grammar';
-import { highlightRanges, rankStandardVariables } from '@/lib/standard-variable-search';
+import { highlightRanges } from '@/lib/standard-variable-search';
 import { DIMENSION_ORDER, prettyUnit, unitDimension, unitName } from '@/lib/unit-dictionary';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -43,6 +42,7 @@ import {
 } from '@/components/ui/dialog';
 import { CreateStandardVariableForm } from '@/components/autocomplete/CreateStandardVariableForm';
 import type { StandardVariableOption } from '@/components/autocomplete/StandardVariableCombobox';
+import { useStandardVariableMatches } from '@/components/autocomplete/useStandardVariableMatches';
 
 export interface StandardVariableUnitPickerProps {
   /** Currently resolved standard variable, or null. */
@@ -115,21 +115,11 @@ export function StandardVariableUnitPicker({
   }, [data]);
 
   const phenomenonGroups = React.useMemo(() => buildPhenomenonGroups(options), [options]);
-  const localSearchResults = React.useMemo(
-    () => (search.trim() === '' ? [] : rankStandardVariables(options, search)),
-    [options, search],
-  );
-  const semanticSearch = useSemanticSearch(search, { target: 'svo', limit: 50 });
-  const semanticResults = React.useMemo<StandardVariableOption[] | null>(
-    () =>
-      semanticSearch.results?.map((result) => ({
-        id: result.id,
-        label: result.label ?? '',
-        description: result.description ?? null,
-      })) ?? null,
-    [semanticSearch.results],
-  );
-  const searchResults = semanticResults ?? localSearchResults;
+  const {
+    results: searchResults,
+    loading: searchLoading,
+    isDeadEnd,
+  } = useStandardVariableMatches(search, options);
 
   const suggestedUnits = React.useMemo(() => {
     if (!draftVariable) return [];
@@ -189,8 +179,6 @@ export function StandardVariableUnitPicker({
     if (!phenomenon) return [];
     return phenomenonGroups.find((g) => g.phenomenon === phenomenon)?.properties ?? [];
   }, [phenomenonGroups, phenomenon]);
-
-  const isDeadEnd = !semanticSearch.loading && search.trim() !== '' && searchResults.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -328,7 +316,7 @@ export function StandardVariableUnitPicker({
               ) : (
                 // ---- search results ----
                 <div className="max-h-[280px] overflow-auto py-1">
-                  {semanticSearch.loading && searchResults.length === 0 ? (
+                  {searchLoading && searchResults.length === 0 ? (
                     <p className="px-4 py-6 text-center text-sm text-muted-foreground">
                       Searching standard variables…
                     </p>
