@@ -239,8 +239,10 @@ describe('MintProblemStatement detail panel', () => {
     expect(
       await screen.findByPlaceholderText('Describe the goal of this sub-task'),
     ).toBeInTheDocument();
-    const stepRail = screen.getByRole('complementary', { name: 'Sub-task step navigation' });
-    expect(within(stepRail).getByTestId('subtask-steps-toggle')).toBeInTheDocument();
+    // The steps live in the task tree, not in a separate column.
+    expect(
+      screen.queryByRole('complementary', { name: 'Sub-task step navigation' }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -319,5 +321,64 @@ describe('MintProblemStatement per-task sub-task lists', () => {
     expect(taskItem).toHaveAttribute('aria-selected', 'true');
     expect(toggleFor('Water modeling')).toHaveAttribute('aria-expanded', 'true');
     expect(inTree('Flood scenario')).toBeInTheDocument();
+  });
+});
+
+describe('MintProblemStatement steps in the tree', () => {
+  async function openSubTask(name = 'Rainfed scenario') {
+    renderPage(multiTaskStatement);
+    const tree = await screen.findByRole('tree');
+    await userEvent.click(await within(tree).findByText(name));
+    return within(await screen.findByRole('tree', { name: 'Tasks' }));
+  }
+
+  it('nests the open sub-task steps under its row, with states, and no rail column', async () => {
+    const tree = await openSubTask();
+    const nav = await tree.findByRole('navigation', { name: 'Sub-task steps' });
+
+    for (const label of [
+      'Framing',
+      'Variables',
+      'Models',
+      'Datasets',
+      'Parameters',
+      'Runs',
+      'Results',
+      'Summary',
+    ]) {
+      expect(within(nav).getByText(label)).toBeInTheDocument();
+    }
+    // Nested under the selected sub-task's list item.
+    const row = tree.getByText('Rainfed scenario').closest('[role="treeitem"]');
+    expect(row).toContainElement(nav);
+    expect(within(nav).getByTestId('rail-step-framing')).toHaveAttribute('aria-current', 'step');
+    expect(within(nav).getByTestId('rail-step-results')).toBeDisabled();
+    expect(
+      screen.queryByRole('complementary', { name: 'Sub-task step navigation' }),
+    ).not.toBeInTheDocument();
+    // Only the open sub-task shows steps.
+    expect(screen.getAllByRole('navigation', { name: 'Sub-task steps' })).toHaveLength(1);
+  });
+
+  it('clicking a step changes the step; a locked step does nothing', async () => {
+    const tree = await openSubTask();
+    const nav = await tree.findByRole('navigation', { name: 'Sub-task steps' });
+
+    await userEvent.click(within(nav).getByTestId('rail-step-summary'));
+    expect(within(nav).getByTestId('rail-step-summary')).toHaveAttribute('aria-current', 'step');
+    expect(within(nav).getByTestId('rail-step-framing')).not.toHaveAttribute('aria-current');
+
+    await userEvent.click(within(nav).getByTestId('rail-step-results'));
+    expect(within(nav).getByTestId('rail-step-summary')).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('collapses the steps list', async () => {
+    const tree = await openSubTask();
+    await tree.findByRole('navigation', { name: 'Sub-task steps' });
+    const toggle = tree.getByTestId('subtask-steps-toggle');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(tree.queryByRole('navigation', { name: 'Sub-task steps' })).not.toBeInTheDocument();
   });
 });
