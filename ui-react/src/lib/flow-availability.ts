@@ -1,15 +1,15 @@
 /**
- * Whether the signed-in user could run a flow: the adapter's
- * `GET /flows/{configuration_id}/availability`.
+ * Whether the signed-in user could run a flow: the catalog API's
+ * `GET /flows/{id}/availability`, which asks the SVO adapter as the user.
  *
- * The adapter answers per step whether the caller may run its piece, and reveals
+ * The answer says per step whether the caller may run its piece, and reveals
  * nothing about a piece the caller cannot see beyond `piece_missing`. This is a
  * courtesy check: plan and submit refuse a flow the user may not run all the same,
- * so every way this check can fail (no adapter configured, no token, a network
- * error, an old adapter without the route, a malformed answer) yields `null` and
- * the caller shows nothing.
+ * so every way this check can fail (no token, a network error, a catalog with no
+ * adapter or without the route, a malformed answer) yields `null` and the caller
+ * shows nothing.
  */
-import { getSvoAdapterApiUrl } from './config';
+import { getModelCatalogApiUrl } from './config';
 
 export type FlowStepReason = 'piece_missing' | 'not_approved' | 'stored_source_disabled';
 
@@ -41,7 +41,7 @@ export async function fetchFlowAvailability(
   token: string | null,
   signal?: AbortSignal,
 ): Promise<FlowAvailability | null> {
-  const base = getSvoAdapterApiUrl();
+  const base = getModelCatalogApiUrl();
   if (!base || !token) return null;
   try {
     const response = await fetch(`${base}/flows/${encodeURIComponent(flowId)}/availability`, {

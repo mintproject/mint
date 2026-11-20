@@ -107,7 +107,7 @@ query ModelInputRequirement($ds_id: String!) {
 LIST_DATA_OBJECTS_QUERY = """
 query ListDataObjects {
   adapter_data_object {
-    id label resource_uri format source_catalog
+    id label resource_uri format source_catalog owner_username owner_execution_id
     variables { standard_variable_uri local_name unit spatial_type crs }
   }
 }
@@ -129,6 +129,7 @@ DATA_OBJECT_CONTRACT_QUERY = """
 query DataObjectContract($id: String!) {
   adapter_data_object(where: {id: {_eq: $id}}) {
     id label resource_uri format extension mime_type source_catalog
+    owner_username owner_execution_id
     variables {
       id standard_variable_uri local_name unit dimensionality
       spatial_type crs grid_id grid_description temporal_resolution schema_json

@@ -11,6 +11,7 @@ vi.mock('../hasura/client.js', () => ({
 import {
   custom_flows_post,
   custom_flows_id_availability_get,
+  warnIfAdapterSecretMissing,
   planRegistration,
   buildRows,
   registrationMutation,
@@ -425,5 +426,24 @@ describe('GET /flows/{id}/availability', () => {
     reply = makeReply()
     await custom_flows_id_availability_get(makeAvailabilityReq('dictionary'), reply)
     expect([reply._status, reply._body.code]).toEqual([502, 'FLOW_AVAILABILITY_UNAVAILABLE'])
+  })
+})
+
+describe('the startup warning for a missing service secret', () => {
+  it('warns once, naming the setting and no value, only when an adapter is set without it', () => {
+    const log = { warn: vi.fn() }
+    process.env.SVO_ADAPTER_API_URL = 'https://adapter.example'
+    expect(warnIfAdapterSecretMissing(log)).toBe(true)
+    expect(log.warn).toHaveBeenCalledOnce()
+    expect(log.warn.mock.calls[0][0]).toContain('SVO_ADAPTER_INTERNAL_SERVICE_SECRET')
+
+    process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET = 'service-only'
+    expect(warnIfAdapterSecretMissing(log)).toBe(false)
+    expect(log.warn.mock.calls.flat().join(' ')).not.toContain('service-only')
+
+    delete process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET
+    delete process.env.SVO_ADAPTER_API_URL
+    expect(warnIfAdapterSecretMissing(log)).toBe(false)
+    expect(log.warn).toHaveBeenCalledOnce()
   })
 })

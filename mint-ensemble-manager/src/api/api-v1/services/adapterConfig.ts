@@ -18,3 +18,18 @@ export function adapterInternalSecret(): string {
         process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET || prefs.svo_adapter_internal_secret || ""
     );
 }
+
+/**
+ * One startup warning when an adapter is configured but the shared service secret is
+ * not: the Ensemble Manager would then call the adapter without it, and the adapter
+ * answers 503 on its service-only routes (and refuses everything with its front door
+ * on). Names the setting, never a value. Returns whether it warned.
+ */
+export function warnIfAdapterSecretMissing(log: { warn: (message: string) => void }): boolean {
+    if (!adapterBaseUrl() || adapterInternalSecret()) return false;
+    log.warn(
+        "SVO adapter is configured but SVO_ADAPTER_INTERNAL_SERVICE_SECRET (or " +
+            "svo_adapter_internal_secret) is not: calls to the adapter carry no shared service secret"
+    );
+    return true;
+}

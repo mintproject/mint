@@ -400,13 +400,24 @@ async def _front_door_guard(request: Request, call_next):
     return await call_next(request)
 
 
+def _cors_origins() -> list[str]:
+    """The configured CORS origins. A literal ``*`` is refused while the front door is
+    on: it would let any web page read the adapter's refusals and public routes."""
+    origins = settings.cors_origin_list
+    if "*" in origins and settings.require_front_door:
+        log.error("SVO_ADAPTER_CORS_ORIGINS contains '*' while SVO_ADAPTER_REQUIRE_FRONT_DOOR is on; "
+                  "ignoring it and allowing no browser origin")
+        return []
+    return origins
+
+
 # Registered after the front-door guard so CORS stays outermost and a refusal still
 # carries CORS headers for an allowed origin. No origins are allowed unless
 # SVO_ADAPTER_CORS_ORIGINS lists them.
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
+    allow_origins=_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -516,6 +527,89 @@ def _require_run_reader(run: dict[str, Any] | None, reader: str) -> dict[str, An
     if not run or (reader != _ANY_RUN and run.get("submitted_by") != reader):
         raise HTTPException(404, "run not found")
     return run
+
+
+# --- who may use a data object -------------------------------------------------
+# A data object names storage and data. A user may use one they registered. A row
+# the Ensemble Manager registered for a model output carries its user's name when
+# the EM forwarded their token (owner_execution_id alone grants a user nothing: the
+# adapter cannot tell who may read that execution). A row with no owner (made before
+# owners were recorded) is usable by no user, except in the local demo, which has no
+# accounts. Only a call that already proved the
+# shared secret (the deferred-plan bind) may use any row.
+
+def _data_object_usable(row: dict[str, Any] | None, caller: str | None, *, service: bool = False) -> bool:
+    if not row:
+        return False
+    if service:
+        return True
+    if settings.demo_mode and not row.get("owner_username"):
+        return True  # the local demo has no accounts: its seeded and token-less rows are shared
+    if caller is None:
+        return False
+    return row.get("owner_username") == caller
+
+
+def _shared_reference_object(row: dict[str, Any]) -> bool:
+    """A catalog row the CKAN sync registered: no owner, shared reference data the
+    planner picks from for everyone. It is never usable by id."""
+    return (
+        not row.get("owner_username") and not row.get("owner_execution_id")
+        and str(row.get("source_catalog") or "").startswith("ckan")
+    )
+
+
+async def _data_object_caller(h: Any) -> str | None:
+    """The signed-in caller, or 401. The local demo has no accounts, so there an
+    unverifiable token is no caller rather than a refusal."""
+    token = getattr(h, "_bearer", None)
+    if settings.demo_mode:
+        return await _caller_or_none(token)
+    return await _caller_or_demo(token)
+
+
+async def _contract_rows(h: Any, object_id: str, *, service: bool = False) -> list[dict[str, Any]]:
+    """The contract rows for a data object the caller may use; none when it does not
+    exist or is another user's, which are indistinguishable to the caller."""
+    caller = None if service else await _data_object_caller(h)
+    rows = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": object_id}))["adapter_data_object"]
+    return [row for row in rows if _data_object_usable(row, caller, service=service)]
+
+
+async def _discoverable_objects(h: Any) -> list[dict[str, Any]]:
+    """Data objects the planner may pick as sources for this caller: their own and the
+    shared catalog reference rows. Never another user's."""
+    caller = await _data_object_caller(h)
+    rows = (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
+    return [
+        row for row in rows
+        if _data_object_usable(row, caller) or _shared_reference_object(row)
+    ]
+
+
+def _refuse_data_object_clash(
+    existing: dict[str, Any] | None, owner_username: str | None, owner_execution_id: str | None,
+    *, user_write: bool = False,
+) -> None:
+    """Refuse a write that would replace a row someone else owns. The upsert would
+    otherwise overwrite its label, location and owner columns. An execution may
+    update its own row again; a user may update their own, and ``user_write`` (a plain
+    user registration) also may not take a row that has no owner at all."""
+    if not existing:
+        return
+    existing_user = existing.get("owner_username")
+    existing_execution = existing.get("owner_execution_id")
+    if existing_execution is not None:
+        clash = existing_execution != owner_execution_id or (
+            existing_user is not None and owner_username is not None and existing_user != owner_username)
+    else:
+        clash = existing_user != owner_username if (existing_user is not None or (
+            user_write and not settings.demo_mode)) else False
+    if clash:
+        raise HTTPException(403, detail={
+            "code": "DATA_OBJECT_NOT_OWNED",
+            "message": "this data object id belongs to another user or execution",
+        })
 
 
 def humanize_svo(uri: str | None) -> str:
@@ -890,7 +984,8 @@ async def register_data_object(
 ):
     token = _bearer(authorization)
     h = get_client(token)
-    if body.owner_execution_id or body.owner_model_child_id or body.owner_tenant:
+    owned = bool(body.owner_execution_id or body.owner_model_child_id or body.owner_tenant)
+    if owned:
         # The server-owned model-output handoff: the Ensemble Manager's secret is the
         # credential. A token, when it forwards one, still names the owner.
         _require_internal_service(
@@ -900,13 +995,10 @@ async def register_data_object(
         # Every other write is a user's, and is recorded against them. Without this
         # check the write ran on the adapter's admin Hasura credential for anyone.
         owner = await _caller_or_demo(token)
-        if body.id:
-            existing = (await h.execute(GET_DATA_OBJECT, {"id": body.id}))["adapter_data_object_by_pk"]
-            if existing and existing.get("owner_username") != owner:
-                raise HTTPException(403, detail={
-                    "code": "DATA_OBJECT_NOT_OWNED",
-                    "message": "this data object id belongs to another user",
-                })
+    if body.id:
+        _refuse_data_object_clash(
+            (await h.execute(GET_DATA_OBJECT, {"id": body.id}))["adapter_data_object_by_pk"],
+            owner, body.owner_execution_id, user_write=not owned)
     obj = body.model_dump(exclude_none=True)
     if owner:
         obj["owner_username"] = owner
@@ -925,8 +1017,9 @@ async def register_data_object(
 @app.get("/data-objects/{object_id}", tags=["Core: Registry"])
 async def get_data_object(object_id: str, authorization: str | None = Header(None)):
     h = get_client(_bearer(authorization))
+    caller = await _data_object_caller(h)
     obj = (await h.execute(GET_DATA_OBJECT, {"id": object_id}))["adapter_data_object_by_pk"]
-    if not obj:
+    if not _data_object_usable(obj, caller):
         raise HTTPException(404, "data object not found")
     return obj
 
@@ -1829,7 +1922,7 @@ async def evaluate_objective_plan(
     if not target_contract:
         raise HTTPException(422, "objective has no target_contract; pass target_contract in request body")
 
-    objects = (await h.execute(LIST_DATA_OBJECTS_QUERY)).get("adapter_data_object", [])
+    objects = await _discoverable_objects(h)
     if not objects:
         raise HTTPException(422, "no data objects registered — sync CKAN resources first")
 
@@ -1848,7 +1941,7 @@ async def evaluate_objective_plan(
             for variable in obj.get("variables", [])
         ):
             continue
-        rows = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": obj["id"]}))["adapter_data_object"]
+        rows = await _contract_rows(h, obj["id"])
         if not rows:
             continue
         source = _data_object_to_contract(rows[0])
@@ -1904,7 +1997,7 @@ async def create_dfc_fanout_plan(
         raise HTTPException(422, "target_records must be a non-empty list")
 
     h = get_client(_bearer(authorization))
-    src_rows = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": data_object_id}))["adapter_data_object"]
+    src_rows = await _contract_rows(h, data_object_id)
     if not src_rows:
         raise HTTPException(404, "data object not found")
     source = _data_object_to_contract(src_rows[0])
@@ -2136,9 +2229,8 @@ async def bind_deferred_plan(
     if body.plan_hash != plan_json.get("plan_hash"):
         raise HTTPException(409, detail={"code": "PLAN_HASH_MISMATCH"})
 
-    object_rows = (await h.execute(
-        DATA_OBJECT_CONTRACT_QUERY, {"id": body.data_object_id}
-    )).get("adapter_data_object") or []
+    # The shared secret was proved above: the bind may use the model-output row.
+    object_rows = await _contract_rows(h, body.data_object_id, service=True)
     object_row = object_rows[0] if object_rows else None
     if not object_row:
         raise HTTPException(404, "data object not found")
@@ -2336,9 +2428,7 @@ def _user_scoped_parameters(parameters: list[dict[str, Any]], can_publish: dict[
 @app.post("/readiness/check", response_model=ReadinessResult, tags=["Core: Planning"])
 async def readiness_check(body: ReadinessCheckIn, authorization: str | None = Header(None)):
     h = get_client(_bearer(authorization))
-    src_rows = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": body.data_object_id}))[
-        "adapter_data_object"
-    ]
+    src_rows = await _contract_rows(h, body.data_object_id)
     if not src_rows:
         raise HTTPException(404, "data object not found")
     src = _data_object_to_contract(src_rows[0])
@@ -2384,9 +2474,7 @@ async def _named_path(h: Any, piece_ids: list[str], src: DataObjectContract,
 @app.post("/plans", tags=["Core: Planning"])
 async def create_plan(body: PlanIn, authorization: str | None = Header(None)):
     h = get_client(_bearer(authorization))
-    src_rows = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": body.data_object_id}))[
-        "adapter_data_object"
-    ]
+    src_rows = await _contract_rows(h, body.data_object_id)
     if not src_rows:
         raise HTTPException(404, "data object not found")
     src = _data_object_to_contract(src_rows[0])
@@ -2933,7 +3021,7 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
     for input_id in used:
         if input_id == region_input or input_id in gathers:
             continue
-        found = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": body.inputs[input_id]}))["adapter_data_object"]
+        found = await _contract_rows(h, body.inputs[input_id])
         if not found:
             raise HTTPException(404, detail={
                 "code": "DATA_OBJECT_NOT_FOUND", "input": input_id, "data_object_id": body.inputs[input_id]})
@@ -3296,7 +3384,7 @@ async def list_data_objects(authorization: str | None = Header(None)):
     owner = await _caller_or_demo(token)
     h = get_client(token)
     if owner is None:  # the local demo, signed out
-        return (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
+        return await _discoverable_objects(h)
     return (await h.execute(LIST_OWN_DATA_OBJECTS_QUERY, {"owner": owner}))["adapter_data_object"]
 
 
@@ -3446,7 +3534,7 @@ async def list_standard_variables(authorization: str | None = Header(None)):
     'want this SVO output' picker."""
     h = get_client(_bearer(authorization))
     specs = await _registry(h)
-    objs = (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
+    objs = await _discoverable_objects(h)
     seen: dict[str, dict[str, Any]] = {}
     for s in specs:
         for c in s.get("contracts", []):
@@ -3482,7 +3570,7 @@ async def modflow6_qaqc(authorization: str | None = Header(None)):
     except Exception as exc:  # noqa: BLE001 - report dependency failure
         registry_error = f"{type(exc).__name__}: {exc}"
     try:
-        data_objects = (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
+        data_objects = await _discoverable_objects(h)
     except Exception as exc:  # noqa: BLE001 - report dependency failure
         data_objects_error = f"{type(exc).__name__}: {exc}"
     return await qaqc.modflow6_report(
@@ -3506,7 +3594,7 @@ async def modflow6_qaqc_tapis(body: dict[str, Any] | None = None,
     token = _bearer(authorization) or body.get("tapis_token")
     h = get_client(_bearer(authorization))
     registry = await _registry(h)
-    data_objects = (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
+    data_objects = await _discoverable_objects(h)
     context = qaqc.tapis_context(registry=registry, data_objects=data_objects)
     pipeline_id = body.get("pipeline_id") or f"modflow6-svo-qaqc-{context['config']['name']}"
     pipeline = qaqc.build_tapis_pipeline(pipeline_id)
@@ -3556,7 +3644,7 @@ async def reachable(data_object_id: str, authorization: str | None = Header(None
     (single-input transform chains), each with the shortest chain. Drives a
     source-aware target picker so the UI only offers achievable outputs."""
     h = get_client(_bearer(authorization))
-    rows = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": data_object_id}))["adapter_data_object"]
+    rows = await _contract_rows(h, data_object_id)
     if not rows:
         raise HTTPException(404, "data object not found")
     src = _data_object_to_contract(rows[0])
@@ -3587,7 +3675,7 @@ async def plan_model_run_endpoint(body: ModelRunIn, authorization: str | None = 
     if run_spec is None:
         raise HTTPException(404, f"run spec '{body.run_spec_id}' not found")
 
-    rows = (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
+    rows = await _discoverable_objects(h)
     if body.source_ids:
         wanted = set(body.source_ids)
         rows = [r for r in rows if r["id"] in wanted]
@@ -6006,8 +6094,17 @@ async def register_output(
 ):
     _require_internal_service(
         internal_secret, "output registration is an internal Ensemble Manager operation")
-    h = get_client(_bearer(authorization))
-    obj = body.output_data_object.model_dump(exclude_none=True)
+    token = _bearer(authorization)
+    h = get_client(token)
+    owner = await _caller_or_none(token)
+    output = body.output_data_object
+    if output.id:
+        _refuse_data_object_clash(
+            (await h.execute(GET_DATA_OBJECT, {"id": output.id}))["adapter_data_object_by_pk"],
+            owner, output.owner_execution_id)
+    obj = output.model_dump(exclude_none=True)
+    if owner:
+        obj["owner_username"] = owner
     variables = obj.pop("variables", [])
     if variables:
         obj["variables"] = {"data": variables}
@@ -6099,6 +6196,7 @@ async def ntgam_scenario(body: dict[str, Any], authorization: str | None = Heade
     then EXECUTE each resolved branch's ETL on its source to fill the scenario — plus
     registered scalar params + physical derivations + provenance + honest ``missing``.
     No hardcoded source selection."""
+    await _caller_or_demo(_bearer(authorization))
     if "lat" not in body or "lon" not in body:
         raise HTTPException(422, "lat and lon are required")
     lat, lon = float(body["lat"]), float(body["lon"])
@@ -6141,6 +6239,7 @@ async def ntgam_run_tapis(body: dict[str, Any], authorization: str | None = Head
     register + run it. ``dry_run`` returns the exact pipeline definition + run args
     without submitting. Live submission forwards the caller's Tapis bearer token and
     requires the tenant ``workflows`` service grant (the documented SUBSIDE blocker)."""
+    await _caller_or_demo(_bearer(authorization))
     scenario = body.get("scenario")
     if not isinstance(scenario, dict) or not scenario:
         raise HTTPException(422, "a scenario object is required")
@@ -6186,7 +6285,7 @@ async def _resolve_forecast_plan(h, lat: float, lon: float,
                                  "run ntgam/register_forecast_planner.py")
     detected = await run_in_threadpool(ntgam.detect_aquifer, lat, lon)
     nearest_well = await run_in_threadpool(stac.nearest_well, lat, lon)
-    rows = (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
+    rows = await _discoverable_objects(h)
 
     def _layer(r):
         for v in (r.get("variables") or []):
@@ -6227,6 +6326,7 @@ async def _resolve_forecast_plan(h, lat: float, lon: float,
 @app.post("/forecast/plan", tags=["NTGAM forecast"])
 async def ntgam_forecast_plan(body: dict[str, Any], authorization: str | None = Header(None)):
     """Query by the forecast -> the files + ETLs (DAG) needed to run it, from the registry."""
+    await _caller_or_demo(_bearer(authorization))
     if "lat" not in body or "lon" not in body:
         raise HTTPException(422, "lat and lon are required")
     h = get_client(_bearer(authorization))

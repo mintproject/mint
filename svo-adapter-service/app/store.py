@@ -217,7 +217,12 @@ class InMemoryHasura:
 
     # --- writes --------------------------------------------------------------
     def _op_InsertDataObject(self, v):
-        row = _insert(STORE.data_object, v["obj"], nested_key="variables")
+        obj = dict(v["obj"])
+        previous = STORE.data_object.get(obj.get("id") or "")
+        if previous and previous.get("owner_username") and "owner_username" not in obj:
+            # The real upsert never updates owner_username: it keeps the first writer's.
+            obj["owner_username"] = previous["owner_username"]
+        row = _insert(STORE.data_object, obj, nested_key="variables")
         return {"insert_adapter_data_object_one": row}
 
     def _op_ReconcileCkanDataObject(self, v):

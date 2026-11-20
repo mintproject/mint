@@ -254,3 +254,123 @@ def test_the_open_routes_are_exactly_the_designs_route_table():
         ("GET", "/runtime-defaults"), ("GET", "/spatial/layers"), ("GET", "/etl/common-variables"),
         ("GET", "/dfc-targets"), ("GET", "/forecast/ntgam/options"),
     ])
+
+
+# --- data objects are scoped to their owner on every path that reads one -----
+
+def _alices_object():
+    STORE.data_object["a1"] = {
+        "id": "a1", "label": "heads", "resource_uri": "tapis://sys/a1", "owner_username": "alice",
+        "variables": [{"standard_variable_uri": "https://example.org/x"}]}
+
+
+def test_reading_a_data_object_by_id_is_for_its_owner_only():
+    _alices_object()
+    assert client.get("/data-objects/a1", headers=ALICE).status_code == 200
+    assert client.get("/data-objects/a1", headers=BOB).status_code == 404
+    assert client.get("/data-objects/a1").status_code == 401
+
+
+def test_a_row_with_no_owner_is_usable_by_no_user():
+    STORE.data_object["old"] = {"id": "old", "label": "old", "resource_uri": "x", "variables": []}
+    assert client.get("/data-objects/old", headers=ALICE).status_code == 404
+
+
+@pytest.mark.parametrize("method,path,body", [
+    ("POST", "/plans", {"data_object_id": "a1", "target_contract": {"standard_variable_uri": "u"}}),
+    ("POST", "/readiness/check", {"data_object_id": "a1", "target_contract": {"standard_variable_uri": "u"}}),
+    ("GET", "/reachable/a1", None),
+    ("POST", "/plans/dfc-fanout", {"data_object_id": "a1", "target_contract": {"standard_variable_uri": "u"},
+                                    "target_records": [{"id": 1}]}),
+])
+def test_planning_readiness_and_reachability_refuse_another_users_object(method, path, body):
+    _alices_object()
+    resp = client.request(method, path, headers=BOB, json=body)
+    assert resp.status_code == 404, (path, resp.text)
+    assert resp.json()["detail"] == "data object not found"
+    # The owner is not refused at the lookup (any later answer is about the plan itself).
+    own = client.request(method, path, headers=ALICE, json=body).json()
+    assert not (isinstance(own, dict) and own.get("detail") == "data object not found")
+
+
+def test_a_flow_input_cannot_bind_another_users_object(monkeypatch):
+    _alices_object()
+    rows = main_module._contract_rows
+    import asyncio
+    h = InMemoryHasura("bob.jwt")
+    assert asyncio.run(rows(h, "a1")) == []
+    assert asyncio.run(rows(InMemoryHasura("alice.jwt"), "a1"))[0]["id"] == "a1"
+
+
+def test_the_bind_path_that_proved_the_secret_may_use_a_model_output_row():
+    import asyncio
+    STORE.data_object["em-out"] = {"id": "em-out", "label": "o", "resource_uri": "x", "variables": [],
+                                   "owner_execution_id": "ue_1"}
+    h = InMemoryHasura(None)
+    assert asyncio.run(main_module._contract_rows(h, "em-out", service=True))
+    # An execution id alone grants a user nothing.
+    assert asyncio.run(main_module._contract_rows(InMemoryHasura("alice.jwt"), "em-out")) == []
+
+
+def test_discovery_offers_a_user_their_own_objects_and_shared_catalog_rows_only():
+    import asyncio
+    STORE.data_object.update({
+        "mine": {"id": "mine", "owner_username": "alice", "variables": []},
+        "theirs": {"id": "theirs", "owner_username": "bob", "variables": []},
+        "ckan": {"id": "ckan", "source_catalog": "ckan:pkg", "variables": []},
+        "legacy": {"id": "legacy", "variables": []},
+        "output": {"id": "output", "owner_execution_id": "ue_1", "variables": []},
+    })
+    ids = {row["id"] for row in asyncio.run(main_module._discoverable_objects(InMemoryHasura("alice.jwt")))}
+    assert ids == {"mine", "ckan"}
+
+
+# --- the secret holder cannot overwrite a row someone else owns --------------
+
+def test_the_secret_cannot_overwrite_a_users_data_object():
+    _alices_object()
+    owned = {**OBJ, "id": "a1", "label": "stolen", "owner_execution_id": "ue_9"}
+    assert client.post("/data-objects", json=owned, headers=SERVICE).status_code == 403
+    assert client.post("/data-objects", json=owned, headers={**SERVICE, **BOB}).status_code == 403
+    assert STORE.data_object["a1"]["label"] == "heads"
+
+
+def test_an_execution_can_update_its_own_output_but_no_other_execution_can():
+    owned = {**OBJ, "id": "em-out", "owner_execution_id": "ue_1"}
+    assert client.post("/data-objects", json=owned, headers={**SERVICE, **ALICE}).status_code == 200
+    # a retry, with or without the forwarded token
+    assert client.post("/data-objects", json={**owned, "label": "again"}, headers=SERVICE).status_code == 200
+    assert client.post("/data-objects", json={**owned, "owner_execution_id": "ue_2"},
+                       headers=SERVICE).status_code == 403
+    assert STORE.data_object["em-out"]["owner_username"] == "alice"
+
+
+def test_register_output_cannot_overwrite_another_owners_row():
+    _alices_object()
+    body = {"output_data_object": {**OBJ, "id": "a1", "label": "stolen"}}
+    assert client.post("/runs/r1/register-output", json=body, headers=SERVICE).status_code == 403
+    assert STORE.data_object["a1"]["label"] == "heads"
+    fresh = {"output_data_object": {**OBJ, "id": "new-out", "owner_execution_id": "ue_1"}}
+    assert client.post("/runs/r1/register-output", json=fresh, headers={**SERVICE, **ALICE}).status_code == 200
+    assert STORE.data_object["new-out"]["owner_username"] == "alice"
+
+
+# --- the forecast routes need a signed-in user -------------------------------
+
+@pytest.mark.parametrize("path", ["/forecast/plan", "/forecast/scenario", "/forecast/run-tapis"])
+def test_the_other_forecast_routes_need_a_signed_in_user(path):
+    body = {"lat": 1, "lon": 2, "scenario": {"a": 1}, "dry_run": True}
+    assert client.post(path, json=body).status_code == 401
+    assert client.post(path, json=body, headers={"Authorization": "Bearer bad"}).status_code == 401
+    assert client.post(path, json=body, headers=ALICE).status_code != 401
+
+
+# --- CORS ---------------------------------------------------------------------
+
+def test_a_literal_star_origin_is_refused_while_the_front_door_is_on(monkeypatch):
+    monkeypatch.setattr(settings, "cors_origins", "*")
+    assert main_module._cors_origins() == ["*"]
+    monkeypatch.setattr(settings, "require_front_door", True)
+    assert main_module._cors_origins() == []
+    monkeypatch.setattr(settings, "cors_origins", "https://a.example,*")
+    assert main_module._cors_origins() == []

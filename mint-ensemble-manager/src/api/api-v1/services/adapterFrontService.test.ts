@@ -3,6 +3,7 @@ import request from "supertest";
 import { secretsRouter, spatialRouter } from "@/api/api-v1/paths/adapterFront";
 import { createAdapterFrontService } from "./adapterFrontService";
 import { adapterRequest } from "./unifiedExecutionService";
+import { warnIfAdapterSecretMissing } from "./adapterConfig";
 import { UnifiedExecutionError } from "@/classes/common/errors";
 
 const mockConfig: {
@@ -134,5 +135,34 @@ describe("the shared secret sent to the adapter", () => {
         await adapterRequest("/x", {}, BEARER);
         expect(fetchMock.mock.calls[1][1].headers["X-Ensemble-Manager-Secret"]).toBe("from-env");
         delete process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET;
+    });
+});
+
+describe("the startup warning for a missing service secret", () => {
+    beforeEach(() => {
+        delete process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET;
+        delete mockConfig.svo_adapter_internal_secret;
+        mockConfig.graphql = { secret: "hasura-admin" };
+    });
+
+    it("warns once, naming the setting and no value, when an adapter is set without it", () => {
+        const log = { warn: jest.fn() };
+        mockConfig.svo_adapter_api = "https://adapter.example";
+        expect(warnIfAdapterSecretMissing(log)).toBe(true);
+        expect(log.warn).toHaveBeenCalledTimes(1);
+        const message = log.warn.mock.calls[0][0] as string;
+        expect(message).toContain("SVO_ADAPTER_INTERNAL_SERVICE_SECRET");
+        expect(message).not.toContain("hasura-admin");
+    });
+
+    it("is silent when the secret is set, or no adapter is configured", () => {
+        const log = { warn: jest.fn() };
+        mockConfig.svo_adapter_api = "https://adapter.example";
+        mockConfig.svo_adapter_internal_secret = "service-only";
+        expect(warnIfAdapterSecretMissing(log)).toBe(false);
+        delete mockConfig.svo_adapter_internal_secret;
+        mockConfig.svo_adapter_api = "";
+        expect(warnIfAdapterSecretMissing(log)).toBe(false);
+        expect(log.warn).not.toHaveBeenCalled();
     });
 });

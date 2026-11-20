@@ -572,3 +572,18 @@ export async function custom_flows_id_availability_get(req: any, reply: any): Pr
     reply.code(502).send({ error: 'The flow availability could not be read', code: 'FLOW_AVAILABILITY_UNAVAILABLE' })
   }
 }
+
+/**
+ * One startup warning when an adapter is configured but the shared service secret
+ * is not. Without it the adapter's front door (when on) refuses every flow call,
+ * and with the front door off the adapter has no proof the call came through the
+ * catalog. Names the setting, never a value. Returns whether it warned.
+ */
+export function warnIfAdapterSecretMissing(log: { warn: (message: string) => void }): boolean {
+  if (!process.env.SVO_ADAPTER_API_URL || process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET) return false
+  log.warn(
+    'SVO_ADAPTER_API_URL is set but SVO_ADAPTER_INTERNAL_SERVICE_SECRET is not: flow checks are sent ' +
+      'to the adapter without the shared service secret'
+  )
+  return true
+}

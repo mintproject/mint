@@ -73,8 +73,7 @@ export function getEnsembleManagerApiUrl(): string {
 
 /**
  * Returns the SVO adapter API base URL. The adapter is an internal engine behind
- * the Ensemble Manager and the catalog API; the browser still calls it directly
- * only for the flow-availability check (`src/lib/flow-availability.ts`).
+ * the Ensemble Manager and the catalog API; the browser no longer calls it.
  */
 export function getSvoAdapterApiUrl(): string {
   const url = getRuntimeConfig().SVO_ADAPTER_API ?? '';

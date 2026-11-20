@@ -1,12 +1,13 @@
 /**
- * The signed-in user's own saved credentials, kept by the SVO adapter.
+ * The signed-in user's own saved credentials, kept by the SVO adapter and reached
+ * through the Ensemble Manager's `/secrets` routes.
  *
  * A value is sent once with `PUT` and never comes back: the adapter answers
  * with field names only. Nothing here logs, caches or echoes a value, and no
  * thrown message is built from the server's text, so a value cannot leak
  * through an error.
  */
-import { getSvoAdapterApiUrl } from '@/lib/config';
+import { getEnsembleManagerApiUrl } from '@/lib/config';
 import { getAccessToken } from '@/lib/auth/token-store';
 
 export interface UserSecret {
@@ -67,7 +68,7 @@ async function refusal(resp: Response): Promise<UserSecretError> {
 }
 
 async function call(path: string, init: RequestInit = {}): Promise<Response> {
-  const base = getSvoAdapterApiUrl();
+  const base = getEnsembleManagerApiUrl();
   if (!base) throw new UserSecretError(0, MESSAGES.SECRETS_NOT_CONFIGURED!);
   const token = getAccessToken();
   const headers: Record<string, string> = { Accept: 'application/json' };
