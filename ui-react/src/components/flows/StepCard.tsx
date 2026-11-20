@@ -13,8 +13,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { PieceSummary } from '@/lib/flow-authoring-api';
 import {
+  EDIT_CHECKS,
   inputWireIndex,
   type DraftInput,
+  type EditableChoice,
   type DraftStep,
   type FlowProblem,
 } from '@/lib/flow-authoring';
@@ -45,6 +47,11 @@ export interface StepCardProps {
   onSetting: (name: string, value: string) => void;
   onRemoveWire: (wireIndex: number) => void;
   onPause: (pause: boolean) => void;
+  /** The file this step's pause makes editable, and the change of it (`null` clears). */
+  editable: EditableChoice | null;
+  onEditable: (choice: EditableChoice | null) => void;
+  /** What stops this pause being saved yet, found in the form. */
+  pauseProblems: FlowProblem[];
   onRemove: () => void;
 }
 
@@ -65,6 +72,7 @@ export function sourceValue(wire: { from: Record<string, unknown> } | undefined)
 
 export function StepCard(props: StepCardProps) {
   const { position, step, summary, problems } = props;
+  const choice: EditableChoice = props.editable ?? { ref: '', file: '', check: '', key: '' };
   const wires = parseWires(step.wires);
   const onWire = (index: number) => problems.filter((problem) => problem.wire === index);
   const onStep = problems.filter((problem) => problem.wire === undefined);
@@ -262,6 +270,66 @@ export function StepCard(props: StepCardProps) {
         />
         Pause for review after this step
       </label>
+
+      {step.pauseAfter && (
+        <fieldset className="mt-2 text-xs" aria-label={`Editable file of step ${position}`}>
+          <legend className="font-medium">File the person edits at this pause</legend>
+          {summary && summary.outputs.length === 0 ? (
+            <p className="mt-1 text-muted-foreground">This step returns no file to edit.</p>
+          ) : (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <select
+                className={field}
+                aria-label={`Editable output of step ${position}`}
+                value={choice.ref}
+                onChange={(event) => props.onEditable({ ...choice, ref: event.target.value })}
+              >
+                <option value="">Choose an output…</option>
+                {(summary?.outputs ?? []).map((output) => (
+                  <option key={output} value={String(output)}>
+                    Output {output}
+                  </option>
+                ))}
+              </select>
+              <Input
+                className="h-8 w-48"
+                aria-label={`File name to edit for step ${position}`}
+                placeholder="lexicon_draft.json"
+                value={choice.file}
+                disabled={choice.ref === ''}
+                onChange={(event) => props.onEditable({ ...choice, file: event.target.value })}
+              />
+              <select
+                className={field}
+                aria-label={`Check on the edited file of step ${position}`}
+                value={choice.check}
+                disabled={choice.ref === ''}
+                onChange={(event) => props.onEditable({ ...choice, check: event.target.value })}
+              >
+                <option value="">No check</option>
+                {EDIT_CHECKS.map((check) => (
+                  <option key={check} value={check}>
+                    {check}
+                  </option>
+                ))}
+              </select>
+              <Input
+                className="h-8 w-40"
+                aria-label={`Key of the edited file of step ${position}`}
+                placeholder="Key (optional)"
+                value={choice.key}
+                disabled={choice.ref === ''}
+                onChange={(event) => props.onEditable({ ...choice, key: event.target.value })}
+              />
+            </div>
+          )}
+          {props.pauseProblems.map((problem, index) => (
+            <p key={index} role="alert" className="mt-1 text-destructive">
+              {problem.message}
+            </p>
+          ))}
+        </fieldset>
+      )}
     </li>
   );
 }

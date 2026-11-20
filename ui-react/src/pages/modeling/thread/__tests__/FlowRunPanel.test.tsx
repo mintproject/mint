@@ -131,6 +131,28 @@ describe('FlowRunPanel', () => {
     expect(screen.queryByText(/pass inputs to model/i)).not.toBeInTheDocument();
   });
 
+  it('updates the graph nodes when a re-render brings new step states', async () => {
+    const { rerender } = render(<FlowRunPanel run={flowRun()} />);
+    expect(await screen.findByTestId('flow-node-step-2')).toHaveTextContent('Running');
+    expect(screen.getByTestId('flow-node-step-3')).toHaveTextContent('Waiting');
+
+    const later: Stages = [
+      step('step-1', 'Sensemaking: ingest corpus', 'completed'),
+      step('step-2', 'Sensemaking: embed', 'completed', ['step-1']),
+      step('step-3', 'Sensemaking: cluster', 'running', ['step-1']),
+      step('step-4', 'Sensemaking: report', 'pending', ['step-2', 'step-3']),
+    ];
+    rerender(<FlowRunPanel run={flowRun({ workflow_stages: later })} />);
+
+    for (const [id, word] of [
+      ['step-2', 'Completed'],
+      ['step-3', 'Running'],
+    ] as const) {
+      expect(screen.getByTestId(`flow-step-${id}`)).toHaveTextContent(word);
+      expect(screen.getByTestId(`flow-node-${id}`)).toHaveTextContent(word);
+    }
+  });
+
   it('shows the single pre-poll stage as Starting the flow', () => {
     render(
       <FlowRunPanel

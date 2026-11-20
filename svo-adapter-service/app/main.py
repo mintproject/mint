@@ -846,7 +846,7 @@ query GetRunStepSecrets($id: String!) {
 USER_ACTIVE_RUNS = """
 query UserActiveRuns($user: String!) {
   adapter_workflow_run(where: {submitted_by: {_eq: $user}, status: {_in: ["submitting", "running"]}}) {
-    id workflow_plan_id bound_secrets
+    id workflow_plan_id bound_secrets tapis_workflow_id tapis_run_id
   }
 }
 """
@@ -4185,15 +4185,25 @@ def _check_secret_run_trust(plan_json: dict[str, Any], registry: list[dict[str, 
 
 async def _check_run_conflict(
     h: Any, username: str, registry: list[dict[str, Any]], *, this_run: str | None,
-    secrets_here: bool, untrusted_here: bool,
+    secrets_here: bool, untrusted_here: bool, token: str | None = None,
 ) -> None:
     """Run arguments are taken to be readable by the run's owner, and an untrusted
     piece runs with the owner's token. So while the user has a run holding unissued
     secret credentials, none of their other active runs may hold an untrusted step,
     and the reverse. Refused with 409 SECRET_RUN_CONFLICT; finish or cancel the other
     run. (A run that starts between this check and the other's is not caught: a
-    residual race, see docs/api.md.)"""
+    residual race, see docs/api.md.)
+
+    A run stored as active may have finished in Tapis long ago, so when the caller's
+    ``token`` is given their open runs are reconciled first (bounded:
+    poller.reconcile_open_runs, as _guard_secret_change does) and only those Tapis still
+    reports active conflict. A run that cannot be checked stays open and conflicts: this
+    never fails open. Without a token (the step-credential fetch) the stored status is used."""
     runs = (await h.execute(USER_ACTIVE_RUNS, {"user": username}))["adapter_workflow_run"]
+    if token and any(run["id"] != this_run for run in runs):
+        from . import poller  # noqa: PLC0415 — deferred, as in lifespan
+        await poller.reconcile_open_runs(h, [run for run in runs if run["id"] != this_run], token)
+        runs = (await h.execute(USER_ACTIVE_RUNS, {"user": username}))["adapter_workflow_run"]
     for other in runs:
         if other["id"] == this_run:
             continue
@@ -4290,7 +4300,8 @@ async def _bind_flow_secrets_and_check_conflict(
             registry_now = await _registry(h, plannable=False)
             await _check_run_conflict(
                 h, submitter_now, registry_now, this_run=None, secrets_here=bool(flow_bound),
-                untrusted_here=_untrusted_step(plan_json, registry_now, submitter_now) is not None)
+                untrusted_here=_untrusted_step(plan_json, registry_now, submitter_now) is not None,
+                token=token)
     return flow_bound
 
 

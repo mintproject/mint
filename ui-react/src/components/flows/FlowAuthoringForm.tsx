@@ -29,11 +29,15 @@ import {
   applyProduces,
   buildCheckBody,
   buildSaveBody,
+  editableChoice,
   emptyDraft,
+  pauseProblems,
   removeInput,
   removeStep,
   removeWire,
+  setEditable,
   setInputWire,
+  setPause,
   sortProblems,
   updateStep,
   type BindingRole,
@@ -180,12 +184,14 @@ export function FlowAuthoringForm({
   );
 
   // --- save -------------------------------------------------------------------
+  const pausing = useMemo(() => pauseProblems(draft), [draft]);
   const complete =
     draft.configuration.label.trim() !== '' &&
     (draft.software.id !== '' || draft.software.label.trim() !== '') &&
     (draft.version.id !== '' || draft.version.label.trim() !== '') &&
     draft.inputs.every((input) => input.key !== '' && input.standardVariable !== '') &&
-    draft.outputs.every((item) => item.kind !== 'output' || item.label.trim() !== '');
+    draft.outputs.every((item) => item.kind !== 'output' || item.label.trim() !== '') &&
+    pausing.length === 0;
   const canSave = Boolean(token) && !saving && complete && current?.ok === true;
 
   const save = async () => {
@@ -517,7 +523,10 @@ export function FlowAuthoringForm({
                   )
                 }
                 onRemoveWire={(wireIndex) => change(removeWire(draft, index, wireIndex))}
-                onPause={(pause) => change(updateStep(draft, index, { pauseAfter: pause }))}
+                onPause={(pause) => change(setPause(draft, index, pause))}
+                editable={editableChoice(draft, position)}
+                onEditable={(choice) => change(setEditable(draft, position, choice))}
+                pauseProblems={pausing.filter((problem) => problem.step === position)}
                 onRemove={() => change(removeStep(draft, index))}
               />
             );

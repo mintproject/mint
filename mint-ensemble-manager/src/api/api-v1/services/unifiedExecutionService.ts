@@ -311,7 +311,10 @@ function decodePlan(planId: string): LegacyPlan {
  * must be able to read the run's thread: the thread's row-level permissions decide.
  * The answer for a thread that is not theirs is the same as for a missing run.
  */
-async function assertThreadReadable(threadId: string, authorization?: string): Promise<void> {
+export async function assertThreadReadable(
+    threadId: string,
+    authorization?: string
+): Promise<void> {
     const token = authorization?.startsWith("Bearer ") ? authorization.split(" ")[1] : "";
     if (!token) {
         throw new UnifiedExecutionError(

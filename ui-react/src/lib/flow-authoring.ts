@@ -114,6 +114,16 @@ function stepsJson(draft: FlowDraft) {
   }));
 }
 
+/** `editable` as the catalog takes it: a blank check or key is left out. */
+function editableJson(editable: Json): Json {
+  const { check, key, ...rest } = editable;
+  return {
+    ...rest,
+    ...(typeof check === 'string' && check !== '' ? { check } : {}),
+    ...(typeof key === 'string' && key !== '' ? { key } : {}),
+  };
+}
+
 function outputJson(output: DraftOutput, forSave: boolean): Json {
   const where: Json = { step: output.step };
   if (output.kind === 'output') where.output = Number(output.ref);
@@ -122,7 +132,7 @@ function outputJson(output: DraftOutput, forSave: boolean): Json {
     where.label = output.label;
     if (output.format) where.format = output.format;
   }
-  if (output.kind === 'output' && output.editable) where.editable = output.editable;
+  if (output.kind === 'output' && output.editable) where.editable = editableJson(output.editable);
   return where;
 }
 
@@ -241,6 +251,109 @@ export function updateStep(draft: FlowDraft, index: number, change: Partial<Draf
     ...draft,
     steps: draft.steps.map((step, at) => (at === index ? { ...step, ...change } : step)),
   };
+}
+
+// --- a pause and the file it makes editable ---------------------------------------
+
+/** What the catalog allows for `editable.check` and `editable.key`. */
+export const EDIT_CHECKS = ['json', 'lexicon'] as const;
+const EDIT_KEY = /^[a-z][a-z0-9_]{0,63}$/;
+const MAX_FILE_NAME = 200;
+
+/** The file a paused step makes editable: which output, and what the person edits. */
+export interface EditableChoice {
+  /** The output position of the step, as text. */
+  ref: string;
+  file: string;
+  check: string;
+  key: string;
+}
+
+const textOf = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+/** The choice a step's pause has made, read from the draft's outputs. */
+export function editableChoice(draft: FlowDraft, position: number): EditableChoice | null {
+  const output = draft.outputs.find(
+    (item) => item.step === position && item.kind === 'output' && item.editable,
+  );
+  if (!output?.editable) return null;
+  return {
+    ref: output.ref,
+    file: textOf(output.editable.file),
+    check: textOf(output.editable.check),
+    key: textOf(output.editable.key),
+  };
+}
+
+/**
+ * Make one of a step's file outputs the editable one, or none (`null`). The output
+ * is added to the flow's outputs when it is not there yet.
+ */
+export function setEditable(
+  draft: FlowDraft,
+  position: number,
+  choice: EditableChoice | null,
+): FlowDraft {
+  const cleared = draft.outputs.map((item) => {
+    if (item.step !== position || !item.editable) return item;
+    const { editable: _dropped, ...rest } = item;
+    return rest;
+  });
+  if (!choice || choice.ref === '') return { ...draft, outputs: cleared };
+  const editable = { file: choice.file, check: choice.check, key: choice.key };
+  const found = cleared.some(
+    (item) => item.step === position && item.kind === 'output' && item.ref === choice.ref,
+  );
+  return {
+    ...draft,
+    outputs: found
+      ? cleared.map((item) =>
+          item.step === position && item.kind === 'output' && item.ref === choice.ref
+            ? { ...item, editable }
+            : item,
+        )
+      : [
+          ...cleared,
+          {
+            step: position,
+            kind: 'output',
+            ref: choice.ref,
+            label: `Output ${cleared.length + 1}`,
+            format: '',
+            editable,
+          },
+        ],
+  };
+}
+
+/** Pause or resume a step. A step that no longer pauses has no editable file. */
+export function setPause(draft: FlowDraft, index: number, pause: boolean): FlowDraft {
+  const updated = updateStep(draft, index, { pauseAfter: pause });
+  return pause ? updated : setEditable(updated, index + 1, null);
+}
+
+/** What stops a paused step being saved: it must name the file the person edits. */
+export function pauseProblems(draft: FlowDraft): FlowProblem[] {
+  const problems: FlowProblem[] = [];
+  draft.steps.forEach((step, index) => {
+    if (!step.pauseAfter) return;
+    const step_ = index + 1;
+    const refuse = (message: string) => problems.push({ code: 'FLOW_PAUSE', message, step: step_ });
+    const choice = editableChoice(draft, step_);
+    if (!choice) {
+      refuse('Choose the file output the person edits at this pause, and name the file.');
+    } else if (
+      !choice.file ||
+      /[/\\]/.test(choice.file) ||
+      choice.file.startsWith('.') ||
+      choice.file.length > MAX_FILE_NAME
+    ) {
+      refuse('Name the file to edit: a plain file name, with no folder and no leading dot.');
+    } else if (choice.key !== '' && !EDIT_KEY.test(choice.key)) {
+      refuse('The key is a lower-case name such as lexicon_uri.');
+    }
+  });
+  return problems;
 }
 
 /** The index in a step's wires of the one that feeds input `position`, or -1. */

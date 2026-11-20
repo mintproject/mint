@@ -8,6 +8,7 @@ import { KeycloakAdapter } from "@/config/keycloak-adapter";
 import listTasksByProblemStatementGQL from "./queries/task/listTasksByProblemStatement.graphql";
 import getThreadGQL from "./queries/thread/get.graphql";
 import listExecutionHistoryGQL from "./queries/execution/list-history.graphql";
+import getExecutionThreadIdsGQL from "./queries/execution/get-thread-ids.graphql";
 import checkVariableByIdGQL from "./queries/variable/check-by-id.graphql";
 import getRegionGQL from "./queries/region/get.graphql";
 import checkRegionByIdGQL from "./queries/region/check-by-id.graphql";
@@ -88,6 +89,33 @@ export const getThread = async (thread_id: string, access_token?: string): Promi
         throw new InternalServerError("Error getting thread " + result.errors[0].message);
     }
     return result.data.thread_by_pk;
+};
+
+/**
+ * The ids of the threads an execution belongs to (thread_model_execution, then
+ * thread_model.thread_id). Read with the service client, not the caller's token: the
+ * caller's row-level view of these links is the very thing a thread check decides, so the
+ * check is made on the thread itself (getThread with the caller's token). Empty for an
+ * execution that no thread owns.
+ */
+export const getExecutionThreadIds = async (executionId: string): Promise<string[]> => {
+    const APOLLO_CLIENT = GraphQL.instance(KeycloakAdapter.getUser());
+    const result: ApolloQueryResult<{
+        thread_model_execution: Array<{ thread_model?: { thread_id?: string } | null }>;
+    }> = await APOLLO_CLIENT.query({
+        query: getExecutionThreadIdsGQL,
+        variables: { id: executionId },
+        fetchPolicy: "no-cache"
+    });
+    if (!result || (result.errors && result.errors.length > 0)) {
+        throw new InternalServerError(
+            "Error getting execution threads " + (result?.errors?.[0]?.message || "unknown error")
+        );
+    }
+    const ids = result.data.thread_model_execution
+        .map((link) => link.thread_model?.thread_id)
+        .filter((id): id is string => Boolean(id));
+    return [...new Set(ids)];
 };
 
 /**

@@ -281,6 +281,90 @@ describe('FlowAuthoringForm', () => {
     expect(screen.getByText(/nothing fits/)).toBeInTheDocument();
   });
 
+  describe('a pause that makes a file editable', () => {
+    async function pausedFirstStep(user: ReturnType<typeof userEvent.setup>) {
+      render();
+      await fillAbout(user);
+      await user.click(screen.getByRole('button', { name: 'Add a flow input' }));
+      await user.click(
+        within(screen.getByTestId('flow-form-input-0')).getByRole('button', {
+          name: 'Pick a variable',
+        }),
+      );
+      await addStepOf(user, 'Ingest');
+      await user.selectOptions(
+        await screen.findByLabelText('Source of input 1 of step 1'),
+        'Flow input: input1',
+      );
+      await user.click(screen.getByLabelText('Pause for review after this step'));
+    }
+
+    const lastCall = (suffix: string) => calls.filter((c) => c.url.endsWith(suffix)).at(-1)!.body;
+
+    it('sends pause_after and the chosen editable output in the check and the save', async () => {
+      const user = userEvent.setup();
+      await pausedFirstStep(user);
+      await user.selectOptions(screen.getByLabelText('Editable output of step 1'), '1');
+      await user.type(screen.getByLabelText('File name to edit for step 1'), 'lexicon_draft.json');
+      await user.selectOptions(
+        screen.getByLabelText('Check on the edited file of step 1'),
+        'lexicon',
+      );
+      await user.type(screen.getByLabelText('Key of the edited file of step 1'), 'lexicon_uri');
+
+      const save = screen.getByRole('button', { name: 'Save flow' });
+      await waitFor(() => expect(save).toBeEnabled());
+      const editable = { file: 'lexicon_draft.json', check: 'lexicon', key: 'lexicon_uri' };
+      const checkBody = lastCall('/flows/check');
+      expect(checkBody.steps[0].pause_after).toBe(true);
+      expect(checkBody.outputs).toEqual([{ step: 1, output: 1, editable }]);
+
+      await user.click(save);
+      await waitFor(() => expect(calls.some((c) => c.url.endsWith('/v2.0.0/flows'))).toBe(true));
+      const sent = calls.find((c) => c.url.endsWith('/v2.0.0/flows'))!.body;
+      expect(sent.steps[0].pause_after).toBe(true);
+      expect(sent.outputs).toEqual([expect.objectContaining({ step: 1, output: 1, editable })]);
+    });
+
+    it('leaves out a blank check and key', async () => {
+      const user = userEvent.setup();
+      await pausedFirstStep(user);
+      await user.selectOptions(screen.getByLabelText('Editable output of step 1'), '1');
+      await user.type(screen.getByLabelText('File name to edit for step 1'), 'a.json');
+      await waitFor(() =>
+        expect(lastCall('/flows/check').outputs[0].editable).toEqual({ file: 'a.json' }),
+      );
+    });
+
+    it('blocks saving a paused step with no editable output, and says why', async () => {
+      const user = userEvent.setup();
+      await pausedFirstStep(user);
+      const step = screen.getByTestId('flow-form-step-1');
+      expect(
+        await within(step).findByText(/Choose the file output the person edits/),
+      ).toBeVisible();
+      await waitFor(() =>
+        expect(screen.getByText('The flow fits its pieces.')).toBeInTheDocument(),
+      );
+      expect(screen.getByRole('button', { name: 'Save flow' })).toBeDisabled();
+
+      await user.selectOptions(screen.getByLabelText('Editable output of step 1'), '1');
+      expect(await within(step).findByText(/Name the file to edit/)).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Save flow' })).toBeDisabled();
+    });
+
+    it('drops the editable file when the pause is turned off', async () => {
+      const user = userEvent.setup();
+      await pausedFirstStep(user);
+      await user.selectOptions(screen.getByLabelText('Editable output of step 1'), '1');
+      await user.type(screen.getByLabelText('File name to edit for step 1'), 'a.json');
+      await user.click(screen.getByLabelText('Pause for review after this step'));
+      expect(screen.queryByLabelText('Editable output of step 1')).toBeNull();
+      await waitFor(() => expect(lastCall('/flows/check').steps[0].pause_after).toBe(false));
+      expect(lastCall('/flows/check').outputs).toEqual([{ step: 1, output: 1 }]);
+    });
+  });
+
   describe('edited as a copy', () => {
     const stored: StoredFlowSource = {
       configuration: {
@@ -320,6 +404,29 @@ describe('FlowAuthoringForm', () => {
         ],
       },
     };
+
+    it('pre-fills the editable choice of a paused flow', async () => {
+      const editable = { file: 'lexicon_draft.json', check: 'lexicon', key: 'lexicon_uri' };
+      render({
+        initial: draftFromStoredFlow({
+          ...stored,
+          flow: {
+            ...stored.flow,
+            outputs_json: [{ step: 1, output: 1, output_id: 'cfg_output_1', editable }],
+            steps: [{ ...stored.flow.steps[0]!, pause_after: true }],
+          },
+        }),
+      });
+      expect(screen.getByLabelText('Pause for review after this step')).toBeChecked();
+      expect(await screen.findByLabelText('Editable output of step 1')).toHaveValue('1');
+      expect(screen.getByLabelText('File name to edit for step 1')).toHaveValue(
+        'lexicon_draft.json',
+      );
+      expect(screen.getByLabelText('Check on the edited file of step 1')).toHaveValue('lexicon');
+      expect(screen.getByLabelText('Key of the edited file of step 1')).toHaveValue('lexicon_uri');
+      const save = screen.getByRole('button', { name: 'Save flow' });
+      await waitFor(() => expect(save).toBeEnabled());
+    });
 
     it('is prefilled and saves a NEW configuration under the same version, thread bindings included', async () => {
       const user = userEvent.setup();

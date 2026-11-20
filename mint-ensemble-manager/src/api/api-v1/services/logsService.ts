@@ -5,7 +5,9 @@ import { fetchLocalRunLog } from "@/classes/localex/local-execution-functions";
 import { fetchMintConfig } from "@/classes/mint/mint-functions";
 import { getTokenFromAuthorizationHeader } from "@/utils/authUtils";
 import { TapisExecutionService } from "@/classes/tapis/adapters/TapisExecutionService";
-import { NotFoundError, UnauthorizedError } from "@/classes/common/errors";
+import { NotFoundError, UnauthorizedError, UnifiedExecutionError } from "@/classes/common/errors";
+import { getExecutionThreadIds } from "@/classes/graphql/graphql_functions_v2";
+import { assertThreadReadable } from "./unifiedExecutionService";
 import { createHasuraUnifiedExecutionStore } from "./unifiedExecutionStore";
 import { internalSecretFrom } from "./adapterConfig";
 
@@ -24,11 +26,17 @@ const logsService: LogsService = {
         return access_token;
     },
     async fetchLog(execution_id: string, authorizationHeader: string) {
+        // Whatever the engine, the caller must hold a token and be able to read a thread
+        // the execution belongs to: executions themselves are readable by id.
+        if (!getTokenFromAuthorizationHeader(authorizationHeader)) {
+            throw new UnauthorizedError("Invalid authorization header");
+        }
         const prefs = await fetchMintConfig();
         const execution: Execution = await getExecution(execution_id);
         if (!execution) {
             throw new NotFoundError("Execution not found");
         }
+        await assertExecutionReadable(execution_id, authorizationHeader);
         if (prefs.execution_engine === "wings") {
             return await fetchWingsRunLog(execution.runid, prefs);
         } else if (prefs.execution_engine === "localex") {
@@ -52,6 +60,30 @@ const logsService: LogsService = {
         throw new Error(`Unsupported execution engine: ${prefs.execution_engine || "unknown"}`);
     }
 };
+
+/**
+ * The caller may read an execution's logs only when they can read one of its threads
+ * (the thread's row-level permissions decide, so a collaborator on a shared thread may).
+ * An execution no thread owns, or a thread that is not theirs, is a 404, the same as a
+ * missing execution.
+ */
+async function assertExecutionReadable(
+    executionId: string,
+    authorizationHeader: string
+): Promise<void> {
+    const threadIds = await getExecutionThreadIds(executionId);
+    for (const threadId of threadIds) {
+        try {
+            await assertThreadReadable(threadId, authorizationHeader);
+            return;
+        } catch (error) {
+            if (!(error instanceof UnifiedExecutionError) || error.statusCode !== 404) {
+                throw error;
+            }
+        }
+    }
+    throw new NotFoundError("Execution not found");
+}
 
 interface WorkflowTaskLogPreferences {
     svo_adapter_api?: string;
