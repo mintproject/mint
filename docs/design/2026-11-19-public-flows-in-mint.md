@@ -3,7 +3,10 @@
 ## Status
 
 Implementing. Approved by the user on 2026-11-19 after the step 0 results. Steps 0 and 1
-are done and live on dev (#427).
+are done and live on dev (#427). Step 2's approval hash over the bindings is built (decision
+of 2026-11-19); the pinned install and the two-user check are not reported. Step 5 was built
+as the pause-for-edit design, not as the handoff record below. Step 6's operator-held key is
+not built; a user's own stored credential is used instead. Step 7 is open.
 
 **Steps 3, 4 and 5 are superseded** by `2026-11-19-flows-as-models.md`: the user decided
 that flows are stored as models and run from a modeling thread, not from a flows screen.
@@ -527,6 +530,14 @@ Questions 1 to 3 are answered in step 0. Question 8 is the user's.
   - **Not taken:** flows as a configuration file (see Alternatives).
 - 2026-11-19: **Reversed by the user:** flows are models in a thread, with the Model
   metadata structure, not a dedicated screen. See `2026-11-19-flows-as-models.md`.
+
+- 2026-11-20, status as built (rollout report; the flows-as-models spec has the detail):
+  - Step 5 (review step for formulation) was built as the pause-for-edit design in
+    `2026-11-20-flow-pause-for-edit.md` (#456). The handoff record in this step was not built.
+  - Step 6: a run used a user's own stored credential (Narrative fetched its stored
+    `model_server` credential, live check on dev). The operator-held key with per-run fetch was
+    not built.
+  - Step 7 (hardening and production) is open.
 
 ## User feedback / decisions
 

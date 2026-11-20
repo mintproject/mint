@@ -3,8 +3,22 @@
 ## Status
 
 Approved (2026-11-20). Implementing.
+Deployed to dev on 2026-11-20: PR #456 merged (merge commit 9d8867b), with follow-up PRs
+#457 to #460 on the same routes. The front door is on for dev. Not complete; the open items
+are listed under Remaining below.
 The parent spec's line "the adapter is put behind DYNAMO's APIs" is recorded there as
 proposed by the assistant and not yet confirmed by the user.
+
+Remaining (as of 2026-11-20):
+- `_check_run_conflict` still reads the stored run status, so a stale run can block a new submit.
+- The EM logs route's `wings` and `localex` branches have no thread check.
+- The adapter's own `/ui/` console does not work with the front door on. Accepted: the DYNAMO
+  UI replaces it.
+- Private uploads cannot be used by model runs ("option 1", deferred).
+- Not reported as checked: Step 0 findings 2 and 3 (`POST /forecast/run` auth, anonymous
+  `GET /transform-specs`); Step 1 (the browser's `/spatial/layers` through the EM); Step 6
+  (public reads and DFC routes; undecided).
+- Not run: the one-week log check that Step 5 asks for before the front door.
 
 Paths below are relative to the `docs-phases` worktree root,
 `/Users/wmobley/Documents/Github/modflow-suite/monorepo/.claude/worktrees/docs-phases/`,
@@ -570,6 +584,34 @@ Steps are in "Migration order". Summary:
 9. **Is finding 1 (`POST /data-objects` with no token) live?** Needs one call on dev, as a
    confirmation, before anything else.
 
+## Deviations
+
+Where the build differs from the approved design. Reasons are under Decisions.
+
+- **One allowlisted forward, not a route per call.** The MCP's calls go through
+  `/v1/adapter/{adapter path}` (17 method and path pairs). The per-route names in the route
+  table are still proposals for the browser. Code: `adapterFrontService.ts`.
+- **Forwarded user calls send `X-Front-Door-Secret`.** `X-Ensemble-Manager-Secret` is kept for
+  the EM acting for itself, because it also reads every run. Code: `main.py` (front-door guard).
+- **Piece routes sit on the EM** at `/v1/etl-pieces`: `POST /v1/etl-pieces/from-repository`,
+  `GET /v1/etl-pieces/approvals`, and `GET` and `PUT /v1/etl-pieces/{id}/approval` (#457). The
+  adapter's own routes are `POST /pieces/from-repository`, `GET /pieces/approvals`, and `GET` and
+  `PUT /transform-specs/{id}/approval`. The step-secret fetch is exempt from the front door (a
+  task callback with its own one-time credential).
+- **Secrets are on the EM.** The browser uses the EM's `/v1/secrets` (#456, #457). The adapter's
+  own routes are `/secrets`.
+- **Existing data objects are not all hidden.** Open question 3 chose "hidden from users". The
+  user approved a different backfill on 2026-11-20: rows pointing at public places were marked
+  `shared`, and `tapis://` rows were given owner `wmobley`. Migration 44
+  (`adapter_data_object_owner`) adds `owner_username` and `shared`. Code: `migrations/`.
+- **No week of logs before the front door.** Step 5 asked for a week of adapter logs first. The
+  setting was turned on on 2026-11-20 with the user's approval. The one-week log check was not
+  run.
+- **CORS is a setting.** The design said the adapter had no CORS setting. The build reads
+  `SVO_ADAPTER_CORS_ORIGINS` (`config.py`, `cors_origins`, default empty). Browser origins are
+  refused on non-exempt routes: a request with an `Origin` header gets 403 `FRONT_DOOR_REQUIRED`
+  (live check, 2026-11-20).
+
 ## Decisions
 
 - 2026-11-19: The adapter is put behind DYNAMO's APIs and is not rewritten. Proposed by the
@@ -652,6 +694,35 @@ Steps are in "Migration order". Summary:
     user header so the adapter checks the submitter.
   - Not fixed here: the legacy `wings` and `localex` log branches of `GET /v1/logs/{id}` still
     read an execution with no thread check; they have no adapter call.
+
+- 2026-11-20, rollout on dev (facts from the live rollout; not all readable from the code).
+  Pod settings are hand-set, because a deploy keeps a pod's settings:
+  - `SVO_ADAPTER_INTERNAL_SERVICE_SECRET` holds one shared value on mintdevsvo,
+    mintdevensemble and mintdevapi.
+  - `SVO_ADAPTER_CORS_ORIGINS=https://mintdevui.pods.portals.tapis.io`.
+  - `SVO_ADAPTER_FLOW_PAUSE_ENABLED=true`.
+  - `SVO_ADAPTER_REQUIRE_FRONT_DOOR=true`, turned on 2026-11-20 with the user's approval.
+  - The EM pod's networking `cors_allow_methods` is `GET, POST, PUT, DELETE, OPTIONS`.
+- 2026-11-20, data-object backfill, approved by the user: 37 rows pointing at public places
+  (CKAN, public S3, STAC) were marked `shared`; 12 rows pointing at `tapis://` were given
+  owner `wmobley`.
+- 2026-11-20, live checks that passed on dev: an owned data object returns 404 to another
+  user; a direct user route returns 403 `FRONT_DOOR_REQUIRED`; a browser upload to a private
+  CKAN dataset worked; a private gather worked.
+- 2026-11-20, the adapter's own `/ui/` console stops working with the front door on. The
+  user said the DYNAMO UI replaces it. Accepted.
+- 2026-11-20, private uploads stay unusable by model runs. Deferred ("option 1").
+- 2026-11-20, open follow-ups (listed under Status, Remaining).
+- 2026-11-20, further live checks on dev (user's report):
+  - Resume: the UI's "Resume with this edit" called the EM route `POST /plans/runs/{runId}/resume`.
+    It started segment 2 as adapter run `6fa34cb2`, with a `gather-edit` task, and the run completed.
+  - Secrets: EM `GET /v1/secrets` returned 200, and saving `model_server` from the Credentials page
+    worked. The browser's PUT needed the EM pod's CORS methods widened to include PUT and DELETE.
+  - Browser origin: a direct adapter call with `Origin: https://mintdevui.pods.portals.tapis.io`
+    returned 403 `FRONT_DOOR_REQUIRED`.
+  - Flow form: the page loads, and `/v1/adapter/flows/propose` returned 200. No flow was saved.
+  - Not run: the second-account resume refusal (pause spec); the 14-day sweep on dev; the one-week
+    log check in Step 5.
 
 ## User feedback / decisions
 

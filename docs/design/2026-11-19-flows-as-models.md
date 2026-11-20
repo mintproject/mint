@@ -2,15 +2,20 @@
 
 ## Status
 
-Implementing. Approved by the user on 2026-11-19. Replaces steps 3, 4 and 5 of
+Implementing. Approved by the user on 2026-11-19. Phases 0, A, B, C, E and F are live on dev
+(see the table); D is partly built; D5 and the open items under Decisions are not done.
+Replaces steps 3, 4 and 5 of
 `2026-11-19-public-flows-in-mint.md`; that spec's steps 2, 6 and 7 still stand.
 
 | Phase | State |
 |---|---|
 | 0 — fixes and checks | done (#431, #432, #433) |
 | A — flows in the catalog and the adapter | done, live on dev (#434, mcp-suite #13) |
-| B — running a flow from a thread | built, in review (draft PR); not yet on dev |
-| C to F | not started |
+| B — running a flow from a thread | checked on dev 2026-11-19 (#436, #437); the security review changes are under Decisions |
+| C — finding, running and watching a flow in the UI | done (#448 find a flow; UI submit, collection input, run view and results download, per the user's report of 2026-11-20) |
+| D — authoring in the UI | partly: D1 and D2 (#455, register from a repo commit and admin approval); the D3 form and D4 proposal route (#459); D5 ranking not started |
+| E — a pause for the user's edit | built in #456, deployed and live-checked on dev 2026-11-20 (see `2026-11-20-flow-pause-for-edit.md`) |
+| F — the adapter behind DYNAMO's APIs | built in #456 to #458; front door on dev 2026-11-20 (see `2026-11-20-adapter-behind-dynamo-apis.md`) |
 
 Deviations from the approved text, and what each review changed, are under Decisions.
 
@@ -847,6 +852,38 @@ reordered or dropped without undoing the first four.
     outputs point at one folder and all read "Term counts". The ineffective code is
     removed. Changing it means changing how every result is stored, which is not part of
     this phase. For the dictionary flow it goes away once the pieces report each file.
+
+- 2026-11-20, merged PRs (from PR descriptions and the user's rollout report; code not all read):
+  - #449, #450: user secrets, and a step that fetches its own secret (phase B). #450 is where
+    `feat/flow-step-secrets` shipped: `secrets` and `sends_data_to` are declared on the piece and
+    shown in the pre-run dialog.
+  - #451: the saved credentials page.
+  - #452: the region fix. A thread with no region of its own falls back to its task's or problem
+    statement's `region_id` for the dataslice (`datasliceRegionId`, in
+    `ui-react/src/lib/thread-datasets.ts`), with a toast when none is found. Before, an empty
+    `region_id` broke a NOT NULL foreign key.
+  - #454: user uploads go into CKAN. Uploads are private by default in the user's organisation.
+    Private uploads are not usable by model runs yet (option 1, deferred).
+  - #455: register a piece from a repository commit, and admin approval (D1, D2).
+  - #456: pause for edit, and the adapter behind DYNAMO's APIs (phases E and F).
+  - #457: front-door gaps. The step-secret route is exempt; the piece routes go behind the EM.
+  - #458: the EM's allowlisted forward `/v1/adapter` and the `X-Front-Door-Secret` header.
+  - #459: the flow form. Calls made for a user send the user's header; run reads need a
+    readable thread.
+  - #460: stale runs are reconciled before a credential change; the poll answer keeps the
+    adapter's status, with `tapis_status` kept separate; flow settings are described in words;
+    the paused header; EM CORS methods in the deploy script; Results unlock on any finished
+    model; a parameter save no longer wipes other models' runs.
+  - #461: the upload-a-dataset page; flow runs record their inputs and settings, with a backfill
+    script; sub-tasks under every task.
+- 2026-11-20, live checks passed on dev (user's report): a private gather; Narrative fetched its
+  stored `model_server` credential and the chat model labelled its frames; the provenance
+  backfill for thread `nZU7zKm9ODvnwFXXMNb5` rebuilt 5 runs; Formulation paused, its lexicon was
+  edited, it resumed, and the counts used the edit.
+- 2026-11-20, open follow-ups (user's report): `_check_run_conflict` still reads the stored run
+  status, so a stale run can block a new submit; the graph lags the step list; the EM logs
+  route's `wings` and `localex` branches have no thread check; the flow form cannot choose an
+  editable output for a new pause; the upload page's map and metadata work is in progress.
 
 ## User feedback / decisions
 
