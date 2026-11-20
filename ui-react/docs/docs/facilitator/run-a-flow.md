@@ -63,6 +63,8 @@ If something blocks the run, DYNAMO shows a message with a title and the details
 
 The **Flow steps** panel in the Runs step shows the run.
 
+![A completed flow run: its run counts and the Flow steps graph, each step marked Completed](../assets/images/flow-run-panel.png)
+
 - **The step graph.** Each step is one box, with its state: *Waiting*, *Running*, *Completed*, *Failed*, *Skipped* or *Cancelled*. A step that failed shows its message under it.
 - **The step list.** The same steps in order, below the graph. A step that has a task reference shows it.
 - **Refresh workflow.** Fetches the latest state. DYNAMO keeps checking on the run for a while after you start it. Use **Refresh workflow** at any time to check again.

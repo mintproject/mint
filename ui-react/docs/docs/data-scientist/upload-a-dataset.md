@@ -4,7 +4,7 @@ You can put your own data into the catalog from DYNAMO, without asking an admini
 
 You must be signed in. Open **Datasets → Upload a dataset** in the menu, or go to `/datasets/upload`.
 
-<!-- screenshot: the Upload a dataset form, top section (files, organisation, title) -->
+![The top of the Upload a dataset form: files, organisation, title, description, license and tags](../assets/images/upload-dataset-form.png)
 
 ## What you can upload
 
@@ -57,7 +57,7 @@ So:
     - **A MINT region**. Choose a category, then a region. The dataset takes the bounding box of that region's geometry. If the region has no geometry, DYNAMO asks you to choose another.
     - **A bounding box**.Draw a box on the map, or open **Edit coordinates** and type West, South, East and North in degrees.Without the map, type the four values in degrees. West must be below East, South below North, longitude between -180 and 180, latitude between -90 and 90.
 
-<!-- screenshot: the spatial coverage choice, with the map box drawn -->
+![Spatial coverage: a box drawn over Texas on the map, with its West, South, East and North coordinates below](../assets/images/upload-dataset-map.png)
 
 ### Who can use this
 

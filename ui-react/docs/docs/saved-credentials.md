@@ -10,6 +10,8 @@ Select **Saved credentials** in the header, or go to `/account/credentials`.
 
 The page lists the credentials you have saved. For each one it shows its name, its field names, when it was last changed, and when it was last used. It never shows a value.
 
+![The Saved credentials page with one model_server credential, its field names and dates, and Replace and Delete buttons](assets/images/saved-credentials-list.png)
+
 ## Add a credential
 
 1. Select **Add a credential**.

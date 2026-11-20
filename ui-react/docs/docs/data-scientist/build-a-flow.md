@@ -6,7 +6,9 @@ Both tasks need you to be signed in. A piece you register is private to you unti
 
 ## Register a piece from a commit
 
-Open `/etl/register-piece`. The piece form is for pieces whose code lives in a GitHub commit.
+Open **Models → Register a piece from GitHub**, or select **Register a piece** on the ETL processes page. The piece form is for pieces whose code lives in a GitHub commit.
+
+![The Register a piece form: name, version, description, and the code's repository, commit, source file and entrypoint](../assets/images/register-piece-form.png)
 
 <!-- To confirm before publishing: this page is not linked from the sidebar, which has "Register ETL Process" (/etl/register) for the older registration form. Say here how a user reaches this page once a link exists. -->
 
@@ -70,6 +72,8 @@ A private piece runs only for its owner, so it has nothing to approve.
 ## Build a flow
 
 Open **Models → Build a Flow**, or go to `/flows/new`. To start from an existing flow, open it and select **Edit as a copy**, or go to `/flows/new/[id]`.
+
+![The Build a flow form: about the flow, flow inputs, steps, the wanted result and outputs](../assets/images/build-a-flow-form.png)
 
 The form builds the flow as you go. A live check runs on every change and reports problems on the step or link they belong to. **Save flow** stays off until every part of the form is complete and the check passes for exactly what is on the form.
 
