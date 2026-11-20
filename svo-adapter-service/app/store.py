@@ -327,6 +327,11 @@ class InMemoryHasura:
             return {"update_adapter_workflow_run": {"affected_rows": 1}}
         return {"update_adapter_workflow_run": {"affected_rows": 0}}
 
+    def _op_UserActiveRuns(self, v):
+        return {"adapter_workflow_run": [
+            r for r in STORE.run.values()
+            if r.get("submitted_by") == v["user"] and r.get("status") in ("submitting", "running")]}
+
     def _op_GetRunStepSecrets(self, v):
         return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
 

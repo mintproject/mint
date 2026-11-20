@@ -560,6 +560,7 @@ A piece asks for the secrets it needs in its catalog row, in `runtime_json`:
 | `secrets` | `[{name, label, fields, steps, stored}]`: each secret the flow needs, the sorted field names the steps need, the step positions, and whether the caller has stored it (with all those fields). |
 | `secrets_ready` | `true` when every one is stored, or there are none. |
 | `sends_data_to` | `[{step, piece, service, what}]`: what each step says it sends, and to whom. |
+| `planned_by` | the Tapis username that made the plan (every flow plan). A run that binds a secret is submitted only by that user: anyone else gets 403 `FLOW_PLAN_NOT_YOURS`. |
 | `secret_bindings` | the id and version of each stored row the plan found (for the check at submit). Ids and versions only. |
 
 A flow whose secret is not stored is planned (200) with `secrets_ready: false`. No value is
@@ -572,11 +573,13 @@ in a plan.
 | Refusal | Status | `detail.code` |
 |---|---|---|
 | A secret is not stored, or lacks a needed field | 422 | `FLOW_SECRET_MISSING` (`secrets`: `[{name, fields}]`) |
-| The stored secret is not the one the plan found | 409 | `FLOW_SECRET_CHANGED` (`name`); plan again |
+| The stored secret is not the one the plan found, or the plan found none (stored after planning) | 409 | `FLOW_SECRET_CHANGED` (`name`); plan again |
+| The plan was made by another user | 403 | `FLOW_PLAN_NOT_YOURS` |
+| The user has another active run that holds unissued secret credentials and this run has an untrusted step, or the reverse | 409 | `SECRET_RUN_CONFLICT` |
 | A secret is declared by a piece that is not an entrypoint function piece | 422 | `SECRET_PIECE_UNSUPPORTED` (`step`, `reason`) |
 | A run that binds a secret has a step whose piece is not built-in, approved as it is, or the runner's own (an opted-in unapproved piece counts) | 403 | `SECRET_PIECE_NOT_TRUSTED` (`step`) |
 | The piece declares different secrets than when the plan was made | 409 | `STEP_SECRET_DECLARATION_CHANGED` (`step`) |
-| No `SVO_ADAPTER_STEP_SECRET_KEY`, `SVO_ADAPTER_PUBLIC_URL` or encryption key | 503 | `STEP_SECRETS_NOT_CONFIGURED` |
+| No `SVO_ADAPTER_STEP_SECRET_KEY` of at least 32 bytes (shorter is logged at startup, never the key), `SVO_ADAPTER_PUBLIC_URL` or encryption key | 503 | `STEP_SECRETS_NOT_CONFIGURED` |
 
 Nothing about a secret travels in `args`. `svo_run_id`, `svo_adapter_url` and
 `step_secret_token_<position>` are managed by the adapter: sending any is 422
@@ -607,10 +610,22 @@ while all of this holds, and refuses otherwise with a code and nothing else:
 | credential not used before (once, claimed atomically) | 409 `STEP_SECRET_ALREADY_ISSUED` |
 | every piece of the run still passes the trust rule; the piece's declaration and the destination rule still hold | 403 `SECRET_PIECE_NOT_TRUSTED`, 409 `STEP_SECRET_DECLARATION_CHANGED`, 403/422 `FLOW_SECRET_INPUT_TAKEN` |
 | each secret still exists, is the submitter's, at the bound version, with the fields | 409 `SECRET_REMOVED`, `FLOW_SECRET_CHANGED`, `SECRET_FIELDS_INCOMPLETE` |
-| per-run rate limit (shared with the model task's fetch) | 429 `RUN_CREDENTIALS_RATE_LIMITED` |
+| the user has no other active run holding an untrusted step | 409 `SECRET_RUN_CONFLICT` |
+| rate limit per (caller, run), checked after the run is known to be the caller's | 429 `RUN_CREDENTIALS_RATE_LIMITED` |
 
 An `issued` event records the run, step and secret id (no value). This route never reads a
 model owner's secret, and `GET /runs/{id}/credentials` never returns a runner's own.
+
+**Residual race.** Run arguments are taken to be readable by the run's owner, and an
+untrusted (opted-in, unapproved) piece runs with the owner's token. The adapter therefore
+refuses (`SECRET_RUN_CONFLICT`) to start an untrusted run while the user's other run holds
+unissued credentials, to start a secret run while another active run holds an untrusted
+step, and to serve a fetch while one does. Two runs submitted at the same moment can each
+pass the check before the other exists; that window is not closed. An app step receives
+the runner's token too, so it is held to the same rule (the runner's own, or a seeded
+piece with no owner and no catalog author). A fetch whose response is lost has spent its
+credential: the step fails, and submitting the flow again is the recovery. The `issued`
+audit event is written before the credential is spent.
 
 **For piece authors.** Declare the secret and read its values from the dict your entrypoint
 receives (`inputs["MODEL_API_KEY"]`); do not take a key as a run argument. Before your

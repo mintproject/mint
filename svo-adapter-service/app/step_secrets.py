@@ -31,6 +31,8 @@ LABEL_MAX = 100
 # may fill none of them, whatever the case it is written in.
 RESERVED_INPUT_PREFIXES = ("SOURCE_", "TAPIS_", "SVO_")
 
+ADAPTER_FIXED_INPUTS = ("SVO_RUN_ID", "SVO_ADAPTER_URL", "SVO_STEP_SECRET_TOKEN")
+
 # Pipeline arguments the adapter fills in for a step bound to a secret.
 RUN_ID_ARG = "svo_run_id"
 ADAPTER_URL_ARG = "svo_adapter_url"
@@ -194,6 +196,12 @@ def step_inputs_check(step: dict[str, Any], inputs: Iterable[str], env_keys: Ite
     ``env_keys`` what its ``env_from_args`` names, whether or not a link took it
     away. Names are compared without regard to case."""
     taken = {str(name).upper() for name in inputs} | {str(name).upper() for name in env_keys}
+    # The inputs the adapter fills in itself, however a piece writes them.
+    fixed = taken & set(ADAPTER_FIXED_INPUTS)
+    if fixed:
+        raise StepSecretError(422, {
+            "code": "FLOW_SECRET_INPUT_TAKEN", "step": step.get("step"), "input": sorted(fixed)[0],
+            "message": f"step {step.get('step')}: {sorted(fixed)[0]} is filled by the adapter"})
     for declaration in step.get("secrets") or []:
         for env in declaration["env"]:
             upper = env.upper()
@@ -257,8 +265,15 @@ def sends_data_summary(steps: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # The per-step fetch credential
 # ---------------------------------------------------------------------------
+MIN_KEY_BYTES = 32
+
+
+def key_long_enough(key: str | None) -> bool:
+    return bool(key) and len(key.encode()) >= MIN_KEY_BYTES
+
+
 def configured(key: str | None, public_base_url: str | None) -> bool:
-    return bool(key and public_base_url)
+    return key_long_enough(key) and bool(public_base_url)
 
 
 def _message(run_id: str, position: int, secrets: Iterable[dict[str, Any]], expires: int) -> bytes:

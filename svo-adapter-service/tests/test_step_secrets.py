@@ -37,7 +37,7 @@ BASE = "https://models.example"
 USERS = {"tok-alice": "alice", "tok-bob": "bob"}
 ALICE = {"Authorization": "Bearer tok-alice"}
 BOB = {"Authorization": "Bearer tok-bob"}
-KEY = "step-secret-test-key"
+KEY = "step-secret-test-key-0123456789-abcdef"
 ADAPTER = "https://svo.example"
 CODE = "def run(inputs):\n    return 'ok'\n"
 SECRETS = [{"name": "model_server", "label": "Model server",
@@ -58,6 +58,7 @@ def _configured(monkeypatch):
     main_module._CALLER_CACHE.clear()
     main_module._SECRET_CHANGE_RATE.clear()
     main_module._CREDENTIALS_RATE.clear()
+    main_module._STEP_FETCH_RATE.clear()
     yield
     secrets_store.ValueScrubber.clear()
 
@@ -680,7 +681,7 @@ def test_a_secret_that_lost_a_field_gets_nothing(bound):
 
 
 def test_the_per_run_rate_limit_applies(bound):
-    main_module._CREDENTIALS_RATE[bound["run"]] = [time.time()] * main_module._CREDENTIALS_RATE_LIMIT
+    main_module._STEP_FETCH_RATE[("alice", bound["run"])] = [time.time()] * main_module._CREDENTIALS_RATE_LIMIT
     response = fetch(bound["run"], bound["credential"])
     assert response.status_code == 429 and response.json()["detail"]["code"] == "RUN_CREDENTIALS_RATE_LIMITED"
 
@@ -866,3 +867,165 @@ def test_the_generated_task_code_is_the_fetching_wrapper(monkeypatch):
     (task_def,) = [t for t in pipeline["tasks"] if t["id"].startswith("step-1")]
     assert "/steps/1/secrets" in task_def["code"] and "STEP_SECRET_FETCH_FAILED" in task_def["code"]
     assert VALUE not in task_def["code"]
+
+
+# --- review findings -------------------------------------------------------------
+def test_every_flow_plan_records_who_planned_it(monkeypatch):
+    one_step_flow(monkeypatch, secrets=None, sends=None)
+    assert plan().json()["plan_json"]["planned_by"] == "alice"
+
+
+def test_a_plan_made_by_someone_else_is_not_submitted_with_my_secrets(monkeypatch, captured):
+    one_step_flow(monkeypatch)
+    put_secret()
+    put_secret(headers=BOB)
+    plan_id = plan().json()["plan_id"]  # alice's plan and alice's consent screen
+    refused = submit(plan_id, headers=BOB)
+    assert refused.status_code == 403 and refused.json()["detail"]["code"] == "FLOW_PLAN_NOT_YOURS"
+    assert not STORE.run and not captured["submits"]
+
+
+def test_a_secret_stored_after_the_plan_was_made_means_planning_again(monkeypatch, captured):
+    one_step_flow(monkeypatch)
+    plan_id = plan().json()["plan_id"]  # not stored yet: no binding was recorded
+    put_secret()
+    refused = submit(plan_id)
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == {
+        "code": "FLOW_SECRET_CHANGED", "name": "model_server",
+        "message": "this secret changed after the flow was planned; plan again"}
+    assert submit(plan().json()["plan_id"]).status_code == 200
+
+
+def test_another_users_attempts_do_not_spend_the_runners_rate_limit(bound):
+    for _ in range(main_module._CREDENTIALS_RATE_LIMIT + 5):
+        assert fetch(bound["run"], bound["credential"], headers=BOB).status_code == 403
+    assert main_module._STEP_FETCH_RATE == {}
+    assert fetch(bound["run"], bound["credential"]).status_code == 200
+
+
+def test_the_step_fetch_rate_table_stays_small(monkeypatch):
+    monkeypatch.setattr(main_module, "_STEP_FETCH_RATE_MAX_KEYS", 50)
+    now = time.time()
+    for n in range(200):
+        assert main_module._step_fetch_rate_ok("alice", f"run-{n}", now + n * 0.001)
+    assert len(main_module._STEP_FETCH_RATE) <= 50
+    old = time.time() - main_module._CREDENTIALS_RATE_WINDOW - 5
+    main_module._STEP_FETCH_RATE.clear()
+    for n in range(50):
+        main_module._STEP_FETCH_RATE[("alice", f"old-{n}")] = [old]
+    assert main_module._step_fetch_rate_ok("alice", "fresh", time.time())
+    assert len(main_module._STEP_FETCH_RATE) == 1
+
+
+def untrusted_piece():
+    return piece("shared-unapproved", secrets=None, sends=None, owner="bob", visibility="shared",
+                 approved=False, code="def run(inputs):\n    return 7\n")
+
+
+def other_active_run(plan_json, *, user="alice", bound_secrets=None):
+    STORE.plan["plan-b"] = {"id": "plan-b", "plan_json": plan_json}
+    STORE.run["run-b"] = {"id": "run-b", "submitted_by": user, "status": "running",
+                          "workflow_plan_id": "plan-b", **({"bound_secrets": bound_secrets} if bound_secrets else {})}
+
+
+def untrusted_plan_json(piece_id):
+    row = STORE.transform_spec[piece_id]
+    (planned,) = build_plan_json([row])["steps"]
+    return {"steps": [planned]}
+
+
+def test_a_fetch_is_refused_while_another_run_of_the_user_holds_an_untrusted_step(bound):
+    piece_id = untrusted_piece()
+    other_active_run(untrusted_plan_json(piece_id))
+    response = fetch(bound["run"], bound["credential"])
+    assert response.status_code == 409 and response.json()["detail"]["code"] == "SECRET_RUN_CONFLICT"
+    no_value(response)
+    STORE.run["run-b"]["status"] = "completed"
+    assert fetch(bound["run"], bound["credential"]).status_code == 200
+
+
+def test_another_users_active_run_is_no_conflict(bound):
+    other_active_run(untrusted_plan_json(untrusted_piece()), user="bob")
+    assert fetch(bound["run"], bound["credential"]).status_code == 200
+
+
+def test_an_untrusted_run_is_refused_while_a_run_holds_unissued_secrets(monkeypatch, captured):
+    plan_a, run_a = planned_and_submitted(monkeypatch)
+    credential = captured["submits"][0]["args"]["step_secret_token_1"]["value"]
+    piece_id = untrusted_piece()
+    stored_flow(monkeypatch, [step(1, piece_id)])
+    planned = plan(allow_unapproved_piece_ids=[piece_id])
+    assert planned.status_code == 200, planned.text
+    refused = submit(planned.json()["plan_id"])
+    assert refused.status_code == 409 and refused.json()["detail"]["code"] == "SECRET_RUN_CONFLICT"
+    assert len(STORE.run) == 1
+    assert fetch(run_a, credential).status_code == 200            # the secrets are issued ...
+    assert submit(planned.json()["plan_id"]).status_code == 200  # ... and the other run may start
+
+
+def test_a_secret_run_is_refused_while_another_run_holds_an_untrusted_step(monkeypatch, captured):
+    piece_id = untrusted_piece()
+    one_step_flow(monkeypatch)
+    put_secret()
+    other_active_run(untrusted_plan_json(piece_id))
+    refused = submit(plan().json()["plan_id"])
+    assert refused.status_code == 409 and refused.json()["detail"]["code"] == "SECRET_RUN_CONFLICT"
+    assert "run-b" in STORE.run and len(STORE.run) == 1 and not captured["submits"]
+
+
+def test_an_app_step_is_trusted_only_as_any_other_piece_is():
+    step_ = {"step": 2, "tapis_app_id": "some-app"}
+    seeded = {"id": "a", "tapis_app_id": "some-app"}
+    assert main_module._step_untrusted(step_, seeded, "alice") is False          # seeded, no author
+    assert main_module._step_untrusted(step_, {**seeded, "owner_username": "alice"}, "alice") is False
+    assert main_module._step_untrusted(step_, {**seeded, "owner_username": "bob"}, "alice") is True
+    assert main_module._step_untrusted(step_, {**seeded, "mint_etl_process_id": "etl-1"}, "alice") is True
+    assert main_module._step_untrusted(step_, None, "alice") is True
+    assert main_module._step_untrusted({"step": 1}, None, "alice") is False      # built-in code
+
+
+def test_a_run_that_binds_a_secret_may_not_hold_someone_elses_app_step():
+    secret_step = {"step": 1, "python_source": CODE, "transform_spec_id": "p", "secrets": SECRETS}
+    app_step = {"step": 2, "tapis_app_id": "some-app", "transform_spec_id": "a"}
+    registry = [{"id": "a", "owner_username": "bob", "tapis_app_id": "some-app"}]
+    with pytest.raises(Exception) as caught:
+        main_module._check_secret_run_trust({"steps": [app_step]}, registry, "alice")
+    assert caught.value.status_code == 403 and caught.value.detail["step"] == 2
+    del secret_step
+
+
+def test_the_issued_event_is_written_before_the_claim(bound, monkeypatch):
+    real = main_module.ISSUE_STEP_SECRETS_IF
+    original = type(get_hasura()).execute
+    seen = {}
+
+    async def spy(self, query, variables=None):
+        if query is real:
+            seen["events_before_claim"] = [e["event"] for e in STORE.secret_event]
+        return await original(self, query, variables)
+    monkeypatch.setattr(type(get_hasura()), "execute", spy)
+    assert fetch(bound["run"], bound["credential"]).status_code == 200
+    assert "issued" in seen["events_before_claim"]
+
+
+@pytest.mark.parametrize("name", ["svo_run_id", "Svo_Adapter_Url", "SVO_STEP_SECRET_TOKEN"])
+def test_a_secret_step_may_not_bind_an_adapter_input_in_any_case(monkeypatch, name):
+    one_step_flow(monkeypatch, env={name: "an_arg"})
+    detail = plan().json()["detail"]
+    assert detail["code"] == "FLOW_SECRET_INPUT_TAKEN" and detail["input"] == name.upper()
+    with pytest.raises(step_secrets.StepSecretError):
+        step_secrets.step_inputs_check({"step": 1, "secrets": []}, [name], [])
+
+
+@pytest.mark.parametrize("key,ok", [("x" * 31, False), ("x" * 32, True), ("", False)])
+def test_the_step_secret_key_must_be_long_enough(monkeypatch, captured, key, ok):
+    assert step_secrets.configured(key, ADAPTER) is ok
+    one_step_flow(monkeypatch)
+    put_secret()
+    plan_id = plan().json()["plan_id"]
+    monkeypatch.setattr(settings, "step_secret_key", key)
+    refused = submit(plan_id)
+    assert refused.status_code == (200 if ok else 503)
+    if not ok:
+        assert refused.json()["detail"]["code"] == "STEP_SECRETS_NOT_CONFIGURED" and (not key or key not in refused.text)

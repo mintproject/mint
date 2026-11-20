@@ -160,6 +160,9 @@ async def lifespan(app: FastAPI):
     # authenticate must stop the service, not silently store nothing.
     run_tokens.validate_keeper_config()
     secrets_store.install_log_scrubber()
+    if settings.step_secret_key and not step_secrets.key_long_enough(settings.step_secret_key):
+        log.error("SVO_ADAPTER_STEP_SECRET_KEY is shorter than %d bytes: steps cannot be given "
+                  "secrets until it is longer", step_secrets.MIN_KEY_BYTES)
     task: asyncio.Task | None = None
     if not settings.demo_mode and settings.poll_interval_seconds > 0:
         from . import poller
@@ -586,6 +589,16 @@ GET_RUN_STEP_SECRETS = """
 query GetRunStepSecrets($id: String!) {
   adapter_workflow_run_by_pk(id: $id) {
     id status submitted_by bound_secrets workflow_plan_id
+  }
+}
+"""
+
+# The user's runs that are still going, for the check that no run holding a runner's
+# secret shares the user with a step that is not trusted with it.
+USER_ACTIVE_RUNS = """
+query UserActiveRuns($user: String!) {
+  adapter_workflow_run(where: {submitted_by: {_eq: $user}, status: {_in: ["submitting", "running"]}}) {
+    id workflow_plan_id bound_secrets
   }
 }
 """
@@ -2610,6 +2623,7 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         "thread_bindings": flow["thread_bindings"],
         "pause_after": [int(step["position"]) for step in rows if step.get("pause_after")],
     }
+    plan_json["planned_by"] = caller
     plan_json.update(await _flow_secret_plan(plan_json["steps"], caller))
     created = (await h.execute(INSERT_PLAN, {"obj": {
         "source_data_object_id": next(
@@ -3474,26 +3488,77 @@ def _validate_plan_args(
 _SECRET_TRUSTED = frozenset({"builtin", "approved", "own"})
 
 
+def _step_untrusted(step: dict[str, Any], spec: dict[str, Any] | None, username: str | None) -> bool:
+    """Whether a step is something other than built-in code, an approved piece, or
+    the runner's own piece. Every step holds the runner's Tapis token (an app step
+    receives it as TAPIS_TOKEN and its env arguments as well), so an app piece is held
+    to the same rule: it counts only when it is the runner's own, or a seeded piece
+    with no owner and no catalog author."""
+    if step.get("python_source"):
+        return spec is None or stored_source.decision(spec, username, ()) not in _SECRET_TRUSTED
+    if step.get("tapis_app_id"):
+        if spec is None:
+            return True
+        owner = spec.get("owner_username")
+        return not ((owner and owner == username) or (not owner and not spec.get("mint_etl_process_id")))
+    return False
+
+
+def _untrusted_step(plan_json: dict[str, Any], registry: list[dict[str, Any]],
+                    username: str | None) -> dict[str, Any] | None:
+    """The first step of a plan that is not trusted with a runner's secret, if any."""
+    by_id = {spec.get("id"): spec for spec in registry}
+    return next((step for step in plan_json.get("steps") or []
+                 if _step_untrusted(step, by_id.get(step.get("transform_spec_id")), username)), None)
+
+
 def _check_secret_run_trust(plan_json: dict[str, Any], registry: list[dict[str, Any]],
                             username: str | None) -> None:
     """A run that binds any secret must consist only of trusted steps, because every
     step holds the runner's Tapis token and could otherwise ask for another step's
     secret (design section 3). Opt-in is never allowed here."""
+    bad = _untrusted_step(plan_json, registry, username)
+    if bad is not None:
+        raise HTTPException(403, detail={
+            "code": "SECRET_PIECE_NOT_TRUSTED", "step": bad.get("step"),
+            "message": "a run that uses your secrets may contain only built-in pieces, approved "
+                       "pieces and your own pieces; this step is none of those"})
     by_id = {spec.get("id"): spec for spec in registry}
-    for step in plan_json.get("steps") or []:
-        if not step.get("python_source"):
-            continue  # built-in code (or an app), reviewed in this repository
-        spec = by_id.get(step.get("transform_spec_id"))
-        if spec is None or stored_source.decision(spec, username, ()) not in _SECRET_TRUSTED:
-            raise HTTPException(403, detail={
-                "code": "SECRET_PIECE_NOT_TRUSTED", "step": step.get("step"),
-                "message": "a run that uses your secrets may contain only built-in pieces, approved "
-                           "pieces and your own pieces; this step is none of those"})
-        declared = step_secrets.declared_secrets(spec)
-        if declared != (step.get("secrets") or []):
+    for step in step_secrets.secret_steps(plan_json):
+        declared = step_secrets.declared_secrets(by_id[step.get("transform_spec_id")])
+        if declared != step["secrets"]:
             raise HTTPException(409, detail={
                 "code": "STEP_SECRET_DECLARATION_CHANGED", "step": step.get("step"),
                 "message": "the piece declares different secrets than when the plan was made; plan again"})
+
+
+async def _check_run_conflict(
+    h: Any, username: str, registry: list[dict[str, Any]], *, this_run: str | None,
+    secrets_here: bool, untrusted_here: bool,
+) -> None:
+    """Run arguments are taken to be readable by the run's owner, and an untrusted
+    piece runs with the owner's token. So while the user has a run holding unissued
+    secret credentials, none of their other active runs may hold an untrusted step,
+    and the reverse. Refused with 409 SECRET_RUN_CONFLICT; finish or cancel the other
+    run. (A run that starts between this check and the other's is not caught: a
+    residual race, see docs/api.md.)"""
+    runs = (await h.execute(USER_ACTIVE_RUNS, {"user": username}))["adapter_workflow_run"]
+    for other in runs:
+        if other["id"] == this_run:
+            continue
+        if untrusted_here and any(
+                not entry.get("issued") for entry in step_secrets.bound_steps(other.get("bound_secrets")) or []):
+            raise HTTPException(409, detail={
+                "code": "SECRET_RUN_CONFLICT",
+                "message": "another of your runs is still holding secrets for its steps; "
+                           "wait for it to finish or cancel it"})
+        if secrets_here:
+            plan = (await h.execute(GET_PLAN, {"id": other.get("workflow_plan_id")}))["adapter_workflow_plan_by_pk"]
+            if _untrusted_step((plan or {}).get("plan_json") or {}, registry, username) is not None:
+                raise HTTPException(409, detail={
+                    "code": "SECRET_RUN_CONFLICT",
+                    "message": "another of your runs contains a piece that is not trusted with your "
+                               "secrets; wait for it to finish or cancel it"})
 
 
 async def _resolve_flow_secrets(
@@ -3517,6 +3582,11 @@ async def _resolve_flow_secrets(
         raise HTTPException(401, detail={"code": "TAPIS_AUTH_REQUIRED",
                                          "message": "a valid Tapis bearer token is required to use your secrets"})
     _check_secret_run_trust(plan_json, registry, submitter)
+    if plan_json.get("planned_by") != submitter:
+        # The plan's consent screen was somebody else's.
+        raise HTTPException(403, detail={
+            "code": "FLOW_PLAN_NOT_YOURS",
+            "message": "this flow plan was made by someone else; plan the flow again to run it"})
 
     store = secrets_store.FernetSecretStore(get_client(None))
     rows: dict[str, dict[str, Any]] = {}
@@ -3534,7 +3604,8 @@ async def _resolve_flow_secrets(
     recorded = plan_json.get("secret_bindings") or {}
     for name, row in rows.items():
         was = recorded.get(name) or {}
-        if was.get("owner") == submitter and (
+        # No record at all means the secret was stored after the plan: plan again.
+        if was.get("owner") != submitter or (
                 was.get("id") != str(row["id"]) or was.get("version") != int(row["version"])):
             raise HTTPException(409, detail={
                 "code": "FLOW_SECRET_CHANGED", "name": name,
@@ -3645,6 +3716,16 @@ async def submit_workflow(
         flow_bound = await _resolve_flow_secrets(
             h, plan.get("plan_json") or {}, await _registry(h, plannable=False), await _caller_or_none(token),
             has_model_task=body.model_task is not None, dry_run=body.dry_run)
+
+    if not body.dry_run:
+        submitter_now = await _caller_or_none(token)
+        plan_now = plan.get("plan_json") or {}
+        if submitter_now and (flow_bound or any(
+                step.get("python_source") or step.get("tapis_app_id") for step in plan_now.get("steps") or [])):
+            registry_now = await _registry(h, plannable=False)
+            await _check_run_conflict(
+                h, submitter_now, registry_now, this_run=None, secrets_here=bool(flow_bound),
+                untrusted_here=_untrusted_step(plan_now, registry_now, submitter_now) is not None)
 
     service_args = dict(body.args or {})
     source_id = plan.get("source_data_object_id")
@@ -4403,6 +4484,27 @@ def _refuse(status: int, code: str, **extra: Any) -> HTTPException:
     return HTTPException(status, detail={"code": code, **extra}, headers=_NO_STORE)
 
 
+# The step fetch's own rate limit, keyed by (caller, run) and kept small.
+_STEP_FETCH_RATE: dict[tuple[str, str], list[float]] = {}
+_STEP_FETCH_RATE_MAX_KEYS = 4096
+
+
+def _step_fetch_rate_ok(caller: str, run_id: str, now_ts: float) -> bool:
+    if len(_STEP_FETCH_RATE) >= _STEP_FETCH_RATE_MAX_KEYS:
+        for key in [k for k, stamps in _STEP_FETCH_RATE.items()
+                    if not stamps or now_ts - stamps[-1] >= _CREDENTIALS_RATE_WINDOW]:
+            del _STEP_FETCH_RATE[key]
+        while len(_STEP_FETCH_RATE) >= _STEP_FETCH_RATE_MAX_KEYS:  # still full: drop the oldest
+            del _STEP_FETCH_RATE[min(_STEP_FETCH_RATE, key=lambda k: _STEP_FETCH_RATE[k][-1])]
+    key = (caller, run_id)
+    stamps = [t for t in _STEP_FETCH_RATE.get(key, []) if now_ts - t < _CREDENTIALS_RATE_WINDOW]
+    ok = len(stamps) < _CREDENTIALS_RATE_LIMIT
+    if ok:
+        stamps.append(now_ts)
+    _STEP_FETCH_RATE[key] = stamps
+    return ok
+
+
 @app.get("/runs/{run_id}/steps/{step}/secrets", tags=["Core: Runs"])
 async def fetch_step_secrets(
     run_id: str,
@@ -4428,13 +4530,14 @@ async def fetch_step_secrets(
     if not caller or not step_credential:
         raise _refuse(401, "STEP_SECRET_AUTH_REQUIRED")
     now = datetime.now(tz=timezone.utc)
-    if not _credentials_rate_ok(run_id, now.timestamp()):
-        raise _refuse(429, "RUN_CREDENTIALS_RATE_LIMITED")
     h = get_client(None)
     run = (await h.execute(GET_RUN_STEP_SECRETS, {"id": run_id}))["adapter_workflow_run_by_pk"]
     if not run or run.get("submitted_by") != caller:
         # The same answer whether the run is someone else's or does not exist.
         raise _refuse(403, "STEP_SECRET_REFUSED")
+    # After ownership, so that nobody can spend another user's bucket.
+    if not _step_fetch_rate_ok(caller, run_id, now.timestamp()):
+        raise _refuse(429, "RUN_CREDENTIALS_RATE_LIMITED")
     if str(run.get("status") or "") not in _STEP_SECRET_ACTIVE:
         raise _refuse(409, "RUN_NOT_ACTIVE")
     entries = step_secrets.bound_steps(run.get("bound_secrets"))
@@ -4460,6 +4563,8 @@ async def fetch_step_secrets(
         if stored_source.check_plan(plan_json, registry, caller, ()):
             raise _refuse(403, "SECRET_PIECE_NOT_TRUSTED", step=step)
         _check_secret_run_trust(plan_json, registry, caller)
+        await _check_run_conflict(h, caller, registry, this_run=run_id, secrets_here=True,
+                                  untrusted_here=False)
         tapis.generate_tapis_workflow({"id": run_id, "plan_json": plan_json})
     except HTTPException as refusal:
         raise _refuse(refusal.status_code, refusal.detail["code"], step=step)
@@ -4490,6 +4595,14 @@ async def fetch_step_secrets(
             raise _refuse(409, "SECRET_FIELDS_INCOMPLETE")
         rows.append((row, int(row["version"])))
 
+    # The audit event is written first, as the intent to release: a failure after the
+    # claim can never leave a release unrecorded. A response lost after the claim is
+    # not retried; the credential is spent, the step fails, and submitting the flow
+    # again is the recovery (see docs/api.md).
+    for row, version in rows:
+        await secrets_store.record_event(h, "issued", row, run_id=run_id, actor="step",
+                                         token_kind="step_secret", version=version)
+
     # Consumed only once the answer is fully assembled, so a transient failure above
     # never burns the credential. Compare-and-set on the whole column; a concurrent
     # change by another step's fetch is read again and tried once more.
@@ -4508,9 +4621,7 @@ async def fetch_step_secrets(
     else:
         raise _refuse(409, "STEP_SECRET_ALREADY_ISSUED")
 
-    for row, version in rows:
-        await secrets_store.record_event(h, "issued", row, run_id=run_id, actor="step",
-                                         token_kind="step_secret", version=version)
+    for row, _version in rows:
         await store.touch(row["id"])
     await h.execute(INSERT_PROVENANCE, {"obj": {
         "workflow_run_id": run_id, "event_type": "run.step_secret.issued",
