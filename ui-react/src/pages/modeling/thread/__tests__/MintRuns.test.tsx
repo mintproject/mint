@@ -2,7 +2,7 @@
  * Tests for MintRuns — execution lifecycle step.
  */
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/utils/render';
 import { storeTokens } from '@/lib/auth/token-store';
 import { MintRuns } from '../MintRuns';
@@ -941,5 +941,83 @@ describe('MintRuns archived files', () => {
         'http://ensemble/executions/exec-1/files',
       ),
     );
+  });
+});
+
+// A flow can expose a dozen settings; only the ones that tell runs apart earn
+// a column, the rest are summarised once above the table.
+describe('MintRuns runs table columns', () => {
+  const model = {
+    ...mockModel,
+    input_parameters: [
+      { id: 'p-depth', name: 'flood_depth', type: 'float', default: '10' },
+      { id: 'p-mode', name: 'match_mode', type: 'string', default: 'longest_match' },
+      { id: 'p-max', name: 'max_files', type: 'int', default: '200' },
+    ],
+  };
+  const thread: ThreadExecutionData = {
+    ...mockThreadDataSubmitted,
+    models: { 'model-1': model },
+    model_ensembles: {
+      'model-1': {
+        id: 'ens-1',
+        bindings: { 'p-depth': ['15', '25'], 'p-mode': ['longest_match'], 'p-max': ['200'] },
+      },
+    },
+  };
+  const run = (id: string, bindings: Record<string, unknown>) => ({
+    id,
+    modelid: 'model-1',
+    status: 'SUCCESS',
+    run_progress: 1,
+    bindings,
+    results: {},
+  });
+
+  function renderRuns(runs: ReturnType<typeof run>[]) {
+    return renderWithProviders(
+      <MintRuns
+        threadData={thread}
+        executions={{ 'model-1': { loading: false, executions: runs } } as ModelExecutionsMap}
+        canWrite
+        canExecute
+        ensembleManagerApi="http://ensemble"
+        onContinue={vi.fn()}
+        onFetchRuns={vi.fn()}
+        onSubmitRuns={vi.fn()}
+      />,
+    );
+  }
+
+  it('shows no parameter columns for one run and lists every value as shared', () => {
+    renderRuns([run('exec-1', { 'p-depth': '15' })]);
+    const table = screen.getByTestId('runs-table-model-1');
+    expect(within(table).queryByText('Parameters')).not.toBeInTheDocument();
+    expect(within(table).queryByText('flood depth')).not.toBeInTheDocument();
+    const line = screen.getByTestId('same-for-every-run-model-1');
+    expect(line).toHaveTextContent('Same for every run:');
+    expect(line).toHaveTextContent('flood depth 15');
+    expect(line).toHaveTextContent('match mode longest_match');
+    expect(line).toHaveTextContent('max files 200');
+  });
+
+  it('gives only the parameter that differs a column', () => {
+    renderRuns([run('exec-1', { 'p-depth': '15' }), run('exec-2', { 'p-depth': '25' })]);
+    const table = screen.getByTestId('runs-table-model-1');
+    expect(within(table).getByText('flood depth')).toBeInTheDocument();
+    expect(within(table).queryByText('match mode')).not.toBeInTheDocument();
+    expect(within(table).queryByText('max files')).not.toBeInTheDocument();
+    expect(within(table).getByText('15')).toBeInTheDocument();
+    expect(within(table).getByText('25')).toBeInTheDocument();
+    const line = screen.getByTestId('same-for-every-run-model-1');
+    expect(line).toHaveTextContent('match mode longest_match');
+    expect(line).not.toHaveTextContent('flood depth');
+  });
+
+  it('does not wrap the table in a vertically scrolling box', () => {
+    renderRuns([run('exec-1', {}), run('exec-2', {})]);
+    const wrapper = screen.getByTestId('runs-table-model-1').parentElement;
+    expect(wrapper?.className).not.toContain('max-h-96');
+    expect(wrapper?.className).not.toMatch(/\boverflow-(auto|y-)/);
   });
 });
