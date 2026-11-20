@@ -233,6 +233,58 @@ class SpecApprovalIn(BaseModel):
     approved: bool
 
 
+class PieceContractIn(BaseModel):
+    """One input or output of a piece, by standard variable."""
+    model_config = ConfigDict(extra="forbid")
+    standard_variable_uri: str
+    format: str | None = None
+    unit: str | None = None
+    dimensionality: str | None = None
+    spatial_type: str | None = None
+    crs_requirement: str | None = None
+    temporal_resolution: str | None = None
+
+
+class PieceArgumentIn(BaseModel):
+    """A run argument the piece declares."""
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    type: str = "string"
+    default: Any | None = None
+    description: str | None = None
+    required: bool = False
+
+
+class PieceFromRepositoryIn(BaseModel):
+    """Register a piece whose code is one file of a public GitHub repository at a
+    pinned commit. ``dry_run`` (the default) fetches and checks, and writes nothing."""
+    model_config = ConfigDict(extra="forbid")
+    label: str
+    description: str = ""
+    version: str = "1.0.0"
+    visibility: str = "private"
+    repository: str
+    commit: str
+    path: str
+    entrypoint: str
+    inputs: list[PieceContractIn]
+    outputs: list[PieceContractIn]
+    arguments: list[PieceArgumentIn] = Field(default_factory=list)
+    env_from_args: dict[str, str] | None = None
+    secrets: list[dict[str, Any]] | None = None
+    sends_data_to: list[dict[str, Any]] | None = None
+    dry_run: bool = True
+
+
+class PieceApprovalIn(BaseModel):
+    """Approve, or withdraw approval of, a piece from its page. ``reviewed_sha256``
+    is the approval hash the approver was shown; approval is refused if the piece
+    no longer has it."""
+    model_config = ConfigDict(extra="forbid")
+    approved: bool
+    reviewed_sha256: str | None = None
+
+
 class ModelRunIn(BaseModel):
     # Plan an ETL DAG that resolves EVERY input of a multi-input model (run_spec)
     # from the registered data objects, then runs it. source_ids optionally

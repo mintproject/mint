@@ -35,6 +35,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -56,14 +57,22 @@ if not logging.getLogger().handlers:
 
 log = logging.getLogger(__name__)
 
-from . import flow_graph, flow_run, gather_fetch, input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, step_secrets, stored_source, tapis
+from . import flow_graph, flow_run, gather_fetch, input_plan, ntgam, piece_authoring, publication, qaqc, run_state, run_tokens, stac, step_secrets, stored_source, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
+    APPROVAL_EVENTS_QUERY,
+    CATALOG_ADMIN_QUERY,
+    COUNT_OWN_PIECES_QUERY,
+    CREATE_ETL_PROCESS_MUTATION,
     DATA_OBJECT_CONTRACT_QUERY,
+    GET_APPROVAL_SPEC_QUERY,
+    GET_ETL_PROCESS_QUERY,
     GET_FLOW,
     GET_FLOW_PIECES,
     HasuraClient,
+    HasuraError,
+    STANDARD_VARIABLES_QUERY,
     LIST_DATA_OBJECTS_QUERY,
     MODEL_INPUT_REQUIREMENT_QUERY,
     TRANSFORM_REGISTRY_QUERY,
@@ -78,6 +87,8 @@ from .models import (
     FlowPlanIn,
     GenerateWorkflowIn,
     ModelRunIn,
+    PieceApprovalIn,
+    PieceFromRepositoryIn,
     PlanIn,
     PlanModelInputsIn,
     ReadinessCheckIn,
@@ -1267,6 +1278,271 @@ async def set_transform_spec_approval(body: SpecApprovalIn):
         },
     }})
     return {"spec_id": body.spec_id, "approved": body.approved, "approved_source_sha256": sha}
+
+
+# ---------------------------------------------------------------------------
+# Pieces from a repository commit, and approval from the web app
+# (design 2026-11-20-flow-authoring-in-the-ui.md, parts D1 and D2)
+# ---------------------------------------------------------------------------
+def _caller_catalog(token: str | None) -> Any:
+    """The catalog as the CALLER: their own token, never the admin secret, so the
+    catalog's permissions decide what they may read and write."""
+    return HasuraClient(token, user_scoped=True)
+
+
+def _piece_error(error: "piece_authoring.PieceError") -> HTTPException:
+    return HTTPException(error.status, detail=error.detail)
+
+
+async def _is_catalog_admin(token: str | None, username: str, *, strict: bool) -> bool:
+    """Whether the caller is a row of ``modelcatalog_admin``.
+
+    Read from the catalog with the caller's own token, for the username Tapis
+    verified for that token. A user can read only their own row of that table, so
+    the answer cannot come from anything the client says. ``strict`` (approval
+    itself) fails closed with a 503 when the catalog cannot be asked; a page that
+    only decides whether to show the buttons treats that as "not an admin".
+    """
+    if not token:
+        return False
+    try:
+        rows = (await _caller_catalog(token).execute(CATALOG_ADMIN_QUERY, {"username": username})
+                ).get("modelcatalog_admin") or []
+    except Exception as error:  # noqa: BLE001
+        log.warning("catalog admin check failed: %s", safe_error_message(error, limit=200))
+        if strict:
+            raise HTTPException(503, detail={
+                "code": "ADMIN_CHECK_UNAVAILABLE",
+                "message": "could not check whether you are an administrator; nothing was changed"})
+        return False
+    return any(isinstance(row, dict) and row.get("username") == username for row in rows)
+
+
+def _catalog_write_error(error: Exception) -> HTTPException:
+    text = str(error).lower()
+    if "uniqueness violation" in text or "duplicate key" in text:
+        return HTTPException(409, detail={
+            "code": "PIECE_EXISTS", "message": "a piece with this id already exists; nothing was changed"})
+    if "not allowed" in text or "permission" in text or "access denied" in text or "jwt" in text:
+        return HTTPException(403, detail={
+            "code": "CATALOG_WRITE_REFUSED", "message": "the catalog did not allow you to register a piece"})
+    return HTTPException(502, detail={
+        "code": "CATALOG_WRITE_FAILED", "message": "the catalog could not be written; nothing was changed"})
+
+
+@app.post("/pieces/from-repository", tags=["Core: Registry"])
+async def register_piece_from_repository(
+    body: PieceFromRepositoryIn, authorization: str | None = Header(None),
+):
+    """Register a piece whose code is one file of a public GitHub repository at a
+    pinned commit.
+
+    The adapter, not the browser, fetches the file over https and hashes it; the
+    stored source is exactly what was fetched. ``dry_run`` (the default) does all of
+    that and returns what would be stored, writing nothing. A live call writes the
+    catalog row WITH THE CALLER'S TOKEN, so the catalog's permissions apply and the
+    caller owns the piece, then puts it in the adapter's registry so it can be
+    approved at once.
+    """
+    token = _bearer(authorization)
+    username = await _require_caller(token)
+    wait = piece_authoring.registration_limiter.take(username)
+    if wait is not None:
+        raise HTTPException(429, headers={"Retry-After": str(int(wait) + 1)}, detail={
+            "code": "PIECE_RATE_LIMITED",
+            "message": f"at most {piece_authoring.REGISTRATIONS_PER_HOUR} registrations (previews "
+                       f"included) per hour; try again in {int(wait) // 60 + 1} minutes"})
+    try:
+        owned = (await _caller_catalog(token).execute(
+            COUNT_OWN_PIECES_QUERY, {"owner": username, "limit": piece_authoring.MAX_PIECES_PER_OWNER})
+        ).get("modelcatalog_etl_process") or []
+    except Exception as error:  # noqa: BLE001
+        log.warning("piece count failed: %s", safe_error_message(error, limit=200))
+        raise HTTPException(502, detail={
+            "code": "CATALOG_READ_FAILED", "message": "the catalog could not be asked how many pieces you own"})
+    if len(owned) >= piece_authoring.MAX_PIECES_PER_OWNER:
+        raise HTTPException(422, detail={
+            "code": "PIECE_LIMIT_REACHED",
+            "message": f"you own {piece_authoring.MAX_PIECES_PER_OWNER} pieces, the most one user may register"})
+    try:
+        fetched = await run_in_threadpool(
+            piece_authoring.fetch_verified_source, body.repository, body.commit, body.path)
+        # The id is always the adapter's own: it becomes a key of the adapter's
+        # registry, so a caller must not choose it.
+        process_id = piece_authoring.new_process_id(body.label)
+        built = piece_authoring.build_piece(body.model_dump(), fetched, process_id)
+    except piece_authoring.PieceError as error:
+        raise _piece_error(error)
+    row = built["object"]
+    wanted = sorted({c["standard_variable_uri"] for c in row["contracts"]["data"]})
+    try:
+        known = {r["id"] for r in (await _caller_catalog(token).execute(
+            STANDARD_VARIABLES_QUERY, {"ids": wanted})).get("modelcatalog_standard_variable") or []}
+    except Exception as error:  # noqa: BLE001
+        log.warning("standard variable check failed: %s", safe_error_message(error, limit=200))
+        raise HTTPException(502, detail={
+            "code": "CATALOG_READ_FAILED", "message": "the catalog could not be asked about the variables"})
+    unknown = [uri for uri in wanted if uri not in known]
+    if unknown:
+        raise HTTPException(422, detail={
+            "code": "PIECE_VARIABLE_UNKNOWN", "variables": unknown,
+            "message": "these standard variables are not in the catalog"})
+
+    from .mint_sync import etl_process_to_spec_row
+    as_registered = {**row, "owner_username": username, "contracts": row["contracts"]["data"]}
+    summary = piece_authoring.preview(built, etl_process_to_spec_row(as_registered, []))
+    if body.dry_run:
+        # The id is chosen again when the piece is registered.
+        return {"dry_run": True, "valid": True, **{k: v for k, v in summary.items() if k != "process_id"}}
+
+    try:
+        created = (await _caller_catalog(token).execute(
+            CREATE_ETL_PROCESS_MUTATION, {"object": row}))["insert_modelcatalog_etl_process_one"]
+    except (HasuraError, httpx.HTTPError) as error:
+        raise _catalog_write_error(error)
+    # From here the piece exists. Nothing below may turn that into an error: what
+    # could not be done is reported as a warning.
+    warnings = list(summary["warnings"])
+    event = {
+        "event_type": "piece_registered_from_repository",
+        "payload_json": {
+            "process_id": process_id, "registered_by": username,
+            "repository": fetched["repository"], "commit": fetched["commit"], "path": fetched["path"],
+            "verified_on_branch": fetched.get("verified_on_branch"),
+            "source_sha256": fetched["sha256"], "visibility": row["visibility"]},
+    }
+    recorded = False
+    for _attempt in range(2):
+        try:
+            await get_client(None).execute(INSERT_PROVENANCE, {"obj": event})
+            recorded = True
+            break
+        except Exception as error:  # noqa: BLE001
+            log.warning("piece %s: provenance write failed: %s", process_id, safe_error_message(error, limit=200))
+    if not recorded:
+        warnings.append("The piece was registered, but the audit record of its registration could not be "
+                        "written. The piece stays; tell an administrator.")
+    in_registry = False
+    try:
+        from .mint_sync import sync_one_etl_process
+        in_registry = bool(await sync_one_etl_process(get_client(None), {
+            **row, "owner_username": created.get("owner_username") or username,
+            "contracts": row["contracts"]["data"]}))
+    except Exception as error:  # noqa: BLE001
+        log.warning("piece %s written but not synced: %s", process_id, safe_error_message(error, limit=200))
+    if not in_registry:
+        warnings.append("The piece was registered in the catalog but is not in the adapter's registry yet; "
+                        "it appears at the next catalog sync.")
+    return {"dry_run": False, "status": "created", "process_id": created.get("id") or process_id,
+            "owner_username": created.get("owner_username") or username,
+            "in_registry": in_registry, "provenance_recorded": recorded,
+            **{k: v for k, v in summary.items() if k not in ("process_id", "warnings")},
+            "warnings": warnings}
+
+
+def _may_read_piece(spec: dict[str, Any], username: str, is_admin: bool) -> bool:
+    return bool(is_admin or spec.get("owner_username") == username
+                or (spec.get("visibility") or "public") in ("shared", "public"))
+
+
+@app.get("/pieces/approvals", tags=["Core: Registry"])
+async def list_piece_approvals(authorization: str | None = Header(None)):
+    """Pieces that carry stored source, as the caller may see them, with whether each
+    is approved as it is now and by whom. ``is_admin`` says whether the caller may
+    approve (the page shows buttons only then)."""
+    token = _bearer(authorization)
+    username = await _require_caller(token)
+    is_admin = await _is_catalog_admin(token, username, strict=False)
+    registry = await _registry(get_client(token), plannable=False)
+    events = (await get_client(None).execute(
+        APPROVAL_EVENTS_QUERY, {"contains": {}, "limit": 1000})).get("adapter_provenance_event") or []
+    latest = piece_authoring.latest_approvals(events)
+    return {"is_admin": is_admin, "pieces": [
+        piece_authoring.piece_summary(spec, latest.get(str(spec.get("id"))))
+        for spec in registry
+        if stored_source.stored_source(spec) and _may_read_piece(spec, username, is_admin)]}
+
+
+@app.get("/transform-specs/{spec_id:path}/approval", tags=["Core: Registry"])
+async def get_piece_approval(spec_id: str, authorization: str | None = Header(None)):
+    """What an approver is shown for one piece: the stored source and its hash, the
+    function called, the arguments, the secrets, where data is sent, and who
+    approved which hash when."""
+    token = _bearer(authorization)
+    username = await _require_caller(token)
+    is_admin = await _is_catalog_admin(token, username, strict=False)
+    spec = (await get_client(None).execute(GET_APPROVAL_SPEC_QUERY, {"id": spec_id}))[
+        "adapter_transform_spec_by_pk"]
+    if not spec or not stored_source.stored_source(spec) or not _may_read_piece(spec, username, is_admin):
+        raise HTTPException(404, detail={"code": "PIECE_NOT_FOUND",
+                                         "message": "no such piece with stored source is visible to you"})
+    events = (await get_client(None).execute(
+        APPROVAL_EVENTS_QUERY, {"contains": {"transform_spec_id": spec_id}, "limit": 50}
+    )).get("adapter_provenance_event") or []
+    return {"is_admin": is_admin, **piece_authoring.piece_detail(spec, events)}
+
+
+@app.put("/transform-specs/{spec_id:path}/approval", tags=["Core: Registry"])
+async def set_piece_approval(
+    spec_id: str, body: PieceApprovalIn, authorization: str | None = Header(None),
+):
+    """Approve, or withdraw approval of, a piece's stored source: the same record as
+    ``PUT /admin/transform-spec-approval``, but for a signed-in member of
+    ``modelcatalog_admin`` instead of the operator secret.
+
+    Approving needs ``reviewed_sha256``, the hash the page showed; it is refused
+    (409) when the piece has changed since. The event written names the approver and
+    the time, and the hash. Withdrawal clears the approval and writes the same event
+    with a null hash.
+    """
+    token = _bearer(authorization)
+    username = await _require_caller(token)
+    if not await _is_catalog_admin(token, username, strict=True):
+        raise HTTPException(403, detail={
+            "code": "ADMIN_REQUIRED", "message": "only a catalog administrator may approve a piece"})
+    admin = get_client(None)
+    spec = (await admin.execute(GET_APPROVAL_SPEC_QUERY, {"id": spec_id}))["adapter_transform_spec_by_pk"]
+    if not spec:
+        # A piece registered a moment ago may not be in the registry yet. Read it
+        # from the catalog as the approver, and put it there.
+        from .mint_sync import sync_one_etl_process
+        try:
+            process = (await _caller_catalog(token).execute(
+                GET_ETL_PROCESS_QUERY, {"id": spec_id})).get("modelcatalog_etl_process_by_pk")
+            if process:
+                await sync_one_etl_process(admin, process)
+                spec = (await admin.execute(GET_APPROVAL_SPEC_QUERY, {"id": spec_id}))[
+                    "adapter_transform_spec_by_pk"]
+        except Exception as error:  # noqa: BLE001
+            log.warning("could not sync piece %s for approval: %s", spec_id, safe_error_message(error, limit=200))
+    if not spec:
+        raise HTTPException(404, detail={"code": "PIECE_NOT_FOUND", "message": "transform spec not found"})
+    current = stored_source.approval_sha256(spec)
+    if body.approved:
+        if not current:
+            raise HTTPException(400, detail={
+                "code": "NO_STORED_SOURCE", "message": "this piece carries no stored source to approve"})
+        if body.reviewed_sha256 != current:
+            raise HTTPException(409, detail={
+                "code": "APPROVAL_STALE" if body.reviewed_sha256 else "REVIEWED_HASH_REQUIRED",
+                "message": "send the approval hash the page showed; the piece may have changed since "
+                           "you read it",
+                "approval_sha256": current})
+    elif not spec.get("approved_source_sha256"):
+        return {"spec_id": spec_id, "approved": False, "approved_source_sha256": None}
+    sha = current if body.approved else None
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    from .hasura import SET_SPEC_APPROVAL_MUTATION
+    await admin.execute(SET_SPEC_APPROVAL_MUTATION, {"id": spec_id, "sha": sha})
+    await admin.execute(INSERT_PROVENANCE, {"obj": {
+        "event_type": "transform_spec_approval_set",
+        "payload_json": {
+            "transform_spec_id": spec_id, "owner_username": spec.get("owner_username"),
+            "approved_source_sha256": sha, "approved_by": username, "approved_at": now,
+            "action": "approved" if body.approved else "withdrawn"},
+    }})
+    return {"spec_id": spec_id, "approved": body.approved, "approved_source_sha256": sha,
+            "approved_by": username, "approved_at": now}
 
 
 _DFC_FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "twdb_adopted_dfc_2021.json"
