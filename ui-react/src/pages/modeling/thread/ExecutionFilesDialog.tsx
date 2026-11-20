@@ -30,9 +30,12 @@ import { useAddConfigurationOutputMutation } from '@/graphql/generated/graphql';
 import {
   EnsembleManagerError,
   NO_OUTPUTS_DECLARED,
-  fetchExecutionFiles,
+  fetchExecutionListing,
+  isResultDownload,
   type ExecutionFile,
+  type ExecutionResultLocation,
 } from '@/lib/ensemble-manager';
+import { FileDownloadButton } from './FileDownloadButton';
 import { buildAddOutputVariables } from '@/lib/mutation-builder';
 import {
   formatFileSize,
@@ -71,6 +74,8 @@ export function ExecutionFilesDialog({
   onPublish,
 }: ExecutionFilesDialogProps) {
   const [files, setFiles] = useState<ExecutionFile[] | null>(null);
+  // The run's results, which decide which listed files can be downloaded.
+  const [results, setResults] = useState<ExecutionResultLocation[]>([]);
   const [loadError, setLoadError] = useState('');
   const [promoting, setPromoting] = useState<Record<string, boolean>>({});
   const [promoted, setPromoted] = useState<string[]>([]);
@@ -88,6 +93,7 @@ export function ExecutionFilesDialog({
   useEffect(() => {
     if (!open) return;
     setFiles(null);
+    setResults([]);
     setLoadError('');
     setPromoted([]);
     setPromoteError('');
@@ -98,8 +104,11 @@ export function ExecutionFilesDialog({
     const ctrl = new AbortController();
     abortRef.current?.abort();
     abortRef.current = ctrl;
-    fetchExecutionFiles(ensembleManagerApi, executionId, ctrl.signal)
-      .then((list) => setFiles(list))
+    fetchExecutionListing(ensembleManagerApi, executionId, ctrl.signal)
+      .then((listing) => {
+        setFiles(listing.files);
+        setResults(listing.results);
+      })
       .catch((err: unknown) => {
         if (err instanceof Error && err.name === 'AbortError') return;
         setFiles([]);
@@ -183,6 +192,7 @@ export function ExecutionFilesDialog({
                 <tr>
                   <th className="px-2 py-1 text-left font-medium">File</th>
                   <th className="px-2 py-1 text-left font-medium">Size</th>
+                  <th className="px-2 py-1 text-left font-medium">Download</th>
                   <th className="px-2 py-1 text-left font-medium">Output</th>
                 </tr>
               </thead>
@@ -199,6 +209,18 @@ export function ExecutionFilesDialog({
                         </span>
                       </td>
                       <td className="px-2 py-1 text-gray-500">{formatFileSize(file.size)}</td>
+                      <td className="px-2 py-1">
+                        {isResultDownload(file.url, results) ? (
+                          <FileDownloadButton
+                            ensembleManagerApi={ensembleManagerApi}
+                            executionId={executionId}
+                            url={file.url}
+                            testId={`download-${file.path}`}
+                          />
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
                       <td className="px-2 py-1">
                         {declared ? (
                           <span className="text-green-700">Declared</span>

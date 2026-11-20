@@ -2204,6 +2204,20 @@ const ExecutionSchema = {
         },
         required: ["name", "path", "size", "url"]
     },
+    ExecutionResultLocation: {
+        type: "object",
+        description: "A result of an execution that points at Tapis storage",
+        properties: {
+            name: { type: "string", description: "The name of the result" },
+            url: { type: "string", description: "The tapis:// URI of the result" },
+            kind: {
+                type: "string",
+                enum: ["file", "folder"],
+                description: "Whether Tapis says the URI is a file or a folder"
+            }
+        },
+        required: ["name", "url", "kind"]
+    },
     ExecutionFilesError: {
         type: "object",
         description: "The error answer of the execution files endpoint",
@@ -2214,6 +2228,10 @@ const ExecutionSchema = {
             },
             message: {
                 type: "string"
+            },
+            code: {
+                type: "string",
+                description: "A stable name for the cause, such as FILE_NOT_IN_RESULTS"
             }
         },
         required: ["result", "message"]

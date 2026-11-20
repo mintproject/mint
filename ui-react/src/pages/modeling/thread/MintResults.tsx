@@ -19,6 +19,8 @@ import {
   ThreadExecutionData,
 } from '@/graphql/generated/execution';
 import { RunAnswerCard } from '@/components/modeling/runs/RunAnswerCard';
+import { ExecutionFilesDialog } from './ExecutionFilesDialog';
+import { TapisResult } from './TapisResult';
 import {
   EnsembleManagerError,
   NO_OUTPUTS_DECLARED,
@@ -52,6 +54,13 @@ function getResultUrl(
     }
   }
   return '';
+}
+
+/** `tapis` locations are opened through the Ensemble Manager; only http(s) is a link. */
+function resultScheme(url: string): 'tapis' | 'web' | 'text' {
+  if (/^tapis:\/\//i.test(url)) return 'tapis';
+  if (/^https?:\/\//i.test(url)) return 'web';
+  return 'text';
 }
 
 function getResultName(result: ExecutionResult): string {
@@ -110,6 +119,9 @@ export function MintResults({
       return s && (s.submitted_for_execution || s.submission_time);
     });
 
+  const ensembleManagerApi = window.__MINT_CONFIG__?.ENSEMBLE_MANAGER_API ?? '';
+  // The run whose result folder is open in the files dialog.
+  const [filesFor, setFilesFor] = useState<{ executionId: string; modelId: string } | null>(null);
   const [pages, setPages] = useState<Record<string, number>>({});
   const [showAllOutputs, setShowAllOutputs] = useState(true);
   const [publishWaiting, setPublishWaiting] = useState<Record<string, boolean>>({});
@@ -550,7 +562,19 @@ export function MintResults({
                                   const fname = getResultName(result);
                                   return (
                                     <td key={out.id} className="px-2 py-1">
-                                      {url ? (
+                                      {!url ? (
+                                        <span className="text-gray-400">{fname || 'No file'}</span>
+                                      ) : resultScheme(url) === 'tapis' ? (
+                                        <TapisResult
+                                          ensembleManagerApi={ensembleManagerApi}
+                                          executionId={execution.id}
+                                          name={fname}
+                                          url={url}
+                                          onOpenFolder={(executionId) =>
+                                            setFilesFor({ executionId, modelId: mid })
+                                          }
+                                        />
+                                      ) : resultScheme(url) === 'web' ? (
                                         <a
                                           href={url}
                                           target="_blank"
@@ -560,7 +584,7 @@ export function MintResults({
                                           {fname}
                                         </a>
                                       ) : (
-                                        <span className="text-gray-400">{fname || 'No file'}</span>
+                                        <span data-testid="result-text">{fname}</span>
                                       )}
                                     </td>
                                   );
@@ -618,6 +642,20 @@ export function MintResults({
           );
         })}
       </ul>
+
+      {filesFor && (
+        <ExecutionFilesDialog
+          open
+          executionId={filesFor.executionId}
+          configurationId={filesFor.modelId}
+          declaredOutputLabels={(threadData.models[filesFor.modelId]?.output_files ?? []).map(
+            (o) => o.name,
+          )}
+          ensembleManagerApi={ensembleManagerApi}
+          canWrite={false}
+          onClose={() => setFilesFor(null)}
+        />
+      )}
 
       {/* Footer continue button */}
       <div className="mt-4 flex justify-end">

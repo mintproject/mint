@@ -1,3 +1,4 @@
+import { HttpError } from "@/classes/common/errors";
 import executionFilesService from "@/api/api-v1/services/executionFilesService";
 import { getExecution } from "@/classes/graphql/graphql_functions";
 import { getConfiguration } from "@/classes/mint/mint-functions";
@@ -25,12 +26,23 @@ const tapisListsFiles = (files: unknown[]) => {
     const listJobFiles = jest.fn().mockResolvedValue(files);
     const listArchiveFiles = jest.fn().mockResolvedValue(files);
     const listCompositeWorkflowFiles = jest.fn().mockResolvedValue(null);
+    // A path is a file unless a test says it is a folder.
+    const isArchiveDirectory = jest.fn().mockResolvedValue(false);
+    const openArchiveFile = jest.fn().mockResolvedValue({ stream: "stream", contentType: null });
     (TapisExecutionService as unknown as jest.Mock).mockImplementation(() => ({
         listJobFiles,
         listArchiveFiles,
-        listCompositeWorkflowFiles
+        listCompositeWorkflowFiles,
+        isArchiveDirectory,
+        openArchiveFile
     }));
-    return { listJobFiles, listArchiveFiles, listCompositeWorkflowFiles };
+    return {
+        listJobFiles,
+        listArchiveFiles,
+        listCompositeWorkflowFiles,
+        isArchiveDirectory,
+        openArchiveFile
+    };
 };
 
 describe("executionFilesService.listFiles", () => {
@@ -125,10 +137,7 @@ describe("executionFilesService.listFiles", () => {
             EXECUTION_ID,
             "mint-workflow-output/run-1/model"
         );
-        expect(listArchiveFiles).toHaveBeenCalledWith(
-            "ls6",
-            "mint-workflow-output/run-1/model"
-        );
+        expect(listArchiveFiles).toHaveBeenCalledWith("ls6", "mint-workflow-output/run-1/model");
         expect(files).toEqual([
             {
                 name: "mfsim.lst",
@@ -182,5 +191,251 @@ describe("executionFilesService.listFiles", () => {
         await expect(executionFilesService.listFiles(EXECUTION_ID, AUTH)).rejects.toMatchObject({
             statusCode: 400
         });
+    });
+});
+
+describe("executionFilesService.listFiles for a flow run", () => {
+    const flowExecution = (url: string) => ({
+        id: EXECUTION_ID,
+        runid: "ue_run-1",
+        results: { out: { resource: { name: "out", url } } }
+    });
+
+    afterEach(() => {
+        jest.clearAllMocks();
+    });
+
+    beforeEach(() => {
+        (getConfiguration as jest.Mock).mockReturnValue(TAPIS_CONFIG);
+    });
+
+    it("lists the folder itself when the result is a folder", async () => {
+        const { listArchiveFiles, isArchiveDirectory } = tapisListsFiles([]);
+        isArchiveDirectory.mockResolvedValue(true);
+        (getExecution as jest.Mock).mockResolvedValue(
+            flowExecution("tapis://cloud.data/home/u/out.v2")
+        );
+
+        const listing = await executionFilesService.list(EXECUTION_ID, AUTH);
+
+        expect(isArchiveDirectory).toHaveBeenCalledWith("cloud.data", "home/u/out.v2");
+        expect(listArchiveFiles).toHaveBeenCalledTimes(1);
+        expect(listArchiveFiles).toHaveBeenCalledWith("cloud.data", "home/u/out.v2");
+        expect(listing.results).toEqual([
+            { name: "out", url: "tapis://cloud.data/home/u/out.v2", kind: "folder" }
+        ]);
+    });
+
+    it("lists the containing folder when the result is a file, even without an extension", async () => {
+        const { listArchiveFiles } = tapisListsFiles([]);
+        (getExecution as jest.Mock).mockResolvedValue(
+            flowExecution("tapis://cloud.data/home/u/out/summary")
+        );
+
+        const listing = await executionFilesService.list(EXECUTION_ID, AUTH);
+
+        expect(listArchiveFiles).toHaveBeenCalledWith("cloud.data", "home/u/out");
+        expect(listing.results[0].kind).toBe("file");
+    });
+
+    it("lists each folder when results point at different folders", async () => {
+        const { listArchiveFiles, isArchiveDirectory } = tapisListsFiles([]);
+        isArchiveDirectory.mockImplementation(async (_s: string, p: string) => p === "a/dir");
+        (getExecution as jest.Mock).mockResolvedValue({
+            id: EXECUTION_ID,
+            runid: "ue_run-1",
+            results: {
+                one: { resource: { name: "one", url: "tapis://s/a/dir" } },
+                two: { resource: { name: "two", url: "tapis://s/b/file.txt" } }
+            }
+        });
+
+        await executionFilesService.list(EXECUTION_ID, AUTH);
+
+        expect(listArchiveFiles).toHaveBeenCalledWith("s", "a/dir");
+        expect(listArchiveFiles).toHaveBeenCalledWith("s", "b");
+    });
+
+    it("treats a result as a file when Tapis cannot stat it", async () => {
+        const { listArchiveFiles, isArchiveDirectory } = tapisListsFiles([]);
+        isArchiveDirectory.mockRejectedValue(new Error("nope"));
+        (getExecution as jest.Mock).mockResolvedValue(flowExecution("tapis://s/a/b/c"));
+
+        await executionFilesService.list(EXECUTION_ID, AUTH);
+
+        expect(listArchiveFiles).toHaveBeenCalledWith("s", "a/b");
+    });
+});
+
+describe("executionFilesService.openFile", () => {
+    const stream = { id: "stream" };
+
+    beforeEach(() => {
+        (getConfiguration as jest.Mock).mockReturnValue(TAPIS_CONFIG);
+        (getExecution as jest.Mock).mockResolvedValue({
+            id: EXECUTION_ID,
+            runid: "ue_run-1",
+            results: {
+                file: {
+                    resource: { name: "summary", url: "tapis://cloud.data/home/u/out/summary.md" }
+                },
+                folder: { resource: { name: "folder", url: "tapis://cloud.data/home/u/dir" } }
+            }
+        });
+    });
+
+    afterEach(() => {
+        jest.clearAllMocks();
+    });
+
+    const setup = (dirs: string[] = ["home/u/dir"]) => {
+        const mocks = tapisListsFiles([]);
+        mocks.isArchiveDirectory.mockImplementation(async (_s: string, p: string) =>
+            dirs.includes(p)
+        );
+        mocks.openArchiveFile.mockResolvedValue({ stream, contentType: "text/markdown" });
+        return mocks;
+    };
+
+    const rejection = (promise: Promise<unknown>) =>
+        promise.then(
+            () => {
+                throw new Error("expected a rejection");
+            },
+            (error) => error
+        );
+
+    it("streams a result file from Tapis with the token of the caller", async () => {
+        const { openArchiveFile } = setup();
+
+        const file = await executionFilesService.openFile(
+            EXECUTION_ID,
+            AUTH,
+            "/home/u/out/summary.md"
+        );
+
+        expect(TapisExecutionService).toHaveBeenCalledWith(
+            "test-token",
+            "https://portals.tapis.io"
+        );
+        expect(openArchiveFile).toHaveBeenCalledWith("cloud.data", "home/u/out/summary.md");
+        expect(file).toEqual({
+            stream,
+            contentType: "text/markdown",
+            filename: "summary.md"
+        });
+    });
+
+    it("streams a file inside a result folder, below sub folders too", async () => {
+        const { openArchiveFile } = setup();
+
+        await executionFilesService.openFile(
+            EXECUTION_ID,
+            AUTH,
+            "home/u/dir/sub/a.nc",
+            "cloud.data"
+        );
+
+        expect(openArchiveFile).toHaveBeenCalledWith("cloud.data", "home/u/dir/sub/a.nc");
+    });
+
+    it("streams a sibling of a file result, as the listing shows it", async () => {
+        const { openArchiveFile } = setup();
+
+        await executionFilesService.openFile(EXECUTION_ID, AUTH, "home/u/out/other.csv");
+
+        expect(openArchiveFile).toHaveBeenCalledWith("cloud.data", "home/u/out/other.csv");
+    });
+
+    it("refuses a sibling of a folder result", async () => {
+        setup();
+
+        const error = await rejection(
+            executionFilesService.openFile(EXECUTION_ID, AUTH, "home/u/other.csv")
+        );
+
+        expect(error).toMatchObject({ statusCode: 404, code: "FILE_NOT_IN_RESULTS" });
+    });
+
+    it.each([
+        ["a traversal", "home/u/dir/../../secret"],
+        ["a dot segment", "home/u/dir/./a"],
+        ["an empty segment", "home/u/dir//a"],
+        ["a leading double slash", "//home/u/dir/a"],
+        ["a control character", "home/u/dir/a\u0000b"],
+        ["a newline", "home/u/dir/a\nb"],
+        ["a backslash", "home/u/dir\\a"],
+        ["an empty path", ""]
+    ])("refuses %s with FILE_PATH_INVALID", async (_label, path) => {
+        const { openArchiveFile } = setup();
+
+        const error = await rejection(executionFilesService.openFile(EXECUTION_ID, AUTH, path));
+
+        expect(error).toMatchObject({ statusCode: 400, code: "FILE_PATH_INVALID" });
+        expect(openArchiveFile).not.toHaveBeenCalled();
+    });
+
+    it("refuses a system that the results do not name", async () => {
+        const { openArchiveFile } = setup();
+
+        const error = await rejection(
+            executionFilesService.openFile(EXECUTION_ID, AUTH, "home/u/dir/a", "other.system")
+        );
+
+        expect(error).toMatchObject({ statusCode: 404, code: "FILE_NOT_IN_RESULTS" });
+        expect(openArchiveFile).not.toHaveBeenCalled();
+    });
+
+    it("refuses a malformed system id", async () => {
+        setup();
+
+        const error = await rejection(
+            executionFilesService.openFile(EXECUTION_ID, AUTH, "home/u/dir/a", "a/b")
+        );
+
+        expect(error).toMatchObject({ statusCode: 400, code: "FILE_PATH_INVALID" });
+    });
+
+    it("refuses a file outside the results", async () => {
+        const { openArchiveFile } = setup();
+
+        const error = await rejection(
+            executionFilesService.openFile(EXECUTION_ID, AUTH, "home/u/elsewhere/passwd")
+        );
+
+        expect(error).toMatchObject({ statusCode: 404, code: "FILE_NOT_IN_RESULTS" });
+        expect(openArchiveFile).not.toHaveBeenCalled();
+    });
+
+    it("refuses a folder name that only shares a prefix with a result folder", async () => {
+        setup();
+
+        const error = await rejection(
+            executionFilesService.openFile(EXECUTION_ID, AUTH, "home/u/dir2/a")
+        );
+
+        expect(error).toMatchObject({ statusCode: 404, code: "FILE_NOT_IN_RESULTS" });
+    });
+
+    it("passes through the 403, 404 and 502 that the Tapis adapter reports, without the token", async () => {
+        const { openArchiveFile } = setup();
+        for (const status of [403, 404, 502]) {
+            openArchiveFile.mockRejectedValue(new HttpError(status, "Tapis said no"));
+            const error = await rejection(
+                executionFilesService.openFile(EXECUTION_ID, AUTH, "home/u/out/summary.md")
+            );
+            expect(error.statusCode).toBe(status);
+            expect(error.message).not.toContain("test-token");
+        }
+    });
+
+    it("fails with 401 without an authorization header", async () => {
+        setup();
+
+        const error = await rejection(
+            executionFilesService.openFile(EXECUTION_ID, undefined, "home/u/out/summary.md")
+        );
+
+        expect(error).toMatchObject({ statusCode: 401 });
     });
 });
