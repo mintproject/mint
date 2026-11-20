@@ -1,0 +1,8 @@
+mutation add_execution_data_binding($bindings: [execution_data_binding_insert_input!]!) {
+    insert_execution_data_binding(
+        objects: $bindings
+        on_conflict: { constraint: execution_data_binding_pkey, update_columns: [] }
+    ) {
+        affected_rows
+    }
+}

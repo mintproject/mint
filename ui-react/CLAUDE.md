@@ -86,6 +86,7 @@ ui-react/
         DatasetsHome.tsx          # /datasets
         DatasetsBrowse.tsx        # /datasets/browse
         DatasetsSearch.tsx        # /datasets/search
+        DatasetUploadPage.tsx     # /datasets/upload
         DatasetDetail.tsx         # /datasets/detail/:id
       regions/
         RegionsHome.tsx           # /regions
@@ -298,6 +299,7 @@ All routes are declared in `src/App.tsx`. Current routes:
 | `/datasets` | DatasetsHome |
 | `/datasets/browse` | DatasetsBrowse |
 | `/datasets/search` | DatasetsSearch |
+| `/datasets/upload` | DatasetUploadPage (protected) |
 | `/datasets/detail/:id` | DatasetDetail |
 | `/regions` | RegionsHome |
 | `/regions/editor` | RegionsEditor |

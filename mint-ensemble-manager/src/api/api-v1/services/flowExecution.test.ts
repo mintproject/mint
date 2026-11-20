@@ -75,6 +75,7 @@ describe("running a flow from a thread", () => {
     const flows = {
         flowContext: jest.fn(),
         startFlowExecution: jest.fn(),
+        recordFlowEdit: jest.fn(),
         finishFlowExecution: jest.fn()
     };
     let records: Map<string, UnifiedExecutionRecord>;
@@ -157,6 +158,7 @@ describe("running a flow from a thread", () => {
         flows.flowContext.mockResolvedValue(context());
         flows.startFlowExecution.mockResolvedValue("exec-1");
         flows.finishFlowExecution.mockResolvedValue(undefined);
+        flows.recordFlowEdit.mockResolvedValue(undefined);
         adapter({
             "/data-objects": () => ({ body: { id: "do-1" } }),
             "/plans/flow": () => ({ body: { plan_id: "adapter-plan-1", plan_json: PLAN_JSON } }),
@@ -639,7 +641,11 @@ describe("running a flow from a thread", () => {
                 "thread-1",
                 "cfg-flow",
                 "ue_parent-1",
-                AUTH
+                AUTH,
+                expect.objectContaining({
+                    inputs: expect.any(Array),
+                    parameters: expect.any(Array)
+                })
             );
             expect(legacy.tapis.submitExecution).not.toHaveBeenCalled();
             expect(legacy.tapis.buildCompositeWorkflowModelTask).not.toHaveBeenCalled();
@@ -1129,6 +1135,255 @@ describe("running a flow from a thread", () => {
             const run = await svc.getRun("ue_parent-1", AUTH);
             expect(run.status).toBe("adapter_running");
             expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("what a run records of its inputs and settings", () => {
+        const THREE = [
+            { id: "res-1", name: "a.csv", url: "https://files.example.org/a.csv" },
+            { id: "res-2", name: "b.csv", url: "https://other.example.net/b.csv" },
+            { id: "res-3", name: "c.txt", url: "tapis://corral/data/c.txt" }
+        ];
+        const STORED_PLAN = {
+            parameters: [
+                { name: "output_uri", required: true },
+                { name: "top_n", default: "25", default_source: "flow", required: false },
+                { name: "lexicon_uri", required: false },
+                { name: "ckan_token", default: "tok-flow", default_source: "flow" },
+                { name: "flow_staging_uri", managed: true, managed_source: "run_folder" }
+            ],
+            secrets: [{ name: "model_server", fields: ["api_key"], steps: [1], stored: true }],
+            flow: {
+                linked_settings: [
+                    { step: 2, setting: "lexicon_uri", from: { step: 1, value: "lexicon_uri" } }
+                ],
+                inputs: [],
+                collections: [
+                    {
+                        input: "in-corpus",
+                        label: "Documents",
+                        gather: "g1",
+                        resources: THREE.map(({ name, url }) => ({ name, url }))
+                    }
+                ]
+            }
+        };
+
+        function collecting() {
+            flows.flowContext.mockResolvedValue(
+                context({
+                    thread_bindings: {
+                        collections: ["in-corpus"],
+                        start_date: { parameter: "par-start" }
+                    },
+                    parameters: [
+                        { id: "par-start", name: "start" },
+                        { id: "par-top", name: "top_n", value: "9" },
+                        { id: "par-lex", name: "lexicon_uri" },
+                        { id: "par-key", name: "api_key" }
+                    ],
+                    inputs: [
+                        {
+                            model_io_id: "in-corpus",
+                            name: "Documents",
+                            standard_variables: ["sv:text"],
+                            optional: false,
+                            resources: THREE
+                        }
+                    ]
+                })
+            );
+        }
+
+        async function run(planJson: unknown = STORED_PLAN, extra: Record<string, unknown> = {}) {
+            adapter({
+                "/data-objects": () => ({ body: { id: "do-1" } }),
+                "/plans/flow": () => ({ body: { plan_id: "adapter-plan-1", plan_json: planJson } }),
+                "/plans/adapter-plan-1": () => ({
+                    body: { id: "adapter-plan-1", plan_json: planJson }
+                }),
+                "/workflows/submit": () => ({ body: { run_id: "run-1", status: "running" } })
+            });
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            await svc.submit({ plan_id: plan.plan_id, accept_flow_settings: true, ...extra }, AUTH);
+            const started = flows.startFlowExecution.mock.calls;
+            return started[started.length - 1][4];
+        }
+
+        it("records one binding per resource under a collection input, in the one input", async () => {
+            collecting();
+            const provenance = await run();
+            expect(provenance.inputs).toEqual([
+                {
+                    model_io_id: "in-corpus",
+                    resources: THREE.map(({ id, name, url }) => ({ id, name, url }))
+                }
+            ]);
+        });
+
+        it("records a single dataset input as one binding", async () => {
+            const provenance = await run({
+                parameters: [
+                    {
+                        name: "source",
+                        default: "tapis://sys/docs",
+                        managed: true,
+                        managed_source: "flow_input"
+                    }
+                ],
+                flow: { inputs: [{ input_id: "in-corpus", arg: "source", data_object_id: "do-1" }] }
+            });
+            expect(provenance.inputs).toEqual([
+                {
+                    model_io_id: "in-corpus",
+                    resources: [{ id: "res-1", name: "Wiki", url: "tapis://sys/docs" }]
+                }
+            ]);
+        });
+
+        it("records the flow's fixed and the user's settings, and a link as a reference", async () => {
+            collecting();
+            const provenance = await run(STORED_PLAN, {
+                parameter_values: { output_uri: "tapis://sys/out", top_n: "3" }
+            });
+            expect(provenance.settings).toEqual({
+                top_n: "3",
+                start: "2020-01-01",
+                output_uri: "tapis://sys/out",
+                lexicon_uri: "linked: step 1 value lexicon_uri"
+            });
+            expect(provenance.parameters).toEqual(
+                expect.arrayContaining([
+                    { model_parameter_id: "par-top", name: "top_n", value: "3" },
+                    {
+                        model_parameter_id: "par-lex",
+                        name: "lexicon_uri",
+                        value: "linked: step 1 value lexicon_uri"
+                    }
+                ])
+            );
+        });
+
+        it("uses the flow's fixed value for a setting nobody sent", async () => {
+            collecting();
+            const provenance = await run(STORED_PLAN);
+            expect(provenance.settings.top_n).toBe("9");
+        });
+
+        it("uses the flow's fixed value when no value is sent at all", async () => {
+            collecting();
+            const provenance = await run({
+                parameters: [{ name: "depth", default: "4", default_source: "flow" }]
+            });
+            expect(provenance.settings.depth).toBe("4");
+        });
+
+        it("never records a credential, however it is named or where it came from", async () => {
+            collecting();
+            const provenance = await run(STORED_PLAN, {
+                parameter_values: {
+                    api_key: "k-123",
+                    my_password: "p",
+                    plain: "Bearer abc.def.ghi"
+                }
+            });
+            const everything = JSON.stringify(provenance);
+            expect(everything).not.toMatch(/k-123|tok-flow|ckan_token|my_password|Bearer|api_key/);
+            expect(provenance.settings.top_n).toBeDefined();
+        });
+
+        it("still runs the flow when the stored plan cannot be read", async () => {
+            collecting();
+            adapter({
+                "/plans/flow": () => ({
+                    body: { plan_id: "adapter-plan-1", plan_json: PLAN_JSON }
+                }),
+                "/plans/adapter-plan-1": () => ({ status: 500, body: {} }),
+                "/workflows/submit": () => ({ body: { run_id: "run-1", status: "running" } })
+            });
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            const submitted = await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            expect(submitted.status).toBe("adapter_running");
+            expect(flows.startFlowExecution.mock.calls[0][4].inputs[0].resources).toHaveLength(3);
+        });
+
+        it("records the edited file as an input of the resumed part", async () => {
+            const EDIT =
+                "https://ckan.example.org/dataset/ds-1/resource/res-9/download/lexicon.json";
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            adapter({
+                "/runs/run-1/poll": () => ({
+                    body: {
+                        status: "completed",
+                        flow: {
+                            status: "awaiting_edit",
+                            outputs: [
+                                {
+                                    output_id: "out-lexicon",
+                                    key: "1:1",
+                                    editable: { file: "lexicon_draft.json" },
+                                    file_location:
+                                        "tapis://ls6/scratch/alice/out/lexicon_draft.json"
+                                }
+                            ]
+                        }
+                    }
+                })
+            });
+            await svc.getRun("ue_parent-1", AUTH);
+            adapter({
+                "/runs/run-1/resume": () => ({ body: { run_id: "run-2", status: "running" } })
+            });
+            await svc.resumeRun(
+                "ue_parent-1",
+                {
+                    replacements: { "1:1": { url: EDIT, dataset_id: "ds-1", resource_id: "res-9" } }
+                },
+                AUTH
+            );
+            expect(flows.recordFlowEdit).toHaveBeenCalledWith("exec-1", "out-lexicon", {
+                name: "edited lexicon_draft.json",
+                url: EDIT,
+                dcid: "res-9"
+            });
+        });
+
+        it("resumes the run even when the edit cannot be recorded", async () => {
+            flows.recordFlowEdit.mockRejectedValue(new Error("hasura down"));
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            adapter({
+                "/runs/run-1/poll": () => ({
+                    body: {
+                        status: "completed",
+                        flow: {
+                            status: "awaiting_edit",
+                            outputs: [
+                                {
+                                    output_id: "out-lexicon",
+                                    key: "1:1",
+                                    editable: { file: "lexicon_draft.json" }
+                                }
+                            ]
+                        }
+                    }
+                })
+            });
+            await svc.getRun("ue_parent-1", AUTH);
+            adapter({
+                "/runs/run-1/resume": () => ({ body: { run_id: "run-2", status: "running" } })
+            });
+            const resumed = await svc.resumeRun(
+                "ue_parent-1",
+                { replacements: { "1:1": { url: "https://ckan.example.org/x.json" } } },
+                AUTH
+            );
+            expect(resumed.status).toBe("adapter_running");
         });
     });
 

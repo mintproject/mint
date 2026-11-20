@@ -30,6 +30,49 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+type BoundFile = { url?: string; name?: string };
+
+function FileLink({ file }: { file: BoundFile }) {
+  if (!file.url) return <span>{file.name ?? '—'}</span>;
+  return (
+    <a
+      href={file.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 hover:underline"
+    >
+      {file.name ?? file.url}
+    </a>
+  );
+}
+
+/**
+ * What a run read for one input: a link for one file, or "N files" that opens to
+ * the list for an input that took a collection. "—" when nothing was recorded.
+ */
+function InputBinding({ binding }: { binding: unknown }) {
+  const files = (Array.isArray(binding) ? binding : binding ? [binding] : []).filter(
+    (file): file is BoundFile => !!file && typeof file === 'object',
+  );
+  const [first] = files;
+  if (!first) return <>—</>;
+  if (!Array.isArray(binding) || files.length === 1) {
+    return first.url ? <FileLink file={first} /> : <>—</>;
+  }
+  return (
+    <details data-testid="collection-binding">
+      <summary className="cursor-pointer text-blue-600">{files.length} files</summary>
+      <ul className="mt-1 space-y-0.5">
+        {files.map((file, i) => (
+          <li key={file.url ?? i}>
+            <FileLink file={file} />
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function matchVariables(
   responseVars: string[] | undefined,
   outputVars: string[] | undefined,
@@ -597,24 +640,9 @@ export function MintResults({
                                   );
                                 })}
                                 {adjustableInputs.map((inp) => {
-                                  const res = execution.bindings[inp.id ?? ''] as {
-                                    url?: string;
-                                    name?: string;
-                                  } | null;
                                   return (
                                     <td key={inp.id} className="px-2 py-1">
-                                      {res?.url ? (
-                                        <a
-                                          href={res.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-blue-600 hover:underline"
-                                        >
-                                          {res.name ?? res.url}
-                                        </a>
-                                      ) : (
-                                        '—'
-                                      )}
+                                      <InputBinding binding={execution.bindings[inp.id ?? '']} />
                                     </td>
                                   );
                                 })}

@@ -5,6 +5,7 @@ import {
   UPLOAD_FILE_CAP,
   UPLOAD_UNREACHABLE_MESSAGE,
   UploadError,
+  boundingBoxToSpatial,
   checkUploadAgainstInput,
   listUploadOrganizations,
   regionToSpatial,
@@ -381,6 +382,26 @@ describe('uploadFilesToCatalog', () => {
     expect(body.temporal_coverage_start).toBe('2026-11-19');
     expect(body.temporal_coverage_end).toBe('2026-11-19');
     expect(body.spatial).toBeUndefined();
+  });
+
+  it('takes a title and a ready spatial polygon from the upload page', async () => {
+    const spatial = boundingBoxToSpatial({ xmin: -98, ymin: 29, xmax: -97, ymax: 30 });
+    const done = await uploadFilesToCatalog({
+      ...BASE,
+      files: [file('a.txt')],
+      title: '  Rain 2020 ',
+      spatial,
+      startDate: '2020-01-01',
+      endDate: '2020-12-31',
+    });
+    const body = JSON.parse(
+      String(fetchCalls.find((c) => c.url.includes('package_create'))!.init?.body),
+    );
+    expect(body.title).toBe('Rain 2020');
+    expect(body.spatial).toBe(spatial);
+    expect(body.temporal_coverage_start).toBe('2020-01-01');
+    expect(done.datasetName).toBe('Rain 2020');
+    expect(done.isPrivate).toBe(true);
   });
 
   it('uploads one file for an ordinary input as an individual dataset', async () => {

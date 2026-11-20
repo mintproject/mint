@@ -44,13 +44,17 @@ describe('Sidebar', () => {
       expect(screen.getByRole('link', { name: /browse models/i })).toBeInTheDocument();
     });
 
-    it('uses Browse as the only Datasets navigation entry', async () => {
+    it('lists Browse and Upload a dataset under Datasets', async () => {
       renderSidebar(false);
       await userEvent.click(screen.getByRole('button', { name: /datasets/i }));
 
       expect(screen.getByRole('link', { name: 'Browse' })).toHaveAttribute(
         'href',
         '/datasets/browse',
+      );
+      expect(screen.getByRole('link', { name: 'Upload a dataset' })).toHaveAttribute(
+        'href',
+        '/datasets/upload',
       );
       expect(screen.queryByRole('link', { name: 'Overview' })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Search' })).not.toBeInTheDocument();

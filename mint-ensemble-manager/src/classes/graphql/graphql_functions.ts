@@ -50,6 +50,7 @@ import updateExecutionStatusResultsSummaryGQL from "./queries/execution/update-s
 import updateExecutionStatusGQL from "./queries/execution/update-status.graphql";
 import updateExecutionRunIdGQL from "./queries/execution/update-run-id.graphql";
 import deleteExecutionsGQL from "./queries/execution/delete.graphql";
+import addExecutionDataBindingGQL from "./queries/execution/add-data-binding.graphql";
 
 import getRegionDetailsGQL from "./queries/region/get.graphql";
 
@@ -555,6 +556,39 @@ export const setExecutions = (executions: Execution[], thread_model_id: string) 
     }).catch((e) => {
         console.log("ERROR");
         console.log(e);
+    });
+};
+
+/**
+ * Add an input to an execution that already exists, filing the file as one catalog
+ * resource per location (like a result). Used for a flow's edited file, which is
+ * known only when the run is resumed.
+ */
+export const addExecutionDataBinding = (
+    executionId: string,
+    modelIoId: string,
+    file: { url: string; name: string; dcid?: string | null }
+) => {
+    const APOLLO_CLIENT = GraphQL.instance(KeycloakAdapter.getUser());
+    return APOLLO_CLIENT.mutate({
+        mutation: addExecutionDataBindingGQL,
+        variables: {
+            bindings: [
+                {
+                    execution_id: executionId,
+                    model_io_id: modelIoId,
+                    resource: {
+                        data: {
+                            id: getMd5Hash(file.url),
+                            ...(file.dcid ? { dcid: file.dcid } : {}),
+                            name: file.name,
+                            url: file.url
+                        },
+                        on_conflict: { constraint: "resource_pkey", update_columns: ["name"] }
+                    }
+                }
+            ]
+        }
     });
 };
 

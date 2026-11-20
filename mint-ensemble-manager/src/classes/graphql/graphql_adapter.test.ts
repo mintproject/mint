@@ -23,7 +23,9 @@ describe("executionToGQL", () => {
     it("maps modelid to modelcatalog_configuration_id", () => {
         const ex = makeExecution({ modelid: "https://w3id.org/okn/i/mint/test-config" });
         const result = executionToGQL(ex);
-        expect(result.modelcatalog_configuration_id).toBe("https://w3id.org/okn/i/mint/test-config");
+        expect(result.modelcatalog_configuration_id).toBe(
+            "https://w3id.org/okn/i/mint/test-config"
+        );
         expect(result).not.toHaveProperty("model_id");
     });
 
@@ -81,7 +83,9 @@ describe("executionFromGQL", () => {
     });
 
     it("reads modelcatalog_configuration_id into Execution.modelid", () => {
-        const gqlEx = makeGQLExecution({ modelcatalog_configuration_id: "https://w3id.org/okn/i/mint/test-config" });
+        const gqlEx = makeGQLExecution({
+            modelcatalog_configuration_id: "https://w3id.org/okn/i/mint/test-config"
+        });
         const result = executionFromGQL(gqlEx);
         expect(result.modelid).toBe("https://w3id.org/okn/i/mint/test-config");
     });
@@ -96,22 +100,26 @@ describe("executionFromGQL", () => {
 
 describe("executionResultsToGQL", () => {
     it("serializes results whose resource has no time period", () => {
-        expect(executionResultsToGQL({
-            "output-1": {
-                id: "resource-1",
-                name: "model output",
-                url: "tapis://ls6/output-1"
-            }
-        })).toMatchObject([{
-            model_io_id: "output-1",
-            resource: {
-                data: {
-                    dcid: "resource-1",
+        expect(
+            executionResultsToGQL({
+                "output-1": {
+                    id: "resource-1",
                     name: "model output",
                     url: "tapis://ls6/output-1"
                 }
+            })
+        ).toMatchObject([
+            {
+                model_io_id: "output-1",
+                resource: {
+                    data: {
+                        dcid: "resource-1",
+                        name: "model output",
+                        url: "tapis://ls6/output-1"
+                    }
+                }
             }
-        }]);
+        ]);
     });
 });
 
@@ -144,5 +152,39 @@ describe("output junction archived_file and declaration order", () => {
         ];
         const model = modelFromGQL({ id: "cfg", label: "Cfg", inputs: rows });
         expect(model.input_files.map((i) => i.id)).toEqual(["i1", "i2"]);
+    });
+});
+
+describe("a collection input on an execution", () => {
+    it("is written as one data binding per resource and read back as all of them", () => {
+        const written = executionToGQL(
+            makeExecution({
+                bindings: {
+                    "in-corpus": [
+                        { id: "r1", name: "a" },
+                        { id: "r2", name: "b" }
+                    ] as any,
+                    "in-one": { id: "r3", name: "c" } as any
+                }
+            })
+        );
+        expect(written.data_bindings.data).toEqual([
+            { model_io_id: "in-corpus", resource_id: "r1" },
+            { model_io_id: "in-corpus", resource_id: "r2" },
+            { model_io_id: "in-one", resource_id: "r3" }
+        ]);
+        const read = executionFromGQL({
+            id: "11111111-1111-1111-1111-111111111111",
+            status: "SUCCESS",
+            start_time: "2026-11-20T00:00:00",
+            parameter_bindings: [],
+            results: [],
+            data_bindings: written.data_bindings.data.map((row: any) => ({
+                model_io_id: row.model_io_id,
+                resource: { id: row.resource_id }
+            }))
+        });
+        expect(read.bindings["in-corpus"]).toEqual([{ id: "r1" }, { id: "r2" }]);
+        expect(read.bindings["in-one"]).toEqual({ id: "r3" });
     });
 });

@@ -581,7 +581,7 @@ const standardVariablesFromPresentations = (presentations: any): string[] => {
 // junctionRow has shape { input: {...}, is_optional: boolean } for inputs,
 // or { output: {...} } for outputs (is_optional not present on output junction).
 export const modelIOFromCatalogGQL = (junctionRow: any, entityKey?: string): ModelIO => {
-    const key = entityKey ?? 'input';
+    const key = entityKey ?? "input";
     const io = junctionRow[key] ?? junctionRow;
     return {
         id: io.id,
@@ -678,10 +678,11 @@ export const executionToGQL = (ex: Execution): any => {
                 parameter_value: binding + ""
             });
         } else {
-            exobj.data_bindings.data.push({
-                model_io_id: ioid,
-                resource_id: binding["id"]
-            });
+            // A collection input is one binding per resource under the same input.
+            const resources = Array.isArray(binding) ? binding : [binding];
+            resources.forEach((resource) =>
+                exobj.data_bindings.data.push({ model_io_id: ioid, resource_id: resource["id"] })
+            );
         }
     });
     exobj.results.data = executionResultsToGQL(ex.results);
@@ -706,8 +707,13 @@ export const executionFromGQL = (ex: any, emulator = false): Execution => {
             param.parameter_value;
     });
     ex.data_bindings.forEach((data: any) => {
-        exobj.bindings[emulator ? data.model_io.name : data.model_io_id] =
-            data.resource as DataResource;
+        const key = emulator ? data.model_io.name : data.model_io_id;
+        const resource = data.resource as DataResource;
+        const held = exobj.bindings[key];
+        // Several rows under one input are a collection: keep every resource.
+        exobj.bindings[key] = held
+            ? [...(Array.isArray(held) ? held : [held as DataResource]), resource]
+            : resource;
     });
     ex.results.forEach((data: any) => {
         exobj.results[emulator ? data.model_output.name : data.model_io_id] =

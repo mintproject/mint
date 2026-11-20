@@ -14,7 +14,7 @@ import { getAccessToken } from './auth/token-store';
 import { getDataCatalogApiUrl } from './config';
 import type { DataCatalogResource } from './data-catalog';
 import { resourceStandardVariables, showPackage } from './datasets/ckan';
-import { geoJsonBoundingBox, unionBoundingBox } from './geo/bbox';
+import { geoJsonBoundingBox, unionBoundingBox, type BoundingBox } from './geo/bbox';
 
 export const UPLOAD_FILE_CAP = 500;
 export const UPLOAD_BYTES_CAP = 2 * 1024 * 1024 * 1024;
@@ -36,6 +36,8 @@ export interface UploadedDataset {
   /** The catalog id the data step uses (the dataset's name slug). */
   datasetId: string;
   datasetName: string;
+  /** Whether the catalog says the dataset is private, as read back after the upload. */
+  isPrivate: boolean;
   resources: DataCatalogResource[];
 }
 
@@ -203,12 +205,8 @@ export function checkUploadAgainstInput(params: {
   return { error: null, notes: [] };
 }
 
-/** The region as the one bounding polygon a dataset's `spatial` field can hold, or null. */
-export function regionToSpatial(regionGeometry: unknown): string | null {
-  const box = Array.isArray(regionGeometry)
-    ? unionBoundingBox(regionGeometry)
-    : geoJsonBoundingBox(regionGeometry);
-  if (!box) return null;
+/** A bounding box as the one polygon a dataset's `spatial` field can hold. */
+export function boundingBoxToSpatial(box: BoundingBox): string {
   const { xmin, ymin, xmax, ymax } = box;
   return JSON.stringify({
     type: 'Polygon',
@@ -222,6 +220,14 @@ export function regionToSpatial(regionGeometry: unknown): string | null {
       ],
     ],
   });
+}
+
+/** The region as the one bounding polygon a dataset's `spatial` field can hold, or null. */
+export function regionToSpatial(regionGeometry: unknown): string | null {
+  const box = Array.isArray(regionGeometry)
+    ? unionBoundingBox(regionGeometry)
+    : geoJsonBoundingBox(regionGeometry);
+  return box ? boundingBoxToSpatial(box) : null;
 }
 
 /** The format CKAN records for a file: its extension, upper-cased, or empty. */
@@ -398,6 +404,10 @@ export async function uploadFilesToCatalog(params: {
   startDate?: string | null;
   endDate?: string | null;
   regionGeometry?: unknown;
+  /** A ready `spatial` polygon (see boundingBoxToSpatial); wins over `regionGeometry`. */
+  spatial?: string | null;
+  /** The dataset's title. Defaults to "Uploaded files, <day>, <username>". */
+  title?: string;
   username: string;
   now?: Date;
   onProgress?: (progress: UploadProgress) => void;
@@ -427,12 +437,12 @@ export async function uploadFilesToCatalog(params: {
   const pkg = await createPackage({
     organizationId: params.organizationId,
     isPublic: params.isPublic,
-    title: `Uploaded files, ${day}, ${params.username}`,
+    title: params.title?.trim() || `Uploaded files, ${day}, ${params.username}`,
     notes: params.notes ?? `Uploaded through DYNAMO for ${params.flowName} / ${params.inputName}.`,
     now,
     startDate: threadDates ? start : day,
     endDate: threadDates ? end : day,
-    spatial: regionToSpatial(params.regionGeometry),
+    spatial: params.spatial !== undefined ? params.spatial : regionToSpatial(params.regionGeometry),
   });
 
   const names = sanitizeUploadNames(files.map((file) => file.name));
@@ -506,6 +516,7 @@ export async function uploadFilesToCatalog(params: {
   return {
     datasetId: pkg.name,
     datasetName: pkg.title,
+    isPrivate: typeof shown.private === 'boolean' ? shown.private : !params.isPublic,
     resources: resources.map((r) => ({ ...r, url: urls.get(r.id) || r.url })),
     notes: fit.notes,
   };

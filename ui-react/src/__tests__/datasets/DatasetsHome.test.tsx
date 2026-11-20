@@ -16,6 +16,14 @@ describe('DatasetsHome', () => {
     expect(screen.getByRole('link', { name: /search datasets/i })).toBeInTheDocument();
   });
 
+  it('links to the upload page', () => {
+    renderWithProviders(<DatasetsHome />);
+    expect(screen.getByRole('link', { name: 'Upload a dataset' })).toHaveAttribute(
+      'href',
+      '/datasets/upload',
+    );
+  });
+
   it('links point to correct hrefs', () => {
     renderWithProviders(<DatasetsHome />);
     const browseLink = screen.getByRole('link', { name: /browse datasets/i });
