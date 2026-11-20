@@ -81,6 +81,7 @@ import { MintParameters } from './thread/MintParameters';
 import type { PublishRequest } from '@/lib/publish-outputs';
 import type { SpatialSelection } from './thread/SpatialScopeMap';
 import { MintRuns } from './thread/MintRuns';
+import type { RestartOptions } from './thread/RestartRun';
 import { MintResults } from './thread/MintResults';
 import { WizardRail, type ThreadStepNav } from './thread/wizard/WizardRail';
 import { deriveStepStates } from './thread/wizard/deriveStepStates';
@@ -830,7 +831,7 @@ export function MintThread({
   );
 
   const handleSubmitRuns = useCallback(
-    async (modelId: string, maxMinutes: number, publish?: PublishRequest) => {
+    async (modelId: string, maxMinutes: number, publish?: PublishRequest, queue?: string) => {
       const isFlow = Boolean(threadExecutionData?.models[modelId]?.isFlow);
       if (!isFlow && (adapterPlansLoading || adapterPlanError)) {
         throw new Error('SVO adapter plan discovery must complete before workflow submission.');
@@ -971,6 +972,7 @@ export function MintThread({
       const submitted = await submitExecutionPlan(ensembleManagerApi, {
         plan_id: plan.plan_id,
         max_minutes: maxMinutes,
+        ...(queue ? { queue } : {}),
         adapter_parameter_values: adapterParameterValues,
         ...(publish && Object.keys(publish.values).length > 0
           ? { parameter_values: publish.values }
@@ -1024,6 +1026,26 @@ export function MintThread({
       thread?.start_date,
       workflowUserKey,
     ],
+  );
+
+  // A restart of a model, from the Runs or the Results step. Kept here so that a
+  // send started in one step shows as in flight in the other, and a second one
+  // for the same model is ignored until the first is done.
+  const [restartingModels, setRestartingModels] = useState<Record<string, boolean>>({});
+  const restartingNow = useRef<Record<string, boolean>>({});
+  const handleRestartRuns = useCallback(
+    async (modelId: string, options: RestartOptions) => {
+      if (restartingNow.current[modelId]) return;
+      restartingNow.current[modelId] = true;
+      setRestartingModels((current) => ({ ...current, [modelId]: true }));
+      try {
+        await handleSubmitRuns(modelId, options.maxMinutes, options.publish, options.queue);
+      } finally {
+        restartingNow.current[modelId] = false;
+        setRestartingModels((current) => ({ ...current, [modelId]: false }));
+      }
+    },
+    [handleSubmitRuns],
   );
 
   // Show the run a flow refused to duplicate, so the user can follow it.
@@ -1273,6 +1295,8 @@ export function MintThread({
             onContinue={goNext}
             onFetchRuns={handleFetchRuns}
             onSubmitRuns={handleSubmitRuns}
+            onRestartRuns={perm.write ? handleRestartRuns : undefined}
+            restartingModels={restartingModels}
             onOpenFlowRun={handleOpenFlowRun}
             onRefreshWorkflow={handleRefreshWorkflow}
             workflowRefreshErrors={unifiedRunErrors}
@@ -1299,6 +1323,9 @@ export function MintThread({
             onFetchRuns={handleFetchRuns}
             onPublishResults={handlePublishResults}
             onPromoteOutputs={() => setCurrentSection('runs')}
+            onOpenRuns={() => setCurrentSection('runs')}
+            onRestartRuns={perm.write ? handleRestartRuns : undefined}
+            restartingModels={restartingModels}
           />
         );
       case 'summary':

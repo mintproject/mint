@@ -7,25 +7,9 @@
  * download through the Ensemble Manager, a folder opens the files dialog.
  */
 import { Copy, FolderOpen } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
-import { fetchExecutionListing, type ExecutionResultLocation } from '@/lib/ensemble-manager';
 import { FileDownloadButton } from './FileDownloadButton';
-
-// Cells of one run ask for the same listing; share the request while it is in flight.
-const inFlight = new Map<string, Promise<ExecutionResultLocation[]>>();
-
-function loadResultKinds(api: string, executionId: string): Promise<ExecutionResultLocation[]> {
-  const key = `${api}|${executionId}`;
-  let pending = inFlight.get(key);
-  if (!pending) {
-    pending = fetchExecutionListing(api, executionId)
-      .then((listing) => listing.results)
-      .finally(() => inFlight.delete(key));
-    inFlight.set(key, pending);
-  }
-  return pending;
-}
+import { useTapisResultKind } from './useTapisResultKind';
 
 export interface TapisResultProps {
   ensembleManagerApi: string;
@@ -42,22 +26,7 @@ export function TapisResult({
   url,
   onOpenFolder,
 }: TapisResultProps) {
-  const [kind, setKind] = useState<'file' | 'folder' | 'unknown' | 'error'>('unknown');
-
-  useEffect(() => {
-    let cancelled = false;
-    setKind('unknown');
-    loadResultKinds(ensembleManagerApi, executionId)
-      .then((results) => {
-        if (cancelled) return;
-        const match = results.find((result) => result.url === url);
-        setKind(match ? match.kind : 'error');
-      })
-      .catch(() => !cancelled && setKind('error'));
-    return () => {
-      cancelled = true;
-    };
-  }, [ensembleManagerApi, executionId, url]);
+  const kind = useTapisResultKind(ensembleManagerApi, executionId, url);
 
   return (
     <span className="inline-flex flex-wrap items-center gap-1" data-testid="tapis-result">

@@ -497,6 +497,7 @@ export function submitExecutionPlan(
     plan_id: string;
     parameter_values?: Record<string, unknown>;
     max_minutes?: number;
+    queue?: string;
     run_name?: string;
     recreate?: boolean;
     dry_run?: boolean;
@@ -810,16 +811,12 @@ function filenameFromDisposition(header: string | null, fallbackPath: string): s
   return plain ?? fallbackPath.split('/').pop() ?? 'download';
 }
 
-/**
- * Fetch one result file through the Ensemble Manager, with the user's token.
- * The server streams it from Tapis; the browser cannot open a `tapis://` URI.
- */
-export async function downloadExecutionFile(
+async function requestExecutionFile(
   ensembleManagerApi: string,
   executionId: string,
   file: { systemId: string; path: string },
   signal?: AbortSignal,
-): Promise<{ blob: Blob; filename: string }> {
+): Promise<Response> {
   const query = new URLSearchParams({ path: file.path, systemId: file.systemId });
   const url = `${ensembleManagerApi}/executions/${encodeURIComponent(executionId)}/files/content?${query}`;
   const resp = await fetch(url, { signal, headers: ensembleManagerHeaders() });
@@ -830,10 +827,81 @@ export async function downloadExecutionFile(
     }
     throw error;
   }
+  return resp;
+}
+
+/**
+ * Fetch one result file through the Ensemble Manager, with the user's token.
+ * The server streams it from Tapis; the browser cannot open a `tapis://` URI.
+ */
+export async function downloadExecutionFile(
+  ensembleManagerApi: string,
+  executionId: string,
+  file: { systemId: string; path: string },
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; filename: string }> {
+  const resp = await requestExecutionFile(ensembleManagerApi, executionId, file, signal);
   return {
     blob: await resp.blob(),
     filename: filenameFromDisposition(resp.headers?.get('Content-Disposition') ?? null, file.path),
   };
+}
+
+/**
+ * Read only the start of a result file, for a preview. The route is the same as
+ * the download's and it does not answer a `Range` request, so the body is read
+ * as a stream and cancelled once `maxBytes` have arrived: the rest of a large
+ * file is never pulled into the browser.
+ */
+export async function readExecutionFilePrefix(
+  ensembleManagerApi: string,
+  executionId: string,
+  file: { systemId: string; path: string },
+  maxBytes: number,
+  signal?: AbortSignal,
+): Promise<{ bytes: Uint8Array; truncated: boolean }> {
+  const resp = await requestExecutionFile(ensembleManagerApi, executionId, file, signal);
+  const reader = resp.body?.getReader?.();
+  if (!reader) {
+    // No streaming body (an old browser): read it, then keep the start.
+    const blob = await resp.blob();
+    const start = blob.slice(0, maxBytes);
+    const buffer =
+      typeof start.arrayBuffer === 'function'
+        ? await start.arrayBuffer()
+        : await new Promise<ArrayBuffer>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as ArrayBuffer);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsArrayBuffer(start);
+          });
+    return { bytes: new Uint8Array(buffer), truncated: blob.size > maxBytes };
+  }
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  let truncated = false;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      received += value.length;
+    }
+    if (received > maxBytes) {
+      truncated = true;
+      await reader.cancel().catch(() => undefined);
+      break;
+    }
+  }
+  const bytes = new Uint8Array(Math.min(received, maxBytes));
+  let offset = 0;
+  for (const chunk of chunks) {
+    const room = bytes.length - offset;
+    if (room <= 0) break;
+    bytes.set(chunk.length > room ? chunk.subarray(0, room) : chunk, offset);
+    offset += Math.min(chunk.length, room);
+  }
+  return { bytes, truncated };
 }
 
 /** Save a blob as a file through a temporary object URL. */

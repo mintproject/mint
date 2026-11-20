@@ -91,6 +91,13 @@ interface LegacyPlan {
     model_id: string;
     execution_engine: string;
     adapter_steps?: AdapterStep[];
+    // Makes each planning its own plan. A plan id is the encoded plan, and a
+    // submit of a plan id that already has a record returns that record. Pre-model
+    // steps name saved adapter plans, so their plan id would never change; a flow's
+    // or post-model plan id changes only if the adapter happens to mint a new plan
+    // each time. The nonce makes a re-plan after a failure a new run whatever the
+    // adapter does, while submitting one plan twice still returns one run.
+    nonce?: string;
     post_model_adapter?: PostModelAdapter;
     // Input ETL is planned by the bridge (POST /plans/model-inputs). The plan
     // records only what submit needs to plan the same steps again: the region
@@ -459,6 +466,10 @@ function isRunOwnerMismatch(error: unknown): boolean {
         error.statusCode === 403 &&
         error.code === "RUN_OWNER_MISMATCH"
     );
+}
+
+function planNonce(): string {
+    return crypto.randomBytes(6).toString("hex");
 }
 
 function planHash(plan: LegacyPlan): string {
@@ -2280,7 +2291,8 @@ export function createUnifiedExecutionService(
                     thread_id: body.thread_id,
                     model_id: body.model_id,
                     execution_engine: "tapis",
-                    flow: plannedFlow.flow
+                    flow: plannedFlow.flow,
+                    nonce: planNonce()
                 };
                 return {
                     executor,
@@ -2534,6 +2546,7 @@ export function createUnifiedExecutionService(
                     };
                 });
             }
+            if (plan.post_model_adapter || plan.adapter_steps?.length) plan.nonce = planNonce();
             return {
                 executor,
                 version: 1,

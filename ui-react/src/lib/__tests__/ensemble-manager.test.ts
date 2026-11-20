@@ -25,6 +25,7 @@ import {
   submitRuns,
   submitExecutionPlan,
   isResultDownload,
+  readExecutionFilePrefix,
 } from '@/lib/ensemble-manager';
 
 function lastRequest(): [string, RequestInit] {
@@ -458,5 +459,81 @@ describe('isResultDownload', () => {
     expect(isResultDownload('tapis://other/home/u/out/a.csv', [folder])).toBe(false);
     expect(isResultDownload('tapis://sys/home/u/out/a.csv', [])).toBe(false);
     expect(isResultDownload('https://example.org/a.csv', [folder])).toBe(false);
+  });
+});
+
+describe('readExecutionFilePrefix', () => {
+  const file = { systemId: 'cloud.data', path: 'home/u/out/report.md' };
+
+  function streamed(chunks: Uint8Array[]) {
+    let at = 0;
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const read = vi.fn(async () =>
+      at < chunks.length ? { done: false, value: chunks[at++] } : { done: true, value: undefined },
+    );
+    return {
+      cancel,
+      read,
+      response: { ok: true, status: 200, body: { getReader: () => ({ read, cancel }) } },
+    };
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    storeTokens({ accessToken: 'tok' });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('asks the download route with the same token, and stops reading at the cap', async () => {
+    const chunks = [new Uint8Array(60), new Uint8Array(60), new Uint8Array(60)];
+    const s = streamed(chunks);
+    const fetchMock = vi.fn().mockResolvedValue(s.response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await readExecutionFilePrefix('http://em', 'exec-1', file, 100);
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      'http://em/executions/exec-1/files/content?path=home%2Fu%2Fout%2Freport.md&systemId=cloud.data',
+    );
+    expect(fetchMock.mock.calls[0]?.[1].headers).toMatchObject({ Authorization: 'Bearer tok' });
+    expect(out.bytes).toHaveLength(100);
+    expect(out.truncated).toBe(true);
+    // The third chunk was never pulled, and the body was cancelled.
+    expect(s.read).toHaveBeenCalledTimes(2);
+    expect(s.cancel).toHaveBeenCalled();
+  });
+
+  it('returns a small file whole and untruncated', async () => {
+    const s = streamed([new TextEncoder().encode('hello')]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(s.response));
+    const out = await readExecutionFilePrefix('http://em', 'exec-1', file, 100);
+    expect(new TextDecoder().decode(out.bytes)).toBe('hello');
+    expect(out.truncated).toBe(false);
+    expect(s.cancel).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a whole read, keeping the start, when the body is not a stream', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob(['abcdefghij']) }),
+    );
+    const out = await readExecutionFilePrefix('http://em', 'exec-1', file, 4);
+    expect(new TextDecoder().decode(out.bytes)).toBe('abcd');
+    expect(out.truncated).toBe(true);
+  });
+
+  it('rejects like a download does when the route refuses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 403, json: async () => ({ message: 'raw' }) }),
+    );
+    await expect(readExecutionFilePrefix('http://em', 'exec-1', file, 100)).rejects.toThrow(
+      'Your account cannot read this file in Tapis storage.',
+    );
   });
 });

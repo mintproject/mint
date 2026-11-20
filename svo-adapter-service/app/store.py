@@ -437,6 +437,13 @@ class InMemoryHasura:
     def _op_DeleteSpecContracts(self, v):
         return {"delete_adapter_transform_contract": {"affected_rows": 0}}
 
+    # The replace mutations: delete the row's contracts, then upsert it, as one.
+    def _op_ReplaceMintSyncSpec(self, v):
+        return {**self._op_DeleteSpecContracts(v), **self._op_UpsertMintSyncSpec(v)}
+
+    def _op_ReplaceMintETLSpec(self, v):
+        return {**self._op_DeleteSpecContracts(v), **self._op_UpsertMintETLSpec(v)}
+
     def _op_GetMintSpecIds(self, v):
         mint_rows = [
             {"mint_model_config_id": r["mint_model_config_id"]}

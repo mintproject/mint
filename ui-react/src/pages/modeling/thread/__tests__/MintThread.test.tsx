@@ -194,7 +194,7 @@ const executionMock = {
 
 /**
  * The same thread once its runs have finished, which is the only state that
- * renders the Results step's Fetch results button.
+ * renders the Results step's Refresh button.
  */
 const executionFinishedMock = {
   request: { query: GetThreadExecutionDocument, variables: { id: 'test-thread-id' } },
@@ -396,7 +396,7 @@ describe('MintThread', () => {
     });
   });
 
-  it('wires Fetch results to the ensemble manager', async () => {
+  it('wires Refresh to the ensemble manager', async () => {
     // The regression this guards: MintThread rendered MintResults without
     // onPublishResults, and MintResults returns on its first line when that
     // prop is absent — so the button made no request at all (#110). Asserting
@@ -412,7 +412,7 @@ describe('MintThread', () => {
       await waitFor(() => expect(resultsStep).not.toBeDisabled(), { timeout: 3000 });
       resultsStep.click();
 
-      const button = await screen.findByTestId('fetch-results-cfgA');
+      const button = await screen.findByTestId('refresh-results-cfgA');
       button.click();
 
       await waitFor(() =>

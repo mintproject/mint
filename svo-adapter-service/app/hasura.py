@@ -320,6 +320,48 @@ query GetMintSpecIds {
 # The sync re-inserts a spec's contracts on every run (nested insert under an
 # upserted spec appends), so it clears them first. Edges cascade and are
 # recomputed after the sync.
+# Replace one registry row and its contracts in one request. Hasura runs the root
+# fields of a mutation in order inside one transaction, so the row is never seen
+# without contracts: a flow checked during a sync no longer finds a piece with no
+# inputs or outputs. `$ids` is the row's own id when its contracts are replaced,
+# else empty (an `_in` of nothing deletes nothing).
+REPLACE_TRANSFORM_SPEC_MUTATION = """
+mutation ReplaceMintSyncSpec($ids: [String!]!, $obj: adapter_transform_spec_insert_input!) {
+  delete_adapter_transform_contract(where: { transform_spec_id: { _in: $ids } }) {
+    affected_rows
+  }
+  insert_adapter_transform_spec_one(
+    object: $obj
+    on_conflict: {
+      constraint: transform_spec_mint_model_config_id_key
+      update_columns: [
+        name description transform_type method tapis_app_id app_version
+        stage env_from_args file_inputs mint_synced_at
+      ]
+    }
+  ) { id mint_model_config_id }
+}
+"""
+
+REPLACE_ETL_TRANSFORM_SPEC_MUTATION = """
+mutation ReplaceMintETLSpec($ids: [String!]!, $obj: adapter_transform_spec_insert_input!) {
+  delete_adapter_transform_contract(where: { transform_spec_id: { _in: $ids } }) {
+    affected_rows
+  }
+  insert_adapter_transform_spec_one(
+    object: $obj
+    on_conflict: {
+      constraint: transform_spec_pkey
+      update_columns: [
+        name description transform_type method tapis_app_id app_version
+        stage parameters_schema_json env_from_args file_inputs mint_synced_at
+        owner_username visibility mint_etl_process_id
+      ]
+    }
+  ) { id }
+}
+"""
+
 DELETE_SPEC_CONTRACTS_MUTATION = """
 mutation DeleteSpecContracts($ids: [String!]!) {
   delete_adapter_transform_contract(where: { transform_spec_id: { _in: $ids } }) {

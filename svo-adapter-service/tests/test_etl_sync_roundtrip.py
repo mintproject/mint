@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.hasura import DELETE_SPEC_CONTRACTS_MUTATION  # noqa: E402
+from app.hasura import DELETE_SPEC_CONTRACTS_MUTATION, REPLACE_ETL_TRANSFORM_SPEC_MUTATION  # noqa: E402
 from app.mint_sync import etl_process_to_spec_row, sync_mint_to_adapter  # noqa: E402
 from app.planner import build_plan_json  # noqa: E402
 
@@ -95,13 +95,16 @@ class _FakeHasura:
         return {"insert_adapter_transform_spec_one": {"id": "x"}}
 
 
-def test_resync_clears_contracts_before_reinserting():
+def test_resync_replaces_contracts_in_the_same_request_as_the_upsert():
+    # One request per piece deletes its contracts and upserts it, which Hasura runs
+    # as one transaction: a flow checked mid-sync never sees a piece without them.
     aoi = next(s for s in _hosted_specs() if s.get("id") == "ts-aoi-from-boundary")
     fake = _FakeHasura([_as_catalog_row(register.to_object(aoi))], existing=[])
     asyncio.run(sync_mint_to_adapter(fake, dry_run=False))
 
-    kinds = [q for q, _ in fake.calls]
-    delete_at = next(i for i, q in enumerate(kinds) if q == DELETE_SPEC_CONTRACTS_MUTATION)
-    upsert_at = next(i for i, q in enumerate(kinds) if "UpsertMintETLSpec" in q)
-    assert delete_at < upsert_at
-    assert fake.calls[delete_at][1] == {"ids": ["ts-aoi-from-boundary"]}
+    assert not any(q == DELETE_SPEC_CONTRACTS_MUTATION for q, _ in fake.calls)
+    (query, variables), = [(q, v) for q, v in fake.calls if "ReplaceMintETLSpec" in q]
+    assert query == REPLACE_ETL_TRANSFORM_SPEC_MUTATION
+    assert query.index("delete_adapter_transform_contract") < query.index("insert_adapter_transform_spec_one")
+    assert variables["ids"] == ["ts-aoi-from-boundary"]
+    assert variables["obj"]["contracts"]

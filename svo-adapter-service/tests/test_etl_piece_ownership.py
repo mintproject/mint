@@ -84,7 +84,7 @@ def test_built_in_process_stays_public_and_ownerless():
 def test_sync_upserts_ownership_and_never_writes_approval():
     fake = _FakeHasura([_process()])
     asyncio.run(sync_mint_to_adapter(fake))
-    (upsert,) = fake.variables_of("UpsertMintETLSpec")
+    (upsert,) = fake.variables_of("ReplaceMintETLSpec")
     assert upsert["obj"]["owner_username"] == "alice"
     assert upsert["obj"]["visibility"] == "private"
     assert "approved_source_sha256" not in upsert["obj"]

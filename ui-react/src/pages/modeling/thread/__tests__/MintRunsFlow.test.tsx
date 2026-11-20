@@ -103,8 +103,8 @@ describe('MintRuns for a flow', () => {
     renderRuns();
     expect(screen.getByTestId('flow-run-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('unified-execution-panel')).not.toBeInTheDocument();
-    expect(screen.getByTestId('flow-step-step-1')).toHaveTextContent('Ingest corpus');
-    expect(screen.getByTestId('flow-step-step-2')).toHaveTextContent('Running');
+    expect(screen.getByTestId('flow-node-step-1')).toHaveTextContent('Ingest corpus');
+    expect(screen.getByTestId('flow-node-step-2')).toHaveTextContent('Running');
     expect(screen.queryByText(/run model/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/pass inputs to model/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/the model is running/i)).not.toBeInTheDocument();
@@ -201,7 +201,7 @@ describe('MintRuns for a flow', () => {
     expect(screen.getByText('Waiting for your edit')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'The flow is paused for your edit. Download the file below, change it, upload your copy and resume.',
+        'The flow is paused for your edit. Download the file, change it, upload your copy and resume.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/the flow is running/i)).not.toBeInTheDocument();

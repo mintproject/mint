@@ -254,7 +254,7 @@ describe('FlowRunPanel for a paused run', () => {
       />,
     );
     expect(screen.getByTestId('flow-paused')).toHaveTextContent('Paused after “Draft the lexicon”');
-    expect(screen.getByTestId('flow-step-step-2')).toHaveTextContent('Waiting');
+    expect(screen.getByTestId('flow-node-step-2')).toHaveTextContent('Waiting');
     await user.click(screen.getByTestId('cancel-workflow'));
     expect(screen.getByText(/It stops here and cannot be continued/)).toBeInTheDocument();
     await user.click(screen.getByTestId('confirm-cancel-workflow'));

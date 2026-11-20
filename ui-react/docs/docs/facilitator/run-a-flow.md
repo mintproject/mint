@@ -74,17 +74,31 @@ If something blocks the run, DYNAMO shows a message with a title and the details
 
 ## Follow a run
 
-The **Flow steps** panel in the Runs step shows the run.
+The Runs step shows one **card** for each model or flow in the thread. The header has its name, a status (*Waiting to start*, *Running*, *Waiting for your edit*, *Completed*, *Failed* or *Cancelled*), and either when the run started or how long it took. Select the header to minimise the card or open it again; the choice stays while you are on the page.
 
-![A completed flow run: its run counts and the Flow steps graph, each step marked Completed](../assets/images/flow-run-panel.png)
-
-- **The step graph.** Each step is one box, with its state: *Waiting*, *Running*, *Completed*, *Failed*, *Skipped* or *Cancelled*. A step that failed shows its message under it.
-- **The step list.** The same steps in order, below the graph. A step that has a task reference shows it.
-- **Refresh workflow.** Fetches the latest state. DYNAMO keeps checking on the run for a while after you start it. Use **Refresh workflow** at any time to check again.
+- **Which cards are open.** A card opens by itself when its run needs your attention: running, waiting for your edit, or failed. A completed card is closed when the thread has several models, so a long list stays short. If the thread has only one model, its card is open.
+- **One sentence.** Under the header, one line says what to do next, for example *The flow is running. Results will appear when it completes.*
+- **The steps.** Each step is one box in the graph, with its state: *Waiting*, *Running*, *Completed*, *Failed*, *Skipped* or *Cancelled*. The steps are drawn once. A step that failed is named, with its message, in the failure box above the graph.
+- **Refresh.** Fetches the latest state. DYNAMO keeps checking on the run for a while after you start it. Use **Refresh** at any time to check again.
+- **Log and Files.** For a single run, these two buttons are on the card. **Log** shows the run's log. **Files** lists what the run archived.
+- **Settings used.** Collapsed by default. It lists the settings the run used, with those changed from their default first.
 - **Cancel run.** Asks you to confirm. Select **Yes, cancel run** to stop it, or **Keep waiting** to go back. A cancelled run cannot be resumed, and for a run stopped for your edit the confirmation says so.
-- **Technical identifiers.** Collapsed by default. Open it only if someone supporting you asks for the IDs.
+- **Technical details.** Collapsed by default. It holds the Tapis run and pipeline IDs and the task ID of each step. Open it only if someone supporting you asks for the IDs.
 
-When a run finishes, the thread says *The flow run is complete. Continue to review its results.* Continue to the **Results** step.
+A flow is one run, so its card shows no run counts, no paging and no table of runs. A model run many times, for example one run for each value of a setting, shows a line of counts such as *2 of 3 completed · 1 running* and a table with one row per run. The table has a column only for the settings that differ between runs; the rest are listed once above it as *Same for every run*. Paging appears only when there is more than one page of runs. **Reload** reads the run records again.
+
+When a run finishes, the card says *The flow run is complete. Continue to review its results.* Continue to the **Results** step.
+
+### When a run fails
+
+A failed run shows a red box with the reason: the failure message, and a line for each step that failed. Below it is a **Restart** button. **Restart** sends the same model again with the same data and settings, and only that model, as a new run.
+
+- **Only when every run is over.** If a model ran several times and one run failed while others are still going, the card says so and offers no Restart until the others have finished.
+- **What is carried over.** For a model, the box shows **Maximum run time (minutes)**: the earlier run's time when it was kept, otherwise the default of 60, which you can change. If the earlier run published its outputs to a catalog, **Publish outputs** is already ticked with the same catalogs; check its settings before you restart. A flow has no maximum time and does not publish this way.
+- **Several runs.** The button then reads **Restart all N runs**. It asks you to confirm, and says that runs which succeeded are sent again too: DYNAMO starts a model's runs together, so a single run cannot be restarted alone.
+- **Never twice.** The button is disabled while the new run is being sent, in the Runs step and in the Results step alike.
+- **Who.** Only someone who can send runs on the thread sees it. A run that is still going has **Cancel run** instead.
+- **If it is refused**, the reason is shown under the button. For example, a flow already running in the thread is refused with *This flow is already running*.
 
 ## When a flow pauses for your edit
 
