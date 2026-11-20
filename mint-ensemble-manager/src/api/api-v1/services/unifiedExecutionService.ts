@@ -91,6 +91,11 @@ interface LegacyPlan {
     model_id: string;
     execution_engine: string;
     adapter_steps?: AdapterStep[];
+    // Makes each planning of a pre-model adapter run its own plan. The steps name
+    // saved adapter plans, so without it a plan for the same thread and model is
+    // always the same plan id, and submitting it again returns the earlier run
+    // (which cannot be started again) instead of starting a new one.
+    nonce?: string;
     post_model_adapter?: PostModelAdapter;
     // Input ETL is planned by the bridge (POST /plans/model-inputs). The plan
     // records only what submit needs to plan the same steps again: the region
@@ -2533,6 +2538,7 @@ export function createUnifiedExecutionService(
                         source_resource_id: step.source_resource_id
                     };
                 });
+                if (plan.adapter_steps.length) plan.nonce = crypto.randomBytes(6).toString("hex");
             }
             return {
                 executor,

@@ -405,6 +405,56 @@ describe("unifiedExecutionService", () => {
         });
     });
 
+    describe("planning pre-model adapter steps again", () => {
+        const request = {
+            executor: "ensemble_manager",
+            thread_id: "thread-1",
+            model_id: "model-1",
+            execution_engine: "tapis",
+            adapter_steps: [
+                {
+                    adapter_plan_id: "adapter-plan-1",
+                    model_io_id: "springflow-input",
+                    source_resource_id: "source-1"
+                }
+            ]
+        };
+
+        it("gives each planning its own plan id, so a failed run can be run again", async () => {
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const first = asPlan(await service.createPlan(request));
+            const second = asPlan(await service.createPlan(request));
+            expect(second.plan_id).not.toBe(first.plan_id);
+        });
+
+        it("still returns the same run when one plan is submitted twice", async () => {
+            (global.fetch as jest.Mock).mockResolvedValue({
+                ok: true,
+                json: async () => ({
+                    run_id: "adapter-run-1",
+                    status: "running",
+                    tapis_workflow_id: "workflow-1",
+                    tapis_run_id: "tapis-run-1"
+                })
+            });
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plan = asPlan(await service.createPlan(request));
+            const first = asParent(await service.submit({ plan_id: plan.plan_id }, "Bearer t"));
+            const calls = (global.fetch as jest.Mock).mock.calls.length;
+            const again = asParent(await service.submit({ plan_id: plan.plan_id }, "Bearer t"));
+            expect(again.run_id).toBe(first.run_id);
+            expect((global.fetch as jest.Mock).mock.calls.length).toBe(calls);
+        });
+
+        it("leaves a plan with no adapter steps unchanged", async () => {
+            const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
+            const plain = { ...request, adapter_steps: undefined };
+            const a = asPlan(await service.createPlan(plain));
+            const b = asPlan(await service.createPlan(plain));
+            expect(b.plan_id).toBe(a.plan_id);
+        });
+    });
+
     it("rejects a tampered legacy plan identifier", async () => {
         const service = createUnifiedExecutionService(legacy);
         const plan = await service.createPlan({
