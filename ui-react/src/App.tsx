@@ -15,6 +15,7 @@ import { ETLProcessBrowsePage } from './pages/ETLProcessBrowsePage';
 import { PieceFromRepositoryPage } from './pages/PieceFromRepositoryPage';
 import { PieceApprovalsPage } from './pages/PieceApprovalsPage';
 import { PieceApprovalPage } from './pages/PieceApprovalPage';
+import { FlowAuthoringPage } from './pages/FlowAuthoringPage';
 
 // Pages — modeling
 import { ModelingHome } from './pages/modeling/ModelingHome';
@@ -112,6 +113,22 @@ export function App() {
             element={
               <ProtectedRoute>
                 <PieceApprovalPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/flows/new"
+            element={
+              <ProtectedRoute>
+                <FlowAuthoringPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/flows/new/:slugid"
+            element={
+              <ProtectedRoute>
+                <FlowAuthoringPage />
               </ProtectedRoute>
             }
           />

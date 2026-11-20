@@ -418,6 +418,20 @@ query GetFlowPieces($ids: [String!]!) {
 }
 """
 
+# Every piece the caller may see, for proposing what fits. Run with the caller's
+# token, so Hasura's select rules hide another user's private piece.
+GET_VISIBLE_PIECES = """
+query GetVisiblePieces($limit: Int!) {
+  modelcatalog_etl_process(limit: $limit, order_by: {id: asc}) {
+    id label version owner_username visibility runtime_kind runtime_json
+    contracts(order_by: [{role: asc}, {position: asc}]) {
+      role position standard_variable_uri unit format dimensionality
+      spatial_type crs_requirement temporal_resolution schema_requirement_json
+    }
+  }
+}
+"""
+
 LIST_MINT_ETL_PROCESSES_QUERY = """
 query ListMintETLProcesses($limit: Int!, $offset: Int!) {
   modelcatalog_etl_process(limit: $limit, offset: $offset, order_by: {id: asc}) {

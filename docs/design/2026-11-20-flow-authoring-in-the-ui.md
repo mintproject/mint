@@ -590,6 +590,13 @@ check. D1 and D2 do not depend on each other. Secret arguments wait on `feat/flo
 
 ## Decisions
 
+- 2026-11-20 (implementing D3/D4): with the adapter's front door on, the form's live check and
+  proposals go through the Ensemble Manager's allowlisted forward (`/v1/adapter/flows/check`,
+  `/v1/adapter/flows/propose`), not the catalog. `/flows/check` was already allowlisted;
+  `POST /flows/propose` was added. Reason: both are user routes that read the caller's visible
+  pieces with the caller's token, which the forward already carries; the catalog would only add a
+  second proxy. Saving still goes to the catalog's `POST /flows`, which re-checks (pause rules
+  included). Copies of a paused flow keep each output's `editable` as read.
 - 2026-11-20 (draft): authoring is split into five parts, D1 to D5, each mergeable and checked on
   dev. Ranking by meaning is last, after measurement. Proposed by the assistant; not confirmed.
 - 2026-11-20 (draft): proposals use `compatibility()` and the catalog as the caller, not the edge

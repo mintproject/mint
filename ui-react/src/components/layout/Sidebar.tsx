@@ -48,6 +48,7 @@ const NAV_GROUPS: NavGroup[] = [
           { href: '/models/register', label: 'Register Model Configuration' },
           { href: '/etl/register', label: 'Register ETL Process' },
           { href: '/etl', label: 'Browse ETL Processes' },
+          { href: '/flows/new', label: 'Build a Flow' },
         ],
       },
       {
