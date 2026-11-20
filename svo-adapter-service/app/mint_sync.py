@@ -241,10 +241,20 @@ def _build_contracts(
                 "format": has_format,
                 "unit": unit,
             }
-            if metadata is not None:
-                contract["metadata_json"] = dict(metadata)
+            # A readable name for the flow form: the presentation's label, else the
+            # dataset specification's. Not all inputs or outputs name a variable.
+            name = _text(pres.get("label")) or _text(spec.get("label"))
+            if metadata is not None or name:
+                contract["metadata_json"] = {**(metadata or {}), **({"label": name} if name else {})}
             contracts.append(contract)
     return contracts
+
+
+def _text(value: Any) -> str | None:
+    if isinstance(value, list):
+        value = value[0] if value else None
+    text = str(value).strip() if value is not None else ""
+    return text or None
 
 
 def mint_config_to_spec_row(

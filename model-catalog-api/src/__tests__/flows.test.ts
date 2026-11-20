@@ -85,6 +85,17 @@ describe('what is sent to the adapter to check', () => {
     expect(plan.check.outputs).toEqual([{ step: 2, output: 0 }, { step: 2, value: 'job_uuid' }])
   })
 
+  it('accepts a flow input that names only a format', () => {
+    const body = { ...BODY(), inputs: [{ key: 'budget', label: 'Budget', format: 'cbc-mf6' }] }
+    const plan = planRegistration({ ...body, steps: [{ position: 1, etl_process_id: 'p:ingest', wires: [{ to: { input: 0 }, from: { flow_input: 'budget' } }] }], outputs: [] } as any)
+    expect(plan.check.inputs[0]).toEqual({ id: `${C}_input_1`, contract: { standard_variable_uri: null, format: 'cbc-mf6' } })
+  })
+
+  it('refuses a flow input that names neither a variable nor a format', () => {
+    const body = { ...BODY(), inputs: [{ key: 'blank', label: 'Blank', standard_variable: '' }] }
+    expect(() => planRegistration(body as any)).toThrow('needs a standard_variable or a format')
+  })
+
   it.each([
     [{ ...BODY(), steps: [] }, 'at least one step'],
     [{ ...BODY(), configuration: {} }, 'configuration.label'],

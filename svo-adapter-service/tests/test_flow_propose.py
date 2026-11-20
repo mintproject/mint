@@ -420,3 +420,32 @@ def test_a_variable_uri_label_is_not_a_dataset_name():
                                       "source_catalog": "ckan:barton_springs"}) == "barton springs"
     assert flow_propose.dataset_name({"data_object_id": "a", "label": "Real name"}) == "Real name"
     assert flow_propose.dataset_name({"data_object_id": "a", "label": uri}) == "a"
+
+
+def test_a_format_only_input_gets_the_model_output_that_makes_that_format(monkeypatch):
+    # The MODFLOW extractor shape: the input names a format and no variable, and the
+    # model's output carries a synced label but no variable.
+    response = client.post("/transform-specs", json={
+        "name": "mf6-extract", "method": "tapis_function", "transform_type": "unit_convert",
+        "contracts": [{"role": "input", "format": "cbc-mf6"},
+                      {"role": "output", "standard_variable_uri": V + "spring__flow", "format": "gma-scalar"}],
+        "env_from_args": {"TAPIS_TOKEN": "tapis_token"}})
+    assert response.status_code == 200, response.text
+    model = {"id": "spec-mf6", "name": "mf6", "label": "MODFLOW 6", "visibility": "public",
+             "mint_model_config_id": "https://example.org/configs/mf6",
+             "contracts": [{"role": "output", "format": "cbc-mf6",
+                            "metadata_json": {"label": "Cell-by-cell budget"}}]}
+    with_models(monkeypatch, model)
+    body = propose([], {"contract": {"standard_variable_uri": V + "spring__flow"}}).json()
+    need = body["produces"][0]["inputs"][0]
+    assert need["variable"] is None and need["variable_label"] is None and need["format"] == "cbc-mf6"
+    assert need["providers"]["models"] == [{
+        "configuration_id": "https://example.org/configs/mf6", "label": "MODFLOW 6", "output": 1,
+        "format": "cbc-mf6", "variable": None, "output_label": "Cell-by-cell budget"}]
+
+
+def test_an_output_with_no_label_and_no_variable_has_no_output_label(monkeypatch):
+    model = {"id": "spec-x", "name": "x", "label": "X", "visibility": "public",
+             "mint_model_config_id": "https://example.org/configs/x",
+             "contracts": [{"role": "output", "format": "cbc-mf6"}]}
+    assert flow_propose._output_label(model["contracts"][0]) is None

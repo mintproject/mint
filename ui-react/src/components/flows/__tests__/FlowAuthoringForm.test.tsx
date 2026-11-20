@@ -722,6 +722,85 @@ describe('FlowAuthoringForm semantic recommendations', () => {
     expect(await screen.findByTestId('flow-form-step-1')).toBeInTheDocument();
   });
 
+  it('describes a format-only input readably and adds its route, bound by format', async () => {
+    proposeFor = () => ({
+      ...emptyProposal,
+      produces: [
+        {
+          piece: 'piece-a',
+          label: 'Modflow6 drain extract',
+          output: 1,
+          complete: false,
+          converter: false,
+          output_variable: 'sv:flow',
+          output_label: 'Spring — volume flow rate',
+          output_format: 'gma-scalar',
+          inputs: [
+            routeNeed({
+              variable: null,
+              variable_label: null,
+              format: 'cbc-mf6',
+              providers: {
+                models: [
+                  {
+                    configuration_id: 'https://w3id.org/okn/i/mint/mf6',
+                    label: 'MODFLOW 6',
+                    output: 1,
+                    format: 'cbc-mf6',
+                    variable: null,
+                    output_label: null,
+                  },
+                ],
+                datasets: [],
+              },
+            }),
+          ],
+        },
+        {
+          piece: 'piece-b',
+          label: 'Cfs to m3s',
+          output: 1,
+          complete: false,
+          converter: true,
+          output_variable: 'sv:flow',
+          output_label: 'Spring — volume flow rate',
+          inputs: [
+            routeNeed({
+              variable: 'sv:flow',
+              variable_label: 'Spring — volume flow rate',
+              providers: {
+                models: [],
+                datasets: [{ data_object_id: 'd', name: 'Flow data', format: 'csv' }],
+              },
+            }),
+          ],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render();
+    await pickWanted(user);
+    await find(user);
+    const routes = await screen.findByTestId('routes');
+    expect(routes).toHaveTextContent('needs: MODFLOW 6 cell-by-cell budget (cbc-mf6)');
+    expect(routes).toHaveTextContent(
+      "then use its MODFLOW 6 cell-by-cell budget as this flow's input",
+    );
+    expect(routes).not.toHaveTextContent('input 0');
+    expect(
+      within(routes).getByRole('region', {
+        name: 'Convert Spring — volume flow rate data you already have (e.g. Cfs to m3s)',
+      }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(routes).getByRole('button', {
+        name: 'Add this route: Modflow6 drain extract from model MODFLOW 6',
+      }),
+    );
+    expect(screen.getByLabelText('Input 1 label')).toHaveValue('MODFLOW 6 cell-by-cell budget');
+    expect(await screen.findByTestId('flow-form-step-1')).toBeInTheDocument();
+  });
+
   it('hides the suggestions quietly when the semantic service is down', async () => {
     semantic = () => ({ status: 503, json: { error: 'down' } });
     const user = userEvent.setup();

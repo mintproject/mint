@@ -105,9 +105,44 @@ export function readableName(label: string): string {
   return text;
 }
 
-/** What a model's output is called: its variable's label, else the model's own words. */
+/** Readable names for file formats that name no standard variable. One place. */
+export const FORMAT_NAMES: Record<string, string> = {
+  'cbc-mf6': 'MODFLOW 6 cell-by-cell budget',
+  'cbc-mf2005': 'MODFLOW-2005 cell-by-cell budget',
+  'cbc-mf2000': 'MODFLOW-2000 cell-by-cell budget',
+  'cbc-mf96': 'MODFLOW-96 cell-by-cell budget',
+  'cbc-mfusg': 'MODFLOW-USG cell-by-cell budget',
+  'gma-scalar': 'GMA summary value',
+};
+
+/** A format as people read it: "MODFLOW 6 cell-by-cell budget", else "a csv file". */
+export function formatName(format: string): string {
+  return FORMAT_NAMES[format.trim().toLowerCase()] ?? `a ${format.trim()} file`;
+}
+
+/**
+ * What an input takes, for people: its variable's label; with no variable, the
+ * label of the model output that would make it, else the format's readable name.
+ * The format follows in parentheses unless the name already says it.
+ */
+export function needName(need: RouteNeed): string {
+  const format = need.format?.trim() ?? '';
+  const named =
+    need.variable_label?.trim() ||
+    (need.variable ? need.variable.split('/').pop() || '' : '') ||
+    need.providers?.models.find((model) => model.output_label?.trim())?.output_label?.trim() ||
+    (format ? formatName(format) : '');
+  if (!named) return 'a file';
+  return format && !named.includes(format) && named !== `a ${format} file`
+    ? `${named} (${format})`
+    : named;
+}
+
+/** What a model's output is called: its own label, else the variable's, else the format's. */
 export const modelOutputName = (model: RouteModel, need: RouteNeed): string =>
-  model.output_label?.trim() || need.variable_label?.trim() || 'output';
+  model.output_label?.trim() ||
+  need.variable_label?.trim() ||
+  (model.format || need.format ? formatName((model.format || need.format) as string) : 'output');
 
 /**
  * Take a whole route into the draft, in order, as the form's own steps and wires:
@@ -133,13 +168,17 @@ export function applyRoute(draft: FlowDraft, entry: RouteEntry, choice?: RouteCh
       const appended = appendChain(next, chain);
       next = appended.draft;
       if (appended.from) wires.push({ to: { input: need.input }, from: appended.from });
-    } else if (choice && choice.input === need.input && need.variable) {
+    } else if (
+      choice &&
+      choice.input === need.input &&
+      (need.variable || need.format || choice.kind === 'model')
+    ) {
       const added = addFlowInput(next, {
         label:
           choice.kind === 'model'
             ? modelOutputName(choice.model, need)
             : datasetName(choice.dataset),
-        standardVariable: (choice.kind === 'model' && choice.model.variable) || need.variable,
+        standardVariable: (choice.kind === 'model' && choice.model.variable) || need.variable || '',
         standardVariableLabel: need.variable_label ?? undefined,
         format:
           (choice.kind === 'model' ? choice.model.format : choice.dataset.format) ||
