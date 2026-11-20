@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
-import { secretsRouter, spatialRouter } from "@/api/api-v1/paths/adapterFront";
-import { createAdapterFrontService } from "./adapterFrontService";
+import { piecesRouter, secretsRouter, spatialRouter } from "@/api/api-v1/paths/adapterFront";
+import { adapterForward, createAdapterFrontService } from "./adapterFrontService";
 import { adapterRequest } from "./unifiedExecutionService";
 import { warnIfAdapterSecretMissing } from "./adapterConfig";
 import { UnifiedExecutionError } from "@/classes/common/errors";
@@ -17,12 +17,16 @@ jest.mock("@/classes/mint/mint-functions", () => ({
 
 const BEARER = "Bearer alice.jwt";
 
-function app(fake: jest.Mock) {
-    const service = createAdapterFrontService(fake as unknown as typeof adapterRequest);
+function app(fake: jest.Mock, forward: jest.Mock = jest.fn()) {
+    const service = createAdapterFrontService(
+        fake as unknown as typeof adapterRequest,
+        forward as never
+    );
     const server = express();
     server.use(express.json());
     server.use("/v1/spatial", spatialRouter(service));
     server.use("/v1/secrets", secretsRouter(service));
+    server.use("/v1/etl-pieces", piecesRouter(service));
     return server;
 }
 
@@ -164,5 +168,100 @@ describe("the startup warning for a missing service secret", () => {
         mockConfig.svo_adapter_api = "";
         expect(warnIfAdapterSecretMissing(log)).toBe(false);
         expect(log.warn).not.toHaveBeenCalled();
+    });
+});
+
+describe("the piece-authoring routes", () => {
+    const answer = (status: number, body: unknown, retryAfter?: string) =>
+        jest.fn().mockResolvedValue({ status, body: JSON.stringify(body), retryAfter });
+
+    it("forwards each call with the caller's token and encodes the piece id", async () => {
+        const forward = answer(200, { ok: true });
+        const agent = request(app(jest.fn(), forward));
+        await agent
+            .post("/v1/etl-pieces/from-repository")
+            .set("Authorization", BEARER)
+            .send({ dry_run: true })
+            .expect(200);
+        await agent.get("/v1/etl-pieces/approvals").set("Authorization", BEARER).expect(200);
+        await agent
+            .get("/v1/etl-pieces/a%2Fb%3Ac/approval")
+            .set("Authorization", BEARER)
+            .expect(200);
+        await agent
+            .put("/v1/etl-pieces/a%2Fb%3Ac/approval")
+            .set("Authorization", BEARER)
+            .send({ approved: true, reviewed_sha256: "abc" })
+            .expect(200);
+        expect(forward.mock.calls).toEqual([
+            ["/pieces/from-repository", { method: "POST", body: { dry_run: true } }, BEARER],
+            ["/pieces/approvals", {}, BEARER],
+            ["/transform-specs/a%2Fb%3Ac/approval", {}, BEARER],
+            [
+                "/transform-specs/a%2Fb%3Ac/approval",
+                { method: "PUT", body: { approved: true, reviewed_sha256: "abc" } },
+                BEARER
+            ]
+        ]);
+    });
+
+    it("refuses a call with no token in the adapter's own error shape", async () => {
+        const forward = jest.fn();
+        const res = await request(app(jest.fn(), forward)).get("/v1/etl-pieces/approvals");
+        expect(res.status).toBe(401);
+        expect(res.body).toEqual({
+            detail: { code: "TAPIS_AUTH_REQUIRED", message: expect.any(String) }
+        });
+        expect(forward).not.toHaveBeenCalled();
+    });
+
+    it("passes the adapter's status, error body and Retry-After through", async () => {
+        const refusal = { detail: { code: "PIECE_RATE_LIMITED", message: "slow down" } };
+        const res = await request(app(jest.fn(), answer(429, refusal, "42")))
+            .post("/v1/etl-pieces/from-repository")
+            .set("Authorization", BEARER)
+            .send({});
+        expect(res.status).toBe(429);
+        expect(res.headers["retry-after"]).toBe("42");
+        expect(res.body).toEqual(refusal);
+        expect(res.headers["cache-control"]).toBe("no-store");
+    });
+});
+
+describe("adapterForward", () => {
+    const realFetch = global.fetch;
+    afterEach(() => {
+        global.fetch = realFetch;
+        delete mockConfig.svo_adapter_internal_secret;
+    });
+
+    it("sends the token and the shared secret and returns status, body and Retry-After", async () => {
+        mockConfig.svo_adapter_api = "https://adapter.example/";
+        mockConfig.svo_adapter_internal_secret = "service-only";
+        delete process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET;
+        const fetchMock = jest.fn().mockResolvedValue({
+            status: 429,
+            text: async () => '{"detail":"later"}',
+            headers: { get: (name: string) => (name === "retry-after" ? "7" : null) }
+        });
+        global.fetch = fetchMock as unknown as typeof fetch;
+        const answer = await adapterForward("/pieces/approvals", {}, BEARER);
+        expect(answer).toEqual({ status: 429, body: '{"detail":"later"}', retryAfter: "7" });
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toBe("https://adapter.example/pieces/approvals");
+        expect(init.headers).toMatchObject({
+            Authorization: BEARER,
+            "X-Ensemble-Manager-Secret": "service-only"
+        });
+    });
+
+    it("answers 503 or 502 in the adapter's shape when it is unset or down", async () => {
+        mockConfig.svo_adapter_api = "";
+        expect((await adapterForward("/x", {}, BEARER)).status).toBe(503);
+        mockConfig.svo_adapter_api = "https://adapter.example";
+        global.fetch = jest.fn().mockRejectedValue(new Error("down")) as unknown as typeof fetch;
+        const down = await adapterForward("/x", {}, BEARER);
+        expect(down.status).toBe(502);
+        expect(JSON.parse(down.body).detail.code).toBe("SVO_ADAPTER_UNREACHABLE");
     });
 });

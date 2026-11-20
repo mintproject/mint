@@ -548,6 +548,26 @@ def test_a_step_fetches_exactly_the_values_of_its_env_map(bound):
     assert STORE.run[bound["run"]]["bound_secrets"]["steps"][0]["issued"] is True
 
 
+def test_the_task_fetch_passes_the_front_door_without_the_service_secret(bound, monkeypatch):
+    # The running task has the runner's token and its one-time credential, never the
+    # service secret; the front door must leave this route to its own gate.
+    from app.store import InMemoryHasura
+    monkeypatch.setattr(main_module.settings, "demo_mode", False)
+    monkeypatch.setattr(main_module.settings, "require_front_door", True)
+    monkeypatch.setattr(main_module.settings, "internal_service_secret", "service-secret")
+    monkeypatch.setattr(main_module, "get_client", lambda token=None: InMemoryHasura(token))
+    # The route's own gate still refuses a call missing either half...
+    no_credential = fetch(bound["run"], None)
+    assert no_credential.status_code == 401
+    assert no_credential.json()["detail"]["code"] == "STEP_SECRET_AUTH_REQUIRED"
+    assert fetch(bound["run"], "forged").status_code in (401, 403)
+    assert fetch(bound["run"], bound["credential"], headers=BOB).status_code == 403
+    # ...and serves the right one.
+    response = fetch(bound["run"], bound["credential"])
+    assert response.status_code == 200, response.text
+    assert response.json() == {"inputs": {"MODEL_API_KEY": VALUE, "CHAT_BASE_URL": BASE}}
+
+
 def test_the_credential_is_good_once(bound):
     assert fetch(bound["run"], bound["credential"]).status_code == 200
     again = fetch(bound["run"], bound["credential"])

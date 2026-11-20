@@ -1,14 +1,16 @@
 /**
  * Registering a piece from a repository commit, and approving pieces.
  *
- * Both talk to the SVO adapter (`/pieces/*` and `/transform-specs/{id}/approval`)
- * with the signed-in user's bearer token. The browser never holds source code: the
- * adapter fetches the named file from a public GitHub repository at a pinned
- * commit, and this module only sends the address and the declarations.
+ * Both go through the Ensemble Manager's `/etl-pieces` routes, which forward the
+ * signed-in user's bearer token (and the service secret) to the SVO adapter and
+ * return the adapter's status, error body and `Retry-After` as they came. The
+ * browser never holds source code: the adapter fetches the named file from a public
+ * GitHub repository at a pinned commit, and this module only sends the address and
+ * the declarations.
  *
  * Design: docs/design/2026-11-20-flow-authoring-in-the-ui.md, parts D1 and D2.
  */
-import { getSvoAdapterApiUrl } from './config';
+import { getEnsembleManagerApiUrl } from './config';
 import { getAccessToken } from './auth/token-store';
 
 export const COMMIT_PATTERN = /^[0-9a-fA-F]{40}$/;
@@ -161,8 +163,8 @@ function headers(json = false): HeadersInit {
 }
 
 function base(): string {
-  const url = getSvoAdapterApiUrl();
-  if (!url) throw new PieceApiError(0, 'The SVO adapter address is not configured.');
+  const url = getEnsembleManagerApiUrl();
+  if (!url) throw new PieceApiError(0, 'The Ensemble Manager address is not configured.');
   return url;
 }
 
@@ -197,7 +199,7 @@ async function call<T>(path: string, init: RequestInit): Promise<T> {
 const enc = encodeURIComponent;
 
 export async function registerPiece(request: PieceFromRepositoryRequest): Promise<PiecePreview> {
-  return call('/pieces/from-repository', {
+  return call('/etl-pieces/from-repository', {
     method: 'POST',
     headers: headers(true),
     body: JSON.stringify(request),
@@ -205,11 +207,11 @@ export async function registerPiece(request: PieceFromRepositoryRequest): Promis
 }
 
 export async function listApprovals(): Promise<{ is_admin: boolean; pieces: PieceSummary[] }> {
-  return call('/pieces/approvals', { headers: headers() });
+  return call('/etl-pieces/approvals', { headers: headers() });
 }
 
 export async function getApproval(specId: string): Promise<PieceApprovalDetail> {
-  return call(`/transform-specs/${enc(specId)}/approval`, { headers: headers() });
+  return call(`/etl-pieces/${enc(specId)}/approval`, { headers: headers() });
 }
 
 /** Approve (with the hash that was shown) or withdraw. */
@@ -218,7 +220,7 @@ export async function setApproval(
   approved: boolean,
   reviewedSha256?: string,
 ): Promise<{ approved: boolean; approved_by?: string; approved_at?: string }> {
-  return call(`/transform-specs/${enc(specId)}/approval`, {
+  return call(`/etl-pieces/${enc(specId)}/approval`, {
     method: 'PUT',
     headers: headers(true),
     body: JSON.stringify({ approved, reviewed_sha256: reviewedSha256 }),

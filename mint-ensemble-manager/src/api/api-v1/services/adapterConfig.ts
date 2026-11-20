@@ -13,7 +13,11 @@ export function adapterBaseUrl(): string {
  * not set, and then the adapter answers 503 on the routes that need it.
  */
 export function adapterInternalSecret(): string {
-    const prefs = getConfiguration() as { svo_adapter_internal_secret?: string };
+    return internalSecretFrom(getConfiguration() as { svo_adapter_internal_secret?: string });
+}
+
+/** The same secret, from a configuration object a caller already holds. */
+export function internalSecretFrom(prefs: { svo_adapter_internal_secret?: string }): string {
     return (
         process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET || prefs.svo_adapter_internal_secret || ""
     );

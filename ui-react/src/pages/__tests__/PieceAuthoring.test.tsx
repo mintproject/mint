@@ -42,7 +42,7 @@ function adapter(handler: (url: string, init?: RequestInit) => unknown) {
 }
 
 beforeEach(() => {
-  setMintConfig({ SVO_ADAPTER_API: 'http://adapter.test' });
+  setMintConfig({ ENSEMBLE_MANAGER_API: 'http://em.test/v1' });
   localStorage.setItem('mint.access_token', 'tok');
 });
 afterEach(() => {

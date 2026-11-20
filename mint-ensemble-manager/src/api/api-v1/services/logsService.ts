@@ -7,6 +7,7 @@ import { getTokenFromAuthorizationHeader } from "@/utils/authUtils";
 import { TapisExecutionService } from "@/classes/tapis/adapters/TapisExecutionService";
 import { NotFoundError, UnauthorizedError } from "@/classes/common/errors";
 import { createHasuraUnifiedExecutionStore } from "./unifiedExecutionStore";
+import { internalSecretFrom } from "./adapterConfig";
 
 // ./api-v1/services/logsService.js
 export interface LogsService {
@@ -54,6 +55,7 @@ const logsService: LogsService = {
 
 interface WorkflowTaskLogPreferences {
     svo_adapter_api?: string;
+    svo_adapter_internal_secret?: string;
 }
 
 async function fetchWorkflowTaskLog(
@@ -68,7 +70,8 @@ async function fetchWorkflowTaskLog(
     const children = (unified?.adapter_run_ids || []) as Array<Record<string, unknown>>;
     const workflow = children.find(
         (child) =>
-            (child.execution_kind === "composite_workflow" || child.execution_kind === "workflow") &&
+            (child.execution_kind === "composite_workflow" ||
+                child.execution_kind === "workflow") &&
             typeof child.run_id === "string"
     );
     if (!workflow || typeof workflow.run_id !== "string") {
@@ -79,20 +82,23 @@ async function fetchWorkflowTaskLog(
     if (!baseUrl) {
         return "The workflow task log service is not configured.";
     }
-    const response = await fetch(
-        `${baseUrl}/runs/${encodeURIComponent(workflow.run_id)}/poll`,
-        {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json"
-            }
+    // The adapter's front door: the shared service secret says the call came through
+    // the Ensemble Manager; the user's own token still names who is asking.
+    const internalSecret = internalSecretFrom(prefs);
+    const response = await fetch(`${baseUrl}/runs/${encodeURIComponent(workflow.run_id)}/poll`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            ...(internalSecret ? { "X-Ensemble-Manager-Secret": internalSecret } : {})
         }
-    );
+    });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
         throw new Error(
-            body?.detail || body?.message || `Workflow task log request failed with HTTP ${response.status}`
+            body?.detail ||
+                body?.message ||
+                `Workflow task log request failed with HTTP ${response.status}`
         );
     }
 
@@ -117,8 +123,10 @@ async function fetchWorkflowTaskLog(
 
 function uuidWithDashes(value: string): string {
     if (!/^[0-9a-f]{32}$/i.test(value)) return value;
-    return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-` +
-        `${value.slice(16, 20)}-${value.slice(20)}`;
+    return (
+        `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-` +
+        `${value.slice(16, 20)}-${value.slice(20)}`
+    );
 }
 
 export default logsService;
