@@ -58,6 +58,7 @@ export interface CkanPackage {
   author?: string;
   license_title?: string;
   num_resources?: number;
+  private?: boolean;
   /** GeoJSON geometry, serialised as a string by ckanext-spatial. */
   spatial?: string;
   temporal_coverage_start?: string;

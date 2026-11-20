@@ -29,6 +29,7 @@ import { GuidedModelSetup } from './pages/modeling/GuidedModelSetup';
 // Pages — datasets
 import { DatasetsHome } from './pages/datasets/DatasetsHome';
 import { DatasetsBrowse } from './pages/datasets/DatasetsBrowse';
+import { DatasetUploadPage } from './pages/datasets/DatasetUploadPage';
 import { DatasetsSearch } from './pages/datasets/DatasetsSearch';
 import { DatasetDetail } from './pages/datasets/DatasetDetail';
 
@@ -206,6 +207,14 @@ export function App() {
           <Route path="/datasets/browse" element={<DatasetsBrowse />} />
           <Route path="/datasets/browse/:id" element={<DatasetsBrowse />} />
           <Route path="/datasets/search" element={<DatasetsSearch />} />
+          <Route
+            path="/datasets/upload"
+            element={
+              <ProtectedRoute>
+                <DatasetUploadPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/datasets/detail/:id" element={<DatasetDetail />} />
 
           {/* Regions */}

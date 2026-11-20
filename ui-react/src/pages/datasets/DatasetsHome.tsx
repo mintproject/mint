@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Database, Search } from 'lucide-react';
+import { Database, Search, Upload } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -19,6 +19,11 @@ const NAV_ITEMS: NavItem[] = [
     href: '/datasets/search',
     icon: Search,
     label: 'Search Datasets',
+  },
+  {
+    href: '/datasets/upload',
+    icon: Upload,
+    label: 'Upload a dataset',
   },
 ];
 
