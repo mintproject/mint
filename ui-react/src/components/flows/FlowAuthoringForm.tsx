@@ -39,6 +39,7 @@ import {
   setInputWire,
   setPause,
   sortProblems,
+  setSettingRule,
   updateStep,
   type BindingRole,
   type DraftOutput,
@@ -108,7 +109,16 @@ export function FlowAuthoringForm({
   }, [pieces]);
 
   // --- the live check ---------------------------------------------------------
-  const body = useMemo(() => buildCheckBody(draft), [draft]);
+  // The setting names the pieces have, once every step's piece has been read: a decision
+  // about a setting whose step was removed is then left out rather than failing the check.
+  const knownSettings = useMemo(
+    () =>
+      draft.steps.every((step) => summaries[step.pieceId])
+        ? new Set(draft.steps.flatMap((step) => summaries[step.pieceId]?.settings ?? []))
+        : undefined,
+    [draft.steps, summaries],
+  );
+  const body = useMemo(() => buildCheckBody(draft, knownSettings), [draft, knownSettings]);
   const bodyKey = JSON.stringify(body);
   useEffect(() => {
     if (!token || draft.steps.length === 0) return;
@@ -141,7 +151,7 @@ export function FlowAuthoringForm({
   const ask = async (slot: SlotKey, purpose: Purpose, snapshot: FlowDraft) => {
     setSuggestion({ slot, result: 'loading' });
     const result = token
-      ? await proposeForFlow(buildCheckBody(snapshot), purpose, token)
+      ? await proposeForFlow(buildCheckBody(snapshot, knownSettings), purpose, token)
       : { error: 'Sign in to get proposals.' };
     setSuggestion({ slot, result });
   };
@@ -202,7 +212,7 @@ export function FlowAuthoringForm({
   const save = async () => {
     if (!token || !canSave) return;
     setSaving(true);
-    setSaved(await saveFlow(buildSaveBody(draft), token));
+    setSaved(await saveFlow(buildSaveBody(draft, knownSettings), token));
     setSaving(false);
   };
 
@@ -527,6 +537,8 @@ export function FlowAuthoringForm({
                     updateStep(draft, index, { settings: { ...step.settings, [name]: value } }),
                   )
                 }
+                rules={draft.settings}
+                onRule={(name, rule) => change(setSettingRule(draft, name, rule))}
                 onRemoveWire={(wireIndex) => change(removeWire(draft, index, wireIndex))}
                 onPause={(pause) => change(setPause(draft, index, pause))}
                 editable={editableChoice(draft, position)}

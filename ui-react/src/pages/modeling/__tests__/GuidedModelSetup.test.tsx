@@ -181,4 +181,69 @@ describe('GuidedModelSetup', () => {
     });
     expect(screen.getByText(/prefilled from the selected dataset metadata/i)).toBeInTheDocument();
   });
+
+  describe('opened from an upload', () => {
+    const entry =
+      '/modeling/problem-statements/start?datasetId=my-upload' +
+      '&modelIds=flow-1,model-1&closeModelIds=flow-2&variable=precipitation_flux' +
+      '&modelNames=' +
+      encodeURIComponent(JSON.stringify({ 'flow-1': 'Rain flow', 'flow-2': 'Wet flow' })) +
+      '&goal=Rain%202020&startDate=2020-01-01&endDate=2020-12-31';
+    const regionsMock = {
+      request: { query: LIST_TOP_REGIONS },
+      result: { data: { region: [] } },
+    };
+
+    it('preselects the dataset and lists recommended models first, with the reason', () => {
+      renderWithProviders(<GuidedModelSetup />, {
+        initialEntries: [entry],
+        apolloMocks: [regionsMock],
+      });
+      expect(screen.getByRole('button', { name: /dataset: my-upload ✓/i })).toBeInTheDocument();
+      expect(fetchDatasetDetail).toHaveBeenCalledWith('my-upload');
+      const section = screen.getByRole('region', { name: 'Models for your uploaded data' });
+      const text = section.textContent ?? '';
+      expect(text.indexOf('Recommended')).toBeLessThan(text.indexOf('Close matches'));
+      expect(text.indexOf('Rain flow')).toBeLessThan(text.indexOf('Wet flow'));
+      expect(text).toContain('Takes precipitation_flux, the variable of your uploaded data');
+      expect(text).toContain('Close match, not an exact fit');
+      expect(screen.getByRole('button', { name: /Rain flow/ })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.getByRole('button', { name: /Wet flow/ })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+    });
+
+    it('prefills the question and period, leaves them editable and confirms nothing', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<GuidedModelSetup />, {
+        initialEntries: [entry],
+        apolloMocks: [regionsMock],
+      });
+      const goal = screen.getByLabelText(/what are you trying/i);
+      expect(goal).toHaveValue('Rain 2020');
+      expect(screen.getByLabelText('Start date *')).toHaveValue('2020-01-01');
+      expect(screen.getByLabelText('End date *')).toHaveValue('2020-12-31');
+      await user.clear(goal);
+      await user.type(goal, 'Something else');
+      expect(goal).toHaveValue('Something else');
+      expect(screen.queryByRole('button', { name: /confirm and start setup/i })).toBeNull();
+    });
+
+    it('lets a close match be added to the selection', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<GuidedModelSetup />, {
+        initialEntries: [entry],
+        apolloMocks: [regionsMock],
+      });
+      await user.click(screen.getByRole('button', { name: /Wet flow/ }));
+      expect(screen.getByRole('button', { name: /Wet flow/ })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    });
+  });
 });

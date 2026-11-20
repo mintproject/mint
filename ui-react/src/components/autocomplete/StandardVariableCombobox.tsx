@@ -16,11 +16,11 @@ import * as React from 'react';
 import { Check, ChevronsUpDown, Plus } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { humanizeStandardVariable } from '@/lib/standard-variable-grammar';
 import {
+  dedupeStandardVariables,
   isUnlabeledStandardVariable,
   standardVariableDescription,
-  standardVariableName,
+  standardVariableTitle,
 } from '@/lib/standard-variable-display';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 import { Button } from '@/components/ui/button';
@@ -127,16 +127,27 @@ export function StandardVariableCombobox({
 
   const options = narrowed && !showAll ? scoped : all;
   const semanticSearch = useSemanticSearch(search, { target: 'svo', limit: 50 });
-  const semanticOptions = React.useMemo(
-    () =>
-      semanticSearch.results?.map((result) => ({
-        id: result.id,
-        label: result.label ?? '',
-        description: result.description ?? null,
-        models: Array.isArray(result.models) ? result.models : [],
-      })) ?? null,
-    [semanticSearch.results],
+  const knownById = React.useMemo(
+    () => new Map([...all, ...scoped].map((o) => [o.id, o])),
+    [all, scoped],
   );
+  const semanticOptions = React.useMemo(() => {
+    if (!semanticSearch.results) return null;
+    // The service can answer with an empty label (or only a description) for a
+    // row the catalog names; take the catalog's label so the option has a title.
+    const mapped = semanticSearch.results.map((result) => {
+      const known = knownById.get(result.id);
+      return {
+        id: result.id,
+        label: result.label?.trim() || known?.label || '',
+        description: result.description ?? known?.description ?? null,
+        models: Array.isArray(result.models) ? result.models : [],
+      };
+    });
+    // One row per id, and one per label: the service can return the same
+    // variable under a catalog id and under an adapter URI.
+    return dedupeStandardVariables(mapped, { byLabel: true });
+  }, [semanticSearch.results, knownById]);
 
   /**
    * Semantic results are ranked over the whole catalog, so the scope has to be
@@ -160,7 +171,7 @@ export function StandardVariableCombobox({
    * a control that reads as empty.
    */
   const visibleOptions = React.useMemo(() => {
-    const listed = rankedOptions ?? options;
+    const listed = dedupeStandardVariables(rankedOptions ?? options);
     const base = requireLabel ? listed.filter((o) => !isUnlabeledStandardVariable(o)) : listed;
     // Semantic search results already have a query-specific ranking. Apply the
     // task/goal ranking only to the unfiltered catalog list.
@@ -196,15 +207,7 @@ export function StandardVariableCombobox({
     [value, visibleOptions, all, onChange],
   );
 
-  const triggerLabel = !value
-    ? placeholder
-    : (standardVariableDescription(value) ??
-      (isUnlabeledStandardVariable(value)
-        ? standardVariableName(value)
-        : (() => {
-            const { phenomenon, property } = humanizeStandardVariable(value.label);
-            return phenomenon ? `${phenomenon} — ${property}` : property;
-          })()));
+  const triggerLabel = !value ? placeholder : standardVariableTitle(value);
 
   return (
     <>
@@ -270,21 +273,12 @@ export function StandardVariableCombobox({
                       )}
                     />
                     <div className="flex min-w-0 flex-col">
+                      <span className="line-clamp-1 font-medium">{standardVariableTitle(sv)}</span>
                       {standardVariableDescription(sv) && (
-                        <span className="line-clamp-1 font-medium">
+                        <span className="line-clamp-1 text-xs text-muted-foreground">
                           {standardVariableDescription(sv)}
                         </span>
                       )}
-                      <span
-                        className={cn(
-                          'line-clamp-1',
-                          standardVariableDescription(sv) || !isUnlabeledStandardVariable(sv)
-                            ? 'text-xs text-muted-foreground'
-                            : 'font-medium',
-                        )}
-                      >
-                        {standardVariableName(sv)}
-                      </span>
                       {!!sv.models?.length && (
                         <span className="line-clamp-1 text-[11px] text-muted-foreground/80">
                           {sv.models

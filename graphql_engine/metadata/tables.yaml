@@ -5126,15 +5126,15 @@
             - _not: {thread_models: {}}
             - _not: {executions: {}}
         - {_exists: {_table: {name: modelcatalog_admin, schema: public}, _where: {username: {_eq: X-Hasura-User-Id}}}}
-      columns: [configuration_id, outputs_json, thread_bindings_json]
+      columns: [configuration_id, outputs_json, thread_bindings_json, settings_json]
   select_permissions:
   - role: anonymous
     permission:
-      columns: [configuration_id, outputs_json, thread_bindings_json, created_at]
+      columns: [configuration_id, outputs_json, thread_bindings_json, settings_json, created_at]
       filter: {}
   - role: user
     permission:
-      columns: [configuration_id, outputs_json, thread_bindings_json, created_at]
+      columns: [configuration_id, outputs_json, thread_bindings_json, settings_json, created_at]
       filter: {}
   # No update: a flow's graph does not change in place. Plans are built from it and a
   # changed flow is a new configuration. Deleting it removes its steps (ON DELETE CASCADE)

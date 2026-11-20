@@ -95,6 +95,14 @@ describe('flowErrorMessage', () => {
     expect(fixed?.lines).toContain('title');
   });
 
+  it('names the settings the author fixed or hid, and which', () => {
+    const refused = refuse('FLOW_SETTING_REFUSED', { fixed: ['match_mode'], hidden: ['internal'] });
+    expect(refused?.title).toBe('A setting is fixed or hidden by the flow');
+    expect(refused?.lines).toEqual(
+      expect.arrayContaining(['match_mode (fixed)', 'internal (hidden)']),
+    );
+  });
+
   it('lists the pieces that are not approved and the problems with their steps', () => {
     const stored = refuse('STORED_SOURCE_REFUSED', {
       problems: [{ code: 'NOT_APPROVED', message: 'piece p1 is not approved', step: 'clean' }],

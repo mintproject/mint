@@ -8054,6 +8054,22 @@ paths:
                       maxItems: 64
                       items:
                         type: string
+                settings:
+                  type: object
+                  description: >-
+                    What the author decided about each setting, by setting name. Values
+                    stay in each step's `settings`. A setting that is `hidden`, and that
+                    its piece requires, needs a value or a default (`FLOW_SETTING_HIDDEN_WITHOUT_VALUE`).
+                    A `fixed` setting is written to the flow parameter's fixed value, and a
+                    runner's value for a fixed or hidden setting is refused when the flow is run.
+                  additionalProperties:
+                    type: object
+                    properties:
+                      visibility:
+                        type: string
+                        enum: [shown, advanced, hidden]
+                      fixed:
+                        type: boolean
       responses:
         "201":
           description: Flow registered. Returns the ids of the software, version, configuration, inputs and settings.
@@ -8106,6 +8122,38 @@ paths:
       security:
         - BearerAuth: []
       summary: Which steps of a flow the caller can run
+      tags:
+        - ModelConfiguration
+  /flows/{id}/settings:
+    get:
+      operationId: custom_flows_id_settings_get
+      description: >-
+        A stored flow's settings as a runner meets them: each piece's description of the
+        setting (title, explanation, type, choices with their own explanations, bounds),
+        the value a run starts from, whether the author fixed it, and whether it is
+        shown, advanced or hidden. The SVO adapter answers with the caller's own token.
+        The flow id may be the full configuration id (URL-encoded) or the short id after
+        the catalog prefix.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The flow's settings, and the names of those the thread fills in itself.
+        "401":
+          description: Missing or invalid bearer token.
+        "422":
+          description: No such flow (`FLOW_NOT_FOUND`).
+        "502":
+          description: The SVO adapter could not be reached or refused the request.
+        "503":
+          description: This deployment has no SVO adapter configured.
+      security:
+        - BearerAuth: []
+      summary: The settings of a flow, as a runner sees them
       tags:
         - ModelConfiguration
   /regions/categories:

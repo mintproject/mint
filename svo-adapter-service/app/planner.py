@@ -24,6 +24,7 @@ from .models import (
     ReadinessResult,
     ReadinessStatus,
 )
+from . import flow_settings
 from .etl_contract import canonical_key, normalize_env_from_args
 from .step_secrets import declared_secrets, declared_sends_data_to
 from .stored_source import annotate_step, stored_entrypoint, stored_source
@@ -540,14 +541,20 @@ def parameter_definitions(
                 name = canonical_key(str(raw_name)) or str(raw_name)
                 if not isinstance(prop, dict):
                     prop = {}
+                choices = flow_settings.choices_of(prop)
                 definition = {
                     "type": prop.get("type", "string"),
                     "required": name in required,
                     "description": prop.get("description"),
                     "default": prop.get("default"),
-                    "allowed_values": prop.get("enum"),
+                    "allowed_values": [c["value"] for c in choices] or None,
                     "minimum": prop.get("minimum"),
                     "maximum": prop.get("maximum"),
+                    # How a form shows the setting: a readable name, the explained
+                    # choices, and whether it belongs under "advanced".
+                    "title": prop.get("title"),
+                    "choices": choices if any(len(c) > 1 for c in choices) else None,
+                    "advanced": True if prop.get("x-advanced") is True else None,
                 }
                 add(name, definition, step)
 

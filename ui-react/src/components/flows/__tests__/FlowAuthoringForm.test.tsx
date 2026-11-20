@@ -1,7 +1,7 @@
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { draftFromStoredFlow, type StoredFlowSource } from '@/lib/flow-authoring';
+import { draftFromStoredFlow, emptyDraft, type StoredFlowSource } from '@/lib/flow-authoring';
 import { renderWithProviders, screen, waitFor, within } from '@/test/utils/render';
 import { setMintConfig } from '@/test/utils/mint-config';
 
@@ -27,6 +27,7 @@ vi.mock('@/components/autocomplete/StandardVariableCombobox', () => ({
 const PIECES = [
   { id: 'piece-a', label: 'Ingest' },
   { id: 'piece-b', label: 'Score' },
+  { id: 'piece-c', label: 'Count' },
 ];
 const SUMMARIES = {
   'piece-a': {
@@ -37,6 +38,27 @@ const SUMMARIES = {
     input_contracts: { '1': { standard_variable_uri: 'https://x.org/corpus', format: 'csv' } },
     output_contracts: { '1': { standard_variable_uri: 'https://x.org/clean' } },
     setting_details: { top_n: { type: 'string', default: '10' } },
+  },
+  'piece-c': {
+    inputs: [1],
+    outputs: [1],
+    settings: ['match_mode', 'max_files'],
+    values: [],
+    input_contracts: { '1': { standard_variable_uri: 'https://x.org/corpus' } },
+    output_contracts: { '1': {} },
+    setting_details: {
+      match_mode: {
+        type: 'string',
+        title: 'How terms are counted',
+        description: 'The counting rule.',
+        default: 'auto',
+        choices: [
+          { value: 'auto', title: 'Automatic', description: 'Words and phrases.' },
+          { value: 'longest', title: 'Longest match', description: 'No double counting.' },
+        ],
+      },
+      max_files: { type: 'integer', title: 'Most files', minimum: 1, maximum: 500, advanced: true },
+    },
   },
   'piece-b': {
     inputs: [1],
@@ -155,7 +177,7 @@ describe('FlowAuthoringForm', () => {
     await addStepOf(user, 'Ingest');
     const step = screen.getByTestId('flow-form-step-1');
     expect(await within(step).findByLabelText('Source of input 1 of step 1')).toBeInTheDocument();
-    expect(within(step).getByLabelText('top_n')).toBeInTheDocument();
+    expect(within(step).getByLabelText('top n')).toBeInTheDocument();
     expect(await within(step).findByText('input 1 of step 1 is not linked')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save flow' })).toBeDisabled();
   });
@@ -205,7 +227,7 @@ describe('FlowAuthoringForm', () => {
     expect(proposal.url).toBe('http://em.test/v1/adapter/flows/propose');
     expect(proposal.body.purpose).toEqual({ step: 2, input: 1 });
 
-    await user.type(within(screen.getByTestId('flow-form-step-1')).getByLabelText('top_n'), '5');
+    await user.type(within(screen.getByTestId('flow-form-step-1')).getByLabelText('top n'), '5');
     const save = screen.getByRole('button', { name: 'Save flow' });
     await waitFor(() => expect(save).toBeEnabled());
     await user.click(save);
@@ -237,6 +259,113 @@ describe('FlowAuthoringForm', () => {
       'href',
       '/modelconfigurations/new-flow',
     );
+  });
+
+  describe('settings described by their piece', () => {
+    const counting = () => ({
+      ...emptyDraft(),
+      software: { id: '', label: 'Sensemaking' },
+      version: { id: '', label: '1' },
+      configuration: { label: 'My flow', description: '' },
+      inputs: [
+        {
+          key: 'input1',
+          label: 'Docs',
+          standardVariable: 'sv:corpus',
+          standardVariableLabel: 'Corpus',
+          format: '',
+          optional: false,
+        },
+      ],
+      steps: [
+        {
+          pieceId: 'piece-c',
+          settings: {},
+          wires: [{ to: { input: 1 }, from: { flow_input: 'input1' } }],
+          pauseAfter: false,
+        },
+      ],
+    });
+
+    it('shows titles, a dropdown with explanations and a bounded number box', async () => {
+      fakeServer();
+      const user = userEvent.setup();
+      render({ initial: counting() });
+      const step = await screen.findByTestId('flow-form-step-1');
+      const mode = await within(step).findByLabelText('How terms are counted');
+      expect(mode.tagName).toBe('SELECT');
+      await user.selectOptions(mode, 'Longest match');
+      expect(within(step).getByText('No double counting.')).toBeInTheDocument();
+      const files = within(step).getByLabelText('Most files');
+      expect(files).toHaveAttribute('type', 'number');
+      expect(files).toHaveAttribute('max', '500');
+      // The piece suggests this one is advanced, and the author may change that.
+      expect(within(step).getByLabelText('Who sees Most files')).toHaveValue('advanced');
+      expect(within(step).getByLabelText('Who sees How terms are counted')).toHaveValue('shown');
+    });
+
+    it('saves the value, whether it is fixed and who sees it, in the check and the save', async () => {
+      fakeServer();
+      const user = userEvent.setup();
+      render({ initial: counting() });
+      const step = await screen.findByTestId('flow-form-step-1');
+      await user.selectOptions(
+        await within(step).findByLabelText('How terms are counted'),
+        'Longest match',
+      );
+      await user.selectOptions(
+        within(step).getByLabelText('Is the value of How terms are counted a default or fixed'),
+        'fixed',
+      );
+      await user.selectOptions(
+        within(step).getByLabelText('Who sees How terms are counted'),
+        'hidden',
+      );
+      const save = screen.getByRole('button', { name: 'Save flow' });
+      await waitFor(() => expect(save).toBeEnabled());
+      await user.click(save);
+      await waitFor(() =>
+        expect(calls.some((c) => c.url === 'http://catalog.test/v2.0.0/flows')).toBe(true),
+      );
+      const sent = calls.find((c) => c.url === 'http://catalog.test/v2.0.0/flows')!;
+      expect(sent.body.steps[0].settings).toEqual({ match_mode: 'longest' });
+      expect(sent.body.settings).toEqual({ match_mode: { fixed: true, visibility: 'hidden' } });
+      const check = [...calls].reverse().find((c) => c.url.endsWith('/flows/check'))!;
+      expect(check.body.settings).toEqual({ match_mode: { fixed: true, visibility: 'hidden' } });
+    });
+
+    it('says that hidden is not secret, once a setting is hidden', async () => {
+      fakeServer();
+      const user = userEvent.setup();
+      render({ initial: counting() });
+      const step = await screen.findByTestId('flow-form-step-1');
+      expect(within(step).queryByText(/not shown, not secret/)).not.toBeInTheDocument();
+      await user.selectOptions(
+        await within(step).findByLabelText('Who sees How terms are counted'),
+        'hidden',
+      );
+      expect(within(step).getByText(/not shown, not secret/)).toBeInTheDocument();
+    });
+
+    it('sends no decisions when the author made none', async () => {
+      fakeServer();
+      render({ initial: counting() });
+      await screen.findByTestId('flow-form-step-1');
+      await waitFor(() => expect(calls.some((c) => c.url.endsWith('/flows/check'))).toBe(true));
+      expect(calls.find((c) => c.url.endsWith('/flows/check'))!.body.settings).toEqual({});
+    });
+
+    it('leaves out a decision about a setting no step has any more', async () => {
+      fakeServer();
+      const draft = { ...counting(), settings: { gone: { visibility: 'hidden' as const } } };
+      render({ initial: draft });
+      await screen.findByLabelText('How terms are counted');
+      await waitFor(() =>
+        expect(calls.filter((c) => c.url.endsWith('/flows/check')).at(-1)?.body.settings).toEqual(
+          {},
+        ),
+      );
+    });
   });
 
   it('adds a proposed next step wired from the output it was asked about', async () => {
@@ -437,7 +566,7 @@ describe('FlowAuthoringForm', () => {
       ).toBeInTheDocument();
       expect(screen.getByLabelText('Input 1 takes a collection of files')).toBeChecked();
       expect(screen.getByLabelText('Region is filled in by')).toHaveValue('input:Corpus');
-      expect(await screen.findByLabelText('top_n')).toHaveValue('25');
+      expect(await screen.findByLabelText('top n')).toHaveValue('25');
 
       const save = screen.getByRole('button', { name: 'Save flow' });
       await waitFor(() => expect(save).toBeEnabled());

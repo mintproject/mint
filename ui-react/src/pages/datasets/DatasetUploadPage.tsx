@@ -35,7 +35,13 @@ import {
 } from '@/lib/ckan-upload';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useSemanticSearch, useSimilarVariables } from '@/hooks/useSemanticSearch';
-import { closeConsumers, consumersOfVariable } from '@/lib/datasets/upload-preview';
+import {
+  closeConsumers,
+  consumersOfVariable,
+  guidedSetupLink,
+  rankSuggestionsByUse,
+  suggestionUseText,
+} from '@/lib/datasets/upload-preview';
 import { unionBoundingBox, type BoundingBox } from '@/lib/geo/bbox';
 import { standardVariableName } from '@/lib/standard-variable-display';
 import { useAuth } from '@/lib/auth/useAuth';
@@ -177,12 +183,21 @@ export function DatasetUploadPage() {
   // Standard variables suggested from what the user wrote. Never chosen for them.
   const aboutText = useDebouncedValue(`${title}\n${description}`.trim(), SUGGEST_DELAY_MS);
   const suggested = useSemanticSearch(aboutText, { target: 'svo', limit: 20, minLength: 4 });
+  // Ranked by whether a registered flow or model takes these files under the
+  // variable, then by how close it is to the text.
   const suggestions = useMemo(
-    () => (suggested.results ?? []).filter((r) => r.label?.trim()),
-    [suggested.results],
+    () =>
+      rankSuggestionsByUse(
+        tree,
+        (suggested.results ?? []).filter((r) => r.label?.trim()),
+        files,
+      ),
+    [tree, suggested.results, files],
   );
-  const suggestionIds = useMemo(() => suggestions.map((r) => r.id), [suggestions]);
-  const shownSuggestions = suggestions.filter((r) => r.id !== variable?.id).slice(0, SUGGEST_SHOWN);
+  const suggestionIds = useMemo(() => suggestions.map((r) => r.item.id), [suggestions]);
+  const shownSuggestions = suggestions
+    .filter((r) => r.item.id !== variable?.id)
+    .slice(0, SUGGEST_SHOWN);
 
   const similar = useSimilarVariables(variable?.id, { limit: 5 });
   const closeMatches = useMemo(
@@ -304,7 +319,20 @@ export function DatasetUploadPage() {
             </Link>
           </Button>
           <Button asChild>
-            <Link to="/modeling/problem-statements">Use in a thread</Link>
+            <Link
+              to={guidedSetupLink({
+                datasetId: done.datasetId,
+                variable,
+                exact: consumers,
+                close: closeMatches,
+                title,
+                startDate,
+                endDate,
+                regionId: mode === 'region' ? regionId : undefined,
+              })}
+            >
+              Use in a thread
+            </Link>
           </Button>
           <Button variant="ghost" onClick={reset}>
             Upload another
@@ -532,32 +560,43 @@ export function DatasetUploadPage() {
             <div data-testid="suggested-variables" className="rounded-md border p-2 text-sm">
               <p className="font-medium">Suggested standard variables</p>
               <ul className="mt-1 space-y-1">
-                {shownSuggestions.map((s) => (
-                  <li key={s.id} className="flex flex-wrap items-start justify-between gap-2">
-                    <span>
-                      <span className="font-medium">{s.label}</span>
-                      {s.description && (
-                        <span className="block text-xs text-muted-foreground">{s.description}</span>
-                      )}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={busy}
-                      aria-label={`Use ${s.label} as the standard variable`}
-                      onClick={() =>
-                        setVariable({
-                          id: s.id,
-                          label: s.label ?? '',
-                          description: s.description ?? null,
-                        })
-                      }
-                    >
-                      Use this
-                    </Button>
-                  </li>
-                ))}
+                {shownSuggestions.map((ranked) => {
+                  const s = ranked.item;
+                  return (
+                    <li key={s.id} className="flex flex-wrap items-start justify-between gap-2">
+                      <span>
+                        <span className="font-medium">{s.label}</span>
+                        {s.description && (
+                          <span className="block text-xs text-muted-foreground">
+                            {s.description}
+                          </span>
+                        )}
+                        <span
+                          className="block text-xs text-muted-foreground"
+                          data-testid="suggestion-use"
+                        >
+                          {suggestionUseText(ranked)}
+                        </span>
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        aria-label={`Use ${s.label} as the standard variable`}
+                        onClick={() =>
+                          setVariable({
+                            id: s.id,
+                            label: s.label ?? '',
+                            description: s.description ?? null,
+                          })
+                        }
+                      >
+                        Use this
+                      </Button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

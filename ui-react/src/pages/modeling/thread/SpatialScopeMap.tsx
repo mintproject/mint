@@ -8,8 +8,17 @@ import 'leaflet/dist/leaflet.css';
 import { parseGeometry } from '@/pages/regions/regionUtils';
 import { LIST_REGISTERED_BOUNDARY_REGIONS } from '@/graphql/queries/regions';
 import { fetchSpatialLayers, spatialLayersAvailable } from '@/lib/spatial-layers';
+import {
+  boundaryGroups,
+  buildLayerOptions,
+  buildRegionOptions,
+  findBoundaryOption,
+  type BoundaryLabelConfig,
+  type BoundaryOption,
+} from '@/lib/spatial-boundaries';
+import { BoundaryCombobox } from './BoundaryCombobox';
 
-interface SpatialLayerCatalogEntry {
+interface SpatialLayerCatalogEntry extends BoundaryLabelConfig {
   id: string;
   label: string;
   uri: string;
@@ -85,6 +94,9 @@ type RegisteredBoundaryRegionsData = {
 // pulling the much larger administrative level datasets into every map.
 const REGISTERED_BOUNDARY_CATEGORY_IDS = ['hydrology'];
 
+/** Sentinel for the category select's "All categories" entry. */
+const ALL_CATEGORIES = '__all__';
+
 /** Cartographic preview of the spatial scope carried by the problem statement. */
 export function SpatialScopeMap({
   geometries = [],
@@ -103,6 +115,7 @@ export function SpatialScopeMap({
   const [selectedLayerId, setSelectedLayerId] = useState('');
   const [layerFeatures, setLayerFeatures] = useState<GeoJSON.Feature[]>([]);
   const [selectedFeatureValue, setSelectedFeatureValue] = useState('');
+  const [categoryChoice, setCategoryChoice] = useState('');
   const [layerLoading, setLayerLoading] = useState(false);
   const [layerError, setLayerError] = useState<string | null>(null);
 
@@ -187,42 +200,49 @@ export function SpatialScopeMap({
 
   const activeFilterField = filterField?.trim() || selectedLayer?.default_filter_field;
 
-  const featureOptions = useMemo(() => {
+  const isRegionLayer = selectedLayer?.source_type === 'mint-regions';
+  const allOptions = useMemo<BoundaryOption[]>(() => {
     if (!activeFilterField) return [];
-    const options = layerFeatures.flatMap((feature) => {
-      const rawValue = feature.properties?.[activeFilterField];
-      if (rawValue == null || String(rawValue).trim() === '') return [];
-      const value = String(rawValue);
-      const name =
-        feature.properties?.GMAName ??
-        feature.properties?.GMA_Name ??
-        feature.properties?.GMA_NAME ??
-        feature.properties?.Name ??
-        feature.properties?.name ??
-        feature.properties?.region_name ??
-        feature.properties?.label ??
-        '';
-      return [
-        {
-          value,
-          label: name ? `${value} — ${String(name)}` : value,
-        },
-      ];
-    });
-    return options
-      .filter(
-        (option, index) =>
-          options.findIndex((candidate) => candidate.value === option.value) === index,
-      )
-      .sort((left, right) => left.label.localeCompare(right.label, undefined, { numeric: true }));
-  }, [activeFilterField, layerFeatures]);
+    return isRegionLayer
+      ? buildRegionOptions(layerFeatures, activeFilterField)
+      : buildLayerOptions(layerFeatures, activeFilterField, selectedLayer);
+  }, [activeFilterField, isRegionLayer, layerFeatures, selectedLayer]);
+
+  // Registered regions span several categories. Show one at a time, starting
+  // with the saved selection's category, so the map is not a pile of overlaps.
+  const categories = useMemo(() => boundaryGroups(allOptions), [allOptions]);
+  const savedOption = findBoundaryOption(
+    allOptions,
+    selectedFeatureValue || filterValue?.trim() || '',
+  );
+  const activeCategory =
+    categories.length > 1 && categoryChoice !== ALL_CATEGORIES
+      ? categories.includes(categoryChoice)
+        ? categoryChoice
+        : (savedOption?.group ?? categories[0] ?? '')
+      : '';
+  const featureOptions = useMemo(
+    () => (activeCategory ? allOptions.filter((o) => o.group === activeCategory) : allOptions),
+    [activeCategory, allOptions],
+  );
+  const visibleFeatures = useMemo(
+    () =>
+      activeCategory
+        ? layerFeatures.filter((f) => f.properties?.category_name === activeCategory)
+        : layerFeatures,
+    [activeCategory, layerFeatures],
+  );
+  const selectedOption = findBoundaryOption(allOptions, selectedFeatureValue);
+  const selectedValues = useMemo(() => new Set(selectedOption?.values ?? []), [selectedOption]);
+  const isSelectedFeature = (feature: GeoJSON.Feature) =>
+    selectedValues.has(String(feature.properties?.[activeFilterField ?? '']));
 
   useEffect(() => {
     const nextValue = filterValue?.trim() ?? '';
     setSelectedFeatureValue(
-      nextValue && featureOptions.some((option) => option.value === nextValue) ? nextValue : '',
+      nextValue && findBoundaryOption(allOptions, nextValue) ? nextValue : '',
     );
-  }, [featureOptions, filterValue]);
+  }, [allOptions, filterValue]);
 
   useEffect(() => {
     if (!selectedLayer) {
@@ -249,6 +269,8 @@ export function SpatialScopeMap({
                         // (for example GMAnum=12) for ETL arguments.
                         region_id: region.id.split('__').pop() ?? region.id,
                         region_name: region.name,
+                        category_id: region.category_id,
+                        category_name: region.region_category?.name ?? region.category_id,
                       },
                       geometry: parsed,
                     } as GeoJSON.Feature,
@@ -318,20 +340,20 @@ export function SpatialScopeMap({
     () => ({
       type: 'FeatureCollection',
       features: [
-        ...layerFeatures.map((feature) => ({
+        ...visibleFeatures.map((feature) => ({
           ...feature,
           properties: {
             ...(feature.properties ?? {}),
             catalogLayer: true,
             selectedBoundary:
-              Boolean(selectedFeatureValue) &&
-              String(feature.properties?.[activeFilterField ?? '']) === selectedFeatureValue,
+              selectedValues.size > 0 &&
+              selectedValues.has(String(feature.properties?.[activeFilterField ?? ''])),
           },
         })),
         ...selectedScopeFeatures,
       ],
     }),
-    [activeFilterField, layerFeatures, selectedFeatureValue, selectedScopeFeatures],
+    [activeFilterField, selectedValues, selectedScopeFeatures, visibleFeatures],
   );
 
   const sourceIsCustom = Boolean(
@@ -341,11 +363,8 @@ export function SpatialScopeMap({
     ),
   );
   const activeLayerLabel = sourceIsCustom ? 'Custom geometry source' : selectedLayer?.label;
-  const focusedFeatures = selectedFeatureValue
-    ? layerFeatures.filter(
-        (feature) => String(feature.properties?.[activeFilterField ?? '']) === selectedFeatureValue,
-      )
-    : [];
+  const focusedFeatures = selectedFeatureValue ? visibleFeatures.filter(isSelectedFeature) : [];
+  const hasSelection = selectedValues.size > 0;
 
   const style = (feature?: GeoJSON.Feature): PathOptions =>
     feature?.properties?.selectedBoundary
@@ -363,12 +382,15 @@ export function SpatialScopeMap({
             fillOpacity: 0,
             interactive: false,
           }
-        : {
-            color: '#1d4ed8',
-            weight: 1.5,
-            fillColor: '#3b82f6',
-            fillOpacity: 0.12,
-          };
+        : hasSelection
+          ? // Everything but the selection is faint, so the choice stands out.
+            { color: '#94a3b8', weight: 1, fillColor: '#94a3b8', fillOpacity: 0.04 }
+          : {
+              color: '#1d4ed8',
+              weight: 1.5,
+              fillColor: '#3b82f6',
+              fillOpacity: 0.08,
+            };
 
   return (
     <div className="space-y-1">
@@ -386,6 +408,7 @@ export function SpatialScopeMap({
                 const nextId = event.target.value;
                 setSelectedLayerId(nextId);
                 setSelectedFeatureValue('');
+                setCategoryChoice('');
                 const nextLayer = layers.find((layer) => layer.id === nextId);
                 if (nextLayer) onLayerSelect?.(nextLayer);
               }}
@@ -397,40 +420,49 @@ export function SpatialScopeMap({
               ))}
             </select>
           </label>
-          {featureOptions.length > 0 && (
+          {categories.length > 1 && (
             <label className="flex items-center gap-2 text-xs text-gray-600">
-              <span>Boundary</span>
+              <span>Category</span>
               <select
-                aria-label="Spatial boundary feature"
+                aria-label="Spatial boundary category"
                 className="min-w-0 flex-1 rounded border px-2 py-1 text-xs"
-                value={selectedFeatureValue}
+                value={activeCategory || ALL_CATEGORIES}
                 disabled={disabled}
                 onChange={(event) => {
-                  const nextValue = event.target.value;
-                  setSelectedFeatureValue(nextValue);
-                  const option = featureOptions.find((item) => item.value === nextValue);
-                  if (option && activeFilterField) {
-                    const selectedFeature = layerFeatures.find(
-                      (feature) => String(feature.properties?.[activeFilterField]) === nextValue,
-                    );
-                    onFeatureSelect?.({
-                      filterField: activeFilterField,
-                      filterValue: option.value,
-                      label: option.label,
-                      layer: selectedLayer,
-                      geometry: selectedFeature?.geometry ?? undefined,
-                    });
-                  }
+                  setCategoryChoice(event.target.value);
+                  setSelectedFeatureValue('');
                 }}
               >
-                <option value="">All boundaries</option>
-                {featureOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                <option value={ALL_CATEGORIES}>All categories</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
                   </option>
                 ))}
               </select>
             </label>
+          )}
+          {allOptions.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <span>Boundary</span>
+              <BoundaryCombobox
+                options={featureOptions}
+                value={selectedFeatureValue}
+                fallbackLabel={scopeId && label ? label : undefined}
+                disabled={disabled}
+                onSelect={(option) => {
+                  setSelectedFeatureValue(option?.value ?? '');
+                  if (!option || !activeFilterField) return;
+                  onFeatureSelect?.({
+                    filterField: activeFilterField,
+                    filterValue: option.value,
+                    label: option.label,
+                    layer: selectedLayer,
+                    geometry: boundaryGeometry(layerFeatures, activeFilterField, option),
+                  });
+                }}
+              />
+            </div>
           )}
         </div>
       )}
@@ -457,7 +489,7 @@ export function SpatialScopeMap({
               const option =
                 featureValue == null
                   ? undefined
-                  : featureOptions.find((item) => item.value === String(featureValue));
+                  : findBoundaryOption(allOptions, String(featureValue));
               const scopeName =
                 option?.label ?? (featureValue == null ? activeLayerLabel : String(featureValue));
               if (scopeName && (!isStoredScope || layerFeatures.length === 0)) {
@@ -470,7 +502,7 @@ export function SpatialScopeMap({
               ) {
                 layer.on('click', () => {
                   const value = String(feature.properties?.[activeFilterField]);
-                  const option = featureOptions.find((item) => item.value === value);
+                  const option = findBoundaryOption(allOptions, value);
                   setSelectedFeatureValue(value);
                   onFeatureSelect?.({
                     filterField: activeFilterField,
@@ -497,12 +529,26 @@ export function SpatialScopeMap({
       <div className="flex justify-between gap-2 text-[11px] text-gray-500">
         <span>
           {activeLayerLabel ?? 'Stored region geometry'}
-          {scopeId ? ` · ${label ?? scopeId}` : ''}
+          {scopeId && label ? ` · ${label}` : ''}
         </span>
         <span>{layerLoading ? 'Loading layer…' : (layerError ?? 'OpenStreetMap base map')}</span>
       </div>
     </div>
   );
+}
+
+/** The geometry a boundary option stands for: one feature's, or the union of a family's parts. */
+function boundaryGeometry(
+  features: GeoJSON.Feature[],
+  filterField: string,
+  option: BoundaryOption,
+): GeoJSON.Geometry | undefined {
+  const values = new Set(option.values);
+  const geometries = features
+    .filter((feature) => values.has(String(feature.properties?.[filterField])))
+    .flatMap((feature) => (feature.geometry ? [feature.geometry] : []));
+  if (geometries.length <= 1) return geometries[0];
+  return { type: 'GeometryCollection', geometries };
 }
 
 function spatialLayerQueryUrl(uri: string): string | null {

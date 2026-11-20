@@ -31,6 +31,15 @@ import {
   type ThreadAdapterPlan,
 } from '@/lib/adapter-execution';
 import type { UnifiedParameterDefinition } from '@/lib/ensemble-manager';
+import { SettingInput } from '@/components/common/SettingInput';
+import { useFlowSettings } from '@/hooks/useFlowSettings';
+import {
+  settingText,
+  settingTitle,
+  type FlowSettings,
+  type SettingDetails,
+  type Visibility,
+} from '@/lib/flow-settings';
 import type { SpatialSelection } from './SpatialScopeMap';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -104,6 +113,51 @@ function spatialParameterOverride(
   }
 }
 
+/** What a flow's setting is, for the form: how to describe it, and who sees it. */
+interface FlowSettingView {
+  details: SettingDetails;
+  visibility: Visibility;
+  fixed: boolean;
+  /** The value a run starts from, as text. Empty when nothing gives one. */
+  defaultText: string;
+  /** The text of the fixed value, when the author fixed it. */
+  fixedText: string;
+}
+
+/**
+ * A flow setting as the form shows it. The adapter's description (titles, explained
+ * choices, the author's visibility and fixed flag) is used when it was read; without it
+ * the flow's parameter row still carries the type, default, choices and bounds, so a
+ * setting is never less than a text box.
+ */
+function flowSettingView(parameter: ModelParameter, settings: FlowSettings | undefined) {
+  const found = settings?.settings.find((setting) => setting.parameter_id === parameter.id);
+  const fromRow: SettingDetails = {
+    ...(parameter.type ? { type: parameter.type } : {}),
+    ...(parameter.description ? { description: parameter.description } : {}),
+    ...(parameter.default != null ? { default: parameter.default } : {}),
+    ...(parameter.accepted_values?.length
+      ? { choices: parameter.accepted_values.map((value) => ({ value })) }
+      : {}),
+    ...(parameter.min != null && Number.isFinite(Number(parameter.min))
+      ? { minimum: Number(parameter.min) }
+      : {}),
+    ...(parameter.max != null && Number.isFinite(Number(parameter.max))
+      ? { maximum: Number(parameter.max) }
+      : {}),
+  };
+  const details: SettingDetails = found ? { ...fromRow, ...found } : fromRow;
+  const fixedText = parameter.value ?? (found?.fixed ? settingText(found.default) : '');
+  const view: FlowSettingView = {
+    details,
+    visibility: found?.visibility ?? 'shown',
+    fixed: Boolean(parameter.value) || found?.fixed === true,
+    defaultText: settingText(details.default),
+    fixedText,
+  };
+  return view;
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface MintParametersProps {
@@ -143,6 +197,7 @@ export function MintParameters({
 }: MintParametersProps) {
   const modelIds = Object.keys(threadData.models ?? {});
   const isConfigured = modelIds.length > 0;
+  const flowSettings = useFlowSettings(modelIds.filter((id) => threadData.models[id]?.isFlow));
 
   // Shared with the wizard rail. Note it also requires an execution summary: a
   // model with no adjustable parameters would otherwise read as done before the
@@ -163,11 +218,11 @@ export function MintParameters({
         if (!param.accepted_values.includes(v)) {
           return `Accepted values: ${param.accepted_values.join(', ')}`;
         }
-      } else if (param.type === 'int') {
+      } else if (param.type === 'int' || param.type === 'integer') {
         const n = parseInt(v, 10);
         if (param.min != null && n < parseInt(param.min, 10)) return `Min is ${param.min}`;
         if (param.max != null && n > parseInt(param.max, 10)) return `Max is ${param.max}`;
-      } else if (param.type === 'float') {
+      } else if (param.type === 'float' || param.type === 'number') {
         const n = parseFloat(v);
         if (param.min != null && n < parseFloat(param.min)) return `Min is ${param.min}`;
         if (param.max != null && n > parseFloat(param.max)) return `Max is ${param.max}`;
@@ -176,15 +231,60 @@ export function MintParameters({
     return null;
   }
 
+  // ─ Which of a model's parameters are fixed, hidden, or the runner's to set ──────
+  // A flow's author may fix a setting (it shows as read-only) or hide it (it does not
+  // show). The adapter refuses a runner's value for either, so a value bound earlier for
+  // one that has since been fixed or hidden is dropped on save rather than sent.
+  function partitionParameters(mid: string, model: ThreadExecutionData['models'][string]) {
+    const rows = userParameters(model).sort((a, b) => {
+      if (a.position != null && b.position != null) return a.position - b.position;
+      return (a.name ?? '').localeCompare(b.name ?? '');
+    });
+    if (!model.isFlow) {
+      return {
+        fixed: rows.filter((p) => !!p.value),
+        adjustable: rows.filter((p) => !p.value),
+        withheld: [] as ModelParameter[],
+      };
+    }
+    const viewOf = (p: ModelParameter) => flowSettingView(p, flowSettings[mid]);
+    const hidden = rows.filter((p) => viewOf(p).visibility === 'hidden');
+    const fixed = rows.filter((p) => !hidden.includes(p) && viewOf(p).fixed);
+    return {
+      fixed,
+      adjustable: rows.filter((p) => !hidden.includes(p) && !fixed.includes(p)),
+      withheld: [...hidden, ...fixed],
+    };
+  }
+
   // ─ Parse values from the form for a parameter ─────────────────────────────
-  function getParamValues(modelId: string, param: ModelParameter, isFlow = false): string[] {
+  function getParamValues(
+    modelId: string,
+    param: ModelParameter,
+    isFlow = false,
+    flowDefault = '',
+  ): string[] {
     const form = formRefs.current[modelId];
     if (!form) return [];
-    const el = form.elements.namedItem(param.id ?? '') as HTMLInputElement | null;
+    const el = form.elements.namedItem(param.id ?? '') as
+      | HTMLInputElement
+      | HTMLSelectElement
+      | null;
+    if (el instanceof HTMLSelectElement && el.multiple) {
+      // A model parameter with accepted values: every selected value is a run.
+      return Array.from(el.selectedOptions).map((option) => option.value);
+    }
+    if (isFlow) {
+      // A flow's setting is one value: a comma belongs to the value (a title, a
+      // list the flow parses itself), it does not start a sweep. A value left at the
+      // flow's default is not bound: the run then uses the default as the author's,
+      // which the runner accepts before it starts.
+      const checkbox = el instanceof HTMLInputElement && el.type === 'checkbox';
+      const text = checkbox ? String(el.checked) : (el?.value ?? '').trim();
+      if (checkbox && !el.checked && flowDefault === '') return [];
+      return text && text !== flowDefault ? [text] : [];
+    }
     const raw = el?.value ?? param.default ?? '';
-    // A flow's setting is one value: a comma belongs to the value (a title, a
-    // list the flow parses itself), it does not start a sweep.
-    if (isFlow) return raw.trim() ? [raw.trim()] : [];
     return raw
       .split(/\s*,\s*/)
       .map((s) => s.trim())
@@ -255,8 +355,9 @@ export function MintParameters({
 
     for (const mid of modelIds) {
       const model = threadData.models[mid]!;
-      const adjustable = userParameters(model).filter((p) => !p.value);
+      const { adjustable, withheld } = partitionParameters(mid, model);
       const bindings = newEnsembles[mid]?.bindings ?? {};
+      for (const p of withheld) delete bindings[p.id ?? ''];
       const adapterPlans = threadData.adapter_plans?.[mid] ?? [];
       const adapterParameters = new Map<string, UnifiedParameterDefinition>();
       for (const plan of adapterPlans) {
@@ -312,7 +413,12 @@ export function MintParameters({
         // If not in edit mode and already bound, keep existing
         if (!editMode && current && current.length > 0) continue;
 
-        const vals = getParamValues(mid, param, model.isFlow);
+        const vals = getParamValues(
+          mid,
+          param,
+          model.isFlow,
+          model.isFlow ? flowSettingView(param, flowSettings[mid]).defaultText : '',
+        );
         const err = validateValues(param, vals);
         if (err) {
           newErrors[`${mid}::${param.id}`] = err;
@@ -426,19 +532,16 @@ export function MintParameters({
             const model = threadData.models[mid]!;
             const ensemble = threadData.model_ensembles[mid] ?? { id: '', bindings: {} };
 
-            const fixedParams = userParameters(model)
-              .filter((p) => !!p.value)
-              .sort((a, b) => {
-                if (a.position != null && b.position != null) return a.position - b.position;
-                return (a.name ?? '').localeCompare(b.name ?? '');
-              });
-
-            const adjustableParams = userParameters(model)
-              .filter((p) => !p.value)
-              .sort((a, b) => {
-                if (a.position != null && b.position != null) return a.position - b.position;
-                return (a.name ?? '').localeCompare(b.name ?? '');
-              });
+            const { fixed: fixedParams, adjustable: adjustableParams } = partitionParameters(
+              mid,
+              model,
+            );
+            const flowView = (p: ModelParameter) => flowSettingView(p, flowSettings[mid]);
+            // The flow's author may keep rarely changed settings out of the way.
+            const advancedParams = model.isFlow
+              ? adjustableParams.filter((p) => flowView(p).visibility === 'advanced')
+              : [];
+            const shownParams = adjustableParams.filter((p) => !advancedParams.includes(p));
 
             const adapterPlans = threadData.adapter_plans?.[mid] ?? [];
             const adapterParams = new Map<
@@ -453,6 +556,118 @@ export function MintParameters({
                   adapterParams.set(parameter.name, parameter);
               }
             }
+
+            const renderRow = (p: ModelParameter) => {
+              const bindings = ensemble.bindings[p.id ?? ''] ?? [];
+              const displayValue = bindings.join(', ');
+              const isRegionGeoJson = p.default === '__region_geojson';
+              const errKey = `${mid}::${p.id}`;
+              const view = model.isFlow ? flowView(p) : null;
+              // A model parameter with accepted values is picked from them. Picking
+              // several is several runs, as comma separated values are in the text box.
+              const accepted =
+                !model.isFlow && p.accepted_values?.length ? p.accepted_values : null;
+              const min = view ? view.details.minimum : p.min;
+              const max = view ? view.details.maximum : p.max;
+              // What is chosen already, or the default. A value the list does not hold
+              // (an old binding, say) stays visible and selected, flagged, so the
+              // validation names it instead of the save quietly losing it.
+              const selected = accepted
+                ? bindings.length > 0
+                  ? bindings
+                  : (p.default ?? '').split(/\s*,\s*/).filter(Boolean)
+                : [];
+              const notAccepted = accepted
+                ? [...new Set(selected.filter((value) => !accepted.includes(value)))]
+                : [];
+
+              return (
+                <tr key={p.id} className="odd:bg-white even:bg-gray-50">
+                  <td className="px-2 py-1">
+                    <div className="font-medium">
+                      {view
+                        ? settingTitle(p.name ?? '', view.details)
+                        : (p.name ?? '').replace(/_/g, ' ')}
+                    </div>
+                    {(view?.details.description ?? p.description) && (
+                      <div className="text-gray-500">
+                        {view?.details.description ?? p.description}
+                      </div>
+                    )}
+                    {(min != null || max != null) && (
+                      <div className="text-gray-400">
+                        {min != null && max != null
+                          ? `Range: ${min} – ${max}.`
+                          : min != null
+                            ? `Min: ${min}.`
+                            : `Max: ${max}.`}
+                        {p.default && ` Default: ${p.default}`}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-2 py-1">
+                    {!editMode ? (
+                      <span>{displayValue || view?.defaultText || '—'}</span>
+                    ) : isRegionGeoJson ? (
+                      <span className="text-gray-500">Region GeoJSON</span>
+                    ) : (
+                      <div>
+                        {accepted ? (
+                          <>
+                            <select
+                              multiple
+                              name={p.id ?? ''}
+                              data-testid={`param-input-${p.id}`}
+                              defaultValue={selected}
+                              size={Math.min(accepted.length + notAccepted.length, 6)}
+                              className="w-full rounded border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            >
+                              {accepted.map((value) => (
+                                <option key={value} value={value}>
+                                  {value}
+                                </option>
+                              ))}
+                              {notAccepted.map((value) => (
+                                <option key={`extra-${value}`} value={value}>
+                                  {value} (not an accepted value)
+                                </option>
+                              ))}
+                            </select>
+                            <div className="text-gray-400">
+                              Hold Ctrl or Cmd to pick more than one: each value is a run.
+                            </div>
+                          </>
+                        ) : view ? (
+                          <SettingInput
+                            name={p.id ?? ''}
+                            data-testid={`param-input-${p.id}`}
+                            details={view.details}
+                            defaultValue={displayValue || view.defaultText}
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            name={p.id ?? ''}
+                            data-testid={`param-input-${p.id}`}
+                            defaultValue={displayValue}
+                            placeholder={getDefaultDisplayValue(p)}
+                            className="w-full rounded border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          />
+                        )}
+                        {errors[errKey] && (
+                          <div
+                            className="mt-0.5 text-xs text-red-500"
+                            data-testid={`param-error-${p.id}`}
+                          >
+                            {errors[errKey]}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            };
 
             return (
               <li key={mid} className="px-4 py-3">
@@ -490,14 +705,20 @@ export function MintParameters({
                             <tr key={p.id} className="odd:bg-white even:bg-gray-50">
                               <td className="px-2 py-1">
                                 <div className="font-medium">
-                                  {(p.name ?? '').replace(/_/g, ' ')}
+                                  {model.isFlow
+                                    ? settingTitle(p.name ?? '', flowView(p).details)
+                                    : (p.name ?? '').replace(/_/g, ' ')}
                                 </div>
                                 {p.description && (
                                   <div className="text-gray-500">{p.description}</div>
                                 )}
                               </td>
                               <td className="px-2 py-1">
-                                {p.default === '__region_geojson' ? 'Region GeoJSON' : p.value}
+                                {p.default === '__region_geojson'
+                                  ? 'Region GeoJSON'
+                                  : model.isFlow
+                                    ? flowView(p).fixedText
+                                    : p.value}
                               </td>
                             </tr>
                           ))}
@@ -534,64 +755,18 @@ export function MintParameters({
                               <th className="px-2 py-1 text-left font-semibold">Values</th>
                             </tr>
                           </thead>
-                          <tbody>
-                            {adjustableParams.map((p) => {
-                              const bindings = ensemble.bindings[p.id ?? ''] ?? [];
-                              const displayValue = bindings.join(', ');
-                              const isRegionGeoJson = p.default === '__region_geojson';
-                              const errKey = `${mid}::${p.id}`;
-
-                              return (
-                                <tr key={p.id} className="odd:bg-white even:bg-gray-50">
-                                  <td className="px-2 py-1">
-                                    <div className="font-medium">
-                                      {(p.name ?? '').replace(/_/g, ' ')}
-                                    </div>
-                                    {p.description && (
-                                      <div className="text-gray-500">{p.description}</div>
-                                    )}
-                                    {(p.min != null || p.max != null) && (
-                                      <div className="text-gray-400">
-                                        {p.min != null && p.max != null
-                                          ? `Range: ${p.min} – ${p.max}.`
-                                          : p.min != null
-                                            ? `Min: ${p.min}.`
-                                            : `Max: ${p.max}.`}
-                                        {p.default && ` Default: ${p.default}`}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-1">
-                                    {!editMode ? (
-                                      <span>{displayValue || '—'}</span>
-                                    ) : isRegionGeoJson ? (
-                                      <span className="text-gray-500">Region GeoJSON</span>
-                                    ) : (
-                                      <div>
-                                        <input
-                                          type="text"
-                                          name={p.id ?? ''}
-                                          data-testid={`param-input-${p.id}`}
-                                          defaultValue={displayValue}
-                                          placeholder={getDefaultDisplayValue(p)}
-                                          className="w-full rounded border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                        />
-                                        {errors[errKey] && (
-                                          <div
-                                            className="mt-0.5 text-xs text-red-500"
-                                            data-testid={`param-error-${p.id}`}
-                                          >
-                                            {errors[errKey]}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
+                          <tbody>{shownParams.map(renderRow)}</tbody>
                         </table>
+                        {advancedParams.length > 0 && (
+                          <details className="mt-2" data-testid={`advanced-settings-${mid}`}>
+                            <summary className="cursor-pointer text-xs font-semibold text-gray-700">
+                              Advanced settings ({advancedParams.length})
+                            </summary>
+                            <table className="mt-1 w-full border-collapse text-xs">
+                              <tbody>{advancedParams.map(renderRow)}</tbody>
+                            </table>
+                          </details>
+                        )}
                       </form>
                     </li>
                   ) : (
