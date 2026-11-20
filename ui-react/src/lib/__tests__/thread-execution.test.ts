@@ -263,6 +263,36 @@ describe('parametersComplete', () => {
     ).toBe(true);
   });
 
+  it("lets a flow's optional settings stay empty: Run checks the required ones", () => {
+    const base = execData();
+    const summary = {
+      cfgA: { total_runs: 1, submitted_runs: 0, failed_runs: 0, successful_runs: 0 },
+    };
+    const unbound = { cfgA: { id: 'tm-1', bindings: {} } };
+    // Seen on dev: a flow whose lexicon setting was left empty never unlocked Runs.
+    expect(
+      parametersComplete(execData({ model_ensembles: unbound, execution_summary: summary })),
+    ).toBe(false);
+    expect(
+      parametersComplete(
+        execData({
+          model_ensembles: unbound,
+          execution_summary: summary,
+          models: { cfgA: { ...base.models['cfgA']!, isFlow: true } },
+        }),
+      ),
+    ).toBe(true);
+    // Saving the step is still what opens Runs.
+    expect(
+      parametersComplete(
+        execData({
+          model_ensembles: unbound,
+          models: { cfgA: { ...base.models['cfgA']!, isFlow: true } },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it('ignores secret rows: they never need a binding', () => {
     const base = execData();
     const withSecret = execData({
