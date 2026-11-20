@@ -621,13 +621,7 @@ def _refuse_data_object_clash(
 def humanize_svo(uri: str | None) -> str:
     """SVO machine name -> readable label using the object__quantity grammar:
     'groundwater__hydraulic_head' -> 'Groundwater — hydraulic head'."""
-    name = (uri or "").rsplit("/", 1)[-1]
-    obj, sep, qty = name.partition("__")
-    obj = obj.replace("_", " ").strip()
-    qty = qty.replace("_", " ").strip()
-    if sep and obj and qty:
-        return f"{obj[:1].upper()}{obj[1:]} — {qty}"
-    return (qty or obj or name).replace("_", " ").capitalize()
+    return flow_propose.humanize_variable(uri)
 
 
 # --- mutations (kept here; reads live in hasura.py) ------------------------
@@ -2926,6 +2920,8 @@ async def propose_for_flow(body: FlowProposeIn, authorization: str | None = Head
             models.append({"configuration_id": config_id, "label": spec.get("label") or spec.get("name"),
                            "outputs": outputs})
     datasets = [{"data_object_id": row["id"], "label": row.get("label"), "format": row.get("format"),
+                 "description": row.get("description"), "resource_uri": row.get("resource_uri"),
+                 "source_catalog": row.get("source_catalog"),
                  "contracts": [_data_object_to_contract({**row, "variables": [variable]})
                                for variable in row.get("variables") or []]}
                 for row in await _discoverable_objects(h)]

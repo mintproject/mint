@@ -428,7 +428,7 @@ export const wireFromSource = (source: ProposedSource): Json =>
 
 export interface ProposedChain {
   from: ProposedSource;
-  pieces: { piece: string; position: number; output: number }[];
+  pieces: { piece: string; label?: string | null; position: number; output: number }[];
 }
 
 /** Take a direct source: feed the input from it. */
@@ -464,6 +464,65 @@ export function applyChain(
     step: index + added.length,
     output: last?.output,
   });
+}
+
+/**
+ * Put a converter chain at the END of the flow: each piece reads from the one
+ * before it, the first from the chain's source. Returns the draft and where the
+ * last piece's output is (a wire source), or null for an empty chain.
+ */
+export function appendChain(
+  draft: FlowDraft,
+  chain: ProposedChain,
+): { draft: FlowDraft; from: Json | null } {
+  const base = draft.steps.length;
+  const added = chain.pieces.map((piece, at) =>
+    newStep(piece.piece, [
+      {
+        to: { input: piece.position },
+        from:
+          at === 0
+            ? wireFromSource(chain.from)
+            : { step: base + at, output: chain.pieces[at - 1]?.output },
+      },
+    ]),
+  );
+  const last = chain.pieces[chain.pieces.length - 1];
+  return {
+    draft: insertSteps(draft, base, added),
+    from: last ? { step: base + added.length, output: last.output } : null,
+  };
+}
+
+/** Add a flow input for a standard variable, named after `label`. */
+export function addFlowInput(
+  draft: FlowDraft,
+  input: {
+    label: string;
+    standardVariable: string;
+    standardVariableLabel?: string;
+    format?: string;
+  },
+): { draft: FlowDraft; key: string } {
+  const key = plainKey(input.label, new Set(draft.inputs.map((item) => item.key)));
+  return {
+    key,
+    draft: {
+      ...draft,
+      inputs: [
+        ...draft.inputs,
+        {
+          key,
+          label: input.label,
+          standardVariable: input.standardVariable,
+          standardVariableLabel:
+            input.standardVariableLabel || input.standardVariable.split('/').pop() || '',
+          format: input.format ?? '',
+          optional: false,
+        },
+      ],
+    },
+  };
 }
 
 /** Add a step that takes output `output` of step `step` at input `input`. */
@@ -561,7 +620,7 @@ export interface StoredFlowSource {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-function plainKey(label: string, taken: ReadonlySet<string>): string {
+export function plainKey(label: string, taken: ReadonlySet<string>): string {
   const base =
     label
       .trim()

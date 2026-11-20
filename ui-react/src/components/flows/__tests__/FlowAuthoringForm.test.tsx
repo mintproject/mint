@@ -616,55 +616,110 @@ describe('FlowAuthoringForm semantic recommendations', () => {
     expect(await screen.findByTestId('flow-form-step-1')).toBeInTheDocument();
   });
 
-  it('shows models and datasets that could supply an unmet input, and adds a dataset as a flow input', async () => {
-    proposeFor = () => ({
-      ...emptyProposal,
-      produces: [
-        {
-          piece: 'piece-a',
-          label: 'Ingest',
-          output: 1,
-          complete: false,
-          approval: 'builtin',
-          inputs: [
-            {
-              input: 1,
-              met: false,
-              direct: [],
-              chains: [],
-              providers: {
-                models: [
-                  {
-                    configuration_id: 'https://w3id.org/okn/i/mint/model-9',
-                    label: 'Crawler',
-                    output: 'pages',
-                    format: 'csv',
-                  },
-                ],
-                datasets: [{ data_object_id: 'ds-1', label: 'Hearings corpus', format: 'csv' }],
-              },
+  const BUDGET = 'https://w3id.org/okn/i/mint/drain__budget';
+  const routeNeed = (extra: object = {}) => ({
+    input: 1,
+    met: false,
+    direct: [],
+    chains: [],
+    variable: BUDGET,
+    variable_label: 'Drain budget',
+    format: 'csv',
+    ...extra,
+  });
+  const routeProposal = () => ({
+    ...emptyProposal,
+    produces: [
+      {
+        piece: 'piece-a',
+        label: 'Ingest',
+        output: 1,
+        complete: false,
+        approval: 'builtin',
+        output_variable: 'https://x.org/clean',
+        output_label: 'Clean text',
+        output_format: 'csv',
+        converter: false,
+        inputs: [
+          routeNeed({
+            providers: {
+              models: [
+                {
+                  configuration_id: 'https://w3id.org/okn/i/mint/model-9',
+                  label: 'Crawler',
+                  output: 1,
+                  format: 'csv',
+                  variable: BUDGET,
+                  output_label: 'Drain budget',
+                },
+              ],
+              datasets: [
+                { data_object_id: 'ds-1', label: BUDGET, name: 'Hearings corpus', format: 'csv' },
+                { data_object_id: 'ds-1', label: BUDGET, name: 'Hearings corpus', format: 'csv' },
+              ],
             },
-          ],
-        },
-      ],
-    });
+          }),
+        ],
+      },
+      {
+        piece: 'piece-b',
+        label: 'Score',
+        output: 1,
+        complete: false,
+        converter: true,
+        output_variable: BUDGET,
+        inputs: [routeNeed()],
+      },
+    ],
+  });
+
+  it('groups routes, names inputs and datasets, and adds a model route in one click', async () => {
+    proposeFor = routeProposal;
     const user = userEvent.setup();
     render();
-    await addStepOf(user, 'Ingest'); // loads the piece's contracts
-    await screen.findByLabelText('Source of input 1 of step 1');
     await pickWanted(user);
     await find(user);
-    const advice = await screen.findByTestId('need-providers');
-    expect(advice).toHaveTextContent('Run model Crawler first (its output pages fits)');
+    const routes = await screen.findByTestId('routes');
+    expect(within(routes).getByText('From a model')).toBeInTheDocument();
+    expect(routes).toHaveTextContent('needs: Drain budget (csv)');
+    expect(routes).not.toHaveTextContent('input 1:');
+    // The converter with nothing to convert is under a collapsed heading.
+    expect(within(routes).getByTestId('route-group-converters')).toHaveTextContent(
+      'Unit conversions (1)',
+    );
+    const advice = within(routes).getAllByTestId('need-providers')[0]!;
+    expect(advice).toHaveTextContent(
+      "Run Crawler in a thread, then use its Drain budget as this flow's input",
+    );
     expect(within(advice).getByRole('link', { name: 'Crawler' })).toHaveAttribute(
       'href',
       '/modelconfigurations/model-9',
     );
+    // A dataset is named, not its variable URI, and listed once.
+    expect(
+      within(advice).getAllByRole('button', { name: /from dataset Hearings corpus/ }),
+    ).toHaveLength(1);
+    expect(advice).not.toHaveTextContent('w3id.org');
     await user.click(
-      within(advice).getByRole('button', { name: 'Use dataset Hearings corpus as a flow input' }),
+      within(advice).getByRole('button', { name: 'Add this route: Ingest from model Crawler' }),
     );
-    expect(screen.getByTestId('flow-form-input-0')).toBeInTheDocument();
+    expect(screen.getByLabelText('Input 1 label')).toHaveValue('Drain budget');
+    expect(await screen.findByTestId('flow-form-step-1')).toBeInTheDocument();
+  });
+
+  it('adds a dataset route as a flow input named for the dataset', async () => {
+    proposeFor = routeProposal;
+    const user = userEvent.setup();
+    render();
+    await pickWanted(user);
+    await find(user);
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Add this route: Ingest from dataset Hearings corpus',
+      }),
+    );
     expect(screen.getByLabelText('Input 1 label')).toHaveValue('Hearings corpus');
+    expect(await screen.findByTestId('flow-form-step-1')).toBeInTheDocument();
   });
 
   it('hides the suggestions quietly when the semantic service is down', async () => {

@@ -55,6 +55,7 @@ import {
   type Purpose,
   type SaveResult,
 } from '@/lib/flow-authoring-api';
+import { applyRoute } from '@/lib/flow-routes';
 import { FLOW_LAYOUT_OPTIONS, flowCanvasHeight } from '@/lib/flow-graph-layout';
 import { flowStepsGraph, type FlowLabels } from '@/lib/flow-steps';
 import { slugFromUri } from '@/lib/uri';
@@ -619,31 +620,8 @@ export function FlowAuthoringForm({
             kind="want"
             result={suggestion.result}
             {...proposalProps}
-            onProduces={(entry) => change(applyProduces(draft, entry))}
-            canUseDataset={(entry, need) =>
-              Boolean(
-                summaries[entry.piece]?.input_contracts[String(need.input)]?.standard_variable_uri,
-              )
-            }
-            onUseDataset={(entry, need, dataset) => {
-              const uri =
-                summaries[entry.piece]?.input_contracts[String(need.input)]?.standard_variable_uri;
-              if (!uri) return;
-              change({
-                ...draft,
-                inputs: [
-                  ...draft.inputs,
-                  {
-                    key: `input${draft.inputs.length + 1}`,
-                    label: dataset.label ?? '',
-                    standardVariable: uri,
-                    standardVariableLabel: slugFromUri(uri),
-                    format: dataset.format ?? '',
-                    optional: false,
-                  },
-                ],
-              });
-            }}
+            wantedLabel={wanted?.label}
+            onAddRoute={(entry, choice) => change(applyRoute(draft, entry, choice))}
           />
         )}
         {suggestion?.slot === 'want' &&

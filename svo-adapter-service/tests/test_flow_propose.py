@@ -293,7 +293,7 @@ def test_a_piece_needing_a_model_output_gets_that_model_as_a_provider(monkeypatc
     assert need["met"] is False and body["produces"][0]["complete"] is False
     assert need["providers"]["models"] == [{
         "configuration_id": "https://example.org/configs/modflow6", "label": "modflow6",
-        "output": 1, "format": "csv"}]
+        "output": 1, "format": "csv", "variable": V + "drain_budget", "output_label": "Drain budget"}]
     assert need["providers"]["datasets"] == []
 
 
@@ -320,7 +320,9 @@ def test_a_dataset_provider_appears_for_an_unmet_step_input():
     body = client.post("/flows/propose", headers=AUTH, json={
         "steps": [step(1, score)], "purpose": {"step": 1, "input": 1}}).json()
     assert body["direct"] == [] and body["chains"] == []
-    assert body["providers"]["datasets"] == [{"data_object_id": shared, "label": "clean-parquet", "format": "parquet"}]
+    assert body["providers"]["datasets"] == [{
+        "data_object_id": shared, "label": "clean-parquet", "name": "clean-parquet",
+        "url": "https://example.org/clean-parquet", "format": "parquet"}]
     assert body["providers"]["models"] == []
 
 
@@ -389,3 +391,32 @@ def test_candidates_beyond_the_cap_are_not_searched_and_say_so(monkeypatch):
                                 {"contract": {"standard_variable_uri": V + "y"}}, models=models)
     assert [m["configuration_id"] for m in body["produces"][0]["inputs"][0]["providers"]["models"]] == ["m0", "m1"]
     assert body["cut"] is True
+
+
+def test_a_need_and_the_made_output_carry_readable_labels():
+    register("extract", [("drain__budget", "csv")], [("spring__flow", "csv")])
+    body = propose([], {"contract": {"standard_variable_uri": V + "spring__flow"}}).json()
+    entry = body["produces"][0]
+    assert entry["output_label"] == "Spring — flow" and entry["output_format"] == "csv"
+    assert entry["output_variable"] == V + "spring__flow" and entry["converter"] is False
+    need = entry["inputs"][0]
+    assert (need["variable"], need["variable_label"], need["format"]) == (
+        V + "drain__budget", "Drain — budget", "csv")
+
+
+def test_a_piece_with_the_same_variable_in_and_out_is_marked_a_converter():
+    register("cfs_to_m3s", [("spring__flow", "csv")], [("spring__flow", "csv")])
+    body = propose([], {"contract": {"standard_variable_uri": V + "spring__flow"}}).json()
+    assert body["produces"][0]["converter"] is True
+
+
+def test_a_variable_uri_label_is_not_a_dataset_name():
+    uri = V + "spring__flow"
+    assert flow_propose.dataset_name({"data_object_id": "a", "label": uri, "description": "Barton Springs flow"}) \
+        == "Barton Springs flow"
+    assert flow_propose.dataset_name({"data_object_id": "a", "label": uri,
+                                      "resource_uri": "https://ckan.example/dl/flow_2020.csv?x=1"}) == "flow_2020.csv"
+    assert flow_propose.dataset_name({"data_object_id": "a", "label": "", "resource_uri": "",
+                                      "source_catalog": "ckan:barton_springs"}) == "barton springs"
+    assert flow_propose.dataset_name({"data_object_id": "a", "label": "Real name"}) == "Real name"
+    assert flow_propose.dataset_name({"data_object_id": "a", "label": uri}) == "a"

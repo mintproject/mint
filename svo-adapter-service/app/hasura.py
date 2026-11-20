@@ -107,7 +107,7 @@ query ModelInputRequirement($ds_id: String!) {
 LIST_DATA_OBJECTS_QUERY = """
 query ListDataObjects {
   adapter_data_object {
-    id label resource_uri format source_catalog owner_username owner_execution_id shared
+    id label description resource_uri format source_catalog owner_username owner_execution_id shared
     variables { standard_variable_uri local_name unit spatial_type crs }
   }
 }

@@ -5,12 +5,12 @@
  * nothing is ranked (they come shortest first). A proposal that rests on a piece
  * with a blank contract carries a warning, because blank fits anything.
  */
-import { Link } from 'react-router-dom';
-
 import { Button } from '@/components/ui/button';
-import type { NeedProviders, Proposal, ProposeResult } from '@/lib/flow-authoring-api';
+import type { Proposal, ProposeResult } from '@/lib/flow-authoring-api';
 import type { ProposedChain, ProposedSource } from '@/lib/flow-authoring';
-import { slugFromUri } from '@/lib/uri';
+import type { RouteChoice } from '@/lib/flow-routes';
+
+import { RouteList } from './RouteList';
 
 export type SuggestionKind = 'input' | 'output' | 'want';
 
@@ -22,18 +22,10 @@ export interface ProposalListProps {
   onDirect?: (source: ProposedSource) => void;
   onChain?: (chain: ProposedChain) => void;
   onNext?: (next: Proposal['next'][number]) => void;
-  onProduces?: (entry: Proposal['produces'][number]) => void;
-  /** Add a flow input bound to a dataset's variable (see `canUseDataset`). */
-  onUseDataset?: (
-    entry: Proposal['produces'][number],
-    need: Proposal['produces'][number]['inputs'][number],
-    dataset: NeedProviders['datasets'][number],
-  ) => void;
-  /** Whether a dataset can become a flow input for this need (button vs advice). */
-  canUseDataset?: (
-    entry: Proposal['produces'][number],
-    need: Proposal['produces'][number]['inputs'][number],
-  ) => boolean;
+  /** The wanted variable's label, for the group headings of a "want" answer. */
+  wantedLabel?: string;
+  /** Take a whole route into the flow, with the provider chosen for an unmet input. */
+  onAddRoute?: (entry: Proposal['produces'][number], choice?: RouteChoice) => void;
 }
 
 const approvalNote = (approval?: string | null) =>
@@ -113,43 +105,13 @@ export function ProposalList(props: ProposalListProps) {
         </ul>
       )}
       {proposal.produces.length > 0 && (
-        <ul className="space-y-2">
-          {proposal.produces.map((item, index) => (
-            <li key={index}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => props.onProduces?.(item)}
-              >
-                Add {item.label ?? pieceLabel(item.piece)}
-              </Button>
-              <span className="ml-2 text-muted-foreground">
-                {item.complete ? 'every input has a source' : 'some inputs still need a source'}
-                {approvalNote(item.approval)}
-              </span>
-              <ul className="ml-4 list-disc">
-                {item.inputs.map((need) => (
-                  <li key={need.input}>
-                    input {need.input}:{' '}
-                    {need.direct.length > 0
-                      ? `from ${sourceLabel(need.direct[0]!.source)}`
-                      : need.chains.length > 0
-                        ? `needs ${need.chains[0]!.pieces.length} converter step(s)`
-                        : 'nothing in the flow fits'}
-                    {!need.met && need.providers && (
-                      <Providers
-                        providers={need.providers}
-                        canUse={props.canUseDataset?.(item, need) ?? false}
-                        onUse={(dataset) => props.onUseDataset?.(item, need, dataset)}
-                      />
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
+        <RouteList
+          produces={proposal.produces}
+          wantedLabel={props.wantedLabel ?? 'the wanted result'}
+          pieceLabel={pieceLabel}
+          sourceLabel={sourceLabel}
+          onAddRoute={(entry, choice) => props.onAddRoute?.(entry, choice)}
+        />
       )}
       {proposal.warnings.length > 0 && (
         <p className="mt-1 text-amber-700">
@@ -163,45 +125,5 @@ export function ProposalList(props: ProposalListProps) {
         </p>
       )}
     </div>
-  );
-}
-
-/** What could supply an unmet input: advice, since neither makes the need met. */
-function Providers({
-  providers,
-  canUse,
-  onUse,
-}: {
-  providers: NeedProviders;
-  canUse: boolean;
-  onUse: (dataset: NeedProviders['datasets'][number]) => void;
-}) {
-  if (providers.models.length === 0 && providers.datasets.length === 0) return null;
-  return (
-    <ul className="ml-4 list-disc text-muted-foreground" data-testid="need-providers">
-      {providers.models.map((model) => (
-        <li key={model.configuration_id}>
-          Run model{' '}
-          <Link
-            className="underline"
-            to={`/modelconfigurations/${slugFromUri(model.configuration_id)}`}
-          >
-            {model.label || model.configuration_id}
-          </Link>{' '}
-          first{model.output ? ` (its output ${model.output} fits)` : ''}
-        </li>
-      ))}
-      {providers.datasets.map((dataset) => (
-        <li key={dataset.data_object_id}>
-          {canUse ? (
-            <Button type="button" variant="ghost" size="sm" onClick={() => onUse(dataset)}>
-              Use dataset {dataset.label || dataset.data_object_id} as a flow input
-            </Button>
-          ) : (
-            <>Use dataset {dataset.label || dataset.data_object_id} as a flow input</>
-          )}
-        </li>
-      ))}
-    </ul>
   );
 }
