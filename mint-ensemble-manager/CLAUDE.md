@@ -16,8 +16,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Test files follow pattern `*.test.ts` and use babel-jest transformer
 
 ### Code Quality
+- `npm run lint` - Run ESLint over `src` and `scripts` (what CI runs; any error fails)
+- `npm run format:check` - Check Prettier formatting of `src` and `scripts` (what CI runs)
 - `npm run eslint:fix` - Run ESLint and fix issues
 - `npm run prettier:fix` - Format code with Prettier
+- Codegen output (`src/classes/graphql/graphql.ts`, `gql.ts`, `fragment-masking.ts`, `index.ts`, `types.ts`) is excluded from both; never hand-edit it
 
 ### GraphQL Code Generation
 - `npm run codegen` - Generate TypeScript types from GraphQL schema and operations

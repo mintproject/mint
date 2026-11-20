@@ -8,6 +8,8 @@
         "start:watch": "nodemon ./dist/server.js",
         "build": "npx webpack",
         "test": "ENSEMBLE_MANAGER_CONFIG_FILE=src/config/config.json  jest",
+        "lint": "eslint src scripts",
+        "format:check": "prettier --check src scripts",
         "eslint:fix": "eslint --quiet --fix",
         "prettier:fix": "prettier --write --ignore-unknown",
         "codegen": "graphql-codegen"

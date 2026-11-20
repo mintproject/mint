@@ -24,6 +24,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24 matches mint-ensemble-manager/Dockerfile and the test job.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mint-ensemble-manager/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run format:check
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -44,12 +63,9 @@ jobs:
 
       - run: npm test
 
-      # No lint or format job. The service carries 475 eslint errors and 74
-      # unformatted files. `eslint:fix` and `prettier:fix` stay for manual use.
-
   publish:
     name: Publish image
-    needs: [test]
+    needs: [lint, test]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
