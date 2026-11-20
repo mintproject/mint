@@ -70,6 +70,15 @@ export function settingTitle(name: string, details?: Pick<SettingDetails, 'title
 
 export const choiceLabel = (choice: SettingChoice): string => choice.title ?? String(choice.value);
 
+/** A value as a person reads it: the title of the choice it is, else the value itself. */
+export function choiceText(
+  details: Pick<SettingDetails, 'choices'> | undefined,
+  value: string,
+): string {
+  const choice = details?.choices?.find((c) => String(c.value) === value);
+  return choice ? choiceLabel(choice) : value;
+}
+
 /** The value a setting starts from, as the text an input shows. */
 export function settingText(value: unknown): string {
   if (value === undefined || value === null) return '';

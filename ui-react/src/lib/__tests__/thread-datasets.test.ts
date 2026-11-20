@@ -119,3 +119,15 @@ describe('datasliceRegionId', () => {
     expect(datasliceRegionId({ region_id: null, task: null })).toBeNull();
   });
 });
+
+describe('UpdateThreadData', () => {
+  it('keeps the models parameter values when the data is saved', async () => {
+    const { print } = await import('graphql');
+    const { UpdateThreadDataDocument } = await import('@/graphql/generated/modeling');
+    const text = print(UpdateThreadDataDocument);
+    expect(text).not.toContain('delete_thread_model_parameter');
+    // What the data replaces is still cleared.
+    expect(text).toContain('delete_thread_model_io');
+    expect(text).toContain('delete_thread_model_execution');
+  });
+});
