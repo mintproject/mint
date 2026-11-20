@@ -8019,7 +8019,18 @@ paths:
                     type: object
                 thread_bindings:
                   type: object
-                  description: Which input or setting the thread's region and dates fill in.
+                  description: >-
+                    Which input or setting the thread's region and dates fill in.
+                    `collections` is a list of flow input keys that each take a
+                    collection: every resource a thread binds to one of them is one
+                    input made of many files, and there is one run, not one per
+                    resource. Each key must name an input of this flow, once.
+                  properties:
+                    collections:
+                      type: array
+                      maxItems: 64
+                      items:
+                        type: string
       responses:
         "201":
           description: Flow registered. Returns the ids of the software, version, configuration, inputs and settings.

@@ -213,6 +213,18 @@ def test_thread_bindings_name_a_flow_input_or_parameter():
         assert codes(flow_graph.check({**base, "thread_bindings": bad})) == ["FLOW_THREAD_BINDING"]
 
 
+def test_collections_name_flow_inputs_and_are_not_a_role():
+    base = {"inputs": [{"id": "aoi", "contract": AOI}, {"id": "docs", "contract": AOI}],
+            "steps": [step(1, piece([AOI, AOI], []), [from_input("aoi", 1), from_input("docs", 2)])]}
+    for good in ({"collections": ["docs"]}, {"collections": ["aoi", "docs"], "region": {"input": "aoi"}},
+                 {"collections": []}):
+        assert flow_graph.check({**base, "thread_bindings": good}).ok
+    for bad in ({"collections": ["nope"]}, {"collections": ["docs", "docs"]}, {"collections": "docs"},
+                {"collections": [1]}, {"collections": [["docs"]]}, {"collections": {"docs": True}},
+                {"collections": None}):
+        assert codes(flow_graph.check({**base, "thread_bindings": bad})) == ["FLOW_THREAD_BINDING"], bad
+
+
 def test_an_output_carries_forward_what_its_first_input_brought():
     # The piece declares only a format; the variable comes through from its input,
     # as it does in a planned chain.

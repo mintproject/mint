@@ -127,13 +127,104 @@ submit with `/workflows/submit`.
 | `FLOW_SETTING_CONFLICT` | 422 | two steps give different defaults for a setting they share |
 | `FLOW_NOT_SUPPORTED` | 422 | the flow links a setting from a flow parameter, which is not built yet |
 | `FLOW_DOES_NOT_BUILD` | 422 | the flow checks out but cannot be made into a pipeline, for example a linked setting the piece reads through no task input |
+| `FLOW_COLLECTION_REFUSED` | 422 | a collection for an input the flow does not mark, that no step reads, that also has a data object, or that the thread's region fills; or too many resources. Names the `input` and the reason |
+| `FLOW_COLLECTION_RESOURCE_REFUSED` | 422 | a resource link the gather task would not fetch. Names the resource `index` and the reason, never the link |
 | `STORED_SOURCE_REFUSED` | 403 | the caller may not run one of the pieces |
+
+**An input that takes a collection.** A flow's `thread_bindings` may carry
+`"collections": ["<flow input id>", ...]`, the inputs that each take a collection of
+files. `POST /flows/check` reports `FLOW_THREAD_BINDING` for an entry that is not an input
+of the flow, or is repeated. `collections` is not a role like `region`.
+
+For such an input `POST /plans/flow` takes the files in a new field instead of a data
+object:
+
+```json
+{"flow_id": "...", "inputs": {},
+ "collections": {"<flow input id>": {"label": "Documents",
+   "resources": [{"name": "a.csv", "url": "https://host/a.csv"},
+                 {"name": "b.txt", "url": "tapis://system/path/b.txt"}]}}}
+```
+
+- A collection is allowed only for an input the flow marks, that a step reads, and that
+  is not also in `inputs` and is not the region input (422 `FLOW_COLLECTION_REFUSED`).
+  A marked input may still be bound the ordinary way with one data object: there is then
+  no gather task.
+- `resources` holds 1 to `flow_collection_max_resources` entries (default 500; a
+  `name` of at most 255 characters and a `url` of at most 2,000). A malformed body is a
+  422. Each `url` is `https://host/path` (port 443 only) or `tapis://system/path`, with
+  no user name or password, fragment, control character or `..` segment. `http://` is
+  refused (422 `FLOW_COLLECTION_RESOURCE_REFUSED`). The address a name resolves to is
+  checked when the task fetches it, not here.
+- For the fit check the files are taken as what the first piece input linked to the
+  marked input asks for, as the region is.
+- The plan gets one gather task per collection, `gather-1`, `gather-2`, ... in the order
+  the steps first read the inputs, recorded under `plan_json.flow.collections`:
+  `[{"input": <flow input id>, "label", "gather": "gather-1", "resources": [{"name", "url"}]}]`.
+  A step that reads the input is wired `{"gather": "gather-1"}` instead of `{"arg": ...}`;
+  no `source_uri...` argument is filled for it. The plan also declares the managed
+  parameter `flow_staging_uri` (`managed_source: "run_folder"`, not required).
+
+**The gather task.** A Tapis Workflows function task written by the adapter
+(`app/gather_piece.py`, rules in `app/gather_fetch.py`), standard library only. Its inputs
+are `TAPIS_TOKEN`, `TAPIS_BASE_URL` and `STAGING_URI` (from `flow_staging_uri`). It copies
+every resource into `<flow_staging_uri>/inputs/<gather id>/` through the Tapis Files API,
+sets its `result` output to `tapis://<system>/<that folder>` and prints, last,
+`{"status":"ok","svo_flow_outputs":{"result":"tapis://..."}}`. The steps that read the
+input take `SOURCE_<k>` from that `result` and wait for the task.
+
+- **A `tapis://` resource is refused unless its system is listed** in the setting
+  `flow_collection_tapis_systems` (comma-separated; empty by default, so none). The files
+  of a collection come from a thread that others may be able to edit, and the gather task
+  reads with the runner's token: a Tapis location would let them have the runner's own
+  files copied into a run. An `https` link is fetched with no credential at all.
+- **The Tapis address is the adapter's own.** A submission that sends `tapis_base_url`
+  for a flow is refused (`FLOW_ARGUMENT_FIXED`); the adapter sets it from its setting, and
+  the gather task refuses to start if it was handed any other host.
+- One file may take at most `flow_collection_resource_seconds` (default 1800) to arrive.
+  A body shorter than the length the server declared is tried again.
+- The Tapis token is sent only to the Tapis address (to read a `tapis://` resource and to
+  store the files), never to an `https` resource, on any host or redirect.
+- An `https` host is resolved and refused unless every address is public unicast (not
+  private, loopback, link-local, multicast, reserved, unspecified, or such an address
+  inside an IPv6 form). The connection is made to an address that was checked, with the
+  host name kept for certificate verification, SNI and the `Host` header. Redirects are
+  followed by hand, at most 5, `https` only, each target checked again.
+- A collection totals at most `flow_collection_max_bytes` (default 5 GiB), counted as
+  bytes arrive, not from `Content-Length`. Every request has a timeout; a download is
+  tried up to 3 times on a 5xx, 408, 429 or network error, an upload once more only when
+  no answer came back.
+- A file is named for the resource's `name` if that is a plain base name, else the last
+  path segment of its link, else `resource-<index>`; characters outside `A-Za-z0-9._-`
+  become `_`, at most 200 characters, and repeats get `-2`, `-3` before the extension.
+- Failures print one JSON line with `code`, a `message`, the resource `index` and `host`
+  (never the query, the token or a response body): `GATHER_RESOURCE_NEEDS_LOGIN` (401 or
+  403), `GATHER_RESOURCE_FAILED` (with `http_status` where there is one),
+  `GATHER_ADDRESS_REFUSED`, `GATHER_TOO_LARGE`, `GATHER_STAGING_FAILED`.
+- A link that needs another login (Earthdata, a PTDataX project) fails; a login for the
+  gather task is the secret store's job.
+
+**The run's staging folder.** At `POST /workflows/submit` for a plan with a collection,
+the adapter chooses the run's id first, finds the caller's scratch root on
+`tapis_exec_system`, and passes `flow_staging_uri` =
+`tapis://<exec system>/<scratch root>/dynamo-runs/<run id>`. If the scratch root cannot be
+found: 422 `FLOW_STAGING_UNRESOLVED` ("could not find your scratch folder on <system>: run
+any job there once"), and no run is recorded. A dry run does not look for it and says it
+would (`flow_staging`). `flow_staging_uri` is never the caller's to send
+(`FLOW_ARGUMENT_FIXED`). A required setting named exactly `output_uri` that has no flow
+default is, in a plan with a collection, marked `required: false`,
+`default_source: "run_folder"`, and defaults at submit to `<flow_staging_uri>/outputs`
+when the caller sends none. Files in scratch are cleaned up by the system: publish a
+result worth keeping.
 
 **Following a run of a flow.** `POST /runs/{run_id}/poll` adds `flow` for a plan made
 from a flow:
 
 - `steps`: one entry per step with `step`, `name`, `task_id`, `depends_on`, `status`
   (`pending`, `running`, `completed`, `failed`, `cancelled`, `skipped`) and `message`.
+  A gather task is listed first, before the flow's own steps, as `{"step": "gather-1",
+  "name": "Gather <label>", "task_id": "gather-1", "depends_on": []}`; each step that
+  reads the collection lists `"gather-1"` in `depends_on` ahead of its numbered ones.
 - `outputs`: the flow's outputs as registered, each with `value` (what the step reported)
   and `location` (where the output is). Both are null until the step has finished, and
   for a published record. A piece written for a flow reports each output's location, and
@@ -178,7 +269,7 @@ used only when the submitter says so.
   run needs none.
 - `POST /workflows/submit` refuses a flow plan with 422 `FLOW_ARGUMENT_FIXED` when `args`
   names something the plan fixed: a dataset or region bound when the flow was planned,
-  `execution_id`, `source_uri` or `tapis_token`. Plan again to change a dataset.
+  `execution_id`, `source_uri`, `flow_staging_uri` or `tapis_token`. Plan again to change a dataset.
 
 **What a flow's author cannot do.**
 

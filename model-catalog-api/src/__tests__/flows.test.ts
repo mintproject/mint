@@ -132,6 +132,19 @@ describe('the catalog rows for a flow', () => {
     expect(() => buildRows(bad, planRegistration(bad), PIECES, 'alice')).toThrow('thread_bindings.region')
   })
 
+  it('stores the inputs that take a collection as input ids', () => {
+    const body = { ...BODY(), thread_bindings: { region: { input: 'corpus' }, collections: ['corpus'] } }
+    const stored = buildRows(body, planRegistration(body), PIECES, 'alice').flow.thread_bindings_json
+    expect(stored).toEqual({ region: { input: `${C}_input_1` }, collections: [`${C}_input_1`] })
+  })
+
+  it('refuses a collection marker that is unknown, repeated or not a list of keys', () => {
+    for (const collections of [['nope'], ['corpus', 'corpus'], [1], 'corpus']) {
+      const bad = { ...BODY(), thread_bindings: { collections } }
+      expect(() => buildRows(bad, planRegistration(bad), PIECES, 'alice')).toThrow('thread_bindings.collections')
+    }
+  })
+
   it('stores each step with its links as the adapter checked them', () => {
     const step = rows().flow.steps.data[1]
     expect(step).toEqual({
