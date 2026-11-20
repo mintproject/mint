@@ -47,10 +47,22 @@ export interface NeedProviders {
   models: {
     configuration_id: string;
     label?: string | null;
-    output?: string | null;
+    /** The output's position. */
+    output?: string | number | null;
+    format?: string | null;
+    /** The standard variable the output carries, and its readable label. */
+    variable?: string | null;
+    output_label?: string | null;
+  }[];
+  datasets: {
+    data_object_id: string;
+    label?: string | null;
+    /** A readable name (the label is sometimes a variable's URI). */
+    name?: string | null;
+    /** Where the data is (its resource location). */
+    url?: string | null;
     format?: string | null;
   }[];
-  datasets: { data_object_id: string; label?: string | null; format?: string | null }[];
 }
 
 export interface Proposal {
@@ -64,9 +76,20 @@ export interface Proposal {
   produces: (PieceRef & {
     output: number;
     complete: boolean;
+    /** What the piece makes, and whether it only converts (same variable in and out). */
+    output_variable?: string | null;
+    output_label?: string | null;
+    output_format?: string | null;
+    output_unit?: string | null;
+    converter?: boolean;
     inputs: {
       input: number;
       met: boolean;
+      /** What the input takes. */
+      variable?: string | null;
+      variable_label?: string | null;
+      format?: string | null;
+      unit?: string | null;
       direct: { source: ProposedSource; wire: WireJson }[];
       chains: ProposedChain[];
       providers?: NeedProviders;

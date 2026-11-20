@@ -75,6 +75,45 @@ class _Budget:
 
 _NO_PROVIDERS = {"models": [], "datasets": []}
 
+
+def humanize_variable(uri: str | None) -> str:
+    """A standard variable's machine name as a readable label, by the
+    ``object__quantity`` grammar: ``groundwater__hydraulic_head`` becomes
+    ``Groundwater — hydraulic head``."""
+    name = (uri or "").rsplit("/", 1)[-1]
+    obj, sep, qty = name.partition("__")
+    obj = obj.replace("_", " ").strip()
+    qty = qty.replace("_", " ").strip()
+    if sep and obj and qty:
+        return f"{obj[:1].upper()}{obj[1:]} — {qty}"
+    return (qty or obj or name).replace("_", " ").capitalize()
+
+
+def _is_uri(text: str) -> bool:
+    return "://" in text or text.startswith("urn:")
+
+
+def dataset_name(row: dict[str, Any]) -> str:
+    """A name a person can read for a data object. Rows synced from CKAN take the
+    resource's name as their label, and that is sometimes the variable's URI (or
+    blank); such a label is not a name. Falls back to the description (the CKAN
+    resource description, else its dataset title), the file name in the location,
+    the CKAN dataset the row came from, and last the id."""
+    label = str(row.get("label") or "").strip()
+    if label and not _is_uri(label):
+        return label
+    description = str(row.get("description") or "").strip()
+    if description and not _is_uri(description):
+        return description if len(description) <= 120 else description[:117] + "..."
+    location = str(row.get("resource_uri") or "").split("?", 1)[0].rstrip("/")
+    leaf = location.rsplit("/", 1)[-1] if _is_uri(location) else ""
+    if leaf and not _is_uri(leaf):
+        return leaf
+    catalog = str(row.get("source_catalog") or "")
+    if catalog.startswith("ckan:") and catalog[5:]:
+        return catalog[5:].replace("_", " ").replace("-", " ")
+    return str(row.get("data_object_id") or row.get("id") or "")
+
 Source = tuple[dict[str, Any], DataObjectContract]
 
 
@@ -169,11 +208,14 @@ def _providers(ctx: _Context, contract: dict[str, Any]) -> dict[str, list[dict[s
             made = flow_graph._addressable(_contract_from_registry(out), f"model/{model['configuration_id']}/{position}")
             if _fits(made, target):
                 models.append({"configuration_id": model["configuration_id"], "label": model.get("label"),
-                               "output": position, "format": out.get("format")})
+                               "output": position, "format": out.get("format"),
+                               "variable": out.get("standard_variable_uri"),
+                               "output_label": humanize_variable(out.get("standard_variable_uri"))})
     datasets: list[dict[str, Any]] = []
     for dataset in ctx.datasets:
         if any(_fits(have, target) for have in dataset.get("contracts") or []):
             datasets.append({"data_object_id": dataset["data_object_id"], "label": dataset.get("label"),
+                             "name": dataset_name(dataset), "url": dataset.get("resource_uri"),
                              "format": dataset.get("format")})
     return {"models": ctx.trim(models), "datasets": ctx.trim(datasets)}
 
@@ -328,8 +370,17 @@ def _propose(flow, pieces, purpose, approvals, max_chain, max_results, max_expan
                     chains = [] if direct else _chains(ctx, sources, contract)
                     met = bool(direct or chains)
                     needs.append({"input": in_position, "direct": direct, "chains": chains, "met": met,
+                                  "variable": contract.get("standard_variable_uri"),
+                                  "variable_label": humanize_variable(contract.get("standard_variable_uri")),
+                                  "format": contract.get("format"), "unit": contract.get("unit"),
                                   "providers": dict(_NO_PROVIDERS) if met else _providers(ctx, contract)})
+                variable = out.get("standard_variable_uri")
                 produces.append({**ctx.piece_ref(piece_id), "output": out_position, "inputs": needs,
+                                 "output_variable": variable, "output_label": humanize_variable(variable),
+                                 "output_format": out.get("format"), "output_unit": out.get("unit"),
+                                 # Same variable in and out: it converts, it does not make.
+                                 "converter": bool(variable) and any(
+                                     need["variable"] == variable for need in needs),
                                  "complete": all(need["met"] for need in needs)})
         result["produces"] = ctx.trim(produces)
     else:
