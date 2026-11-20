@@ -103,3 +103,36 @@ export function closeConsumers(
   }
   return found;
 }
+
+export interface GuidedSetupLinkInput {
+  datasetId: string;
+  variable: { label: string } | null;
+  exact: UploadConsumer[];
+  close: CloseConsumer[];
+  title: string;
+  startDate: string;
+  endDate: string;
+  /** Only set when the user picked a catalog region; a drawn box is derived from the dataset instead. */
+  regionId?: string;
+}
+
+/**
+ * The guided model setup URL for a just-uploaded dataset. The exact consumers
+ * travel as `modelIds` (recommended), the close matches as `closeModelIds`, and
+ * `modelNames` maps ids to readable names. Nothing here confirms anything: the
+ * wizard still asks the user to frame the question.
+ */
+export function guidedSetupLink(input: GuidedSetupLinkInput): string {
+  const params = new URLSearchParams({ datasetId: input.datasetId });
+  if (input.exact.length) params.set('modelIds', input.exact.map((c) => c.id).join(','));
+  if (input.close.length) params.set('closeModelIds', input.close.map((c) => c.id).join(','));
+  const names: Record<string, string> = {};
+  for (const c of [...input.exact, ...input.close]) names[c.id] = c.name;
+  if (Object.keys(names).length) params.set('modelNames', JSON.stringify(names));
+  if (input.variable) params.set('variable', input.variable.label);
+  if (input.title.trim()) params.set('goal', input.title.trim());
+  if (input.startDate) params.set('startDate', input.startDate);
+  if (input.endDate) params.set('endDate', input.endDate);
+  if (input.regionId) params.set('regionId', input.regionId);
+  return `/modeling/problem-statements/start?${params.toString()}`;
+}

@@ -35,7 +35,11 @@ import {
 } from '@/lib/ckan-upload';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useSemanticSearch, useSimilarVariables } from '@/hooks/useSemanticSearch';
-import { closeConsumers, consumersOfVariable } from '@/lib/datasets/upload-preview';
+import {
+  closeConsumers,
+  consumersOfVariable,
+  guidedSetupLink,
+} from '@/lib/datasets/upload-preview';
 import { unionBoundingBox, type BoundingBox } from '@/lib/geo/bbox';
 import { standardVariableName } from '@/lib/standard-variable-display';
 import { useAuth } from '@/lib/auth/useAuth';
@@ -304,7 +308,20 @@ export function DatasetUploadPage() {
             </Link>
           </Button>
           <Button asChild>
-            <Link to="/modeling/problem-statements">Use in a thread</Link>
+            <Link
+              to={guidedSetupLink({
+                datasetId: done.datasetId,
+                variable,
+                exact: consumers,
+                close: closeMatches,
+                title,
+                startDate,
+                endDate,
+                regionId: mode === 'region' ? regionId : undefined,
+              })}
+            >
+              Use in a thread
+            </Link>
           </Button>
           <Button variant="ghost" onClick={reset}>
             Upload another

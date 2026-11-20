@@ -409,10 +409,9 @@ describe('DatasetUploadPage', () => {
     expect(sent).toHaveLength(1);
     expect(screen.getByText('dynamo-upload-x')).toBeInTheDocument();
     expect(screen.getByTestId('upload-state')).toHaveTextContent('Private');
-    expect(screen.getByRole('link', { name: 'Use in a thread' })).toHaveAttribute(
-      'href',
-      '/modeling/problem-statements',
-    );
+    const href = screen.getByRole('link', { name: 'Use in a thread' }).getAttribute('href')!;
+    expect(href.startsWith('/modeling/problem-statements/start?')).toBe(true);
+    expect(new URLSearchParams(href.split('?')[1]).get('datasetId')).toBe('dynamo-upload-x');
     expect(screen.getByRole('link', { name: /dataset page/ })).toHaveAttribute(
       'href',
       '/datasets/browse/dynamo-upload-x',
@@ -491,6 +490,28 @@ describe('DatasetUploadPage', () => {
       expect(close).toHaveTextContent(/Wet flow.*matched on rainfall_amount/);
       expect(close).not.toHaveTextContent('Rain flow');
       expect(screen.getByTestId('who-can-use')).toHaveTextContent('Rain flow');
+    });
+
+    it('"Use in a thread" opens guided setup with the dataset, exact models and close matches', async () => {
+      semantic = (u) =>
+        u.includes('/similar?')
+          ? json({ target: 'svo', id: 'sv-1', results: [{ id: 'sv-2', label: 'rainfall_amount' }] })
+          : json({ results: [] });
+      await fill([csv('only.csv')]);
+      await screen.findByTestId('close-matches');
+      await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
+      await screen.findByTestId('upload-success');
+      const href = screen.getByRole('link', { name: 'Use in a thread' }).getAttribute('href')!;
+      expect(href.startsWith('/modeling/problem-statements/start?')).toBe(true);
+      const params = new URLSearchParams(href.split('?')[1]);
+      expect(params.get('datasetId')).toBe('dynamo-upload-x');
+      expect(params.get('modelIds')?.split(',')).toEqual(['flow-1', 'model-1']);
+      expect(params.get('closeModelIds')).toBe('flow-2');
+      expect(params.get('variable')).toBe('precipitation_flux');
+      expect(params.get('goal')).toBe('Rain 2020');
+      expect(params.get('startDate')).toBe('2020-01-01');
+      expect(params.get('endDate')).toBe('2020-12-31');
+      expect(JSON.parse(params.get('modelNames')!)).toMatchObject({ 'flow-2': 'Wet flow' });
     });
 
     it('hides the suggestion sections quietly when the service is down', async () => {
