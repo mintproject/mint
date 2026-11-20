@@ -58,7 +58,7 @@ if not logging.getLogger().handlers:
 
 log = logging.getLogger(__name__)
 
-from . import flow_graph, flow_run, flow_segments, gather_fetch, input_plan, ntgam, piece_authoring, publication, qaqc, run_state, run_tokens, stac, step_secrets, stored_source, tapis
+from . import flow_graph, flow_propose, flow_run, flow_segments, gather_fetch, input_plan, ntgam, piece_authoring, publication, qaqc, run_state, run_tokens, stac, step_secrets, stored_source, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
@@ -71,6 +71,7 @@ from .hasura import (
     GET_ETL_PROCESS_QUERY,
     GET_FLOW,
     GET_FLOW_PIECES,
+    GET_VISIBLE_PIECES,
     HasuraClient,
     HasuraError,
     STANDARD_VARIABLES_QUERY,
@@ -86,6 +87,7 @@ from .models import (
     DataObjectIn,
     DeferredPlanIn,
     FlowCheckIn,
+    FlowProposeIn,
     FlowPlanIn,
     GenerateWorkflowIn,
     ModelRunIn,
@@ -2873,6 +2875,60 @@ async def check_flow(body: FlowCheckIn, authorization: str | None = Header(None)
         "depends_on": {str(position): after for position, after in checked.depends_on.items()},
         "pieces": {piece_id: _piece_summary(view) for piece_id, view in views.items()},
     }
+
+
+async def _pieces_for_proposal(h: Any, caller: str | None) -> list[dict[str, Any]]:
+    """Every piece the caller may see, as catalog or registry rows. Another user's
+    private piece is dropped here as well as by Hasura's select rules."""
+    if settings.demo_mode:
+        rows = await _registry(h, plannable=False)
+    else:
+        client = HasuraClient(getattr(h, "_bearer", None), user_scoped=True)
+        rows = (await client.execute(GET_VISIBLE_PIECES, {"limit": 1000})).get("modelcatalog_etl_process") or []
+    return _visible_pieces(rows, caller)
+
+
+@app.post("/flows/propose", tags=["Core: Planning"])
+async def propose_for_flow(body: FlowProposeIn, authorization: str | None = Header(None)):
+    """What fits in a flow, exactly, from the pieces' declared contracts. Nothing
+    is stored and nothing is ranked.
+
+    ``purpose`` is one of ``{"step": n, "input": k}`` (what can feed that input:
+    the flow inputs and earlier outputs that fit, else the shortest converter
+    chains), ``{"step": n, "output": j}`` (the pieces that can take it) or
+    ``{"contract": {...}}`` (the pieces that make it, and what each still needs).
+    A proposal passes the same fit rule as ``/flows/check``. Only pieces the
+    caller may see are used; each carries the caller's approval state.
+    """
+    bearer = _bearer(authorization)
+    caller = await _require_signed_in(bearer)
+    h = get_client(bearer)
+    specs = await _pieces_for_proposal(h, caller)
+
+    views: dict[str, dict[str, Any]] = {}
+    for spec in specs:
+        view = _piece_view(spec)
+        view["label"] = spec.get("label") or spec.get("name")
+        view["lossy"] = bool(spec.get("is_lossy"))
+        views.setdefault(str(view["id"]), view)
+    approvals: dict[str, str | None] = {}
+    for spec in await _registry(h, plannable=False):
+        for key in (spec.get("mint_etl_process_id"), spec.get("id")):
+            if key and str(key) in views and str(key) not in approvals:
+                approvals[str(key)] = stored_source.decision(spec, caller)
+
+    by_catalog_id = {str(step.etl_process_id): views.get(str(step.etl_process_id))
+                     for step in body.steps if step.etl_process_id}
+    try:
+        return flow_propose.propose(
+            {"inputs": body.inputs, "parameters": body.parameters,
+             "steps": [{"position": step.position, "piece": by_catalog_id.get(str(step.etl_process_id)),
+                        "settings": step.settings, "wires": step.wires} for step in body.steps],
+             "outputs": body.outputs},
+            views, body.purpose, approvals=approvals,
+            max_chain=body.max_chain, max_results=body.max_results)
+    except flow_propose.ProposeError as error:
+        raise HTTPException(422, detail={"code": error.code, "message": error.message}) from error
 
 
 @app.get("/flows/{configuration_id:path}/availability", tags=["Core: Planning"])

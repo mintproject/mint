@@ -102,6 +102,33 @@ It returns `ok`, `problems` (each with `code`, `message`, and the `step` and `wi
 on), `depends_on`, and for each piece its input and output positions, the settings a flow
 may give it, and the values it returns. Nothing is stored.
 
+**`POST /flows/propose`** says what fits in a flow as far as it is built. It is exact and
+never ranked: a proposal passes the same fit rule as `/flows/check`
+(`planner.compatibility` is `ready`). It needs a signed-in caller and uses only the pieces
+that caller may see (another user's private piece is never used or named). Nothing is stored.
+
+```json
+{"inputs": [...], "steps": [{"position": 1, "etl_process_id": "...", "wires": [...]}],
+ "purpose": {"step": 2, "input": 1} | {"step": 2, "output": 1} | {"contract": {...}} | null,
+ "max_chain": 3, "max_results": 20}
+```
+
+- `{"step": n, "input": k}`: `direct` lists each flow input and earlier output that fits,
+  with the `wire` to add. If none fits, `chains` lists the shortest chains of single-input
+  pieces that carry a source to a fit (`from`, `pieces`, `length`, `lossy`).
+- `{"step": n, "output": j}`: `next` lists the pieces that can take it, with the `input`.
+- `{"contract": {...}}` (registry-style, like a flow input's): `produces` lists the pieces
+  that make it, and for each of their inputs the `direct` sources or `chains`, and `met`.
+  `complete` is true when every input is met.
+
+Every piece carries `label` and the caller's `approval` (`builtin`, `own`, `approved`,
+`opt_in`, `denied`, or null when the adapter has no registry row for it). `warnings` holds
+`BLANK_CONTRACT` for a matched input that leaves its standard variable or format blank,
+which fits anything. The search is bounded: chains of at most 3 pieces (`max_chain`),
+2000 pieces tried against a state in all, and at most 20 results per list (`max_results`).
+When a bound stopped it, `cut` is true. A malformed purpose, or a step the caller cannot see,
+is a 422 (`FLOW_PROPOSE_PURPOSE`, `FLOW_PROPOSE_STEP`, `FLOW_MALFORMED`).
+
 **`GET /flows/{configuration_id}/availability`** says whether the caller could run each
 step of a stored flow, without planning it. It needs a signed-in caller, reads the flow and
 the registry as `POST /plans/flow` does, and never plans or stores anything:

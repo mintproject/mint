@@ -83,14 +83,18 @@ async function fetchWorkflowTaskLog(
         return "The workflow task log service is not configured.";
     }
     // The adapter's front door: the shared service secret says the call came through
-    // the Ensemble Manager; the user's own token still names who is asking.
+    // the Ensemble Manager; the user's own token names who is asking. It is sent as
+    // X-Front-Door-Secret, not X-Ensemble-Manager-Secret: this route takes an execution
+    // id from the caller and the Ensemble Manager does not check the caller may read
+    // that execution, so the adapter's owner check (the run's submitter) must decide.
+    // The Ensemble Manager's own header would let any signed-in user read any run's log.
     const internalSecret = internalSecretFrom(prefs);
     const response = await fetch(`${baseUrl}/runs/${encodeURIComponent(workflow.run_id)}/poll`, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
-            ...(internalSecret ? { "X-Ensemble-Manager-Secret": internalSecret } : {})
+            ...(internalSecret ? { "X-Front-Door-Secret": internalSecret } : {})
         }
     });
     const body = await response.json().catch(() => ({}));

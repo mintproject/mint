@@ -111,6 +111,19 @@ class FlowCheckIn(BaseModel):
     thread_bindings: dict[str, Any] = Field(default_factory=dict)
 
 
+class FlowProposeIn(BaseModel):
+    """A flow as far as it is built, and one question about it (see flow_propose)."""
+    inputs: list[dict[str, Any]] = Field(default_factory=list, max_length=64)
+    parameters: list[dict[str, Any]] = Field(default_factory=list, max_length=64)
+    steps: list[FlowStepIn] = Field(default_factory=list, max_length=24)
+    outputs: list[Any] = Field(default_factory=list, max_length=64)
+    # {"step": n, "input": k} | {"step": n, "output": j} | {"contract": {...}} | None
+    purpose: Any = None
+    # Both are held to flow_propose's own limits, whatever is asked.
+    max_chain: int = 3
+    max_results: int = 20
+
+
 class FlowCollectionResourceIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(max_length=255)

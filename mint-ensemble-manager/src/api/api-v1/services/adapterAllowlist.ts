@@ -35,6 +35,7 @@ export const ALLOWED_ADAPTER_ROUTES: AllowedRoute[] = [
     route("POST", "/plans/model-run"),
     // flows
     route("POST", "/flows/check"),
+    route("POST", "/flows/propose"),
     route("POST", "/plans/flow"),
     // authoring
     route("POST", "/data-objects"),

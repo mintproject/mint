@@ -12,10 +12,13 @@
  */
 import { useMemo } from 'react';
 import { useQuery } from '@apollo/client';
+import { Link } from 'react-router-dom';
 
 import { WorkflowCanvas } from '@/components/modeling/WorkflowCanvas';
 import { Badge } from '@/components/ui/badge';
 import { FlowBadge } from '@/components/common/FlowBadge';
+import { useAuth } from '@/lib/auth/useAuth';
+import { slugFromUri } from '@/lib/uri';
 import { useFlowAvailability } from '@/hooks/useFlowAvailability';
 import {
   GET_CONFIGURATION_FLOW,
@@ -160,6 +163,7 @@ export function FlowStepsSection({ configurationId, inputs, parameters }: FlowSt
   });
   const flow = data?.modelcatalog_configuration_flow_by_pk ?? null;
   const availability = useFlowAvailability(flow ? configurationId : null);
+  const { isAuthenticated } = useAuth();
 
   const labels = useMemo<FlowLabels>(
     () => ({
@@ -186,6 +190,14 @@ export function FlowStepsSection({ configurationId, inputs, parameters }: FlowSt
     <section data-testid="flow-steps-section">
       <h3 className={`${heading} flex items-center gap-2`}>
         Steps ({flow.steps.length}) <FlowBadge />
+        {isAuthenticated && (
+          <Link
+            className="ml-auto text-xs font-normal normal-case underline"
+            to={`/flows/new/${slugFromUri(configurationId)}`}
+          >
+            Edit as a copy
+          </Link>
+        )}
       </h3>
       {notice && (
         <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-sm text-amber-800">

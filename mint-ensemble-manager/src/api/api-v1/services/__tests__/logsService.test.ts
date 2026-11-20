@@ -4,6 +4,10 @@ import { fetchMintConfig } from "@/classes/mint/mint-functions";
 import { TapisExecutionService } from "@/classes/tapis/adapters/TapisExecutionService";
 import { createHasuraUnifiedExecutionStore } from "../unifiedExecutionStore";
 
+jest.mock("@/classes/graphql/graphql_functions_v2", () => ({
+    getThread: jest.fn().mockResolvedValue({ id: "thread-1" })
+}));
+
 jest.mock("@/classes/graphql/graphql_functions");
 jest.mock("@/classes/mint/mint-functions", () => ({
     fetchMintConfig: jest.fn(),
@@ -84,7 +88,9 @@ describe("logsService.fetchLog", () => {
         global.fetch = answer() as jest.Mock;
         await logsService.fetchLog("execution-1", "Bearer test-token");
         const headers = (global.fetch as jest.Mock).mock.calls[0][1].headers;
-        expect(headers["X-Ensemble-Manager-Secret"]).toBe("service-only");
+        expect(headers["X-Front-Door-Secret"]).toBe("service-only");
+        // Never the header that lets the adapter read any run.
+        expect(headers).not.toHaveProperty("X-Ensemble-Manager-Secret");
         expect(headers.Authorization).toBe("Bearer test-token");
 
         (fetchMintConfig as jest.Mock).mockResolvedValue({
@@ -95,7 +101,7 @@ describe("logsService.fetchLog", () => {
         global.fetch = answer() as jest.Mock;
         await logsService.fetchLog("execution-1", "Bearer test-token");
         expect((global.fetch as jest.Mock).mock.calls[0][1].headers).not.toHaveProperty(
-            "X-Ensemble-Manager-Secret"
+            "X-Front-Door-Secret"
         );
     });
 

@@ -17,6 +17,10 @@ const mockConfig: {
     svo_adapter_internal_secret?: string;
     graphql?: { secret?: string };
 } = {};
+jest.mock("@/classes/graphql/graphql_functions_v2", () => ({
+    getThread: jest.fn().mockResolvedValue({ id: "thread-1" })
+}));
+
 jest.mock("@/classes/mint/mint-functions", () => ({
     getConfiguration: jest.fn(() => mockConfig)
 }));
@@ -291,6 +295,7 @@ describe("the allowlisted adapter forward", () => {
         ["post", "/v1/adapter/readiness/check", "POST", "/readiness/check"],
         ["post", "/v1/adapter/plans/model-run", "POST", "/plans/model-run"],
         ["post", "/v1/adapter/flows/check", "POST", "/flows/check"],
+        ["post", "/v1/adapter/flows/propose", "POST", "/flows/propose"],
         ["post", "/v1/adapter/plans/flow", "POST", "/plans/flow"],
         ["post", "/v1/adapter/data-objects", "POST", "/data-objects"],
         ["post", "/v1/adapter/transform-specs/a%2Fb/test", "POST", "/transform-specs/a%2Fb/test"],
@@ -310,8 +315,8 @@ describe("the allowlisted adapter forward", () => {
         }
     );
 
-    it("lists exactly the 17 routes the MCP needs", () => {
-        expect(ALLOWED_ADAPTER_ROUTES).toHaveLength(17);
+    it("lists exactly the 18 routes the MCP needs", () => {
+        expect(ALLOWED_ADAPTER_ROUTES).toHaveLength(18);
     });
 
     it.each([
