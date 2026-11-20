@@ -39,7 +39,18 @@ You can upload up to 500 files at once, 2 GB in all. A flow can read private fil
 
 ### Parameters step
 
-Review each setting and enter a value. A setting the flow's author has already fixed is shown with that value. If a required setting has no value, the run is not started. The message says *This flow needs a setting filled in*, and names the settings. Fill them in, save, and run again.
+Review each setting. Each shows a readable title and an explanation. The form fills in the flow's default:
+
+- **A setting with choices** is a dropdown. The explanation of the choice you pick appears under it.
+- **A number** is a number box. Saving is refused, with a message, for a value outside the setting's limits.
+- **A yes or no** is a tick box.
+- **Anything else** is a text box.
+
+Rarely changed settings are inside **Advanced settings**, which is closed until you open it. Settings the flow's author hid are not shown at all, and the run uses the author's value for them. A setting the author has fixed is listed under *Expert modeler has selected the following parameters* with its value, and you cannot change it. If something sends a value for a fixed or hidden setting anyway, the run is refused with *A setting is fixed or hidden by the flow*.
+
+If a required setting has no value, the run is not started. The message says *This flow needs a setting filled in*, and names the settings. Fill them in, save, and run again.
+
+For a model (not a flow), a parameter that has a fixed list of accepted values is a list you pick from, with its default selected. Pick more than one value to make one run for each, the same as typing several values separated by commas. A parameter with no such list stays a text box where you can type values separated by commas.
 
 ### Runs step
 
