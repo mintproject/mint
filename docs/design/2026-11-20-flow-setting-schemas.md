@@ -321,6 +321,36 @@ The old pieces stay registered, so rolling back means pointing the flows back at
 - 2026-11-20: visibility is stored in a new `modelcatalog_configuration_flow.settings_json`
   column. Rejected: `parameter_type`, which is already used for other meanings, and step
   `settings_json`, because one setting can span several steps.
+- 2026-11-20 (user): the `openai_compatible` choice of `embedding_kind` and `chat_kind` is
+  titled "Tejas". The stored value is unchanged, because the library reads it.
+
+### Implementation deviations (2026-11-20, monorepo commits 9994104, 3f9a750, f22c7a3; library 98bd2dd, 760c3ff)
+
+- **The run form reads the catalog parameter rows, not adapter plans,** because a flow is planned
+  only at Run. A new adapter route, `GET /flows/{id}/settings`, is relayed by the catalog API like
+  `/availability`. It returns per setting the title, choices, bounds, advanced flag, resolved
+  default, fixed flag and visibility, plus the thread-filled names. The form merges it onto the
+  rows. With the adapter down, the rows alone still give dropdowns, numbers and defaults. One
+  resolver, `flow_settings.resolve`, serves plan, submit and this route.
+- **The parameter rows are mirrored by the catalog API's `POST /flows` (`buildRows`), not the
+  UI.** This keeps one writer.
+- **A pre-filled value equal to the flow default is not saved as a runner binding.** Fixed or
+  hidden values already bound in a thread are dropped on save.
+- **Thread-filled settings (for example dates) are exempt from the runner-value refusal, not
+  from the flow check.** An author who hides one must give it a value.
+- **Hidden wins over fixed in the UI:** a hidden fixed setting is not listed read-only.
+- **Error codes:**
+  - `FLOW_SETTING_REFUSED` (422 at submit)
+  - `FLOW_SETTING_HIDDEN_WITHOUT_VALUE`, `FLOW_SETTING_FIXED_WITHOUT_VALUE` and
+    `FLOW_SETTING_INVALID` (flow check)
+  - `FLOW_SETTINGS_UNAVAILABLE` (502 from the relay)
+- **Migration:** `1771300000047_configuration_flow_settings`.
+- **Open:** draft-lexicon `grounding=semantic` and map-and-project `mapping_method=embedding`
+  cannot run, because the adapter makes every declared secret required (`step_secrets.py`, no
+  optional flag). Declaring `model_server` on map-and-project would force a credential on keyword
+  runs. Proposed: separate embedding variants of the two pieces (awaiting the user).
+- **Unverified:** Hasura applying the migration; the `text[]` literal written for
+  `has_accepted_values`; anything live.
 
 ## User feedback / decisions
 
