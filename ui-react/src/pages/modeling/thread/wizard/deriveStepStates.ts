@@ -6,8 +6,12 @@ export interface DeriveOpts {
   datasetsComplete?: boolean;
   /** Parameter values valid for every model (defaults give a valid baseline). */
   parametersComplete?: boolean;
-  /** >=1 successful run. */
+  /** Every model's runs have been submitted and have finished. */
   runsComplete?: boolean;
+  /** >=1 model has a successful run to show; this alone unlocks Results. */
+  resultsAvailable?: boolean;
+  /** Models whose runs have all finished, out of the thread's models. */
+  finishedModels?: { finished: number; total: number };
 }
 
 export type StepStateMap = Record<WizardStepId, StepState>;
@@ -19,6 +23,14 @@ export function deriveStepStates(thread: Thread, opts: DeriveOpts = {}): StepSta
   const datasetsSet = !!opts.datasetsComplete;
   const parametersSet = !!opts.parametersComplete;
   const runsSet = !!opts.runsComplete;
+  const resultsAvailable = !!opts.resultsAvailable || runsSet;
+  const { finished = 0, total = 0 } = opts.finishedModels ?? {};
+  // Complete only when every model is done; a partial thread says how far it is.
+  const runsSummary = runsSet
+    ? 'Complete'
+    : finished > 0 && total > 1
+      ? `${finished} of ${total} complete`
+      : 'Pending';
 
   const region = thread.region_id?.trim() || 'any region';
   const framingSummary = goalSet ? `${thread.name!.trim()} · ${region}` : 'Not set';
@@ -46,8 +58,8 @@ export function deriveStepStates(thread: Thread, opts: DeriveOpts = {}): StepSta
     ),
     datasets: state(datasetsSet, !modelsSet, datasetsSet ? 'All inputs assigned' : 'Pending'),
     parameters: state(parametersSet, !datasetsSet, parametersSet ? 'Configured' : 'Pending'),
-    runs: state(runsSet, !parametersSet, runsSet ? 'Complete' : 'Pending'),
-    results: state(false, !runsSet, 'Pending'),
+    runs: state(runsSet, !parametersSet, runsSummary),
+    results: state(false, !resultsAvailable, 'Pending'),
     summary: state(false, false, 'Review'),
   };
 }

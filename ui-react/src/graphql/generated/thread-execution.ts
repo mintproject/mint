@@ -300,13 +300,14 @@ export type ThreadModelSummaryInsert = {
 };
 
 export type UpdateThreadParametersMutationVariables = {
-  threadId: string;
   event: {
     thread_id: string;
     event: string;
     userid: string;
     notes?: string | null;
   };
+  /** The `thread_model.id` values whose parameters or run count changed. */
+  changedThreadModelIds: string[];
   summaries: ThreadModelSummaryInsert[];
   modelParams: ThreadModelParameterInsert[];
 };
@@ -320,29 +321,33 @@ export type UpdateThreadParametersMutation = {
 };
 
 /**
- * Replace a thread's parameter bindings and execution summaries in one document.
+ * Replace the parameter bindings and execution summaries of the thread models
+ * in `$changedThreadModelIds`, in one document.
  *
  * The deletes are not optional: a parameter change invalidates every run that
- * came before it, so the executions and their summaries go with it. Hasura runs
- * a mutation's root fields in a single transaction, so the thread is never left
- * with bindings from one save and summaries from another.
+ * came before it, so the executions and their summaries go with it. They are
+ * scoped to the changed models, though: a model whose parameters did not change
+ * keeps its finished runs, so adding a model to a thread never wipes the runs of
+ * the models already on it. Hasura runs a mutation's root fields in a single
+ * transaction, so the thread is never left with bindings from one save and
+ * summaries from another.
  */
 export const UpdateThreadParametersDocument = gql`
   mutation UpdateThreadParameters(
-    $threadId: String!
     $event: thread_provenance_insert_input!
+    $changedThreadModelIds: [uuid!]!
     $summaries: [thread_model_execution_summary_insert_input!]!
     $modelParams: [thread_model_parameter_insert_input!]!
   ) {
     delete_thread_model_execution_summary(
-      where: { thread_model: { thread_id: { _eq: $threadId } } }
+      where: { thread_model_id: { _in: $changedThreadModelIds } }
     ) {
       affected_rows
     }
-    delete_thread_model_parameter(where: { thread_model: { thread_id: { _eq: $threadId } } }) {
+    delete_thread_model_parameter(where: { thread_model_id: { _in: $changedThreadModelIds } }) {
       affected_rows
     }
-    delete_thread_model_execution(where: { thread_model: { thread_id: { _eq: $threadId } } }) {
+    delete_thread_model_execution(where: { thread_model_id: { _in: $changedThreadModelIds } }) {
       affected_rows
     }
     insert_thread_model_parameter(objects: $modelParams) {

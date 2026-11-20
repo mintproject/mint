@@ -6,8 +6,13 @@ import type {
   ThreadExecutionRow,
   ThreadModelRow,
 } from '@/graphql/generated/thread-execution';
+import { print } from 'graphql';
+import { UpdateThreadParametersDocument } from '@/graphql/generated/thread-execution';
 import {
+  anyResults,
   bindingsFromGQL,
+  changedParameterModelIds,
+  finishedModelCount,
   collectionInputsFromFlow,
   datasetsComplete,
   executionFromGQL,
@@ -543,5 +548,85 @@ describe('run counting with a collection input', () => {
 
   it('leaves a model that is not a flow unchanged', () => {
     expect(totalConfigs({ ...flow, isFlow: false }, bindings, data)).toBe(40);
+  });
+});
+
+describe('results unlock and partial completion', () => {
+  const done = {
+    total_runs: 1,
+    submitted_runs: 1,
+    successful_runs: 1,
+    failed_runs: 0,
+    submitted_for_execution: true,
+  };
+  const unrun = { ...done, submitted_runs: 0, successful_runs: 0, submitted_for_execution: false };
+  const threeModels = (summary: ThreadExecutionData['execution_summary']) =>
+    execData({
+      models: {
+        a: { id: 'a', name: 'A', input_files: [], output_files: [], input_parameters: [] },
+        b: { id: 'b', name: 'B', input_files: [], output_files: [], input_parameters: [] },
+        c: { id: 'c', name: 'C', input_files: [], output_files: [], input_parameters: [] },
+      },
+      execution_summary: summary,
+    });
+
+  it('has results once one of three models has a successful run', () => {
+    const data = threeModels({ a: unrun, b: done, c: unrun });
+    expect(anyResults(data)).toBe(true);
+    expect(runsComplete(data)).toBe(false);
+    expect(finishedModelCount(data)).toEqual({ finished: 1, total: 3 });
+  });
+
+  it('has no results while nothing has succeeded', () => {
+    expect(anyResults(threeModels({ a: unrun, b: unrun, c: unrun }))).toBe(false);
+    expect(anyResults(null)).toBe(false);
+  });
+});
+
+describe('changedParameterModelIds', () => {
+  const finishedSummary = {
+    total_runs: 1,
+    submitted_runs: 1,
+    successful_runs: 1,
+    failed_runs: 0,
+    submitted_for_execution: true,
+  };
+  const noParams = { input_files: [], output_files: [], input_parameters: [] };
+  const data = execData({
+    models: {
+      old: { id: 'old', name: 'Old', ...noParams },
+      added: { id: 'added', name: 'Added', ...noParams },
+    },
+    model_ensembles: {
+      old: { id: 'tm-old', bindings: {} },
+      added: { id: 'tm-added', bindings: {} },
+    },
+    execution_summary: { old: finishedSummary },
+  });
+  const ensembles = {
+    old: { id: 'tm-old', bindings: {} },
+    added: { id: 'tm-added', bindings: {} },
+  };
+
+  it('resets only the newly added model, keeping a finished model untouched', () => {
+    const changed = changedParameterModelIds(data, ensembles, {
+      old: { total_runs: 1 },
+      added: { total_runs: 1 },
+    });
+    expect(changed).toEqual(['tm-added']);
+  });
+
+  it('resets a model whose run count changed', () => {
+    const changed = changedParameterModelIds(data, ensembles, {
+      old: { total_runs: 2 },
+      added: { total_runs: 1 },
+    });
+    expect(changed).toEqual(['tm-old', 'tm-added']);
+  });
+
+  it('scopes every delete in the save mutation to the changed models', () => {
+    const text = print(UpdateThreadParametersDocument);
+    expect(text).not.toMatch(/thread_id: \{ _eq/);
+    expect(text.match(/\$changedThreadModelIds/g)?.length).toBeGreaterThanOrEqual(4);
   });
 });
