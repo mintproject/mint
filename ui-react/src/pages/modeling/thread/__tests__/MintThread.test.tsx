@@ -703,6 +703,90 @@ describe('MintThread with a flow', () => {
     expect(posts(fetchMock, '/plans/submit')).toHaveLength(0);
   });
 
+  async function runFlow(plan: Record<string, unknown>) {
+    const fetchMock = stubEnsembleManager({ plan });
+    renderMintThread([
+      writable,
+      ...executionMocks(withFlow(executionReadyToSendMock), { count: 0 }),
+      regionsMock,
+      modelTreeMock,
+    ]);
+    await openRuns();
+    fireEvent.click(await screen.findByTestId('submit-runs-cfgA'));
+    return fetchMock;
+  }
+
+  it('does not submit when saved credentials are missing, and lists them with a link', async () => {
+    const fetchMock = await runFlow({
+      secrets_ready: false,
+      required_secrets: [
+        {
+          name: 'model_server',
+          label: 'Model server',
+          fields: ['api_key'],
+          steps: ['s1'],
+          stored: false,
+        },
+        { name: 'other', label: 'Other', fields: ['t'], stored: true },
+      ],
+    });
+    const list = await screen.findByTestId('flow-required-secrets');
+    expect(list).toHaveTextContent('This flow needs these saved credentials:');
+    expect(list).toHaveTextContent(/Model server.*model_server: api_key\) is not stored yet/);
+    expect(list).toHaveTextContent(/Other.*is stored/);
+    expect(screen.getByRole('link', { name: /saved credentials/i })).toHaveAttribute(
+      'href',
+      '/account/credentials',
+    );
+    expect(screen.queryByRole('button', { name: /accept and run/i })).not.toBeInTheDocument();
+    expect(posts(fetchMock, '/plans/submit')).toHaveLength(0);
+  });
+
+  it('submits when the credentials are ready', async () => {
+    const fetchMock = await runFlow({ secrets_ready: true, required_secrets: [] });
+    await waitFor(() => expect(posts(fetchMock, '/plans/submit')).toHaveLength(1));
+  });
+
+  it('requires a tick before sending data outside DYNAMO', async () => {
+    const fetchMock = await runFlow({
+      sends_data_to: [
+        { step: 's1', piece: 'p', service: 'OpenAI', what: 'the text of your files' },
+      ],
+    });
+    expect(await screen.findByText('This run sends data outside DYNAMO:')).toBeInTheDocument();
+    expect(screen.getByTestId('flow-sends-data-to')).toHaveTextContent(
+      'OpenAI: the text of your files',
+    );
+    const go = screen.getByRole('button', { name: /accept and run/i });
+    expect(go).toBeDisabled();
+    expect(posts(fetchMock, '/plans/submit')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('checkbox', { name: /send this data outside/i }));
+    fireEvent.click(go);
+    await waitFor(() => expect(posts(fetchMock, '/plans/submit')).toHaveLength(1));
+    expect(bodyOf(posts(fetchMock, '/plans/submit')[0])).toEqual({
+      plan_id: 'plan-flow',
+      accept_flow_settings: false,
+    });
+  });
+
+  it('needs both ticks when author settings and an outside service apply', async () => {
+    const fetchMock = await runFlow({
+      flow_settings: { defaults: { title: 'T' }, links: [] },
+      sends_data_to: [{ service: 'OpenAI' }],
+    });
+    const go = await screen.findByRole('button', { name: /accept and run/i });
+    fireEvent.click(screen.getByRole('checkbox', { name: /i accept these settings/i }));
+    expect(go).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /send this data outside/i }));
+    expect(go).toBeEnabled();
+    fireEvent.click(go);
+    await waitFor(() => expect(posts(fetchMock, '/plans/submit')).toHaveLength(1));
+    expect(bodyOf(posts(fetchMock, '/plans/submit')[0])).toEqual({
+      plan_id: 'plan-flow',
+      accept_flow_settings: true,
+    });
+  });
+
   it('shows a readable refusal and lets the user open the run in progress', async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       const json = (status: number, body: unknown) => ({

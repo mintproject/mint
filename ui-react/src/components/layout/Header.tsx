@@ -1,4 +1,5 @@
 import { Menu } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/useAuth';
@@ -51,6 +52,12 @@ export function Header({ sidebarCollapsed, onToggleSidebar }: HeaderProps) {
           <>
             <UserAvatar username={user?.username} />
             <span className="hidden text-[13px] text-white/70 sm:inline">{user?.username}</span>
+            <Link
+              to="/account/credentials"
+              className="hidden text-[13px] text-white/70 underline-offset-2 hover:text-white hover:underline sm:inline"
+            >
+              Saved credentials
+            </Link>
             <Button variant="outline" size="sm" onClick={logout} className={chromeButton}>
               Sign Out
             </Button>

@@ -48,7 +48,6 @@ import {
   cancelUnifiedRun,
   fetchUnifiedRun,
   isUnifiedRunTerminal,
-  type FlowSettings,
   publishExecution,
   publishResults,
   submitExecutionPlan,
@@ -71,7 +70,7 @@ import {
 import { useAuth } from '@/lib/auth/useAuth';
 import { cn } from '@/lib/utils';
 
-import { FlowSettingsDialog } from './thread/FlowSettingsDialog';
+import { FlowSettingsDialog, type FlowRunGate } from './thread/FlowSettingsDialog';
 import { FlowSettingsMissingError, missingFlowSettings } from '@/lib/flow-errors';
 import { MintSummary } from './thread/MintSummary';
 import { MintParameters } from './thread/MintParameters';
@@ -146,9 +145,9 @@ export function MintThread({
   const [adapterPlanError, setAdapterPlanError] = useState<string | null>(null);
   const [adapterPlansLoading, setAdapterPlansLoading] = useState(false);
   const [spatialSelection, setSpatialSelection] = useState<SpatialSelection | null>(null);
-  // The author's settings of the flow being run, while the user decides on them.
+  // What the user must settle before the flow run starts, while they decide.
   const [flowAcceptance, setFlowAcceptance] = useState<{
-    settings: FlowSettings;
+    gate: FlowRunGate;
     resolve: (accepted: boolean) => void;
   } | null>(null);
   const discoveredAdapterSources = useRef<string | null>(null);
@@ -781,10 +780,9 @@ export function MintThread({
     [apollo, threadExecutionData],
   );
 
-  // Ask the user about the author's settings; resolves with their answer.
+  // Ask the user about the run; resolves with their answer.
   const askFlowAcceptance = useCallback(
-    (settings: FlowSettings) =>
-      new Promise<boolean>((resolve) => setFlowAcceptance({ settings, resolve })),
+    (gate: FlowRunGate) => new Promise<boolean>((resolve) => setFlowAcceptance({ gate, resolve })),
     [],
   );
   const answerFlowAcceptance = useCallback(
@@ -862,7 +860,18 @@ export function MintThread({
         const hasAuthorSettings =
           Object.keys(authorSettings?.defaults ?? {}).length > 0 ||
           (authorSettings?.links ?? []).length > 0;
-        if (hasAuthorSettings && !(await askFlowAcceptance(authorSettings!))) return;
+        // An older server sends none of these fields; absent means nothing to do.
+        const sendsDataTo = flowPlan.sends_data_to ?? [];
+        const secretsNotReady = flowPlan.secrets_ready === false;
+        if (secretsNotReady || hasAuthorSettings || sendsDataTo.length > 0) {
+          const proceed = await askFlowAcceptance({
+            ...(hasAuthorSettings ? { settings: authorSettings } : {}),
+            ...(sendsDataTo.length > 0 ? { sendsDataTo } : {}),
+            ...(secretsNotReady ? { requiredSecrets: flowPlan.required_secrets ?? [] } : {}),
+          });
+          // Not ready is never submitted: the dialog only offers to close.
+          if (!proceed || secretsNotReady) return;
+        }
         const flowRun = await submitExecutionPlan(ensembleManagerApi, {
           plan_id: flowPlan.plan_id,
           accept_flow_settings: hasAuthorSettings,
@@ -1269,7 +1278,7 @@ export function MintThread({
         <main className="min-w-0 flex-1 overflow-y-auto pr-1">{renderStep()}</main>
       </div>
       <FlowSettingsDialog
-        settings={flowAcceptance?.settings ?? null}
+        gate={flowAcceptance?.gate ?? null}
         onConfirm={() => answerFlowAcceptance(true)}
         onCancel={() => answerFlowAcceptance(false)}
       />

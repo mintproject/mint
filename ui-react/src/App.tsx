@@ -41,6 +41,9 @@ import { RegionRedirect } from './pages/regions/RegionRedirect';
 // Pages — variables
 import { VariablesHome } from './pages/variables/VariablesHome';
 
+// Account
+import { CredentialsPage } from './pages/account/CredentialsPage';
+
 // Auth
 import { OAuth2CallbackPage } from './pages/OAuth2CallbackPage';
 
@@ -135,6 +138,16 @@ export function App() {
             element={
               <ProtectedRoute>
                 <MintThread />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Account */}
+          <Route
+            path="/account/credentials"
+            element={
+              <ProtectedRoute>
+                <CredentialsPage />
               </ProtectedRoute>
             }
           />

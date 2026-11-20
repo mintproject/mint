@@ -161,6 +161,23 @@ export interface FlowSettings {
   links?: unknown[];
 }
 
+/** A saved credential a flow's steps need, and whether the user has stored it. */
+export interface RequiredSecret {
+  name: string;
+  label?: string;
+  fields?: string[];
+  steps?: string[];
+  stored?: boolean;
+}
+
+/** An outside service a flow step sends data to. */
+export interface SendsDataTo {
+  step?: string;
+  piece?: string;
+  service: string;
+  what?: string;
+}
+
 export interface UnifiedExecutionPlan {
   plan_id: string | null;
   executor: UnifiedExecutor;
@@ -171,6 +188,10 @@ export interface UnifiedExecutionPlan {
   /** Present for a flow only. */
   flow_steps?: FlowStep[];
   flow_settings?: FlowSettings;
+  /** Absent on an older server, meaning none. */
+  required_secrets?: RequiredSecret[];
+  secrets_ready?: boolean;
+  sends_data_to?: SendsDataTo[];
   [key: string]: unknown;
 }
 
