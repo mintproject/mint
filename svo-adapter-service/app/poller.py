@@ -164,11 +164,16 @@ _TERMINAL: dict[str, str] = {
 }
 
 
+# A task in any of these states did not produce its result. A pipeline run that
+# Tapis reports COMPLETED while one of its tasks is in one of them has not worked.
+_FAILED_TASK_STATES = frozenset({"FAILED", "ERROR", "TERMINATED", "CANCELLED", "CANCELED"})
+
+
 def _failed_task_messages(detail: dict[str, Any]) -> list[str]:
     """Extract child task failures from a Tapis run detail payload."""
     failed = []
     for task in detail.get("tasks") or []:
-        if (task.get("status") or "").upper() not in ("FAILED", "ERROR"):
+        if str(task.get("status") or "").strip().upper() not in _FAILED_TASK_STATES:
             continue
         task_id = task.get("task_id") or task.get("id") or "unknown-task"
         message = task.get("last_message") or task.get("stderr") or task.get("stdout") or "no detail"
@@ -188,6 +193,14 @@ def _terminal_update_set(
         return None, {}
 
     detail = detail or {}
+    if adapter_status == "completed" and (detail.get("tasks_error") or detail.get("run_error")):
+        # Child-task failures are only visible in the task detail; without it a
+        # failed run would be recorded as completed. Leave it open to retry.
+        log.warning(
+            "run reported %s but its task detail was unreadable (%s); not closing it",
+            tapis_status, detail.get("tasks_error") or detail.get("run_error"),
+        )
+        return None, {}
     failed_tasks = _failed_task_messages(detail)
     _, result_error = task_result(detail)
     if result_error:
@@ -330,6 +343,95 @@ async def _auto_bind_completed_run(
     return {"execution_id": execution_id, "model_io_id": ds_id, "resource_id": do_result["id"]}
 
 
+async def reconcile_run(
+    h, run: dict[str, Any], token: str, *, timeout: float | None = None,
+) -> dict[str, Any] | None:
+    """Check one active run against Tapis and close it when Tapis says it has ended.
+
+    Returns {run_id, tapis_status, adapter_status} when the run was closed, else None
+    (still active, no Tapis ids, Tapis unreachable or the task detail unreadable: the
+    run is left as it was, never closed on a guess). ``timeout`` bounds each Tapis read.
+    """
+    run_id = run["id"]
+    pipeline_id = run.get("tapis_workflow_id")
+    run_uuid = run.get("tapis_run_id")
+    if not (pipeline_id and run_uuid):
+        log.debug("poller: run %s missing pipeline_id/run_uuid, skipping", run_id)
+        return None
+
+    async def read(fn):
+        call = run_in_threadpool(fn, pipeline_id, run_uuid, token=token)
+        return await (asyncio.wait_for(call, timeout) if timeout else call)
+
+    # --- status check (fast path — no task logs) -----------------------------
+    try:
+        tapis_status: str | None = await read(tapis_mod.get_run_status)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("poller: Tapis unreachable for run %s: %s", run_id, type(exc).__name__)
+        return None
+
+    if not tapis_status:
+        log.debug("poller: no status returned for run %s", run_id)
+        return None
+
+    if _TERMINAL.get(tapis_status.upper()) is None:
+        return None  # still active — no write needed
+
+    # --- terminal: build the update payload ----------------------------------
+    detail: dict[str, Any] = {}
+    try:
+        detail = await read(tapis_mod.get_run_detail)
+    except Exception as exc:  # noqa: BLE001
+        log.debug("poller: could not fetch task detail for run %s: %s", run_id, exc)
+        detail = {"tasks_error": type(exc).__name__}
+    adapter_status, update_set = _terminal_update_set(tapis_status, detail)
+    if adapter_status is None:
+        return None
+
+    # --- write ---------------------------------------------------------------
+    try:
+        await release_run_token(h, run_id, f"terminal:{adapter_status}")
+        await h.execute(_UPDATE_RUN, {"id": run_id, "set": update_set})
+        await h.execute(_INSERT_PROVENANCE, {"obj": {
+            "workflow_run_id": run_id,
+            "event_type": "run_status_polled",
+            "payload_json": {
+                "tapis_status": tapis_status,
+                "adapter_status": adapter_status,
+            },
+        }})
+        log.info("poller: run %s → %s (tapis=%s)", run_id[:12], adapter_status, tapis_status)
+        return {"run_id": run_id, "tapis_status": tapis_status, "adapter_status": adapter_status}
+    except Exception as exc:  # noqa: BLE001
+        log.error("poller: failed to write update for run %s: %s", run_id, exc)
+        return None
+
+
+# What a credential change spends reconciling the caller's open runs before it is
+# refused: at most this many runs, and this long, in total.
+RECONCILE_MAX_RUNS = 10
+RECONCILE_BUDGET_SECONDS = 20.0
+
+
+async def reconcile_open_runs(h, runs: list[dict[str, Any]], token: str) -> list[dict[str, Any]]:
+    """Reconcile some of ``runs`` against Tapis, with the caller's own token.
+
+    Bounded by RECONCILE_MAX_RUNS and RECONCILE_BUDGET_SECONDS; runs past either
+    bound are left untouched. Returns the transitions made.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + RECONCILE_BUDGET_SECONDS
+    closed: list[dict[str, Any]] = []
+    for run in runs[:RECONCILE_MAX_RUNS]:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            break
+        update = await reconcile_run(h, run, token, timeout=remaining)
+        if update:
+            closed.append(update)
+    return closed
+
+
 async def poll_once(token: str) -> list[dict[str, Any]]:
     """Single poll pass.
 
@@ -347,76 +449,14 @@ async def poll_once(token: str) -> list[dict[str, Any]]:
 
     updates: list[dict[str, Any]] = []
     for run in rows:
-        run_id = run["id"]
-        pipeline_id = run.get("tapis_workflow_id")
-        run_uuid = run.get("tapis_run_id")
         if run.get("execution_id") and not settings.poll_coordinator_runs:
             # Ensemble Manager polls these with the UI caller's bearer token,
             # and only while someone requests the run. Opt out of the service
             # token reading them (see poll_coordinator_runs in config).
             continue
-        if not (pipeline_id and run_uuid):
-            log.debug("poller: run %s missing pipeline_id/run_uuid, skipping", run_id)
-            continue
-
-        # --- status check (fast path — no task logs) -------------------------
-        try:
-            tapis_status: str | None = await run_in_threadpool(
-                tapis_mod.get_run_status, pipeline_id, run_uuid, token=token,
-            )
-        except Exception as exc:  # noqa: BLE001
-            log.warning("poller: Tapis unreachable for run %s: %s", run_id, exc)
-            continue
-
-        if not tapis_status:
-            log.debug("poller: no status returned for run %s", run_id)
-            continue
-
-        adapter_status = _TERMINAL.get(tapis_status.upper())
-        if adapter_status is None:
-            continue  # still active — no write needed
-
-        # --- terminal: build the update payload ------------------------------
-        detail: dict[str, Any] = {}
-        try:
-            detail = await run_in_threadpool(
-                tapis_mod.get_run_detail, pipeline_id, run_uuid, token=token,
-            )
-        except Exception as exc:  # noqa: BLE001
-            log.debug("poller: could not fetch task detail for run %s: %s", run_id, exc)
-        adapter_status, update_set = _terminal_update_set(tapis_status, detail)
-        if adapter_status is None:
-            continue
-        if adapter_status == "completed" and (detail.get("tasks_error") or detail.get("run_error")):
-            # Child-task failures are only visible in the task detail; without
-            # it a failed run would be recorded as completed. Retry next pass.
-            log.warning(
-                "poller: run %s reported %s but task detail was unreadable (%s); retrying",
-                run_id[:12], tapis_status, detail.get("tasks_error") or detail.get("run_error"),
-            )
-            continue
-
-        # --- write -----------------------------------------------------------
-        try:
-            await release_run_token(h, run_id, f"terminal:{adapter_status}")
-            await h.execute(_UPDATE_RUN, {"id": run_id, "set": update_set})
-            await h.execute(_INSERT_PROVENANCE, {"obj": {
-                "workflow_run_id": run_id,
-                "event_type": "run_status_polled",
-                "payload_json": {
-                    "tapis_status": tapis_status,
-                    "adapter_status": adapter_status,
-                },
-            }})
-            updates.append({
-                "run_id": run_id,
-                "tapis_status": tapis_status,
-                "adapter_status": adapter_status,
-            })
-            log.info("poller: run %s → %s (tapis=%s)", run_id[:12], adapter_status, tapis_status)
-        except Exception as exc:  # noqa: BLE001
-            log.error("poller: failed to write update for run %s: %s", run_id, exc)
-            continue
+        update = await reconcile_run(h, run, token)
+        if update:
+            updates.append(update)
 
     return updates
 

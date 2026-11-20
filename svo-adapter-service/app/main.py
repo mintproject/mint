@@ -4931,7 +4931,9 @@ async def poll_run(
                 h, get_client(None), {**run, **update}, token
             )
             run = {**run, "auto_bind": bind_result}
-    response = {**run, **detail}
+    # `detail` carries Tapis's own pipeline-run status under "status", which would
+    # replace the run's. The adapter's status is the run's; Tapis's is `tapis_status`.
+    response = {**run, **detail, "status": run.get("status"), "tapis_status": detail.get("status")}
     plan_row = (await h.execute(GET_PLAN, {"id": run.get("workflow_plan_id")}))["adapter_workflow_plan_by_pk"] \
         if run.get("workflow_plan_id") else None
     plan_json_now = (plan_row or {}).get("plan_json") or {}
@@ -5603,15 +5605,27 @@ async def _secret_caller(authorization: str | None) -> str:
     return username
 
 
-async def _guard_secret_change(h, username: str) -> None:
+async def _guard_secret_change(h, username: str, token: str | None) -> None:
     """Rate limit, then refuse while the caller has a run in progress: a step of
-    that run holds the same token and could otherwise swap the stored secret."""
+    that run holds the same token and could otherwise swap the stored secret.
+
+    A run stored as active may have finished in Tapis long ago, so the caller's open
+    runs are reconciled first (bounded: poller.reconcile_open_runs) and only those
+    Tapis still reports active block the change. A run that cannot be checked, for
+    any reason, stays open and blocks it: this never fails open."""
     if not _secret_change_rate_ok(username, time.time()):
         raise HTTPException(429, detail={"code": "SECRET_RATE_LIMITED"}, headers=_NO_STORE)
-    if await secrets_store.user_has_active_run(h, username):
+    runs = await secrets_store.user_active_runs(h, username)
+    if runs and token:
+        from . import poller  # noqa: PLC0415 — deferred, as in lifespan
+        await poller.reconcile_open_runs(h, runs, token)
+        runs = await secrets_store.user_active_runs(h, username)
+    if runs:
+        run_id = runs[0]["id"]
         raise HTTPException(409, detail={
-            "code": "SECRET_LOCKED_BY_RUN",
-            "message": "you have a run in progress; change this credential when it has finished"},
+            "code": "SECRET_LOCKED_BY_RUN", "run_id": run_id,
+            "message": f"you have a run in progress (run {run_id}); "
+                       "change this credential when it has finished"},
             headers=_NO_STORE)
 
 
@@ -5634,7 +5648,7 @@ async def put_user_secret(
     secrets_store.register_values(body.fields.values())
     username = await _secret_caller(authorization)
     h = get_client(None)
-    await _guard_secret_change(h, username)
+    await _guard_secret_change(h, username, _bearer(authorization))
     try:
         secrets_store.validate_name(name)
         secrets_store.validate_fields(body.fields)
@@ -5659,7 +5673,7 @@ async def delete_user_secret(name: str, authorization: str | None = Header(None)
     """Delete the caller's own secret. 404 when they have none by that name."""
     username = await _secret_caller(authorization)
     h = get_client(None)
-    await _guard_secret_change(h, username)
+    await _guard_secret_change(h, username, _bearer(authorization))
     store = secrets_store.FernetSecretStore(h)
     row = await store.find(secrets_store.SCOPE_USER, username, name, "")
     if not row:

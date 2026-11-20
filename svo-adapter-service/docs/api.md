@@ -666,6 +666,11 @@ Refusals, on all three routes unless noted:
 - `PUT` and `DELETE` only: 409 `SECRET_LOCKED_BY_RUN` while you have a run in progress
   (`submitting` or `running`). Every step of your run holds your token, so a stored secret
   cannot be changed until the run has finished. Listing is never locked.
+  A run stored as active may already have finished in Tapis, so before refusing the adapter
+  checks your open runs against Tapis with your token (at most 10 runs, 20 seconds in
+  total) and closes the ones Tapis reports finished. Only a run still active, or one that
+  could not be checked, blocks the change. The refusal carries `run_id` and names the run
+  in its message.
 - `PUT` and `DELETE` only: 429 `SECRET_RATE_LIMITED` beyond 20 changes per user in 10
   minutes.
 

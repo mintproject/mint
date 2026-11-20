@@ -266,9 +266,11 @@ async def list_user_secrets(hasura, owner: str) -> list[dict[str, Any]]:
     return [_metadata(r) for r in rows]
 
 
-async def user_has_active_run(hasura, username: str) -> bool:
-    """True when ``username`` submitted a run that is still ``submitting`` or ``running``."""
-    return bool((await hasura.execute(USER_ACTIVE_RUN, {"user": username}))["adapter_workflow_run"])
+async def user_active_runs(hasura, username: str) -> list[dict[str, Any]]:
+    """The runs ``username`` submitted that are still ``submitting`` or ``running``, as
+    stored. (Stored, not live: a run Tapis finished days ago stays here until something
+    reconciles it, see poller.reconcile_open_runs.)"""
+    return (await hasura.execute(USER_ACTIVE_RUN, {"user": username}))["adapter_workflow_run"]
 
 
 async def record_event(hasura, event: str, row: dict[str, Any], *, run_id: str | None = None,

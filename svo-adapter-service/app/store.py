@@ -323,10 +323,11 @@ class InMemoryHasura:
                                    for r in sorted(rows, key=lambda r: r["name"])]}
 
     def _op_UserActiveRun(self, v):
-        rows = [{"id": r["id"]} for r in STORE.run.values()
+        rows = [{k: r.get(k) for k in ("id", "tapis_workflow_id", "tapis_run_id")}
+                for r in STORE.run.values()
                 if r.get("submitted_by") == v["user"]
                 and r.get("status") in ("submitting", "running")]
-        return {"adapter_workflow_run": rows[:1]}
+        return {"adapter_workflow_run": rows}
 
     def _op_GetSecret(self, v):
         return {"adapter_secret_by_pk": STORE.secret.get(v["id"])}

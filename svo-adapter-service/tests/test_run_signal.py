@@ -432,3 +432,25 @@ def test_composite_submit_embeds_a_valid_output_file(good, monkeypatch, composit
     assert response.status_code == 200, response.text
     code = composite_submit["submits"][0]["pipeline"]["tasks"][0]["code"]
     assert "_output_file = %r" % good in code
+
+
+def test_poll_answers_with_the_adapters_status_not_tapis_for_a_failed_model_task(monkeypatch, as_alice):
+    """Tapis can report the pipeline run `completed` while its model task failed. The
+    run is stored `failed`, and the answer says so: Tapis's status is `tapis_status`,
+    never `status` (it used to replace it, so a failed run read as completed)."""
+    import json
+    _run()
+    payload = {"status": "error", "code": "MODEL_PROVIDER_JOB_FAILED",
+               "message": "model job j-007 ended with status CANCELLED",
+               "attempts": [{"method": "GET", "status": "200"}]}
+    monkeypatch.setattr("app.main.tapis.get_run_detail", lambda *a, **k: {
+        "status": "completed",
+        "tasks": [{"task_id": "model", "status": "failed", "last_message": "Task Failed: []",
+                   "stdout": json.dumps(payload)}]})
+    response = client.post("/runs/run-1/poll", headers=BEARER)
+    body = response.json()
+    assert response.status_code == 200
+    assert STORE.run["run-1"]["status"] == "failed"
+    assert body["status"] == "failed" and body["tapis_status"] == "completed"
+    assert "MODEL_PROVIDER_JOB_FAILED" in body["error_message"]
+    assert "MODEL_PROVIDER_JOB_FAILED" in STORE.run["run-1"]["error_message"]
