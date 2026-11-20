@@ -1,10 +1,11 @@
 /**
  * Tests for MintThread — step workflow container.
  */
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent } from '@testing-library/react';
 import { screen, waitFor } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
+import type { FetchResult } from '@apollo/client';
 import { MockedProvider } from '@apollo/client/testing';
 import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -138,6 +139,7 @@ const executionMock = {
               id: 'cfgA',
               label: 'HAND setup',
               description: null,
+              flow: null,
               inputs: [
                 {
                   __typename: 'modelcatalog_configuration_input',
@@ -523,5 +525,311 @@ describe('MintThread', () => {
       vi.unstubAllGlobals();
       delete (window as { __MINT_CONFIG__?: unknown }).__MINT_CONFIG__;
     }
+  });
+});
+
+describe('MintThread with a flow', () => {
+  const FLOW = { __typename: 'modelcatalog_configuration_flow', configuration_id: 'cfgA' };
+  const withFlow = (mock: typeof executionReadyToSendMock) => ({
+    request: mock.request,
+    result: {
+      data: {
+        thread_by_pk: {
+          ...mock.result.data.thread_by_pk,
+          thread_models: mock.result.data.thread_by_pk.thread_models.map((tm) => ({
+            ...tm,
+            modelcatalog_configuration: { ...tm.modelcatalog_configuration, flow: FLOW },
+          })),
+        },
+      },
+    },
+  });
+  const writable = {
+    ...getThreadWithModelMock,
+    result: {
+      data: {
+        thread_by_pk: {
+          ...threadWithModel,
+          permissions: [
+            {
+              __typename: 'thread_permission',
+              thread_id: 'test-thread-id',
+              user_id: '*',
+              read: true,
+              write: true,
+            },
+          ],
+        },
+      },
+    },
+  };
+
+  /** A counting execution mock, repeated so every refetch finds one. */
+  function executionMocks(
+    base: { request: typeof executionReadyToSendMock.request; result: FetchResult },
+    calls: { count: number },
+  ) {
+    return Array.from({ length: 8 }, () => ({
+      request: base.request,
+      result: () => {
+        calls.count += 1;
+        return base.result;
+      },
+    }));
+  }
+
+  function stubEnsembleManager(handlers: {
+    plan?: Record<string, unknown>;
+    run?: Record<string, unknown>;
+  }) {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const json = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+      if (url.includes('/plans/publishers')) return json({ publishers: [] });
+      if (url.endsWith('/plans/submit')) {
+        return json({ run_id: 'ue_1', status: 'adapter_running', adapter_stage: 'flow' });
+      }
+      if (url.includes('/plans/runs/')) return json(handlers.run ?? { run_id: 'ue_1' });
+      if (url.endsWith('/plans') && init?.method === 'POST') {
+        return json({ plan_id: 'plan-flow', executor: 'ensemble_manager', ...handlers.plan });
+      }
+      return json({});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    window.__MINT_CONFIG__ = { ENSEMBLE_MANAGER_API: 'http://ensemble/v1' } as never;
+    return fetchMock;
+  }
+
+  const posts = (fetchMock: ReturnType<typeof stubEnsembleManager>, suffix: string) =>
+    fetchMock.mock.calls.filter(
+      ([url, init]) => String(url).endsWith(suffix) && init?.method === 'POST',
+    );
+  const bodyOf = (call: unknown[] | undefined) =>
+    JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
+
+  async function openRuns() {
+    const runsStep = await screen.findByTestId('rail-step-runs');
+    await waitFor(() => expect(runsStep).not.toBeDisabled(), { timeout: 3000 });
+    runsStep.click();
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    delete (window as { __MINT_CONFIG__?: unknown }).__MINT_CONFIG__;
+  });
+
+  it('plans once and submits that plan straight away when the author set nothing', async () => {
+    const fetchMock = stubEnsembleManager({
+      plan: { flow_settings: { defaults: {}, links: [] }, flow_steps: [] },
+    });
+    renderMintThread([
+      writable,
+      ...executionMocks(withFlow(executionReadyToSendMock), { count: 0 }),
+      regionsMock,
+      modelTreeMock,
+    ]);
+    await openRuns();
+    fireEvent.click(await screen.findByTestId('submit-runs-cfgA'));
+
+    await waitFor(() => expect(posts(fetchMock, '/plans/submit')).toHaveLength(1));
+    expect(posts(fetchMock, '/v1/plans')).toHaveLength(1);
+    expect(bodyOf(posts(fetchMock, '/v1/plans')[0])).toEqual({
+      executor: 'ensemble_manager',
+      thread_id: 'test-thread-id',
+      model_id: 'cfgA',
+    });
+    expect(bodyOf(posts(fetchMock, '/plans/submit')[0])).toEqual({
+      plan_id: 'plan-flow',
+      accept_flow_settings: false,
+    });
+    expect(screen.queryByText(/chosen by the flow's author/i)).not.toBeInTheDocument();
+  });
+
+  it("lists the author's settings and submits the same plan once they are accepted", async () => {
+    const fetchMock = stubEnsembleManager({
+      plan: {
+        flow_settings: { defaults: { title: 'Dictionary of Texas' }, links: [] },
+      },
+    });
+    renderMintThread([
+      writable,
+      ...executionMocks(withFlow(executionReadyToSendMock), { count: 0 }),
+      regionsMock,
+      modelTreeMock,
+    ]);
+    await openRuns();
+    fireEvent.click(await screen.findByTestId('submit-runs-cfgA'));
+
+    expect(
+      await screen.findByText(
+        /These were chosen by the flow's author and will be used with your account/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('flow-settings-defaults')).toHaveTextContent(
+      'title: Dictionary of Texas',
+    );
+    expect(posts(fetchMock, '/plans/submit')).toHaveLength(0);
+    const accept = screen.getByRole('button', { name: /accept and run/i });
+    expect(accept).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /i accept these settings/i }));
+    fireEvent.click(accept);
+
+    await waitFor(() => expect(posts(fetchMock, '/plans/submit')).toHaveLength(1));
+    expect(posts(fetchMock, '/v1/plans')).toHaveLength(1);
+    expect(bodyOf(posts(fetchMock, '/plans/submit')[0])).toEqual({
+      plan_id: 'plan-flow',
+      accept_flow_settings: true,
+    });
+  });
+
+  it('submits nothing when the user declines the author settings', async () => {
+    const fetchMock = stubEnsembleManager({
+      plan: { flow_settings: { defaults: { title: 'T' }, links: [] } },
+    });
+    renderMintThread([
+      writable,
+      ...executionMocks(withFlow(executionReadyToSendMock), { count: 0 }),
+      regionsMock,
+      modelTreeMock,
+    ]);
+    await openRuns();
+    fireEvent.click(await screen.findByTestId('submit-runs-cfgA'));
+    fireEvent.click(await screen.findByRole('button', { name: /^cancel$/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/chosen by the flow's author/i)).not.toBeInTheDocument(),
+    );
+    expect(posts(fetchMock, '/plans/submit')).toHaveLength(0);
+  });
+
+  it('shows a readable refusal and lets the user open the run in progress', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const json = (status: number, body: unknown) => ({
+        ok: status < 400,
+        status,
+        json: async () => body,
+      });
+      if (url.includes('/plans/publishers')) return json(200, { publishers: [] });
+      if (url.includes('/plans/runs/'))
+        return json(200, { run_id: 'ue_9', status: 'adapter_running' });
+      if (url.endsWith('/plans') && init?.method === 'POST') {
+        return json(409, {
+          message: 'busy',
+          code: 'FLOW_ALREADY_RUNNING',
+          details: { run_id: 'ue_9' },
+        });
+      }
+      return json(200, {});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    window.__MINT_CONFIG__ = { ENSEMBLE_MANAGER_API: 'http://ensemble/v1' } as never;
+    renderMintThread([
+      writable,
+      ...executionMocks(withFlow(executionReadyToSendMock), { count: 0 }),
+      regionsMock,
+      modelTreeMock,
+    ]);
+    await openRuns();
+    fireEvent.click(await screen.findByTestId('submit-runs-cfgA'));
+
+    expect(await screen.findByTestId('flow-refusal-cfgA')).toHaveTextContent(
+      /already running.*ue_9/is,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /open the run in progress/i }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/plans/runs/ue_9'))).toBe(
+        true,
+      ),
+    );
+  });
+
+  it('reads the thread record once when a followed run turns terminal', async () => {
+    const calls = { count: 0 };
+    const intervals: Array<() => void> = [];
+    const realSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, 'setInterval').mockImplementation(((fn: () => void, ms?: number) => {
+      if (ms === 60_000) intervals.push(fn);
+      return realSetInterval(fn, ms);
+    }) as typeof window.setInterval);
+    const fetchMock = stubEnsembleManager({
+      plan: { flow_settings: { defaults: {}, links: [] } },
+      run: { run_id: 'ue_1', status: 'completed', adapter_stage: 'flow' },
+    });
+    renderMintThread([
+      writable,
+      ...executionMocks(withFlow(executionReadyToSendMock), calls),
+      regionsMock,
+      modelTreeMock,
+    ]);
+    await openRuns();
+    fireEvent.click(await screen.findByTestId('submit-runs-cfgA'));
+    await waitFor(() => expect(posts(fetchMock, '/plans/submit')).toHaveLength(1));
+    await waitFor(() => expect(intervals.length).toBeGreaterThan(0));
+    await waitFor(() => expect(calls.count).toBeGreaterThan(1));
+    // Let the submit-time refetch settle before counting.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const before = calls.count;
+
+    await act(async () => {
+      intervals.at(-1)!();
+    });
+
+    await waitFor(() => expect(calls.count).toBe(before + 1));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(calls.count).toBe(before + 1);
+  });
+
+  it('skips per-input plan discovery for a flow and keeps it for a model', async () => {
+    const enable = () => {
+      window.__MINT_CONFIG__ = {
+        ENSEMBLE_MANAGER_API: 'http://ensemble/v1',
+        SVO_ADAPTER_ENABLED: 'true',
+      } as never;
+    };
+    const run = async (execution: Parameters<typeof executionMocks>[0]) => {
+      const fetchMock = stubEnsembleManager({});
+      enable();
+      const view = renderMintThread([
+        writable,
+        ...executionMocks(execution, { count: 0 }),
+        regionsMock,
+        modelTreeMock,
+      ]);
+      const parametersStep = await screen.findByTestId('rail-step-parameters');
+      await waitFor(() => expect(parametersStep).not.toBeDisabled(), { timeout: 3000 });
+      parametersStep.click();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      view.unmount();
+      return posts(fetchMock, '/v1/plans');
+    };
+
+    expect(await run(withFlow(executionReadyToSendMock))).toHaveLength(0);
+    expect((await run(executionReadyToSendMock)).length).toBeGreaterThan(0);
+  });
+
+  it('sends a model run exactly as before', async () => {
+    const fetchMock = stubEnsembleManager({ plan: { parameters: [] } });
+    renderMintThread([
+      writable,
+      ...executionMocks(executionReadyToSendMock, { count: 0 }),
+      regionsMock,
+      modelTreeMock,
+    ]);
+    await openRuns();
+    fireEvent.click(await screen.findByTestId('submit-runs-cfgA'));
+    await waitFor(() => expect(posts(fetchMock, '/plans/submit')).toHaveLength(1));
+    expect(bodyOf(posts(fetchMock, '/v1/plans')[0])).toEqual({
+      executor: 'ensemble_manager',
+      execution_engine: 'localex',
+      thread_id: 'test-thread-id',
+      model_id: 'cfgA',
+      adapter_steps: [],
+    });
+    expect(bodyOf(posts(fetchMock, '/plans/submit')[0])).toEqual({
+      plan_id: 'plan-flow',
+      max_minutes: 60,
+      adapter_parameter_values: {},
+    });
   });
 });

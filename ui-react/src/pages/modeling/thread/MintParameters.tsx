@@ -177,11 +177,14 @@ export function MintParameters({
   }
 
   // ─ Parse values from the form for a parameter ─────────────────────────────
-  function getParamValues(modelId: string, param: ModelParameter): string[] {
+  function getParamValues(modelId: string, param: ModelParameter, isFlow = false): string[] {
     const form = formRefs.current[modelId];
     if (!form) return [];
     const el = form.elements.namedItem(param.id ?? '') as HTMLInputElement | null;
     const raw = el?.value ?? param.default ?? '';
+    // A flow's setting is one value: a comma belongs to the value (a title, a
+    // list the flow parses itself), it does not start a sweep.
+    if (isFlow) return raw.trim() ? [raw.trim()] : [];
     return raw
       .split(/\s*,\s*/)
       .map((s) => s.trim())
@@ -309,7 +312,7 @@ export function MintParameters({
         // If not in edit mode and already bound, keep existing
         if (!editMode && current && current.length > 0) continue;
 
-        const vals = getParamValues(mid, param);
+        const vals = getParamValues(mid, param, model.isFlow);
         const err = validateValues(param, vals);
         if (err) {
           newErrors[`${mid}::${param.id}`] = err;
@@ -508,8 +511,9 @@ export function MintParameters({
                     <li>
                       {editMode && (
                         <p className="mb-1 text-xs text-gray-600">
-                          Setup the model by specifying values below. You can enter more than one
-                          value (comma separated) if you want several runs.
+                          {model.isFlow
+                            ? 'Set the flow by specifying one value for each setting below.'
+                            : 'Setup the model by specifying values below. You can enter more than one value (comma separated) if you want several runs.'}
                         </p>
                       )}
                       {model.usage_notes && (

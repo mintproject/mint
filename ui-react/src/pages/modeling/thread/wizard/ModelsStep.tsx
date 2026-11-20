@@ -46,6 +46,8 @@ interface ModelRow {
   producesLabels: string[];
   outputContracts: { id: string; label?: string | null; format?: string | null }[];
   needs: { name: string; varIds: string[]; varLabels: string[]; optional: boolean }[];
+  /** The configuration is a flow (a graph of pieces), not a single model. */
+  isFlow: boolean;
 }
 
 export const ModelOutcomeAdapterInferenceDocument = gql`
@@ -116,6 +118,7 @@ function rowFromConfig(cfg: ModelConfigInfo | ModelSetupInfo, parent?: ModelConf
       varLabels: i.variableLabels,
       optional: i.optional,
     })),
+    isFlow: Boolean(('flow' in cfg ? cfg.flow : null) ?? parent?.flow),
   };
 }
 
@@ -162,7 +165,14 @@ function ModelCard({
         className="mt-1"
       />
       <div className="min-w-0 flex-1">
-        <div className="font-medium">{row.name}</div>
+        <div className="flex items-center gap-2 font-medium">
+          {row.name}
+          {row.isFlow && (
+            <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-normal text-purple-800">
+              Flow
+            </span>
+          )}
+        </div>
         {row.region && <div className="text-xs text-gray-500">{row.region}</div>}
         {row.description && (
           <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{row.description}</p>

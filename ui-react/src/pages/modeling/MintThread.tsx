@@ -48,6 +48,7 @@ import {
   cancelUnifiedRun,
   fetchUnifiedRun,
   isUnifiedRunTerminal,
+  type FlowSettings,
   publishExecution,
   publishResults,
   submitExecutionPlan,
@@ -70,6 +71,7 @@ import {
 import { useAuth } from '@/lib/auth/useAuth';
 import { cn } from '@/lib/utils';
 
+import { FlowSettingsDialog } from './thread/FlowSettingsDialog';
 import { MintSummary } from './thread/MintSummary';
 import { MintParameters } from './thread/MintParameters';
 import type { PublishRequest } from '@/lib/publish-outputs';
@@ -143,6 +145,11 @@ export function MintThread({
   const [adapterPlanError, setAdapterPlanError] = useState<string | null>(null);
   const [adapterPlansLoading, setAdapterPlansLoading] = useState(false);
   const [spatialSelection, setSpatialSelection] = useState<SpatialSelection | null>(null);
+  // The author's settings of the flow being run, while the user decides on them.
+  const [flowAcceptance, setFlowAcceptance] = useState<{
+    settings: FlowSettings;
+    resolve: (accepted: boolean) => void;
+  } | null>(null);
   const discoveredAdapterSources = useRef<string | null>(null);
   const hydratedWorkflowIdentity = useRef<string | null>(null);
 
@@ -266,6 +273,7 @@ export function MintThread({
       try {
         const refreshed = await fetchUnifiedRun(ensembleManagerApi, runId);
         rememberUnifiedRun(modelId, refreshed);
+        return refreshed;
       } catch (error) {
         // Keep the cached workflow visible when the service is temporarily
         // unavailable; the error tells the user the displayed state is stale.
@@ -351,8 +359,12 @@ export function MintThread({
         const backoff = refreshBackoff.current[modelId];
         if (backoff && backoff.nextAt > now) continue;
         void refreshUnifiedRun(modelId, snapshot)
-          .then(() => {
+          .then((refreshed) => {
             delete refreshBackoff.current[modelId];
+            // The run settled while the user watched. Read the thread's record
+            // once, so the Results step is not left stale for a run that
+            // outlived the submit-time loop.
+            if (isUnifiedRunTerminal(refreshed)) void refetchExecution();
           })
           .catch(() => {
             const failures = (refreshBackoff.current[modelId]?.failures ?? 0) + 1;
@@ -364,7 +376,7 @@ export function MintThread({
       }
     }, 60_000);
     return () => window.clearInterval(timer);
-  }, [currentSection, refreshUnifiedRun, unifiedRuns]);
+  }, [currentSection, refetchExecution, refreshUnifiedRun, unifiedRuns]);
 
   const threadExecutionData = useMemo(() => {
     if (!baseThreadExecutionData) return null;
@@ -506,33 +518,33 @@ export function MintThread({
 
   const adapterSourceFingerprint = useMemo(() => {
     if (!baseThreadExecutionData) return '';
-    const inputSources = Object.entries(baseThreadExecutionData.models).flatMap(
-      ([modelId, model]) =>
-        model.input_files.flatMap((input) => {
-          const slices = baseThreadExecutionData.model_ensembles[modelId]?.bindings[input.id] ?? [];
-          return slices.flatMap((sliceId) => {
-            const resources = baseThreadExecutionData.data[sliceId]?.resources as
-              | Array<{ id: string; selected?: boolean }>
-              | undefined;
-            return (resources ?? [])
-              .filter((resource) => resource.selected !== false)
-              .map((resource) => {
-                const threadModelId =
-                  baseThreadExecutionData.model_ensembles[modelId]?.id ?? modelId;
-                return `${threadModelId}:${input.id}:${resource.id}`;
-              });
-          });
-        }),
+    // A flow is planned once, at Run: it has no per-input or per-output plans.
+    const adapterModels = Object.entries(baseThreadExecutionData.models).filter(
+      ([, model]) => !model.isFlow,
+    );
+    const inputSources = adapterModels.flatMap(([modelId, model]) =>
+      model.input_files.flatMap((input) => {
+        const slices = baseThreadExecutionData.model_ensembles[modelId]?.bindings[input.id] ?? [];
+        return slices.flatMap((sliceId) => {
+          const resources = baseThreadExecutionData.data[sliceId]?.resources as
+            | Array<{ id: string; selected?: boolean }>
+            | undefined;
+          return (resources ?? [])
+            .filter((resource) => resource.selected !== false)
+            .map((resource) => {
+              const threadModelId = baseThreadExecutionData.model_ensembles[modelId]?.id ?? modelId;
+              return `${threadModelId}:${input.id}:${resource.id}`;
+            });
+        });
+      }),
     );
     const target = baseThreadExecutionData.response_variables?.[0] ?? '';
-    const outputSources = Object.entries(baseThreadExecutionData.models).flatMap(
-      ([modelId, model]) => {
-        const threadModelId = baseThreadExecutionData.model_ensembles[modelId]?.id ?? modelId;
-        return model.output_files
-          .filter((output) => !output.variables?.length || !output.variables.includes(target))
-          .map((output) => `${threadModelId}:post_model:${output.id}:${target}`);
-      },
-    );
+    const outputSources = adapterModels.flatMap(([modelId, model]) => {
+      const threadModelId = baseThreadExecutionData.model_ensembles[modelId]?.id ?? modelId;
+      return model.output_files
+        .filter((output) => !output.variables?.length || !output.variables.includes(target))
+        .map((output) => `${threadModelId}:post_model:${output.id}:${target}`);
+    });
     return [...inputSources, ...outputSources].sort().join('|');
   }, [baseThreadExecutionData]);
 
@@ -563,7 +575,7 @@ export function MintThread({
 
       for (const [modelId, model] of Object.entries(baseThreadExecutionData.models)) {
         const threadModelId = baseThreadExecutionData.model_ensembles[modelId]?.id;
-        if (!threadModelId) continue;
+        if (!threadModelId || model.isFlow) continue;
         for (const input of model.input_files) {
           const slices = baseThreadExecutionData.model_ensembles[modelId]?.bindings[input.id] ?? [];
           for (const sliceId of slices) {
@@ -768,12 +780,27 @@ export function MintThread({
     [apollo, threadExecutionData],
   );
 
+  // Ask the user about the author's settings; resolves with their answer.
+  const askFlowAcceptance = useCallback(
+    (settings: FlowSettings) =>
+      new Promise<boolean>((resolve) => setFlowAcceptance({ settings, resolve })),
+    [],
+  );
+  const answerFlowAcceptance = useCallback(
+    (accepted: boolean) => {
+      flowAcceptance?.resolve(accepted);
+      setFlowAcceptance(null);
+    },
+    [flowAcceptance],
+  );
+
   const handleSubmitRuns = useCallback(
     async (modelId: string, maxMinutes: number, publish?: PublishRequest) => {
-      if (adapterPlansLoading || adapterPlanError) {
+      const isFlow = Boolean(threadExecutionData?.models[modelId]?.isFlow);
+      if (!isFlow && (adapterPlansLoading || adapterPlanError)) {
         throw new Error('SVO adapter plan discovery must complete before workflow submission.');
       }
-      const adapterPlans = threadExecutionData?.adapter_plans?.[modelId] ?? [];
+      const adapterPlans = isFlow ? [] : (threadExecutionData?.adapter_plans?.[modelId] ?? []);
       // POST to the ensemble manager REST API
       const ensembleManagerApi = window.__MINT_CONFIG__?.ENSEMBLE_MANAGER_API ?? '';
       // Which backend this deployment's Ensemble Manager runs. Read at call
@@ -813,6 +840,47 @@ export function MintThread({
         throw new Error(
           'Set both a start date and an end date from the selected archive before sending runs.',
         );
+      }
+      if (isFlow) {
+        // A flow is planned once, here, and the same plan is submitted: a plan
+        // can be run only once and planning registers the flow's datasets. The
+        // Ensemble Manager reads the thread's own stored values itself.
+        const flowPlan = await createExecutionPlan(ensembleManagerApi, {
+          executor: 'ensemble_manager',
+          thread_id: threadId,
+          model_id: modelId,
+        });
+        if (!flowPlan.plan_id)
+          throw new Error('Ensemble Manager did not return an execution plan.');
+        const authorSettings = flowPlan.flow_settings;
+        const hasAuthorSettings =
+          Object.keys(authorSettings?.defaults ?? {}).length > 0 ||
+          (authorSettings?.links ?? []).length > 0;
+        if (hasAuthorSettings && !(await askFlowAcceptance(authorSettings!))) return;
+        const flowRun = await submitExecutionPlan(ensembleManagerApi, {
+          plan_id: flowPlan.plan_id,
+          accept_flow_settings: hasAuthorSettings,
+        });
+        const flowRunId = flowRun.run_id?.startsWith('ue_') ? flowRun.run_id : null;
+        if (flowRunId) {
+          rememberUnifiedRun(modelId, flowRun);
+          // A flow's steps move on only when the run is asked about. Follow it
+          // closely for ten minutes, as a model's run is; after that the Runs
+          // step's own slower check takes over.
+          void (async () => {
+            for (let attempt = 0; attempt < 120; attempt += 1) {
+              await new Promise((resolve) => window.setTimeout(resolve, 5000));
+              const state = await fetchUnifiedRun(ensembleManagerApi, flowRunId);
+              rememberUnifiedRun(modelId, state);
+              if (isUnifiedRunTerminal(state)) {
+                await refetchExecution();
+                return;
+              }
+            }
+          })().catch(() => undefined);
+        }
+        await refetchExecution();
+        return;
       }
       const plan = await createExecutionPlan(ensembleManagerApi, {
         executor: 'ensemble_manager',
@@ -894,6 +962,7 @@ export function MintThread({
     [
       adapterPlanError,
       adapterPlansLoading,
+      askFlowAcceptance,
       refetchExecution,
       rememberUnifiedRun,
       thread?.end_date,
@@ -902,6 +971,15 @@ export function MintThread({
       thread?.start_date,
       workflowUserKey,
     ],
+  );
+
+  // Show the run a flow refused to duplicate, so the user can follow it.
+  const handleOpenFlowRun = useCallback(
+    async (modelId: string, runId: string) => {
+      const ensembleManagerApi = window.__MINT_CONFIG__?.ENSEMBLE_MANAGER_API ?? '';
+      rememberUnifiedRun(modelId, await fetchUnifiedRun(ensembleManagerApi, runId));
+    },
+    [rememberUnifiedRun],
   );
 
   const handleRefreshWorkflow = useCallback(
@@ -1122,6 +1200,7 @@ export function MintThread({
             onContinue={goNext}
             onFetchRuns={handleFetchRuns}
             onSubmitRuns={handleSubmitRuns}
+            onOpenFlowRun={handleOpenFlowRun}
             onRefreshWorkflow={handleRefreshWorkflow}
             workflowRefreshErrors={unifiedRunErrors}
             workflowRefreshing={unifiedRunRefreshing}
@@ -1183,6 +1262,11 @@ export function MintThread({
         </aside>
         <main className="min-w-0 flex-1 overflow-y-auto pr-1">{renderStep()}</main>
       </div>
+      <FlowSettingsDialog
+        settings={flowAcceptance?.settings ?? null}
+        onConfirm={() => answerFlowAcceptance(true)}
+        onCancel={() => answerFlowAcceptance(false)}
+      />
     </div>
   );
 }

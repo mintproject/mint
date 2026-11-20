@@ -68,6 +68,8 @@ export interface ThreadModel {
   output_files: ModelOutputFile[];
   output_parameters?: ModelParameter[];
   usage_notes?: string | null;
+  /** The configuration is a flow: planned once at Run, one value per setting. */
+  isFlow?: boolean;
 }
 
 // ─── Ensemble / Execution state ───────────────────────────────────────────────

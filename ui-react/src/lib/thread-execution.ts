@@ -91,6 +91,7 @@ export function threadModelFromGQL(tm: ThreadModelRow): ThreadModel | null {
     id: cfg.id,
     name: cfg.label ?? cfg.id,
     usage_notes: cfg.usage_notes ?? null,
+    isFlow: Boolean(cfg.flow),
     // The data catalog filters by standard-variable NAME, so inputs carry the
     // labels. Outputs carry the ids, because the response variable they are
     // matched against is an id. Same split as the model-tree path.
