@@ -9,6 +9,10 @@ import {
     UnifiedExecutionStore
 } from "./unifiedExecutionStore";
 
+jest.mock("@/classes/graphql/graphql_functions_v2", () => ({
+    getThread: jest.fn().mockResolvedValue({ id: "thread-1" })
+}));
+
 jest.mock("@/classes/mint/mint-functions", () => ({
     getConfiguration: jest.fn().mockReturnValue({
         execution_engine: "tapis",
@@ -799,7 +803,9 @@ describe("unifiedExecutionService", () => {
             )
         ).rejects.toMatchObject({ statusCode: 422, code: "INVALID_PARAMETERS" });
         expect(legacy.tapis.submitExecution).not.toHaveBeenCalled();
-        await expect(service.getRun("ue_parent-1")).resolves.toMatchObject({ status: "failed" });
+        await expect(service.getRun("ue_parent-1", "Bearer user-token")).resolves.toMatchObject({
+            status: "failed"
+        });
     });
 
     it("runs a deferred output adapter after the model execution succeeds", async () => {

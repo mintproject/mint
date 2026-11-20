@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { UnifiedExecutionError } from "@/classes/common/errors";
 import { ModelSecretDeclaration, Region } from "@/classes/mint/mint-types";
 import { getConfiguration } from "@/classes/mint/mint-functions";
+import { getThread } from "@/classes/graphql/graphql_functions_v2";
 import { adapterBaseUrl, adapterInternalSecret } from "./adapterConfig";
 import { deriveRegionSource, InputSource, RegionGeometryError } from "./inputStepDerivation";
 import {
@@ -251,9 +252,36 @@ function decodePlan(planId: string): LegacyPlan {
     }
 }
 
+/**
+ * Refuse a run the caller may not see. A unified run is stored with the thread it was
+ * made for, and the Ensemble Manager reconciles it with its own service header, which
+ * lets the adapter read any run. So before any of that, the caller's own Hasura token
+ * must be able to read the run's thread: the thread's row-level permissions decide.
+ * The answer for a thread that is not theirs is the same as for a missing run.
+ */
+async function assertThreadReadable(threadId: string, authorization?: string): Promise<void> {
+    const token = authorization?.startsWith("Bearer ") ? authorization.split(" ")[1] : "";
+    if (!token) {
+        throw new UnifiedExecutionError(
+            401,
+            "a Tapis bearer token is required to read a run",
+            "AUTHORIZATION_REQUIRED"
+        );
+    }
+    let thread: unknown = null;
+    try {
+        thread = await getThread(threadId, token);
+    } catch {
+        thread = null;
+    }
+    if (!thread) {
+        throw new UnifiedExecutionError(404, "execution run not found", "RUN_NOT_FOUND");
+    }
+}
+
 export async function adapterRequest(
     path: string,
-    init: { method?: string; body?: unknown; idempotencyKey?: string },
+    init: { method?: string; body?: unknown; idempotencyKey?: string; asUser?: boolean },
     authorization?: string
 ): Promise<any> {
     const base = adapterBaseUrl();
@@ -270,7 +298,18 @@ export async function adapterRequest(
         headers: {
             "Content-Type": "application/json",
             ...(init.idempotencyKey ? { "Idempotency-Key": init.idempotencyKey } : {}),
-            ...(internalSecret ? { "X-Ensemble-Manager-Secret": internalSecret } : {}),
+            // `asUser`: the call acts for the signed-in user, so the secret is sent as
+            // X-Front-Door-Secret, which only opens the adapter's front door and leaves
+            // the adapter's own owner checks in force. Without it the secret is the
+            // Ensemble Manager's own (X-Ensemble-Manager-Secret), which also lets the
+            // adapter read any run and accept server-owned writes, and is for the
+            // Ensemble Manager's service routes and run reconciliation only.
+            ...(internalSecret
+                ? {
+                      [init.asUser ? "X-Front-Door-Secret" : "X-Ensemble-Manager-Secret"]:
+                          internalSecret
+                  }
+                : {}),
             ...(authorization ? { Authorization: authorization } : {})
         },
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) })
@@ -1787,6 +1826,7 @@ export function createUnifiedExecutionService(
             planned = await adapterRequest(
                 "/plans/model-inputs",
                 {
+                    asUser: true,
                     method: "POST",
                     body: {
                         configuration_id: context.configuration_id,
@@ -1939,7 +1979,7 @@ export function createUnifiedExecutionService(
         if (!tokens.length) return { tokens: [], offered: [] };
         const response = await adapterRequest(
             `/publishers?configuration_id=${encodeURIComponent(modelId)}`,
-            {},
+            { asUser: true },
             authorization
         );
         const offered = (response?.publishers || []) as OfferedPublisher[];
@@ -2002,7 +2042,7 @@ export function createUnifiedExecutionService(
             }
             return adapterRequest(
                 `/publishers?configuration_id=${encodeURIComponent(modelId)}`,
-                {},
+                { asUser: true },
                 authorization
             );
         },
@@ -2038,7 +2078,9 @@ export function createUnifiedExecutionService(
                     }
                     const registered = await adapterRequest(
                         "/data-objects",
-                        { method: "POST", body: dataObject },
+                        // The body came from the client: no server-owned fields, and the
+                        // adapter records the signed-in user as its owner.
+                        { method: "POST", body: dataObject, asUser: true },
                         authorization
                     );
                     if (typeof registered?.id !== "string") {
@@ -2054,6 +2096,7 @@ export function createUnifiedExecutionService(
                     "/plans",
                     {
                         method: "POST",
+                        asUser: true,
                         body: planRequest
                     },
                     authorization
@@ -2383,7 +2426,7 @@ export function createUnifiedExecutionService(
             if (planId.startsWith("svo_")) {
                 const result = await adapterRequest(
                     `/plans/${encodeURIComponent(adapterPlanId(planId))}`,
-                    {},
+                    { asUser: true },
                     authorization
                 );
                 return {
@@ -2418,6 +2461,7 @@ export function createUnifiedExecutionService(
                         "RUN_NOT_FOUND"
                     );
                 }
+                await assertThreadReadable(record.thread_id, authorization);
                 const decoded = decodePlan(record.plan_id);
                 const response = decoded.flow
                     ? reconcileFlowRun(record, authorization)
@@ -2429,9 +2473,10 @@ export function createUnifiedExecutionService(
                 if (latest) await persistWorkflowStages(latest);
                 return result;
             }
+            // A run id the user typed: the adapter must check it is theirs.
             const result = await adapterRequest(
                 `/runs/${encodeURIComponent(runId)}`,
-                {},
+                { asUser: true },
                 authorization
             );
             return {
@@ -2452,7 +2497,7 @@ export function createUnifiedExecutionService(
             if (!runId.startsWith("ue_")) {
                 const result = await adapterRequest(
                     `/runs/${encodeURIComponent(runId)}/cancel`,
-                    { method: "POST" },
+                    { method: "POST", asUser: true },
                     authorization
                 );
                 return { ...result, executor: "svo_adapter", child_execution_id: runId };
@@ -2461,6 +2506,7 @@ export function createUnifiedExecutionService(
             if (!record) {
                 throw new UnifiedExecutionError(404, "execution run not found", "RUN_NOT_FOUND");
             }
+            await assertThreadReadable(record.thread_id, authorization);
             const children = (record.adapter_run_ids || []) as AdapterChildRun[];
             const active = children.filter(
                 (child) =>
@@ -2481,12 +2527,12 @@ export function createUnifiedExecutionService(
             for (const child of active) {
                 await adapterRequest(
                     `/runs/${encodeURIComponent(child.run_id)}/cancel`,
-                    { method: "POST" },
+                    { method: "POST", asUser: true },
                     authorization
                 );
                 const run = await adapterRequest(
                     `/runs/${encodeURIComponent(child.run_id)}`,
-                    {},
+                    { asUser: true },
                     authorization
                 );
                 child.status = run.status || "cancelled";
@@ -2524,6 +2570,7 @@ export function createUnifiedExecutionService(
             if (!record) {
                 throw new UnifiedExecutionError(404, "execution run not found", "RUN_NOT_FOUND");
             }
+            await assertThreadReadable(record.thread_id, authorization);
             const plan = decodePlan(record.plan_id);
             if (!deps || !plan.flow) {
                 throw new UnifiedExecutionError(

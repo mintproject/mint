@@ -380,7 +380,9 @@ function adapterTarget(authorization: string): { base: string; headers: Record<s
     headers: {
       'Content-Type': 'application/json',
       Authorization: authorization,
-      ...(secret ? { 'X-Ensemble-Manager-Secret': secret } : {}),
+      // Not X-Ensemble-Manager-Secret: both calls act for the signed-in user, so the secret
+      // only opens the adapter's front door and its own owner checks stay in force.
+      ...(secret ? { 'X-Front-Door-Secret': secret } : {}),
     },
   }
 }

@@ -366,13 +366,14 @@ describe('the service secret', () => {
     process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET = 'service-only'
     let fetchMock = adapterAnswers({ ok: true, problems: [], pieces: PIECES })
     await custom_flows_post(makeReq(BODY()), makeReply())
-    expect(fetchMock.mock.calls[0][1].headers['X-Ensemble-Manager-Secret']).toBe('service-only')
+    expect(fetchMock.mock.calls[0][1].headers['X-Front-Door-Secret']).toBe('service-only')
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('X-Ensemble-Manager-Secret')
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(ALICE)
 
     delete process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET
     fetchMock = adapterAnswers({ ok: true, problems: [], pieces: PIECES })
     await custom_flows_post(makeReq(BODY()), makeReply())
-    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('X-Ensemble-Manager-Secret')
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('X-Front-Door-Secret')
   })
 })
 
@@ -392,7 +393,8 @@ describe('GET /flows/{id}/availability', () => {
     const [url, request] = fetchMock.mock.calls[0]
     expect(url).toBe(`https://adapter.example/flows/${encodeURIComponent(C)}/availability`)
     expect(request.headers.Authorization).toBe(ALICE)
-    expect(request.headers['X-Ensemble-Manager-Secret']).toBe('service-only')
+    expect(request.headers['X-Front-Door-Secret']).toBe('service-only')
+    expect(request.headers).not.toHaveProperty('X-Ensemble-Manager-Secret')
   })
 
   it.each([['', 401], ['Bearer not-a-jwt', 401]])('needs a signed-in caller', async (authorization, status) => {

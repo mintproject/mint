@@ -168,17 +168,16 @@ function completenessFor(
     return "complete";
 }
 
-function tapisWorkflowFor(
-    unified?: UnifiedExecutionRecord
-): RunHistorySummary["tapis_workflow"] {
+function tapisWorkflowFor(unified?: UnifiedExecutionRecord): RunHistorySummary["tapis_workflow"] {
     if (!unified) return null;
     const workflows = (unified.adapter_run_ids || [])
-        .filter((child): child is Record<string, unknown> => Boolean(child && typeof child === "object"))
+        .filter((child): child is Record<string, unknown> =>
+            Boolean(child && typeof child === "object")
+        )
         .map((child) => ({
             workflow_id:
                 typeof child.tapis_workflow_id === "string" ? child.tapis_workflow_id : null,
-            run_id:
-                typeof child.tapis_run_id === "string" ? child.tapis_run_id : null
+            run_id: typeof child.tapis_run_id === "string" ? child.tapis_run_id : null
         }))
         .filter((workflow) => workflow.workflow_id || workflow.run_id);
     const primary = workflows.length === 1 ? workflows[0] : null;
@@ -392,6 +391,11 @@ async function loadWorkflowEvents(
             { type: "workflow_provenance_events", availability: "unavailable", captured_at: null }
         ];
     }
+    // The Ensemble Manager acting for itself, with the EM's own header and no user
+    // token: `assemble` has already read this thread with the caller's own Hasura token
+    // (`loadModels` -> `getThread`, refused when the thread is not theirs), and `runIds`
+    // are the run ids of that thread's records. A thread's runs may have been submitted
+    // by a collaborator, so the adapter's per-submitter check would hide them.
     const secret = adapterInternalSecret();
     const responses = await Promise.all(
         runIds.map(async (runId) => {

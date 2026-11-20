@@ -634,6 +634,25 @@ Steps are in "Migration order". Summary:
   - The adapter's own `/ui/` console is not moved. It stops working for user routes with the
     front door on, and the DYNAMO UI replaces it (the user's decision).
 
+- 2026-11-20, which header each Ensemble Manager and catalog call sends (a call acting for a
+  user sends `X-Front-Door-Secret`; only the Ensemble Manager acting for itself sends
+  `X-Ensemble-Manager-Secret`, because that one also lets the adapter read any run and accept
+  server-owned writes):
+  - Catalog `/flows/check` and `GET /flows/{id}/availability`, and the EM's log poll
+    (`logsService`), plan, publishers, model-inputs, user data objects, flow plan, adapter-run
+    read and cancel: user header. The adapter's owner checks decide.
+  - EM service routes (owned data objects, deferred bind, `/workflows/submit`,
+    `register-output`) and its reconcile of a `ue_` run (poll, read, resume), and the run
+    history's provenance read: the EM's own header, only after the EM proved the caller may
+    read the run's thread with the caller's own Hasura token.
+  - Gap found and closed: `GET /v1/plans/runs/{ue_id}`, `POST .../cancel`, `POST .../resume`
+    read the stored run without checking the caller could read its thread, and the log route
+    took any execution id; with the EM header any caller could read any run through them.
+    The three run routes now require a token and a readable thread; the log poll sends the
+    user header so the adapter checks the submitter.
+  - Not fixed here: the legacy `wings` and `localex` log branches of `GET /v1/logs/{id}` still
+    read an execution with no thread check; they have no adapter call.
+
 ## User feedback / decisions
 
 None yet. Open questions 1 to 9 are for the user's review.

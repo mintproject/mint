@@ -117,7 +117,7 @@ export interface FlowDeps {
     store: UnifiedExecutionStore;
     adapterRequest(
         path: string,
-        init: { method?: string; body?: unknown; idempotencyKey?: string },
+        init: { method?: string; body?: unknown; idempotencyKey?: string; asUser?: boolean },
         authorization?: string
     ): Promise<any>;
     parentRunId(id: string): string;
@@ -432,6 +432,7 @@ export async function planFlow(
         const registered = await deps.adapterRequest(
             "/data-objects",
             {
+                asUser: true,
                 method: "POST",
                 body: {
                     label: resource.name || input.name,
@@ -457,6 +458,7 @@ export async function planFlow(
     const planned = await deps.adapterRequest(
         "/plans/flow",
         {
+            asUser: true,
             method: "POST",
             body: {
                 flow_id: threadmodel.model_id,

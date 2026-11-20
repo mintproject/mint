@@ -6,6 +6,10 @@ import {
 } from "./unifiedExecutionStore";
 import { FlowThreadContext, readThreadBindings } from "./flowExecution";
 
+jest.mock("@/classes/graphql/graphql_functions_v2", () => ({
+    getThread: jest.fn().mockResolvedValue({ id: "thread-1" })
+}));
+
 jest.mock("@/classes/mint/mint-functions", () => ({
     getConfiguration: jest.fn().mockReturnValue({
         execution_engine: "tapis",
@@ -1018,11 +1022,12 @@ describe("running a flow from a thread", () => {
             expect(flows.finishFlowExecution.mock.calls[0][4]).toHaveLength(1);
         });
 
-        it("does not follow or close a run for a caller with no token", async () => {
+        it("does not follow or close a run for a caller with no token, and does not show it", async () => {
             const svc = await started();
             poll({ status: "completed", flow: FLOW_VIEW });
-            const run = await svc.getRun("ue_parent-1", undefined);
-            expect(run.status).toBe("adapter_running");
+            await expect(svc.getRun("ue_parent-1", undefined)).rejects.toMatchObject({
+                statusCode: 401
+            });
             expect(calls("/runs/run-1/poll")).toHaveLength(0);
             expect(flows.finishFlowExecution).not.toHaveBeenCalled();
         });

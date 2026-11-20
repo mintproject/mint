@@ -17,6 +17,10 @@ const mockConfig: {
     svo_adapter_internal_secret?: string;
     graphql?: { secret?: string };
 } = {};
+jest.mock("@/classes/graphql/graphql_functions_v2", () => ({
+    getThread: jest.fn().mockResolvedValue({ id: "thread-1" })
+}));
+
 jest.mock("@/classes/mint/mint-functions", () => ({
     getConfiguration: jest.fn(() => mockConfig)
 }));
