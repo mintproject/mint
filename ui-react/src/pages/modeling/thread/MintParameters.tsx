@@ -569,11 +569,16 @@ export function MintParameters({
                 !model.isFlow && p.accepted_values?.length ? p.accepted_values : null;
               const min = view ? view.details.minimum : p.min;
               const max = view ? view.details.maximum : p.max;
+              // What is chosen already, or the default. A value the list does not hold
+              // (an old binding, say) stays visible and selected, flagged, so the
+              // validation names it instead of the save quietly losing it.
               const selected = accepted
-                ? (bindings.length > 0
-                    ? bindings
-                    : (p.default ?? '').split(/\s*,\s*/).filter(Boolean)
-                  ).filter((value) => accepted.includes(value))
+                ? bindings.length > 0
+                  ? bindings
+                  : (p.default ?? '').split(/\s*,\s*/).filter(Boolean)
+                : [];
+              const notAccepted = accepted
+                ? [...new Set(selected.filter((value) => !accepted.includes(value)))]
                 : [];
 
               return (
@@ -614,12 +619,17 @@ export function MintParameters({
                               name={p.id ?? ''}
                               data-testid={`param-input-${p.id}`}
                               defaultValue={selected}
-                              size={Math.min(accepted.length, 6)}
+                              size={Math.min(accepted.length + notAccepted.length, 6)}
                               className="w-full rounded border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
                             >
                               {accepted.map((value) => (
                                 <option key={value} value={value}>
                                   {value}
+                                </option>
+                              ))}
+                              {notAccepted.map((value) => (
+                                <option key={`extra-${value}`} value={value}>
+                                  {value} (not an accepted value)
                                 </option>
                               ))}
                             </select>

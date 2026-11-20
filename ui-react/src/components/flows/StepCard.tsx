@@ -278,6 +278,12 @@ export function StepCard(props: StepCardProps) {
                         <option value="advanced">Advanced settings</option>
                         <option value="hidden">Hidden from runners</option>
                       </select>
+                      {shown === 'hidden' && (
+                        <span className="text-xs text-muted-foreground">
+                          Hidden means not shown, not secret: anyone who can read this flow can see
+                          the value. Use a stored credential for anything private.
+                        </span>
+                      )}
                     </>
                   )}
                 </div>

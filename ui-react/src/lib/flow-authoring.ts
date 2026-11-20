@@ -185,6 +185,12 @@ export function buildCheckBody(draft: FlowDraft, known?: ReadonlySet<string>) {
     outputs: draft.outputs.map((output) => outputJson(output, false)),
     thread_bindings: bindings,
     settings: settingRulesJson(draft, known),
+    // The settings the thread fills in: the check refuses one that is also fixed or hidden.
+    thread_settings: BINDING_ROLES.flatMap((role) =>
+      draft.bindings[role].startsWith('setting:')
+        ? [draft.bindings[role].slice('setting:'.length)]
+        : [],
+    ),
   };
 }
 

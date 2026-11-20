@@ -310,6 +310,34 @@ The old pieces stay registered, so rolling back means pointing the flows back at
 2. Should `output_uri` stay hidden on every flow? DYNAMO sets it today. **[unverified]** whether a
    runner ever needs to change it.
 
+## Implementation deviations
+
+Recorded 2026-11-20, after review.
+
+- The catalog API (`model-catalog-api/src/flows.ts`) writes `settings_json` and mirrors the
+  defaults, fixed values, choices and bounds onto the parameter rows; the UI sends the step
+  settings and the flow `settings` only. The run form reads settings through a new
+  `GET /flows/{id}/settings` (adapter, relayed by the catalog API), and falls back to the
+  parameter rows.
+- A value left at the flow default on the run form is not bound, so the default is still
+  listed for acceptance. Every author value is listed in that dialog whatever its visibility.
+- New codes: `FLOW_SETTING_REFUSED` (submit), `FLOW_SETTING_HIDDEN_WITHOUT_VALUE`,
+  `FLOW_SETTING_FIXED_WITHOUT_VALUE`, `FLOW_SETTING_INVALID`, `FLOW_SETTING_LOOKS_SECRET`,
+  `FLOW_THREAD_BINDING_FIXED`, `FLOW_SETTING_CONFLICT` (check), `FLOW_SETTINGS_UNAVAILABLE`
+  (catalog relay).
+- Hidden is not secret. The check refuses values for credential-like setting names.
+- **Thread-bound settings (review item 4).** Chosen: refuse at author time. A setting the
+  thread fills in (a date) that is also fixed or hidden is a check problem
+  (`FLOW_THREAD_BINDING_FIXED`), at save (the catalog sends `thread_settings`, and the form
+  sends it to the live check) and at plan. The runtime exemption for thread-bound names stays
+  only as a safety net for a flow saved before the check, compared through aliases. Reason: a
+  fixed or hidden setting then never depends on who supplies the thread's value, and the EM's
+  own thread values need no special case.
+- Pieces that share a setting name must agree on type, choices and bounds
+  (`FLOW_SETTING_CONFLICT`); titles and explanations may differ.
+- A model multi-select keeps a bound or default value that is not an accepted value, flagged
+  "not an accepted value", so the existing validation names it instead of the save losing it.
+
 ## Decisions
 
 - 2026-11-20: Per-choice explanations go in the piece's JSON Schema (`oneOf`), not in a new

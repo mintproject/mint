@@ -176,8 +176,22 @@ describe('the catalog rows for a flow', () => {
     expect(() => planRegistration({ ...BODY(), settings } as any)).toThrow(FlowError)
   })
 
+  it('mirrors the pieces default into the fixed value when the author gave none', () => {
+    const body = { ...BODY(), settings: { start: { fixed: true } } }
+    const built = buildRows(body, planRegistration(body), PIECES, 'alice')
+    const [start] = built.configuration.parameters.data.map((p: any) => p.parameter.data)
+    expect(start.label).toBe('start')
+    expect([start.has_fixed_value, start.has_default_value]).toEqual(['2024-01-01', '2024-01-01'])
+  })
+
+  it('tells the check which settings the thread fills in', () => {
+    expect(planRegistration(BODY()).check.thread_settings).toEqual(['start'])
+    expect(planRegistration({ ...BODY(), thread_bindings: {} }).check.thread_settings).toEqual([])
+  })
+
   it('writes a Postgres text array literal', () => {
     expect(toPgTextArray(['a', 'b c'])).toBe('{"a","b c"}')
+    expect(toPgTextArray(['a', '', '  '])).toBe('{"a"}')
   })
 
   it('describes a data output from the piece and passes a value output through', () => {

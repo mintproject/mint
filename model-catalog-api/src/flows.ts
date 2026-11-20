@@ -139,7 +139,7 @@ const VISIBILITIES = ['shown', 'advanced', 'hidden']
 
 /** A Postgres text-array literal: Hasura reads a `text[]` column from one, not from a list. */
 export function toPgTextArray(values: string[]): string {
-  return `{${values.map((value) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`
+  return `{${values.filter((value) => value.trim() !== '').map((value) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`
 }
 
 /** The flow's own choices about each setting, `{name: {visibility, fixed}}`. The
@@ -235,6 +235,10 @@ export function planRegistration(body: Json): FlowRegistration {
       steps: checkedSteps,
       outputs: checkedOutputs,
       settings: settingRules(body.settings),
+      // The settings the thread fills in, so the check can refuse one that is also fixed or hidden.
+      thread_settings: Object.values(object(body.thread_bindings, 'thread_bindings'))
+        .flatMap((target) => (target && typeof target === 'object' && typeof (target as Json).setting === 'string'
+          ? [(target as Json).setting as string] : [])),
     },
   }
 }

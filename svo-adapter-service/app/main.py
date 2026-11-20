@@ -2653,9 +2653,13 @@ def _fixed_flow_args(plan_json: dict[str, Any], args: dict[str, Any]) -> list[st
     # adapter's own setting, never a value from the request.
     fixed.update({"execution_id", "source_uri", "tapis_token", "flow_staging_uri", "tapis_base_url"})
     sent = normalize_args(_wrap_args(args or {}))
+    # Compared trimmed and without case, so a variant spelling is refused as well. (The
+    # run itself reads arguments by exact name, so a variant would be unknown anyway.)
+    fixed_names = flow_settings.comparable(fixed)
     # What the adapter hands a step bound to a secret: the run, where to fetch, and
     # each step's own fetch credential.
-    return sorted(name for name in sent if name in fixed or step_secrets.is_managed_argument(str(name)))
+    return sorted(name for name in sent
+                  if flow_settings.comparable([name]) & fixed_names or step_secrets.is_managed_argument(str(name)))
 
 
 def _refused_flow_setting_args(plan_json: dict[str, Any], args: dict[str, Any]) -> dict[str, list[str]]:
@@ -2665,15 +2669,17 @@ def _refused_flow_setting_args(plan_json: dict[str, Any], args: dict[str, Any]) 
     runner's choice and pass, even when the author hid them."""
     if not isinstance(plan_json.get("flow"), dict):
         return {}
-    sent = set(normalize_args(_wrap_args(args or {})))
-    thread_bound = flow_settings.thread_bound_names((plan_json["flow"]).get("thread_bindings"))
+    sent = flow_settings.comparable(normalize_args(_wrap_args(args or {})))
+    thread_bound = flow_settings.comparable(
+        flow_settings.thread_bound_names((plan_json["flow"]).get("thread_bindings")))
     refused: dict[str, list[str]] = {}
     for reason, applies in (("fixed", lambda p: p.get("fixed") is True),
                             ("hidden", lambda p: p.get("visibility") == "hidden")):
         names = sorted(
             str(parameter["name"]) for parameter in plan_json.get("parameters") or []
-            if parameter.get("name") and parameter["name"] not in thread_bound and applies(parameter)
-            and sent & accepted_aliases([str(parameter["name"])]))
+            if parameter.get("name") and applies(parameter)
+            and not flow_settings.comparable([parameter["name"]]) & thread_bound
+            and flow_settings.comparable([parameter["name"]]) & sent)
         if names:
             refused[reason] = names
     return refused
@@ -2877,6 +2883,7 @@ async def check_flow(body: FlowCheckIn, authorization: str | None = Header(None)
         "outputs": body.outputs,
         "thread_bindings": body.thread_bindings,
         "settings": body.settings,
+        "thread_settings": body.thread_settings,
     }, refused_settings=_refused_flow_settings())
     secret_problems = [
         problem for step in body.steps if step.etl_process_id in pieces

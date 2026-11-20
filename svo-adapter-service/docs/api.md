@@ -168,8 +168,19 @@ The author's choices are kept on the flow as `settings_json`
 (`{"<setting>": {"visibility": "...", "fixed": true}}`) and sent to `POST /flows/check` as
 `settings`. The check adds `FLOW_SETTING_INVALID` (a malformed choice, or a setting no piece has),
 `FLOW_SETTING_HIDDEN_WITHOUT_VALUE` (hidden, required by the piece, and nothing gives it a
-value) and `FLOW_SETTING_FIXED_WITHOUT_VALUE` (fixed to nothing). `setting_details` in the check's
+value), `FLOW_SETTING_FIXED_WITHOUT_VALUE` (fixed to nothing), `FLOW_SETTING_LOOKS_SECRET`,
+`FLOW_THREAD_BINDING_FIXED` and `FLOW_SETTING_CONFLICT`. `setting_details` in the check's
 piece summary carries the same description keys as the settings route.
+
+**Hidden means not shown, not secret.** A hidden setting is left off the run form, but its
+value is stored with the flow and can be read by anyone who can read the flow, and the run
+dialog lists it before the runner accepts. So the check refuses (`FLOW_SETTING_LOOKS_SECRET`)
+any value, default or fixed, for a setting whose name contains `token`, `secret`, `password`,
+`api_key`/`apikey`, `authorization` or `credential` (any letter case): a piece declares a
+stored credential instead. A setting the thread fills in (the dates) cannot also be fixed or
+hidden (`FLOW_THREAD_BINDING_FIXED`; the check body's `thread_settings` names them when the
+flow is not saved yet). Pieces that share a setting name must agree on its type, choices and
+limits (`FLOW_SETTING_CONFLICT`).
 
 **`POST /plans/flow`** plans a stored flow: `{"flow_id": "<configuration id>", "inputs":
 {"<flow input id>": "<data object id>"}}`. The response is a plan like any other, to
@@ -363,8 +374,10 @@ used only when the submitter says so.
   `execution_id`, `source_uri`, `flow_staging_uri` or `tapis_token`. Plan again to change a dataset.
 - `POST /workflows/submit` refuses a flow plan with 422 `FLOW_SETTING_REFUSED` when `args`
   holds a value for a setting the author fixed or hid (`fixed` and `hidden` list which). The
-  form hides them, and this refusal means the API cannot be used around it. The dates a thread
-  fills in are not refused, even when hidden.
+  form hides them, and this refusal means the API cannot be used around it. Names are compared
+  trimmed, without case and through the adapter's aliases, so a variant spelling is refused too
+  (the run reads arguments by exact name, so a variant would be an unknown parameter anyway).
+  Settings the thread fills in are not refused; the check keeps those from being fixed or hidden.
 
 **What a flow's author cannot do.**
 

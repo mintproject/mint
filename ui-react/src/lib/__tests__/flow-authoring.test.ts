@@ -321,6 +321,14 @@ describe('what the author decides about a setting', () => {
     });
   });
 
+  it('tells the check which settings the thread fills in', () => {
+    const draft: FlowDraft = {
+      ...emptyDraft(),
+      bindings: { ...emptyDraft().bindings, start_date: 'setting:begin', region: 'input:corpus' },
+    };
+    expect(buildCheckBody(draft).thread_settings).toEqual(['begin']);
+  });
+
   it('is read back from a stored flow, ignoring what it cannot read', () => {
     const base: StoredFlowSource = {
       configuration: { label: 'F', inputs: [], outputs: [], parameters: [] },

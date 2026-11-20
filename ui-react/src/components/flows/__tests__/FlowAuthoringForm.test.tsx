@@ -334,6 +334,19 @@ describe('FlowAuthoringForm', () => {
       expect(check.body.settings).toEqual({ match_mode: { fixed: true, visibility: 'hidden' } });
     });
 
+    it('says that hidden is not secret, once a setting is hidden', async () => {
+      fakeServer();
+      const user = userEvent.setup();
+      render({ initial: counting() });
+      const step = await screen.findByTestId('flow-form-step-1');
+      expect(within(step).queryByText(/not shown, not secret/)).not.toBeInTheDocument();
+      await user.selectOptions(
+        await within(step).findByLabelText('Who sees How terms are counted'),
+        'hidden',
+      );
+      expect(within(step).getByText(/not shown, not secret/)).toBeInTheDocument();
+    });
+
     it('sends no decisions when the author made none', async () => {
       fakeServer();
       render({ initial: counting() });

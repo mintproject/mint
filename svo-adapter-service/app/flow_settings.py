@@ -20,12 +20,43 @@ This module is pure: it reads dicts and returns dicts and problems.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
+
+from .etl_contract import accepted_aliases, canonical_key
 
 VISIBILITIES = ("shown", "advanced", "hidden")
 
 # Between the flow's parameter ids and the setting names: ``{configuration}_setting_{name}``.
 PARAMETER_MARKER = "_setting_"
+
+# A setting whose name says it carries a credential. A flow's settings are readable by
+# anyone who can read the flow, hidden ones included ("hidden" is not "secret"), so an
+# author may not give such a setting a value: a piece declares a stored credential instead.
+_LOOKS_SECRET = re.compile(r"token|secret|password|api_?key|authorization|credential", re.IGNORECASE)
+
+
+def looks_secret(name: Any) -> bool:
+    return isinstance(name, str) and _LOOKS_SECRET.search(name) is not None
+
+
+def comparable(names: Iterable[Any]) -> set[str]:
+    """Names as compared for what a runner may not send: trimmed, lower case, and every
+    form the adapter treats as the same argument (its aliases and canonical key)."""
+    found: set[str] = set()
+    for name in accepted_aliases(str(item) for item in names):
+        found.add(name.strip().lower())
+        found.add(str(canonical_key(name)).strip().lower())
+    return found
+
+
+def description_key(prop: Any) -> tuple[Any, ...]:
+    """What two pieces must agree on when they share a setting by name: its type, its
+    choices (by value) and its bounds. Titles and explanations may differ."""
+    described = describe(prop)
+    return (described.get("type"), tuple(str(c["value"]) for c in described.get("choices", [])),
+            described.get("minimum"), described.get("maximum"))
+
 
 _PASSED_ON = ("type", "default", "description", "title", "minimum", "maximum")
 

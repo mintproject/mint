@@ -760,6 +760,29 @@ describe('the settings of a flow', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
+  it('still lists a fixed setting read-only from its row when the settings cannot be read', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    const data = flowData();
+    data.models['model-1']!.input_parameters = [
+      row('p-pinned', 'grounding', { default: 'keyword', value: 'keyword' }),
+      row('p-plain', 'title'),
+    ];
+    renderWithProviders(
+      <MintParameters
+        threadData={data}
+        canWrite
+        canExecute
+        onSave={vi.fn()}
+        onContinue={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('edit-parameters-btn'));
+    expect(screen.getByText(/expert modeler has selected/i)).toBeInTheDocument();
+    expect(screen.getByText('keyword')).toBeInTheDocument();
+    expect(screen.queryByTestId('param-input-p-pinned')).not.toBeInTheDocument();
+    expect(screen.getByTestId('param-input-p-plain')).toBeInTheDocument();
+  });
+
   it('still shows a dropdown from the flows parameter rows when the settings cannot be read', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
     const data = flowData();
@@ -845,5 +868,18 @@ describe('a model parameter with accepted values', () => {
     render_({ 'param-s': ['tvd', 'upstream'] });
     const select = screen.getByTestId('param-input-param-s') as HTMLSelectElement;
     expect(Array.from(select.selectedOptions).map((o) => o.value)).toEqual(['upstream', 'tvd']);
+  });
+
+  it('keeps a bound value the list does not hold, flagged, and says so on save', async () => {
+    // An old model saved comma separated values: one of them is not an accepted value.
+    const onSave = render_({ 'param-s': ['central', 'upwind'] });
+    const select = screen.getByTestId('param-input-param-s') as HTMLSelectElement;
+    expect(
+      screen.getByRole('option', { name: 'upwind (not an accepted value)' }),
+    ).toBeInTheDocument();
+    expect(Array.from(select.selectedOptions).map((o) => o.value)).toEqual(['central', 'upwind']);
+    fireEvent.click(screen.getByTestId('parameters-save-btn'));
+    expect(await screen.findByTestId('param-error-param-s')).toHaveTextContent('Accepted values');
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

@@ -111,6 +111,9 @@ class FlowCheckIn(BaseModel):
     thread_bindings: dict[str, Any] = Field(default_factory=dict)
     # What the author decided about each setting: {name: {"visibility", "fixed"}}.
     settings: dict[str, Any] = Field(default_factory=dict)
+    # Settings the thread fills in (the dates), by name, when the bindings cannot name
+    # flow parameters yet (a flow that is not saved).
+    thread_settings: list[str] = Field(default_factory=list, max_length=64)
 
 
 class FlowProposeIn(BaseModel):

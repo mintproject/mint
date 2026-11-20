@@ -32,6 +32,7 @@ MATCH_MODE = {
 MAX_FILES = {"type": "integer", "title": "Most files", "minimum": 1, "maximum": 500,
              "default": 200, "x-advanced": True}
 COLOUR = {"type": "string", "enum": ["red", "green"]}
+COLOR_URL = {"type": "string"}
 
 
 @pytest.fixture(autouse=True)
@@ -295,3 +296,175 @@ def test_the_run_form_settings_of_a_configuration_that_is_not_a_flow_are_refused
     stored_flow(register("score", {"a": {"type": "string"}}), monkeypatch)
     response = client.get("/flows/a-model/settings", headers=AUTH)
     assert response.status_code == 422 and response.json()["detail"]["code"] == "FLOW_NOT_FOUND"
+
+
+# --- what a runner may not send, however it is spelled -------------------------------
+
+@pytest.mark.parametrize("args", [
+    {"MATCH_MODE": "longest_match"},
+    {"  match_mode ": "longest_match"},
+    {"Match_Mode": {"value": "longest_match"}},
+    {"match_mode": {"value": "longest_match"}},
+])
+def test_a_fixed_setting_is_refused_whatever_the_case_spacing_or_wrapping(monkeypatch, args):
+    piece = register("score", {"match_mode": MATCH_MODE})
+    stored_flow(piece, monkeypatch, settings={"match_mode": {"fixed": True}})
+    plan_id = plan().json()["plan_id"]
+    refused = submit(plan_id, args=args)
+    assert refused.status_code == 422 and refused.json()["detail"]["code"] == "FLOW_SETTING_REFUSED"
+
+
+def test_the_managed_arguments_are_refused_whatever_the_case(monkeypatch):
+    piece = register("score", {"match_mode": MATCH_MODE})
+    stored_flow(piece, monkeypatch)
+    plan_id = plan().json()["plan_id"]
+    for name in ("SOURCE_URI", " source_uri", "Execution_Id"):
+        refused = submit(plan_id, args={name: "x"})
+        assert refused.status_code == 422 and refused.json()["detail"]["code"] == "FLOW_ARGUMENT_FIXED", name
+
+
+def test_a_variant_spelling_is_not_a_way_round_because_the_run_reads_exact_names(monkeypatch):
+    # Refused above on purpose; and were it not, the plan's own argument check is exact.
+    piece = register("score", {"match_mode": MATCH_MODE})
+    stored_flow(piece, monkeypatch)
+    plan_json = plan().json()["plan_json"]
+    with pytest.raises(Exception) as unknown:
+        main_module._validate_plan_args(plan_json, {"MATCH_MODE": "x"}, "tok")
+    assert "UNKNOWN_PARAMETERS" in str(unknown.value.detail)
+
+
+def test_an_aliased_name_is_compared_as_the_same_setting():
+    plan_json = {
+        "flow": {"thread_bindings": {"start_date": {"parameter": "cfg-1_setting_gma_boundary_uri"}}},
+        "parameters": [{"name": "geometry_source_uri", "visibility": "hidden"},
+                       {"name": "other", "visibility": "hidden"},
+                       {"name": "pinned", "fixed": True}]}
+    refused = main_module._refused_flow_setting_args(
+        plan_json, {"location_file_uri": "x", "OTHER": "y", " Pinned": "z"})
+    # The thread fills in the aliased name; the others are refused.
+    assert refused == {"fixed": ["pinned"], "hidden": ["other"]}
+    assert main_module._refused_flow_setting_args(plan_json, {"geometry_source_uri": "x"}) == {}
+
+
+def test_every_author_value_is_listed_for_acceptance_whatever_its_visibility(monkeypatch):
+    piece = register("score", {"match_mode": MATCH_MODE, "colour": COLOR_URL})
+    stored_flow(piece, monkeypatch, settings={"colour": {"visibility": "hidden", "fixed": True},
+                                              "match_mode": {"visibility": "advanced"}},
+                step_settings={"colour": "https://elsewhere.example/x.json", "match_mode": "longest_match"})
+    plan_json = plan().json()["plan_json"]
+    gate = main_module._unaccepted_flow_settings(plan_json, {})
+    assert gate["defaults"] == {"colour": "https://elsewhere.example/x.json", "match_mode": "longest_match"}
+    refused = submit(plan().json()["plan_id"], accept_flow_settings=False, dry_run=False)
+    assert refused.json()["detail"]["code"] == "FLOW_SETTINGS_NOT_ACCEPTED"
+    assert "colour" in refused.json()["detail"]["defaults"]
+
+
+def test_a_fixed_value_reaches_the_run_when_the_runner_sends_nothing(monkeypatch):
+    piece = register("score", {"match_mode": MATCH_MODE})
+    stored_flow(piece, monkeypatch, settings={"match_mode": {"fixed": True, "visibility": "hidden"}},
+                step_settings={"match_mode": "longest_match"})
+    body = plan().json()
+    used = main_module._validate_plan_args(body["plan_json"], {}, "tok", require_required=False)
+    assert used["match_mode"] == {"value": "longest_match"}
+    from app import tapis
+    pipeline = tapis.generate_tapis_workflow({"id": body["plan_id"], "plan_json": body["plan_json"]})
+    assert pipeline["params"]["match_mode"]["default"] == "longest_match"
+
+
+# --- the check: credentials, thread values, conflicts, messages ----------------------
+
+@pytest.mark.parametrize("name", ["service_token_url", "My_Password_Hint", "ApiKeyName", "api_key", "AUTHORIZATION_note",
+                                  "credentials_file"])
+def test_a_credential_like_setting_may_not_be_given_a_value(name):
+    piece = register("score", {name: {"type": "string"}})
+    refused = check(piece, None, {name: "abc"})
+    assert refused["ok"] is False
+    assert [p["code"] for p in refused["problems"]] == ["FLOW_SETTING_LOOKS_SECRET"]
+    assert refused["problems"][0]["step"] == 1 and "stored credential" in refused["problems"][0]["message"]
+    # Without a value there is nothing to leak: the runner may be asked for it.
+    assert check(piece)["ok"] is True
+
+
+def test_a_setting_the_thread_fills_in_cannot_also_be_fixed_or_hidden():
+    piece = register("score", {"start": {"type": "string", "default": "2020"}})
+    body = {"thread_settings": ["Start"]}
+    for rule in ({"fixed": True}, {"visibility": "hidden"}):
+        result = client.post("/flows/check", headers=AUTH, json={
+            "inputs": [{"id": "in:corpus", "contract": {"standard_variable_uri": V + "corpus"}}],
+            "steps": [{"position": 1, "etl_process_id": piece, "settings": {"start": "2021"},
+                       "wires": [{"to": {"input": 1}, "from": {"flow_input": "in:corpus"}}]}],
+            "settings": {"start": rule}, **body}).json()
+        assert [p["code"] for p in result["problems"]] == ["FLOW_THREAD_BINDING_FIXED"]
+    shown = client.post("/flows/check", headers=AUTH, json={
+        "inputs": [{"id": "in:corpus", "contract": {"standard_variable_uri": V + "corpus"}}],
+        "steps": [{"position": 1, "etl_process_id": piece, "settings": {},
+                   "wires": [{"to": {"input": 1}, "from": {"flow_input": "in:corpus"}}]}],
+        "settings": {"start": {"visibility": "advanced"}}, **body}).json()
+    assert shown["ok"] is True
+
+
+def test_a_stored_flow_whose_thread_binding_names_a_fixed_setting_is_refused_at_plan(monkeypatch):
+    piece = register("score", {"start": {"type": "string", "default": "2020"}})
+    stored_flow(piece, monkeypatch, settings={"start": {"fixed": True}},
+                step_settings={"start": "2021"})
+    flow = main_module._load_flow  # the stored stand-in
+    import asyncio
+    stored = asyncio.run(flow(None, "cfg-1"))
+    stored["thread_bindings"] = {"start_date": {"parameter": "cfg-1_setting_start"}}
+    response = plan()
+    assert response.status_code == 422
+    assert "FLOW_THREAD_BINDING_FIXED" in str(response.json()["detail"]["problems"])
+
+
+def test_two_pieces_may_not_describe_one_setting_two_ways():
+    a = register("a", {"mode": {"type": "string", "enum": ["x", "y"]}})
+    b = register("b", {"mode": {"type": "string", "enum": ["x", "z"]}})
+    c = register("c", {"mode": {"type": "string", "enum": ["y", "x"][::-1], "title": "Other title"}})
+    wires = [{"to": {"input": 1}, "from": {"flow_input": "in:corpus"}}]
+    steps = lambda *ids: [{"position": i + 1, "etl_process_id": p, "settings": {}, "wires": wires}  # noqa: E731
+                          for i, p in enumerate(ids)]
+    inputs = [{"id": "in:corpus", "contract": {"standard_variable_uri": V + "corpus"}}]
+    clash = client.post("/flows/check", headers=AUTH, json={"inputs": inputs, "steps": steps(a, b)}).json()
+    assert [(p["code"], p["step"]) for p in clash["problems"]] == [("FLOW_SETTING_CONFLICT", 2)]
+    assert "step 1 and step 2" in clash["problems"][0]["message"]
+    same = client.post("/flows/check", headers=AUTH, json={"inputs": inputs, "steps": steps(a, c)}).json()
+    assert same["ok"] is True  # titles and explanations may differ; choices and limits may not
+
+
+def test_the_hidden_message_names_the_setting_and_the_step():
+    piece = register("score", {"mode": {"type": "string"}}, required=["mode"])
+    problem = check(piece, {"mode": {"visibility": "hidden"}})["problems"][0]
+    assert "mode" in problem["message"] and "step 1" in problem["message"] and problem["step"] == 1
+
+
+def test_a_hidden_setting_linked_from_an_earlier_step_has_a_value():
+    first = client.post("/transform-specs", json={
+        "name": "resolve", "method": "tapis_function", "transform_type": "unit_convert",
+        "contracts": [{"role": "output", "standard_variable_uri": V + "archive"}],
+        "parameters_schema_json": {"properties": {}, "value_outputs": [{"name": "manifest_name"}]}}).json()["id"]
+    second = client.post("/transform-specs", json={
+        "name": "publish", "method": "tapis_function", "transform_type": "unit_convert",
+        "contracts": [{"role": "input", "standard_variable_uri": V + "archive"}],
+        "parameters_schema_json": {"properties": {"manifest_name": {"type": "string"}},
+                                   "required": ["manifest_name"]},
+        "env_from_args": {"TAPIS_TOKEN": "tapis_token", "MANIFEST_NAME": "manifest_name"}}).json()["id"]
+    result = client.post("/flows/check", headers=AUTH, json={
+        "steps": [
+            {"position": 1, "etl_process_id": first, "settings": {}, "wires": []},
+            {"position": 2, "etl_process_id": second, "settings": {}, "wires": [
+                {"to": {"input": 1}, "from": {"step": 1, "output": 1}},
+                {"to": {"setting": "manifest_name"}, "from": {"step": 1, "value": "manifest_name"}}]}],
+        "settings": {"manifest_name": {"visibility": "hidden"}}}).json()
+    assert result["ok"] is True, result["problems"]
+
+
+def test_a_decision_about_a_setting_only_a_removed_piece_had_is_refused():
+    piece = register("score", {"mode": {"type": "string"}})
+    result = client.post("/flows/check", headers=AUTH, json={
+        "inputs": [{"id": "in:corpus", "contract": {"standard_variable_uri": V + "corpus"}}],
+        "steps": [
+            {"position": 1, "etl_process_id": piece, "settings": {},
+             "wires": [{"to": {"input": 1}, "from": {"flow_input": "in:corpus"}}]},
+            {"position": 2, "etl_process_id": "no-such-piece", "settings": {}, "wires": []}],
+        "settings": {"gone": {"visibility": "hidden"}}}).json()
+    assert "FLOW_SETTING_INVALID" in [p["code"] for p in result["problems"]]

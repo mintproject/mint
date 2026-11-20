@@ -373,7 +373,7 @@ def _check(flow: dict[str, Any], refused_settings: Iterable[str]) -> Checked:
         result.depends_on[position] = sorted(after)
         wired_by_position[position] = wired_settings
 
-    _check_settings(flow, by_position, wired_by_position, problems)
+    _check_settings(flow, by_position, wired_by_position, problems, refused)
     _check_outputs(flow, by_position, result)
     _check_pause(flow, by_position, result)
     _check_thread_bindings(flow, flow_inputs, flow_parameters, problems)
@@ -385,12 +385,42 @@ def _check_settings(
     by_position: dict[int, dict[str, Any]],
     wired_by_position: dict[int, set[str]],
     problems: list[Problem],
+    refused: set[str],
 ) -> None:
-    """The author's decisions about settings: they must name settings of the flow's
-    pieces, and a setting that is hidden or fixed must still have a value to run on."""
+    """The author's decisions about settings, and what the pieces say about them.
+
+    - a setting may not be described two ways by the pieces that share its name;
+    - no credential-like setting may have a value, since a flow's settings are readable
+      even when hidden;
+    - decisions must name settings of the flow's pieces;
+    - a setting that is hidden or fixed must still have a value to run on, and must not
+      be one the thread fills in (a runner cannot change what a thread fills in either).
+    """
     rules = flow.get("settings")
     pieces = {position: step["piece"] for position, step in by_position.items()
               if isinstance(step.get("piece"), dict)}
+
+    seen: dict[str, tuple[int, tuple[Any, ...]]] = {}
+    for position in sorted(pieces):
+        properties = (pieces[position].get("parameters_schema_json") or {}).get("properties") or {}
+        for name in sorted(properties):
+            key = flow_settings.description_key(properties[name])
+            first = seen.setdefault(name, (position, key))
+            if first[1] != key:
+                problems.append(Problem(
+                    "FLOW_SETTING_CONFLICT",
+                    f"{name} has different choices or limits in step {first[0]} and step {position}, "
+                    "but a setting with one name is one setting of the flow", position))
+    for position in sorted(by_position):
+        values = by_position[position].get("settings")
+        for name in sorted(values if isinstance(values, dict) else {}, key=str):
+            if flow_settings.looks_secret(name) and str(name).lower() not in refused:
+                problems.append(Problem(
+                    "FLOW_SETTING_LOOKS_SECRET",
+                    f"{name} looks like a credential. A flow's settings can be read by anyone who can "
+                    "read the flow, even a hidden one: use a stored credential the piece declares instead",
+                    position))
+
     known = {name for piece in pieces.values() for name in piece_arguments(piece)}
     shape = flow_settings.rules_problems(rules, known)
     for message in shape:
@@ -404,14 +434,23 @@ def _check_settings(
         for name in flow_settings.hidden_without_value(rules, pieces[position], given, wired):
             problems.append(Problem(
                 "FLOW_SETTING_HIDDEN_WITHOUT_VALUE",
-                f"{name} is hidden from the runner but the piece needs it and nothing gives it a value: "
-                "set a value or a default, or show it", position))
+                f"The setting {name} (step {position}) is hidden from the runner, but the piece needs it "
+                "and nothing gives it a value: set a value or a default, or show it", position))
+    thread_bound = flow_settings.comparable(
+        [*flow_settings.thread_bound_names(flow.get("thread_bindings")),
+         *(n for n in flow.get("thread_settings") or [] if isinstance(n, str))])
     for name in sorted(n for n in rules if flow_settings.is_fixed(rules, n)):
         has_value = name in given or any(
             flow_settings.piece_default(piece, name) is not None for piece in pieces.values())
         if not has_value:
             problems.append(Problem(
                 "FLOW_SETTING_FIXED_WITHOUT_VALUE", f"{name} is fixed but has no value to fix it to"))
+    for name in sorted(rules):
+        if ((flow_settings.is_fixed(rules, name) or flow_settings.visibility_of(rules, name) == "hidden")
+                and flow_settings.comparable([name]) & thread_bound):
+            problems.append(Problem(
+                "FLOW_THREAD_BINDING_FIXED",
+                f"{name} is filled in by the thread (a date), so it cannot also be fixed or hidden"))
 
 
 def _check_outputs(flow: dict[str, Any], by_position: dict[int, dict[str, Any]], result: Checked) -> None:
