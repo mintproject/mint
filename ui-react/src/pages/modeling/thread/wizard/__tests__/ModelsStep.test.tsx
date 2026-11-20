@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import type { MockedResponse } from '@apollo/client/testing';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders, screen, waitFor } from '@/test/utils/render';
 import { server } from '@/test/msw/server';
+import { setMintConfig } from '@/test/utils/mint-config';
+import { clearFlowAvailabilityCache } from '@/lib/flow-availability';
 import {
   GetModelTreeWithRegionsDocument,
   SetThreadModelsDocument,
@@ -712,6 +714,133 @@ describe('ModelsStep', () => {
         ),
       );
       expect(onContinue).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Flows the user may not run ─────────────────────────────────────────────
+
+  describe('flow availability', () => {
+    const flowTreeMock: MockedResponse = {
+      request: { query: GetModelTreeWithRegionsDocument },
+      result: {
+        data: {
+          modelcatalog_software: [
+            {
+              id: 'sw1',
+              label: 'PIHM',
+              versions: [
+                {
+                  id: 'v1',
+                  label: 'v4',
+                  configurations: [
+                    cfg('cfgA', 'PIHM Flood A', 'sv-flood', 'flood extent'),
+                    {
+                      ...cfg('flowX', 'Dictionary flow', 'sv-dict', 'dictionary'),
+                      flow: {
+                        __typename: 'modelcatalog_configuration_flow',
+                        configuration_id: 'flowX',
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const render = () =>
+      renderWithProviders(
+        <ModelsStep
+          thread={makeThread()}
+          onUpdated={vi.fn()}
+          onContinue={vi.fn()}
+          onBack={vi.fn()}
+        />,
+        { apolloMocks: [flowTreeMock, emptyAdapterMock] },
+      );
+    const answer = (body: unknown, ok = true) =>
+      vi.fn(async () => ({ ok, status: ok ? 200 : 503, json: async () => body }));
+
+    beforeEach(() => {
+      clearFlowAvailabilityCache();
+      setMintConfig({ SVO_ADAPTER_API: 'http://adapter' });
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      delete (window as { __MINT_CONFIG__?: unknown }).__MINT_CONFIG__;
+    });
+
+    it('greys an unavailable flow with the reason and does not let it be picked', async () => {
+      const fetchMock = answer({
+        flow_id: 'flowX',
+        available: false,
+        steps: [{ position: 1, runnable: false, reason: 'not_approved' }],
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render();
+      expect(
+        await screen.findByText('A piece of this flow is not approved for your account.'),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText(/select Dictionary flow/i)).toBeDisabled();
+      expect(screen.getByLabelText(/select PIHM Flood A/i)).toBeEnabled();
+      // One request, for the flow only, as the signed-in user.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://adapter/flows/flowX/availability',
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer mock-access-token' },
+        }),
+      );
+    });
+
+    it('says a piece was deleted when the adapter reports it missing', async () => {
+      vi.stubGlobal(
+        'fetch',
+        answer({
+          flow_id: 'flowX',
+          available: false,
+          steps: [{ position: 1, runnable: false, reason: 'piece_missing' }],
+        }),
+      );
+      render();
+      expect(await screen.findByText('A piece of this flow was deleted.')).toBeInTheDocument();
+    });
+
+    it('leaves the flow pickable when the check fails', async () => {
+      const fetchMock = answer({}, false);
+      vi.stubGlobal('fetch', fetchMock);
+      render();
+      await screen.findByText('Dictionary flow');
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(screen.getByLabelText(/select Dictionary flow/i)).toBeEnabled();
+      expect(screen.queryByTestId('flow-unavailable')).not.toBeInTheDocument();
+    });
+
+    it('asks nothing when the adapter is not configured', async () => {
+      setMintConfig({});
+      const fetchMock = answer({});
+      vi.stubGlobal('fetch', fetchMock);
+      render();
+      await screen.findByText('Dictionary flow');
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(screen.getByLabelText(/select Dictionary flow/i)).toBeEnabled();
+    });
+
+    it('makes no availability request when no configuration is a flow', async () => {
+      const fetchMock = answer({});
+      vi.stubGlobal('fetch', fetchMock);
+      renderWithProviders(
+        <ModelsStep
+          thread={makeThread()}
+          onUpdated={vi.fn()}
+          onContinue={vi.fn()}
+          onBack={vi.fn()}
+        />,
+        { apolloMocks: treeMocks },
+      );
+      await screen.findByText('PIHM Flood A');
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 });

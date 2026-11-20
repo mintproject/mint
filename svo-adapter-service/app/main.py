@@ -2271,6 +2271,53 @@ async def check_flow(body: FlowCheckIn, authorization: str | None = Header(None)
     }
 
 
+@app.get("/flows/{configuration_id:path}/availability", tags=["Core: Planning"])
+async def flow_availability(configuration_id: str, authorization: str | None = Header(None)):
+    """Whether this caller could run each step of a stored flow, without planning it.
+
+    The flow and the registry are read the way ``/plans/flow`` reads them, so a
+    piece another user keeps private is reported as ``piece_missing`` and nothing
+    else: no label, owner or id. A step is runnable when ``stored_source.decision``
+    lets the caller run its piece; opting in to an unapproved piece is a choice
+    made at plan time, so it is not offered here.
+    """
+    bearer = _bearer(authorization)
+    caller = await _require_signed_in(bearer)
+    h = get_client(bearer)
+    flow = await _load_flow(h, configuration_id)
+    if flow is None:
+        raise HTTPException(422, detail={
+            "code": "FLOW_NOT_FOUND", "flow_id": configuration_id,
+            "message": "no such flow: the configuration does not exist or is not a flow"})
+
+    by_id: dict[str, dict[str, Any]] = {}
+    for spec in await _registry(h, plannable=False):
+        if spec.get("visibility") == "private" and spec.get("owner_username") != caller:
+            continue
+        by_id.setdefault(str(spec.get("id")), spec)
+        if spec.get("mint_etl_process_id"):
+            by_id[str(spec["mint_etl_process_id"])] = spec
+
+    steps_in = flow.get("steps") if isinstance(flow.get("steps"), list) else []
+    rows = sorted((step for step in steps_in if isinstance(step, dict)),
+                  key=lambda step: step.get("position") if type(step.get("position")) is int else 0)
+    steps: list[dict[str, Any]] = []
+    for step in rows:
+        piece_id = step.get("etl_process_id")
+        spec = by_id.get(piece_id) if isinstance(piece_id, str) and piece_id else None
+        reason: str | None = None
+        if spec is None:
+            reason = "piece_missing"
+        elif stored_source.decision(spec, caller) == "denied":
+            reason = "stored_source_disabled" if not settings.stored_source_enabled else "not_approved"
+        steps.append({
+            "position": step.get("position") if type(step.get("position")) is int else 0,
+            "runnable": reason is None,
+            "reason": reason,
+        })
+    return {"flow_id": configuration_id, "available": all(step["runnable"] for step in steps), "steps": steps}
+
+
 @app.post("/plans/flow", tags=["Core: Planning"])
 async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(None)):
     """Plan a flow stored on a model configuration, with a data object for each

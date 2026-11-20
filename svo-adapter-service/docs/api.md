@@ -102,6 +102,22 @@ It returns `ok`, `problems` (each with `code`, `message`, and the `step` and `wi
 on), `depends_on`, and for each piece its input and output positions, the settings a flow
 may give it, and the values it returns. Nothing is stored.
 
+**`GET /flows/{configuration_id}/availability`** says whether the caller could run each
+step of a stored flow, without planning it. It needs a signed-in caller, reads the flow and
+the registry as `POST /plans/flow` does, and never plans or stores anything:
+
+```json
+{"flow_id": "...", "available": false,
+ "steps": [{"position": 1, "runnable": true, "reason": null},
+           {"position": 2, "runnable": false, "reason": "not_approved"}]}
+```
+
+`reason` is `piece_missing` (the piece was deleted, or is another user's private piece;
+nothing else about it is reported), `not_approved` (a stored-code piece an admin has not
+approved, and the caller does not own), or `stored_source_disabled` (the deployment does not
+run stored code). Opting in to an unapproved piece is chosen when planning, so it is not
+counted here. An unknown or non-flow configuration answers 422 `FLOW_NOT_FOUND`.
+
 **`POST /plans/flow`** plans a stored flow: `{"flow_id": "<configuration id>", "inputs":
 {"<flow input id>": "<data object id>"}}`. The response is a plan like any other, to
 submit with `/workflows/submit`.

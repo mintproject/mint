@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { slugFromUri } from '@/lib/uri';
 import { Badge } from '@/components/ui/badge';
+import { FlowBadge } from '@/components/common/FlowBadge';
 import {
   Accordion,
   AccordionContent,
@@ -29,6 +30,8 @@ export interface ModelGroupListProps {
   basePath?: string;
   /** IDs owned by the current authenticated user. */
   ownedIds?: ReadonlySet<string>;
+  /** IDs of configurations that are flows; they get a "Flow" badge. */
+  flowIds?: ReadonlySet<string>;
   /** Empty-state copy for filtered views. */
   emptyMessage?: string;
 }
@@ -39,6 +42,7 @@ export function ModelGroupList({
   expandAll,
   basePath = '/modelconfigurations',
   ownedIds,
+  flowIds,
   emptyMessage = 'No models match your filters.',
 }: ModelGroupListProps) {
   const signature = groups.map((g) => g.softwareId).join('|');
@@ -70,6 +74,7 @@ export function ModelGroupList({
                   selectedSlug={selectedSlug}
                   basePath={basePath}
                   isOwned={ownedIds?.has(config.id) ?? false}
+                  isFlow={flowIds?.has(config.id) ?? false}
                 />
               ))}
             </div>
@@ -85,11 +90,13 @@ function ConfigBlock({
   selectedSlug,
   basePath,
   isOwned,
+  isFlow,
 }: {
   config: ConfigNode;
   selectedSlug: string | null;
   basePath: string;
   isOwned: boolean;
+  isFlow: boolean;
 }) {
   return (
     <div>
@@ -100,6 +107,7 @@ function ConfigBlock({
         dimmed={config.synthesized}
       >
         <span className="truncate">{config.label}</span>
+        {isFlow && <FlowBadge />}
         {isOwned && (
           <Badge variant="secondary" className="shrink-0 text-[10px]">
             Yours

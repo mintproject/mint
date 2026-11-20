@@ -12,6 +12,7 @@ import { slugFromUri } from '@/lib/uri';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { FlowStepsSection } from './FlowStepsSection';
 
 export interface ConfigurationDetailProps {
   configurationId: string;
@@ -272,6 +273,16 @@ export function ConfigurationDetail({
           </table>
         )}
       </section>
+
+      {/* Steps (only when the configuration is a flow) */}
+      <FlowStepsSection
+        configurationId={config.id}
+        inputs={config.inputs.map((inp) => ({ id: inp.input.id, label: inp.input.label }))}
+        parameters={config.parameters.map((cp) => ({
+          id: cp.parameter.id,
+          label: cp.parameter.label,
+        }))}
+      />
     </div>
   );
 }

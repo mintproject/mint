@@ -2,6 +2,7 @@ import { Search } from 'lucide-react';
 import { gql, useQuery } from '@apollo/client';
 import { useCallback, useMemo, useState } from 'react';
 
+import { FlowBadge } from '@/components/common/FlowBadge';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import {
   WORKFLOW_CANVAS_WIDTH,
@@ -27,6 +28,8 @@ import { slugFromUri } from '@/lib/uri';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useDataCatalogVariableAvailability } from '@/hooks/useDataCatalog';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
+import { useFlowAvailability } from '@/hooks/useFlowAvailability';
+import { flowUnavailableMessage } from '@/lib/flow-availability';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -155,16 +158,24 @@ function ModelCard({
   checked: boolean;
   onToggle: (id: string, checked: boolean) => void;
 }) {
+  // Asked only for a flow, and only once per flow per session. An unanswered or
+  // failed check leaves the card pickable: plan and submit still refuse correctly.
+  const unavailable = flowUnavailableMessage(useFlowAvailability(row.isFlow ? row.id : null));
+  // An already-picked flow can still be unpicked.
+  const blocked = unavailable !== null && !checked;
   return (
     <label
       className={cn(
-        'flex cursor-pointer gap-3 rounded border p-3 text-sm transition-colors',
-        checked ? 'border-blue-400 bg-blue-50' : 'hover:bg-gray-50',
+        'flex gap-3 rounded border p-3 text-sm transition-colors',
+        unavailable !== null && 'opacity-60',
+        blocked ? 'cursor-not-allowed bg-gray-50' : 'cursor-pointer',
+        checked ? 'border-blue-400 bg-blue-50' : !blocked && 'hover:bg-gray-50',
       )}
     >
       <input
         type="checkbox"
         checked={checked}
+        disabled={blocked}
         onChange={(e) => onToggle(row.id, e.target.checked)}
         aria-label={`Select ${row.name}`}
         className="mt-1"
@@ -172,14 +183,15 @@ function ModelCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 font-medium">
           {row.name}
-          {row.isFlow && (
-            <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-normal text-purple-800">
-              Flow
-            </span>
-          )}
+          {row.isFlow && <FlowBadge />}
         </div>
         {row.takesCollection && (
           <div className="text-xs text-purple-800">Takes a set of files as one input</div>
+        )}
+        {unavailable && (
+          <div className="text-xs text-amber-800" data-testid="flow-unavailable">
+            {unavailable}
+          </div>
         )}
         {row.region && <div className="text-xs text-gray-500">{row.region}</div>}
         {row.description && (
