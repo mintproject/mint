@@ -69,7 +69,11 @@ describe('flowErrorMessage', () => {
     });
     expect(m?.lines.join('\n')).toContain("chosen by the flow's author");
     expect(m?.lines).toEqual(
-      expect.arrayContaining(['title: Dictionary', 'n: 3', "Step 3 - lexicon uri: taken from step 2's output 1"]),
+      expect.arrayContaining([
+        'title: Dictionary',
+        'n: 3',
+        "Step 3 - lexicon uri: taken from step 2's output 1",
+      ]),
     );
   });
 
