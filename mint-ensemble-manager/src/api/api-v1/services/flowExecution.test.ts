@@ -292,7 +292,11 @@ describe("running a flow from a thread", () => {
 
             it("still refuses several resources on an input the flow does not mark", async () => {
                 const two = context({ thread_bindings: { collections: ["some-other-input"] } });
-                two.inputs[0].resources.push({ id: "res-2", name: "More", url: "tapis://sys/more" });
+                two.inputs[0].resources.push({
+                    id: "res-2",
+                    name: "More",
+                    url: "tapis://sys/more"
+                });
                 flows.flowContext.mockResolvedValue(two);
                 await expect(service().createPlan(BODY, AUTH)).rejects.toMatchObject({
                     statusCode: 422,
@@ -309,7 +313,9 @@ describe("running a flow from a thread", () => {
                         name: "Lexicon",
                         standard_variables: ["sv:terms"],
                         optional: false,
-                        resources: [{ id: "res-9", name: "terms.csv", url: "tapis://sys/terms.csv" }]
+                        resources: [
+                            { id: "res-9", name: "terms.csv", url: "tapis://sys/terms.csv" }
+                        ]
                     }
                 ]);
                 await service().createPlan(BODY, AUTH);
@@ -326,7 +332,9 @@ describe("running a flow from a thread", () => {
                 collecting([corpus(THREE.slice(0, 1))]);
                 await service().createPlan(BODY, AUTH);
                 expect(calls("/data-objects")).toHaveLength(0);
-                expect(calls("/plans/flow")[0].body.collections["in-corpus"].resources).toHaveLength(1);
+                expect(
+                    calls("/plans/flow")[0].body.collections["in-corpus"].resources
+                ).toHaveLength(1);
             });
 
             it("treats a marked input with no resource as unbound, unless it is optional", async () => {
@@ -345,7 +353,10 @@ describe("running a flow from a thread", () => {
             it("does not let the thread's region fill a collection input that has resources", async () => {
                 flows.flowContext.mockResolvedValue(
                     context({
-                        thread_bindings: { region: { input: "in-corpus" }, collections: ["in-corpus"] },
+                        thread_bindings: {
+                            region: { input: "in-corpus" },
+                            collections: ["in-corpus"]
+                        },
                         inputs: [corpus(THREE)],
                         region: {
                             id: "r",
@@ -556,7 +567,13 @@ describe("running a flow from a thread", () => {
         });
 
         it.each([
-            [422, { code: "FLOW_SECRET_MISSING", secrets: [{ name: "model_server", fields: ["api_key"] }] }],
+            [
+                422,
+                {
+                    code: "FLOW_SECRET_MISSING",
+                    secrets: [{ name: "model_server", fields: ["api_key"] }]
+                }
+            ],
             [409, { code: "FLOW_SECRET_CHANGED", name: "model_server" }],
             [422, { code: "SECRET_PIECE_UNSUPPORTED", step: 2, reason: "a script-style piece" }],
             [403, { code: "SECRET_PIECE_NOT_TRUSTED", step: 2 }],
@@ -565,7 +582,9 @@ describe("running a flow from a thread", () => {
         ])("passes a %s submit refusal through as it is", async (status, detail) => {
             adapter({
                 "/data-objects": () => ({ body: { id: "do-1" } }),
-                "/plans/flow": () => ({ body: { plan_id: "adapter-plan-1", plan_json: SECRET_PLAN } }),
+                "/plans/flow": () => ({
+                    body: { plan_id: "adapter-plan-1", plan_json: SECRET_PLAN }
+                }),
                 "/workflows/submit": () => ({ status, body: { detail } })
             });
             const svc = service();
@@ -1105,6 +1124,478 @@ describe("running a flow from a thread", () => {
             const run = await svc.getRun("ue_parent-1", AUTH);
             expect(run.status).toBe("adapter_running");
             expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("a pause for the user's edit", () => {
+        const LEXICON = "tapis://ls6/scratch/alice/out/lexicon_draft.json";
+        const EDIT = "https://ckan.example.org/dataset/ds-1/resource/res-9/download/lexicon.json";
+        const PAUSED_VIEW = {
+            status: "awaiting_edit",
+            paused_after_step: 1,
+            paused_at: "2026-11-20T10:00:00+00:00",
+            steps: [
+                {
+                    step: 1,
+                    name: "draft",
+                    task_id: "step-1-x",
+                    depends_on: [],
+                    status: "completed"
+                },
+                { step: 2, name: "score", task_id: "step-2-x", depends_on: [1], status: "waiting" }
+            ],
+            outputs: [
+                {
+                    step: 1,
+                    output: 1,
+                    output_id: "out-lexicon",
+                    key: "1:1",
+                    editable: { file: "lexicon_draft.json", key: "lexicon_uri" },
+                    value: "{}",
+                    location: "tapis://ls6/scratch/alice/out",
+                    file_location: LEXICON
+                },
+                { step: 2, output: 1, output_id: "out-counts", value: null }
+            ]
+        };
+        const REPLACEMENT = {
+            output: "1:1",
+            file: "lexicon_draft.json",
+            url: EDIT,
+            dataset_id: "ds-1",
+            resource_id: "res-9",
+            replaced_by: "alice",
+            replaced_at: "2026-11-20T11:00:00+00:00",
+            original: LEXICON,
+            sha256: "b".repeat(64),
+            bytes: 412
+        };
+
+        async function paused() {
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            adapter({
+                "/runs/run-1/poll": () => ({ body: { status: "completed", flow: PAUSED_VIEW } })
+            });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            return { svc, run };
+        }
+
+        function resumeBody(extra: Record<string, unknown> = {}) {
+            return {
+                replacements: {
+                    "1:1": { url: EDIT, dataset_id: "ds-1", resource_id: "res-9", ...extra }
+                }
+            };
+        }
+
+        function adapterResumes() {
+            adapter({
+                "/runs/run-1/resume": () => ({
+                    body: {
+                        run_id: "run-2",
+                        paused_run_id: "run-1",
+                        status: "running",
+                        uuid: "uuid-2"
+                    }
+                }),
+                "/runs/run-2/poll": () => ({ body: { status: "running", flow: FLOW_AFTER } })
+            });
+        }
+        const FLOW_AFTER = {
+            status: "running",
+            steps: PAUSED_VIEW.steps.map((s) => ({ ...s, status: "running" })),
+            outputs: []
+        };
+
+        it("keeps the run, the thread's execution and its one open run while it waits", async () => {
+            const { svc, run } = await paused();
+            expect(run.status).toBe("awaiting_edit");
+            expect(run.started_by).toBe("alice");
+            expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+            expect(run.pause).toEqual({
+                output_key: "1:1",
+                model_io_id: "out-lexicon",
+                file: "lexicon_draft.json",
+                file_location: LEXICON,
+                paused_after_step: 1,
+                paused_at: "2026-11-20T10:00:00+00:00",
+                error: null
+            });
+            // Steps before the pause are done; the rest are waiting.
+            expect(run.workflow_stages.map((stage: any) => [stage.stage_id, stage.status])).toEqual(
+                [
+                    ["step-1", "completed"],
+                    ["step-2", "waiting"]
+                ]
+            );
+            adapter({
+                "/data-objects": () => ({ body: { id: "do-1" } }),
+                "/plans/flow": () => ({ body: { plan_id: "adapter-plan-2", plan_json: PLAN_JSON } })
+            });
+            const second = await svc.createPlan(BODY, AUTH);
+            await expect(svc.submit({ plan_id: second.plan_id }, AUTH)).rejects.toMatchObject({
+                statusCode: 409,
+                code: "FLOW_ALREADY_RUNNING"
+            });
+            // Looking again changes nothing and files nothing.
+            adapter({
+                "/runs/run-1/poll": () => ({ body: { status: "completed", flow: PAUSED_VIEW } })
+            });
+            expect((await svc.getRun("ue_parent-1", AUTH)).status).toBe("awaiting_edit");
+            expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+        });
+
+        it("shows a pause that is only a location: no file an unsafe address is shown", async () => {
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            const unsafe = {
+                ...PAUSED_VIEW,
+                outputs: [{ ...PAUSED_VIEW.outputs[0], file_location: "javascript:alert(1)" }]
+            };
+            adapter({
+                "/runs/run-1/poll": () => ({ body: { status: "completed", flow: unsafe } })
+            });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect(run.pause.file_location).toBeNull();
+        });
+
+        it("resumes through the adapter as the caller and follows the run after the edit", async () => {
+            const { svc } = await paused();
+            adapterResumes();
+            const run = await svc.resumeRun("ue_parent-1", resumeBody(), AUTH);
+            expect(calls("/runs/run-1/resume")[0].body).toEqual(resumeBody());
+            expect(calls("/runs/run-1/resume")[0].headers.Authorization).toBe(AUTH);
+            expect(run.status).toBe("adapter_running");
+            expect(run.pause).toBeNull();
+            expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+            expect(flows.flowContext).toHaveBeenLastCalledWith(
+                { thread_id: "thread-1", model_id: "cfg-flow" },
+                AUTH,
+                "write"
+            );
+            // From here the run after the edit is the one that is asked about.
+            await svc.getRun("ue_parent-1", AUTH);
+            expect(calls("/runs/run-2/poll")).toHaveLength(1);
+        });
+
+        it("files the results of both parts once, with the edit that was used", async () => {
+            const { svc } = await paused();
+            adapterResumes();
+            await svc.resumeRun("ue_parent-1", resumeBody(), AUTH);
+            adapter({
+                "/runs/run-2/poll": () => ({
+                    body: {
+                        status: "completed",
+                        flow: {
+                            ...FLOW_AFTER,
+                            status: "completed",
+                            replacement: { ...REPLACEMENT, extra: "dropped", sha256: "not-a-hash" },
+                            outputs: [
+                                {
+                                    step: 2,
+                                    output: 1,
+                                    output_id: "out-counts",
+                                    value: "tapis://ls6/out/counts.csv"
+                                }
+                            ]
+                        }
+                    }
+                })
+            });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect(run.status).toBe("completed");
+            expect(flows.finishFlowExecution).toHaveBeenCalledTimes(1);
+            expect(flows.finishFlowExecution.mock.calls[0][4]).toEqual([
+                {
+                    model_io_id: "out-counts",
+                    name: "Term counts",
+                    url: "tapis://ls6/out/counts.csv"
+                }
+            ]);
+            expect(run.model_result.replacement).toMatchObject({
+                replaced_by: "alice",
+                resource_id: "res-9",
+                original: LEXICON
+            });
+            expect(run.replacement).toEqual(run.model_result.replacement);
+            // Only the declared fields, and a hash only if it is one.
+            expect(run.replacement).not.toHaveProperty("extra");
+            expect(run.replacement).not.toHaveProperty("sha256");
+        });
+
+        it("records the hash the adapter reports once the edit has been fetched", async () => {
+            const { svc } = await paused();
+            adapterResumes();
+            await svc.resumeRun("ue_parent-1", resumeBody(), AUTH);
+            adapter({
+                "/runs/run-2/poll": () => ({
+                    body: { status: "running", flow: { ...FLOW_AFTER, replacement: REPLACEMENT } }
+                })
+            });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect(run.replacement.sha256).toBe("b".repeat(64));
+            expect(run.replacement.replaced_by).toBe("alice");
+        });
+
+        it("goes back to waiting, with the reason, when the run after the edit fails", async () => {
+            const { svc } = await paused();
+            adapterResumes();
+            await svc.resumeRun("ue_parent-1", resumeBody(), AUTH);
+            adapter({
+                "/runs/run-2/poll": () => ({
+                    body: {
+                        status: "failed",
+                        error_message: "lexicon.json cannot be used: no groups were found",
+                        flow: { ...FLOW_AFTER, status: "failed" }
+                    }
+                })
+            });
+            const back = await svc.getRun("ue_parent-1", AUTH);
+            expect(back.status).toBe("awaiting_edit");
+            expect(back.pause.error).toBe("lexicon.json cannot be used: no groups were found");
+            expect(back.pause.file_location).toBe(LEXICON);
+            expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+            // The first run is the one asked about, and resumed again.
+            adapter({
+                "/runs/run-1/poll": () => ({
+                    body: {
+                        status: "completed",
+                        flow: {
+                            ...PAUSED_VIEW,
+                            resume_error: "lexicon.json cannot be used: no groups were found"
+                        }
+                    }
+                }),
+                "/runs/run-1/resume": () => ({
+                    body: { run_id: "run-3", paused_run_id: "run-1", status: "running" }
+                })
+            });
+            expect((await svc.getRun("ue_parent-1", AUTH)).status).toBe("awaiting_edit");
+            const again = await svc.resumeRun("ue_parent-1", resumeBody(), AUTH);
+            expect(again.status).toBe("adapter_running");
+            expect(again.adapter_runs[0]).toMatchObject({
+                run_id: "run-3",
+                paused_run_id: "run-1"
+            });
+            expect(calls("/runs/run-1/resume")).toHaveLength(2);
+        });
+
+        it("refuses a resume from anyone but the user who started the run", async () => {
+            const { svc } = await paused();
+            flows.flowContext.mockResolvedValue(context({ caller: "mallory" }));
+            await expect(svc.resumeRun("ue_parent-1", resumeBody(), AUTH)).rejects.toMatchObject({
+                statusCode: 403,
+                code: "FLOW_RESUME_NOT_YOURS"
+            });
+            // Nor from someone who may not change the thread: the thread read refuses.
+            flows.flowContext.mockRejectedValue(
+                new UnifiedExecutionError(403, "you may not run models in this thread", "FORBIDDEN")
+            );
+            await expect(svc.resumeRun("ue_parent-1", resumeBody(), AUTH)).rejects.toMatchObject({
+                statusCode: 403
+            });
+            expect(calls("/runs/run-1/resume")).toHaveLength(0);
+        });
+
+        it("needs a token, and a run that is waiting", async () => {
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            await expect(svc.resumeRun("ue_parent-1", resumeBody(), AUTH)).rejects.toMatchObject({
+                statusCode: 409,
+                code: "FLOW_NOT_AWAITING_EDIT"
+            });
+            adapter({
+                "/runs/run-1/poll": () => ({ body: { status: "completed", flow: PAUSED_VIEW } })
+            });
+            await svc.getRun("ue_parent-1", AUTH);
+            await expect(
+                svc.resumeRun("ue_parent-1", resumeBody(), undefined)
+            ).rejects.toMatchObject({
+                statusCode: 401
+            });
+            await expect(svc.resumeRun("ue_nope", resumeBody(), AUTH)).rejects.toMatchObject({
+                statusCode: 404
+            });
+            expect(calls("/runs/run-1/resume")).toHaveLength(0);
+        });
+
+        it.each([
+            [{}],
+            [{ replacements: {} }],
+            [{ replacements: { "1:1": {} } }],
+            [{ replacements: { "1:1": { url: 5 } } }],
+            [{ replacements: { "1:1": { url: "x" }, "2:1": { url: "y" } } }],
+            [null]
+        ])("refuses a resume that does not give one edited file: %j", async (body) => {
+            const { svc } = await paused();
+            await expect(svc.resumeRun("ue_parent-1", body, AUTH)).rejects.toMatchObject({
+                statusCode: 422,
+                code: "FLOW_REPLACEMENT_INVALID"
+            });
+            expect(calls("/runs/run-1/resume")).toHaveLength(0);
+        });
+
+        it("refuses an edit for an output the run did not stop for", async () => {
+            const { svc } = await paused();
+            await expect(
+                svc.resumeRun("ue_parent-1", { replacements: { "2:1": { url: EDIT } } }, AUTH)
+            ).rejects.toMatchObject({
+                code: "FLOW_REPLACEMENT_NOT_EDITABLE",
+                details: { editable: ["1:1"] }
+            });
+            expect(calls("/runs/run-1/resume")).toHaveLength(0);
+        });
+
+        it("keeps the run waiting when the adapter refuses the edit", async () => {
+            const { svc } = await paused();
+            adapter({
+                "/runs/run-1/resume": () => ({
+                    status: 422,
+                    body: {
+                        detail: {
+                            code: "FLOW_REPLACEMENT_REFUSED",
+                            message: "must be in the catalog"
+                        }
+                    }
+                })
+            });
+            await expect(svc.resumeRun("ue_parent-1", resumeBody(), AUTH)).rejects.toBeTruthy();
+            expect(records.get("parent-1")!.status).toBe("awaiting_edit");
+            expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+        });
+
+        it("cancels a waiting run and closes the thread's execution once", async () => {
+            const { svc } = await paused();
+            adapter({
+                "/runs/run-1/cancel": () => ({
+                    body: { status: "cancelled", awaiting_edit: true }
+                }),
+                "/runs/run-1": () => ({
+                    body: { status: "cancelled", error_message: "Cancelled by alice" }
+                })
+            });
+            const run = await svc.cancelRun("ue_parent-1", AUTH);
+            expect([run.status, run.failure_code]).toEqual(["failed", "CANCELLED_BY_USER"]);
+            expect(flows.finishFlowExecution).toHaveBeenCalledTimes(1);
+            expect(flows.finishFlowExecution).toHaveBeenCalledWith(
+                "thread-1",
+                "cfg-flow",
+                "exec-1",
+                "failed",
+                []
+            );
+            await svc.getRun("ue_parent-1", AUTH);
+            expect(flows.finishFlowExecution).toHaveBeenCalledTimes(1);
+        });
+
+        it("closes a waiting run the adapter cancelled (it waited too long) once", async () => {
+            const { svc } = await paused();
+            adapter({
+                "/runs/run-1/poll": () => ({
+                    body: {
+                        status: "cancelled",
+                        error_message: "Cancelled: paused for an edit for more than 14 days"
+                    }
+                })
+            });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect([run.status, run.failure_code]).toEqual(["failed", "CANCELLED_BY_USER"]);
+            expect(flows.finishFlowExecution).toHaveBeenCalledTimes(1);
+            await svc.getRun("ue_parent-1", AUTH);
+            expect(flows.finishFlowExecution).toHaveBeenCalledTimes(1);
+        });
+
+        it("only a flow run can be resumed", async () => {
+            flows.flowContext.mockResolvedValue(context({ is_flow: false }));
+            await expect(service().resumeRun("ue_nope", resumeBody(), AUTH)).rejects.toMatchObject({
+                statusCode: 404
+            });
+        });
+
+        it("follows the run the adapter started when the write after a resume failed", async () => {
+            const { svc } = await paused();
+            adapterResumes();
+            const store = records.get("parent-1")!;
+            // The record keeps saying it waits: the update after the resume was lost.
+            const original = store.status;
+            // Resume with the store refusing the write that records it.
+            const failingService = createUnifiedExecutionService(legacy as any, {
+                store: {
+                    ...(await (async () => {
+                        const base: any = {};
+                        base.getById = async (id: string) => records.get(id) || null;
+                        base.getByPlanId = async (planId: string) =>
+                            [...records.values()].find((r) => r.plan_id === planId) || null;
+                        base.listByThread = async () => [...records.values()];
+                        base.upsertStep = async (input: any) => ({ id: "s", ...input });
+                        base.insert = async () => null;
+                        base.compareAndSet = async () => null;
+                        base.update = async () => {
+                            throw new Error("store down");
+                        };
+                        return base;
+                    })())
+                } as any,
+                flows
+            });
+            const answered = await failingService.resumeRun("ue_parent-1", resumeBody(), AUTH);
+            expect(answered.status).toBe("adapter_running");
+            expect(records.get("parent-1")!.status).toBe(original);
+
+            // The adapter now reports the paused run as resumed, with the run that followed.
+            adapter({
+                "/runs/run-1/poll": () => ({
+                    body: {
+                        status: "completed",
+                        flow: { ...PAUSED_VIEW, status: "resumed", resumed_run_id: "run-2" }
+                    }
+                }),
+                "/runs/run-2/poll": () => ({ body: { status: "running", flow: FLOW_AFTER } })
+            });
+            const adopted = await svc.getRun("ue_parent-1", AUTH);
+            expect(adopted.status).toBe("adapter_running");
+            expect(adopted.adapter_runs[0]).toMatchObject({
+                run_id: "run-2",
+                paused_run_id: "run-1"
+            });
+            expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+        });
+
+        it("picks up the existing run, not a 409 for good, when the adapter says it was resumed", async () => {
+            const { svc } = await paused();
+            adapter({
+                "/runs/run-1/resume": () => ({
+                    status: 409,
+                    body: { detail: { code: "RUN_NOT_AWAITING_EDIT", message: "not paused" } }
+                }),
+                "/runs/run-1/poll": () => ({
+                    body: {
+                        status: "completed",
+                        flow: { ...PAUSED_VIEW, status: "resumed", resumed_run_id: "run-2" }
+                    }
+                })
+            });
+            const run = await svc.resumeRun("ue_parent-1", resumeBody(), AUTH);
+            expect(run.status).toBe("adapter_running");
+            expect(run.adapter_runs[0]).toMatchObject({ run_id: "run-2", paused_run_id: "run-1" });
+        });
+
+        it("still refuses when the adapter says not paused and the run is in fact waiting", async () => {
+            const { svc } = await paused();
+            adapter({
+                "/runs/run-1/resume": () => ({
+                    status: 409,
+                    body: { detail: { code: "RUN_NOT_AWAITING_EDIT", message: "not paused" } }
+                }),
+                "/runs/run-1/poll": () => ({ body: { status: "completed", flow: PAUSED_VIEW } })
+            });
+            await expect(svc.resumeRun("ue_parent-1", resumeBody(), AUTH)).rejects.toMatchObject({
+                code: "RUN_NOT_AWAITING_EDIT"
+            });
         });
     });
 });

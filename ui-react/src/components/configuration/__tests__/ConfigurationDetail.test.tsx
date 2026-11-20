@@ -325,8 +325,8 @@ describe('ConfigurationDetail for a flow', () => {
     expect(section).toHaveTextContent('Takes a collection of files: Precipitation');
   });
 
-  it('marks each step runnable or not, and says the flow is unavailable, when the adapter answers', async () => {
-    setMintConfig({ SVO_ADAPTER_API: 'http://adapter' });
+  it('marks each step runnable or not, and says the flow is unavailable, when the catalog answers', async () => {
+    setMintConfig({ MODEL_CATALOG_API: 'http://catalog/v2.0.0' });
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({

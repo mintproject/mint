@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from starlette.concurrency import run_in_threadpool
@@ -48,6 +48,30 @@ query ListActiveRuns {
   adapter_workflow_run(where: {status: {_in: ["running", "submitting"]}}) {
     id status tapis_workflow_id tapis_run_id execution_id workflow_plan_id
     health signals_armed dispatched_at started_at last_signal_at model_job_uuid
+  }
+}
+"""
+
+# Runs stopped at their pause: completed in the adapter's words, with the step they
+# stopped after. The sweep reads only these.
+_LIST_PAUSED_RUNS = """
+query ListPausedRuns {
+  adapter_workflow_run(where: {paused_after_step: {_is_null: false}, status: {_eq: "completed"}}) {
+    id status completed_at resumed_run_id
+  }
+}
+"""
+
+_GET_RUN_STATUS = """
+query GetRunStatus($id: String!) {
+  adapter_workflow_run_by_pk(id: $id) { id status created_at dispatched_at completed_at }
+}
+"""
+
+_UPDATE_RUN_IF = """
+mutation UpdateRunIf($id: String!, $status: String!, $set: adapter_workflow_run_set_input!) {
+  update_adapter_workflow_run(where: {id: {_eq: $id}, status: {_eq: $status}}, _set: $set) {
+    affected_rows
   }
 }
 """
@@ -442,6 +466,54 @@ async def sweep_stalled(now: datetime | None = None) -> list[dict[str, Any]]:
     return flagged
 
 
+async def sweep_paused(now: datetime | None = None) -> list[str]:
+    """Cancel runs left paused for an edit longer than ``flow_pause_max_days``.
+
+    A paused run holds the thread's one open run of its flow, so one that is
+    forgotten would block it. No Tapis run is open during a pause, so cancelling is
+    one guarded write: it succeeds only on a run that is still ``completed``. A run
+    that was resumed is left alone unless what resumed it failed (it is paused
+    again). Returns the ids cancelled.
+    """
+    from .hasura import get_client  # noqa: PLC0415 — deferred to avoid import cycle
+
+    now = now or datetime.now(tz=timezone.utc)
+    limit = timedelta(days=max(1, int(settings.flow_pause_max_days)))
+    h = get_client(None)
+    cancelled: list[str] = []
+    for run in (await h.execute(_LIST_PAUSED_RUNS))["adapter_workflow_run"]:
+        since = run_state.parse_ts(run.get("completed_at"))
+        if since is None:
+            continue
+        try:
+            if run.get("resumed_run_id"):
+                child = (await h.execute(_GET_RUN_STATUS, {"id": run["resumed_run_id"]}))["adapter_workflow_run_by_pk"]
+                if child and str(child.get("status") or "") != "failed":
+                    continue  # it is running or done: not paused
+                # Waiting again since the continuation last failed (a child that was
+                # never recorded counts as no later than the pause itself).
+                stamps = [run_state.parse_ts((child or {}).get(k))
+                          for k in ("completed_at", "dispatched_at", "created_at")]
+                since = max([since, *[t for t in stamps if t]])
+            if now - since < limit:
+                continue
+            claimed = await h.execute(_UPDATE_RUN_IF, {"id": run["id"], "status": "completed", "set": {
+                "status": "cancelled",
+                "error_message": f"Cancelled: paused for an edit for more than {limit.days} days"}})
+            if (claimed.get("update_adapter_workflow_run") or {}).get("affected_rows", 0) != 1:
+                continue
+            await h.execute(_INSERT_PROVENANCE, {"obj": {
+                "workflow_run_id": run["id"], "event_type": "run.cancelled",
+                "payload_json": {"reason": "paused_too_long", "max_days": limit.days, "counted_from": since.isoformat(),
+                                 "paused_at": run.get("completed_at"), "decided_at": now.isoformat()}}})
+        except Exception as exc:  # noqa: BLE001
+            log.error("sweep: failed to cancel paused run %s: %s", run["id"], type(exc).__name__)
+            continue
+        cancelled.append(run["id"])
+        log.warning("sweep: paused run %s cancelled after %d days", run["id"][:12], limit.days)
+    return cancelled
+
+
 # ---------------------------------------------------------------------------
 # Token keeper (run_tokens.py; token lifecycle design rev 2)
 # ---------------------------------------------------------------------------
@@ -611,6 +683,11 @@ async def run_poller() -> None:
                 await sweep_stalled()
             except Exception as exc:  # noqa: BLE001
                 log.error("sweep: unexpected error: %s", exc)
+        if settings.flow_pause_enabled:
+            try:
+                await sweep_paused()
+            except Exception as exc:  # noqa: BLE001
+                log.error("sweep: unexpected error in the paused-run sweep: %s", type(exc).__name__)
         if keeper_sweep_enabled:
             try:
                 await renew_run_tokens()

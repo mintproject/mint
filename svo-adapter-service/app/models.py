@@ -316,6 +316,27 @@ class SubmitWorkflowIn(BaseModel):
     # A flow's author chose defaults and links for settings of pieces that run with
     # the submitter's token. They are used only when the submitter says so here.
     accept_flow_settings: bool = False
+    # A flow that pauses: run only up to this step (a position), the one the flow
+    # pauses after. Omitted, a flow whose plan pauses runs up to its pause anyway
+    # when pausing is enabled; the rest runs when the run is resumed.
+    through_step: int | None = None
+
+
+class ReplacementIn(BaseModel):
+    """A file the user uploaded to the data catalog to stand in for an editable output."""
+    model_config = ConfigDict(extra="forbid")
+    # The catalog's download address for the file (https, on the catalog's own host).
+    url: str = Field(min_length=1, max_length=2000)
+    # Recorded with the replacement; checked against the address when given.
+    dataset_id: str | None = Field(default=None, max_length=200)
+    resource_id: str | None = Field(default=None, max_length=200)
+
+
+class ResumeRunIn(BaseModel):
+    """Resume a run stopped at its pause. Nothing else may be changed at a resume."""
+    model_config = ConfigDict(extra="forbid")
+    # Editable output key (``<step>:<output>``) -> the file that replaces it.
+    replacements: dict[str, ReplacementIn]
 
 
 class RegisterOutputIn(BaseModel):

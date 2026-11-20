@@ -1,5 +1,6 @@
 import { getThread, getExecutionHistory } from "@/classes/graphql/graphql_functions_v2";
 import { getConfiguration } from "@/classes/mint/mint-functions";
+import { adapterInternalSecret } from "./adapterConfig";
 import { getTokenFromAuthorizationHeader } from "@/utils/authUtils";
 import { BadRequestError, NotFoundError } from "@/classes/common/errors";
 import {
@@ -384,8 +385,6 @@ async function loadWorkflowEvents(
     }
     const config = getConfiguration() as {
         svo_adapter_api?: string;
-        svo_adapter_internal_secret?: string;
-        graphql?: { secret?: string };
     };
     const base = (config.svo_adapter_api || process.env.SVO_ADAPTER_API || "").replace(/\/$/, "");
     if (!base) {
@@ -393,10 +392,7 @@ async function loadWorkflowEvents(
             { type: "workflow_provenance_events", availability: "unavailable", captured_at: null }
         ];
     }
-    const secret =
-        process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET ||
-        config.svo_adapter_internal_secret ||
-        config.graphql?.secret;
+    const secret = adapterInternalSecret();
     const responses = await Promise.all(
         runIds.map(async (runId) => {
             try {

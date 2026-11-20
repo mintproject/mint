@@ -17,6 +17,8 @@ import {
 import { FLOW_LAYOUT_OPTIONS, flowCanvasHeight, layoutFlowGraph } from '@/lib/flow-graph-layout';
 import { EnsembleManagerError, type UnifiedRunSnapshot } from '@/lib/ensemble-manager';
 import { flowErrorMessage, stepErrorText } from '@/lib/flow-errors';
+import { EditedInputNote } from './EditedInputNote';
+import { PausedFlowStep, type PausedEdit } from './PausedFlowStep';
 
 type FlowStage = NonNullable<UnifiedRunSnapshot['workflow_stages']>[number];
 
@@ -151,6 +153,11 @@ export interface FlowRunPanelProps {
   refreshError?: string;
   onCancel?: () => Promise<void>;
   cancelling?: boolean;
+  /** Where the run's files are served from, and who is looking: for a run stopped for an edit. */
+  ensembleManagerApi?: string;
+  username?: string;
+  /** Sends the user's edited file on and continues the run. */
+  onResume?: (edit: PausedEdit) => Promise<void>;
 }
 
 export function FlowRunPanel({
@@ -160,6 +167,9 @@ export function FlowRunPanel({
   refreshError,
   onCancel,
   cancelling = false,
+  ensembleManagerApi = '',
+  username = '',
+  onResume,
 }: FlowRunPanelProps) {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const stages: FlowStage[] = run.workflow_stages?.length
@@ -210,6 +220,19 @@ export function FlowRunPanel({
         testId="flow-graph-canvas"
       />
 
+      {run.status === 'awaiting_edit' && run.pause && (
+        <PausedFlowStep
+          run={run}
+          ensembleManagerApi={ensembleManagerApi}
+          username={username}
+          onResume={onResume}
+          stepName={
+            stages.find((stage) => stage.stage_id === `step-${run.pause?.paused_after_step}`)?.name
+          }
+        />
+      )}
+      {run.replacement && <EditedInputNote replacement={run.replacement} />}
+
       <ol className="space-y-1" data-testid="flow-step-list">
         {stages.map((stage) => {
           const state = flowStepState(stage.status);
@@ -243,7 +266,11 @@ export function FlowRunPanel({
         <div className="flex flex-wrap items-center gap-2">
           {confirmingCancel ? (
             <>
-              <span>Cancel this run in Tapis? This cannot be undone.</span>
+              <span>
+                {run.status === 'awaiting_edit'
+                  ? 'Cancel this run? It stops here and cannot be continued.'
+                  : 'Cancel this run in Tapis? This cannot be undone.'}
+              </span>
               <button
                 type="button"
                 onClick={() => {

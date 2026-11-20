@@ -77,6 +77,64 @@ export function usernameFromBearer(authorization: string | undefined): string | 
   }
 }
 
+const EDIT_CHECKS = ['json', 'lexicon']
+const EDIT_KEY = /^[a-z][a-z0-9_]{0,63}$/
+const MAX_FILE_NAME = 200
+
+/** Why an output's `editable` is malformed, or undefined. It names the file the
+ *  person edits, and may name a check the edited file must pass and the key of the
+ *  step's summary that holds the file's address. The adapter holds the same rule. */
+function editableProblem(spec: unknown): string | undefined {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)
+      || Object.keys(spec).some((key) => !['file', 'check', 'key'].includes(key))) {
+    return 'editable is an object with a file, and optionally a check and a key'
+  }
+  const { file, check, key } = spec as Json
+  if (typeof file !== 'string' || !file || /[/\\]/.test(file) || file.startsWith('.') || file.length > MAX_FILE_NAME) {
+    return 'editable.file must be a plain file name'
+  }
+  if (check !== undefined && check !== null && check !== '' && !EDIT_CHECKS.includes(check)) {
+    return `editable.check must be one of ${EDIT_CHECKS.join(', ')}`
+  }
+  if (key !== undefined && key !== null && !(typeof key === 'string' && EDIT_KEY.test(key))) {
+    return 'editable.key must be a lower-case name such as lexicon_uri'
+  }
+  return undefined
+}
+
+/**
+ * A flow may stop after a step for the person to edit one of its files. The step
+ * that pauses must say which file: exactly one of its outputs, a file output, is
+ * marked `editable`, and nothing else is. One pause per flow in this first cut.
+ * Refused here so that a pause nobody could resume is never written; the adapter
+ * also checks that a later step reads the file.
+ */
+export function checkPause(steps: Json[], outputs: Json[]): void {
+  const problems: Json[] = []
+  const refuse = (message: string, step?: number) =>
+    problems.push({ code: 'FLOW_PAUSE', message, ...(step === undefined ? {} : { step }) })
+  const paused = steps.filter((step) => step.pause_after === true)
+  const editable = outputs.filter((output) => output && typeof output === 'object' && 'editable' in output)
+  for (const output of editable) {
+    const why = editableProblem(output.editable)
+    if (why) refuse(why, output.step)
+  }
+  if (paused.length === 0) {
+    if (editable.length) refuse('an output is marked editable but no step pauses')
+  } else if (paused.length > 1) {
+    refuse('a flow may pause only once', paused[1].position)
+  } else {
+    const here = editable.filter((output) => output.step === paused[0].position && 'output' in output)
+    if (here.length !== 1 || editable.length !== 1) {
+      refuse('a paused step needs exactly one file output marked editable, naming the file to edit; '
+        + 'no other output may be editable', paused[0].position)
+    }
+  }
+  if (problems.length) {
+    throw new FlowError(422, 'FLOW_DOES_NOT_CHECK_OUT', 'the flow does not fit its pieces', { problems })
+  }
+}
+
 export interface FlowRegistration {
   softwareId: string
   versionId: string
@@ -131,6 +189,12 @@ export function planRegistration(body: Json): FlowRegistration {
     }
   })
 
+  const checkedOutputs = list(body.outputs, 'outputs', MAX_ITEMS).map((output) => {
+    const { label, format, standard_variable, description, ...where } = object(output, 'outputs[]')
+    return where
+  })
+  checkPause(checkedSteps, checkedOutputs)
+
   return {
     softwareId: fullId(software.id, 'software.id') ?? `${ID_PREFIX}${randomUUID()}`,
     versionId: fullId(version.id, 'version.id') ?? `${ID_PREFIX}${randomUUID()}`,
@@ -142,10 +206,7 @@ export function planRegistration(body: Json): FlowRegistration {
         contract: { standard_variable_uri: input.standard_variable, format: input.format ?? null },
       })),
       steps: checkedSteps,
-      outputs: list(body.outputs, 'outputs', MAX_ITEMS).map((output) => {
-        const { label, format, standard_variable, description, ...where } = object(output, 'outputs[]')
-        return where
-      }),
+      outputs: checkedOutputs,
     },
   }
 }
@@ -304,16 +365,33 @@ export function buildRows(body: Json, plan: FlowRegistration, pieces: Json, user
   }
 }
 
-async function checkWithAdapter(check: Json, authorization: string): Promise<Json> {
+/** The adapter's address and the headers that identify this call to it: the
+ *  caller's own token, which the adapter verifies, and the shared service secret,
+ *  which proves the call came through the catalog (the adapter's front door). The
+ *  secret is its own setting; with none set only the token is sent. */
+function adapterTarget(authorization: string): { base: string; headers: Record<string, string> } {
   const base = process.env.SVO_ADAPTER_API_URL
   if (!base) {
     throw new FlowError(503, 'FLOWS_NOT_CONFIGURED', 'this deployment has no SVO adapter to check a flow with')
   }
+  const secret = process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET
+  return {
+    base: base.replace(/\/$/, ''),
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: authorization,
+      ...(secret ? { 'X-Ensemble-Manager-Secret': secret } : {}),
+    },
+  }
+}
+
+async function checkWithAdapter(check: Json, authorization: string): Promise<Json> {
+  const { base, headers } = adapterTarget(authorization)
   let response: Response
   try {
-    response = await globalThis.fetch(`${base.replace(/\/$/, '')}/flows/check`, {
+    response = await globalThis.fetch(`${base}/flows/check`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: authorization },
+      headers,
       body: JSON.stringify(check),
       signal: AbortSignal.timeout(30_000),
     })
@@ -447,4 +525,65 @@ export async function custom_flows_post(req: any, reply: any): Promise<void> {
     }
     reply.code(502).send({ error: 'The catalog refused the flow', code: 'FLOW_WRITE_FAILED', details: message })
   }
+}
+
+/**
+ * GET /flows/{id}/availability: whether the caller could run each step of a stored
+ * flow. The adapter answers; this route only carries the caller's token and the
+ * service secret to it. The adapter still verifies the token itself and names no
+ * piece the caller cannot see, so nothing is decided here.
+ */
+export async function custom_flows_id_availability_get(req: any, reply: any): Promise<void> {
+  try {
+    const authorization = req.headers?.authorization as string | undefined
+    if (!authorization || !usernameFromBearer(authorization)) {
+      throw new FlowError(401, 'TAPIS_AUTH_REQUIRED', 'a valid Tapis bearer token is required')
+    }
+    const id = fullId(req.params?.id, 'id')
+    if (!id) throw new FlowError(400, 'FLOW_REQUEST_INVALID', 'a flow id is required')
+    const { base, headers } = adapterTarget(authorization)
+    let response: Response
+    try {
+      response = await globalThis.fetch(`${base}/flows/${encodeURIComponent(id)}/availability`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(30_000),
+      })
+    } catch {
+      throw new FlowError(502, 'FLOW_AVAILABILITY_UNAVAILABLE', 'the SVO adapter could not be reached')
+    }
+    if (response.status === 401) throw new FlowError(401, 'TAPIS_AUTH_REQUIRED', 'a valid Tapis bearer token is required')
+    if (response.status === 422) {
+      // FLOW_NOT_FOUND: the configuration does not exist or is not a flow.
+      const body = (await response.json().catch(() => ({}))) as Json
+      reply.code(422).send(body.detail ?? body)
+      return
+    }
+    if (!response.ok) {
+      throw new FlowError(502, 'FLOW_AVAILABILITY_UNAVAILABLE', `the SVO adapter answered ${response.status}`)
+    }
+    reply.code(200).send(await response.json())
+  } catch (error: any) {
+    if (error instanceof FlowError) {
+      reply.code(error.status).send({ error: error.message, code: error.code, ...error.details })
+      return
+    }
+    req.log?.error({ err: error }, 'Flow availability failed')
+    reply.code(502).send({ error: 'The flow availability could not be read', code: 'FLOW_AVAILABILITY_UNAVAILABLE' })
+  }
+}
+
+/**
+ * One startup warning when an adapter is configured but the shared service secret
+ * is not. Without it the adapter's front door (when on) refuses every flow call,
+ * and with the front door off the adapter has no proof the call came through the
+ * catalog. Names the setting, never a value. Returns whether it warned.
+ */
+export function warnIfAdapterSecretMissing(log: { warn: (message: string) => void }): boolean {
+  if (!process.env.SVO_ADAPTER_API_URL || process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET) return false
+  log.warn(
+    'SVO_ADAPTER_API_URL is set but SVO_ADAPTER_INTERNAL_SERVICE_SECRET is not: flow checks are sent ' +
+      'to the adapter without the shared service secret'
+  )
+  return true
 }

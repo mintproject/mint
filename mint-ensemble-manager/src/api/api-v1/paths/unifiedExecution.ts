@@ -547,6 +547,102 @@ export default function (service: any, scenario?: ScenarioService) {
         }
     });
 
+    /**
+     * @openapi
+     * /plans/runs/{runId}/resume:
+     *   post:
+     *     summary: Continue a flow run that stopped for the user's edit.
+     *     description: >
+     *       A flow can stop after a step so that its user can edit a file that step
+     *       wrote (the run's `status` is `awaiting_edit`, and `pause` names the file
+     *       and the `output_key` to replace). The edited file is uploaded to the data
+     *       catalog first, as a dataset the user owns; this sends its catalog address.
+     *       Only the user who started the run may resume it, and they must still be
+     *       able to change the thread. The adapter fetches the file as them, refuses
+     *       one the flow's pieces could not load, and runs the rest of the flow on it.
+     *       If the run after the edit fails, the run goes back to `awaiting_edit`
+     *       with `pause.error`, and another edit may be sent. A run left paused for 14
+     *       days is cancelled.
+     *     operationId: resumeUnifiedRun
+     *     security:
+     *       - BearerAuth: []
+     *       - oauth2: []
+     *     parameters:
+     *       - in: path
+     *         name: runId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - replacements
+     *             properties:
+     *               replacements:
+     *                 type: object
+     *                 description: One entry, keyed by `pause.output_key`.
+     *                 additionalProperties:
+     *                   type: object
+     *                   required:
+     *                     - url
+     *                   properties:
+     *                     url:
+     *                       type: string
+     *                       description: The catalog's download address for the uploaded file.
+     *                     dataset_id:
+     *                       type: string
+     *                     resource_id:
+     *                       type: string
+     *     responses:
+     *       200:
+     *         description: The run, continuing (`status` `adapter_running`).
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               additionalProperties: true
+     *       403:
+     *         description: The caller did not start this run (FLOW_RESUME_NOT_YOURS).
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/UnifiedExecutionError'
+     *       409:
+     *         description: The run is not waiting for an edit (FLOW_NOT_AWAITING_EDIT).
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/UnifiedExecutionError'
+     *       422:
+     *         description: The edit was refused (FLOW_REPLACEMENT_INVALID, FLOW_REPLACEMENT_NOT_EDITABLE, or the adapter's FLOW_REPLACEMENT_REFUSED).
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/UnifiedExecutionError'
+     *       default:
+     *         description: Resume failed.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/UnifiedExecutionError'
+     */
+    router.post("/runs/:runId/resume", async (req, res) => {
+        try {
+            const result = await service.resumeRun(
+                req.params.runId,
+                req.body,
+                req.headers.authorization
+            );
+            return res.status(200).json(result);
+        } catch (error) {
+            return sendError(res, error);
+        }
+    });
+
     router.get("/:planId", async (req, res) => {
         try {
             const result = await service.getPlan(req.params.planId, req.headers.authorization);

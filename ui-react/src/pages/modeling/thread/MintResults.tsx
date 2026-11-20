@@ -19,6 +19,7 @@ import {
   ThreadExecutionData,
 } from '@/graphql/generated/execution';
 import { RunAnswerCard } from '@/components/modeling/runs/RunAnswerCard';
+import { EditedInputNote } from './EditedInputNote';
 import { ExecutionFilesDialog } from './ExecutionFilesDialog';
 import { TapisResult } from './TapisResult';
 import {
@@ -305,6 +306,9 @@ export function MintResults({
                   result={unifiedRuns?.[mid]?.output_handoff?.result}
                   label="Modeled spring flow"
                 />
+                {unifiedRuns?.[mid]?.replacement && (
+                  <EditedInputNote replacement={unifiedRuns[mid]!.replacement!} />
+                )}
                 {submitted && (
                   <>
                     <p className="text-sm text-gray-600">

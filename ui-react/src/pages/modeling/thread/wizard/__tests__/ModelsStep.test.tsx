@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders, screen, waitFor } from '@/test/utils/render';
 import { server } from '@/test/msw/server';
 import { setMintConfig } from '@/test/utils/mint-config';
-import { clearFlowAvailabilityCache } from '@/lib/flow-availability';
+import { clearFlowAvailabilityCache, fetchFlowAvailability } from '@/lib/flow-availability';
 import {
   GetModelTreeWithRegionsDocument,
   SetThreadModelsDocument,
@@ -764,7 +764,7 @@ describe('ModelsStep', () => {
 
     beforeEach(() => {
       clearFlowAvailabilityCache();
-      setMintConfig({ SVO_ADAPTER_API: 'http://adapter' });
+      setMintConfig({ MODEL_CATALOG_API: 'http://catalog/v2.0.0' });
     });
     afterEach(() => {
       vi.unstubAllGlobals();
@@ -787,7 +787,7 @@ describe('ModelsStep', () => {
       // One request, for the flow only, as the signed-in user.
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(fetchMock).toHaveBeenCalledWith(
-        'http://adapter/flows/flowX/availability',
+        'http://catalog/v2.0.0/flows/flowX/availability',
         expect.objectContaining({
           headers: { Authorization: 'Bearer mock-access-token' },
         }),
@@ -817,14 +817,11 @@ describe('ModelsStep', () => {
       expect(screen.queryByTestId('flow-unavailable')).not.toBeInTheDocument();
     });
 
-    it('asks nothing when the adapter is not configured', async () => {
-      setMintConfig({});
+    it('asks nothing for a user who is not signed in', async () => {
       const fetchMock = answer({});
       vi.stubGlobal('fetch', fetchMock);
-      render();
-      await screen.findByText('Dictionary flow');
+      expect(await fetchFlowAvailability('flowX', null)).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
-      expect(screen.getByLabelText(/select Dictionary flow/i)).toBeEnabled();
     });
 
     it('makes no availability request when no configuration is a flow', async () => {

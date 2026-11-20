@@ -192,7 +192,8 @@ Apply the migrations before testing this path, including the adapter
 workflow-run idempotency migration.
 
 For a non-demo deployment, set `SVO_ADAPTER_INTERNAL_SERVICE_SECRET` on both
-services. Ensemble Manager sends it only on its server-to-server adapter calls;
+services, to a value of its own (it never falls back to the Hasura admin secret, and
+the adapter answers 503 where it is missing). Ensemble Manager sends it only on its server-to-server adapter calls;
 the adapter rejects client attempts to claim an owned model-output object.
 
 Adapter workflows default their Tapis allocation to `PT2050-DataX`, matching

@@ -65,9 +65,7 @@ export function readThreadBindings(stored: unknown): FlowThreadBindings {
         };
     }
     if (Array.isArray(row.collections)) {
-        bindings.collections = row.collections.filter(
-            (id): id is string => typeof id === "string"
-        );
+        bindings.collections = row.collections.filter((id): id is string => typeof id === "string");
     }
     return bindings;
 }
@@ -137,11 +135,54 @@ export interface FlowStage {
     error_message?: string | null;
 }
 
+/** The status of a run stopped after a step, waiting for its user to edit a file. Not terminal. */
+export const AWAITING_EDIT = "awaiting_edit";
+
+/** A run stopped at its pause is cancelled by the adapter after this many days. */
+export const PAUSE_MAX_DAYS = 14;
+
+/** What a person needs to edit a file the flow stopped for. */
+export interface FlowPause {
+    /** How the adapter names the output to replace, and how a resume must. */
+    output_key: string;
+    /** The flow output it is, when the flow registered it as a result. */
+    model_io_id?: string | null;
+    /** The file's name, and where it is (a Tapis location the person downloads it from). */
+    file: string | null;
+    file_location: string | null;
+    paused_after_step: number | null;
+    paused_at: string | null;
+    /** Why the last continuation failed, when it did: the person may send another edit. */
+    error?: string | null;
+}
+
+/** An edit the run continued on: who, when, which catalog file, and what was fetched. */
+export interface FlowReplacement {
+    output: string;
+    file?: string | null;
+    /** What the file had to be (`lexicon`, `json`): how the result names the edit. */
+    check?: string | null;
+    url?: string;
+    dataset_id?: string | null;
+    resource_id?: string | null;
+    replaced_by?: string;
+    replaced_at?: string;
+    original?: string | null;
+    sha256?: string;
+    bytes?: number;
+}
+
 interface FlowChild {
     adapter_plan_id: string;
     model_io_id: string;
     run_id: string;
     status?: string;
+    /** The run that paused, once it has been resumed: `run_id` is then the one after the edit. */
+    paused_run_id?: string;
+    pause?: FlowPause | null;
+    /** The pause as it was when the person resumed it, to go back to if the continuation fails. */
+    last_pause?: FlowPause | null;
+    replacement?: FlowReplacement | null;
     execution_kind: "workflow";
     stage: "flow";
     tapis_workflow_id?: string | null;
@@ -187,6 +228,47 @@ function isResultLocation(value: unknown): value is string {
 /** Where the adapter says an output is; an adapter from before it said so gives only the value. */
 function whereItIs(output: any): unknown {
     return typeof output?.location === "string" ? output.location : output?.value;
+}
+
+function plainText(value: unknown, max = 500): string | undefined {
+    return typeof value === "string" && value.length <= max ? value : undefined;
+}
+
+/** The pause the adapter reports: the editable output and where its file is. Only what is well formed. */
+function readPause(flow: any): FlowPause | null {
+    const editable = (Array.isArray(flow?.outputs) ? flow.outputs : []).find(
+        (output: any) => output && typeof output.editable === "object" && output.editable
+    );
+    if (!editable || typeof editable.key !== "string") return null;
+    return {
+        output_key: editable.key,
+        model_io_id: typeof editable.output_id === "string" ? editable.output_id : null,
+        file: plainText(editable.editable.file, 200) ?? null,
+        file_location: isResultLocation(editable.file_location) ? editable.file_location : null,
+        paused_after_step:
+            typeof flow.paused_after_step === "number" ? flow.paused_after_step : null,
+        paused_at: plainText(flow.paused_at, 100) ?? null,
+        error: plainText(flow.resume_error, 2000) ?? null
+    };
+}
+
+/** The adapter's record of the edit, keeping only the fields of the declared shape. */
+function readReplacement(value: any): FlowReplacement | null {
+    if (!value || typeof value !== "object" || typeof value.output !== "string") return null;
+    const digest = plainText(value.sha256, 64);
+    return {
+        output: value.output,
+        file: plainText(value.file, 200) ?? null,
+        check: plainText(value.check, 50) ?? null,
+        url: plainText(value.url, 2000),
+        dataset_id: plainText(value.dataset_id, 200) ?? null,
+        resource_id: plainText(value.resource_id, 200) ?? null,
+        replaced_by: plainText(value.replaced_by, 200),
+        replaced_at: plainText(value.replaced_at, 100),
+        original: isResultLocation(value.original) ? value.original : null,
+        ...(digest && /^[0-9a-f]{64}$/.test(digest) ? { sha256: digest } : {}),
+        ...(typeof value.bytes === "number" ? { bytes: value.bytes } : {})
+    };
 }
 
 function ageMs(record: UnifiedExecutionRecord): number {
@@ -584,9 +666,72 @@ export async function reconcileFlow(
         tapis_workflow_id: polled?.tapis_workflow_id || child.tapis_workflow_id || null,
         tapis_run_id: polled?.tapis_run_id || child.tapis_run_id || null,
         steps: Array.isArray(polled?.flow?.steps) ? polled.flow.steps : child.steps,
-        error_message: polled?.error_message || null
+        error_message: polled?.error_message || null,
+        replacement: readReplacement(polled?.flow?.replacement) ?? child.replacement ?? null
     };
     const executionId = record.model_child_id || null;
+
+    if (
+        status === "resumed" &&
+        typeof polled?.flow?.resumed_run_id === "string" &&
+        polled.flow.resumed_run_id !== child.run_id
+    ) {
+        // The adapter resumed this run, but this record never learned the new run's id
+        // (the write after the resume failed). The run after the edit is the one to
+        // follow from here on.
+        const adopted: FlowChild = {
+            ...next,
+            paused_run_id: child.paused_run_id || child.run_id,
+            last_pause: child.pause || child.last_pause || null,
+            pause: null,
+            run_id: polled.flow.resumed_run_id,
+            status: "running",
+            tapis_workflow_id: null,
+            tapis_run_id: null,
+            error_message: null
+        };
+        const updated = await deps.store.update(record.id, {
+            status: "adapter_running",
+            adapter_run_ids: [adopted],
+            failure_code: null,
+            error_message: null
+        });
+        return updated || { ...record, status: "adapter_running", adapter_run_ids: [adopted] };
+    }
+    if (status === AWAITING_EDIT) {
+        // The first part of the flow ended at its pause. The run, the thread's one
+        // open run of this flow and its execution all stay open; nothing is filed.
+        const pause = readPause(polled.flow);
+        const updated = await deps.store.update(record.id, {
+            status: AWAITING_EDIT,
+            adapter_run_ids: [
+                { ...next, status: AWAITING_EDIT, pause, error_message: pause?.error ?? null }
+            ],
+            error_message: pause?.error ?? null
+        });
+        return (
+            updated || { ...record, status: AWAITING_EDIT, adapter_run_ids: [{ ...next, pause }] }
+        );
+    }
+    if (status === "failed" && child.paused_run_id) {
+        // What continued from the person's edit failed (most often the edit itself
+        // was refused). The run goes back to its pause with the reason, so the person
+        // can send another edit; it is not closed.
+        const message = next.error_message || "the run after the edit failed";
+        const back: FlowChild = {
+            ...next,
+            run_id: child.paused_run_id,
+            status: AWAITING_EDIT,
+            pause: { ...(child.last_pause as FlowPause), error: message },
+            error_message: message
+        };
+        const updated = await deps.store.update(record.id, {
+            status: AWAITING_EDIT,
+            adapter_run_ids: [back],
+            error_message: message
+        });
+        return updated || { ...record, status: AWAITING_EDIT, adapter_run_ids: [back] };
+    }
 
     if (status === "completed") {
         // The outputs as the submitter saw them, kept with the run: closing a run
@@ -638,7 +783,10 @@ export async function reconcileFlow(
         const updated = await deps.store.update(record.id, {
             status: "completed",
             adapter_run_ids: [next],
-            model_result: { outputs }
+            model_result: {
+                outputs,
+                ...(next.replacement ? { replacement: next.replacement } : {})
+            }
         });
         return updated || { ...record, status: "completed", adapter_run_ids: [next] };
     }
@@ -662,6 +810,135 @@ export async function reconcileFlow(
     }
     const updated = await deps.store.update(record.id, { adapter_run_ids: [next] });
     return updated || { ...record, adapter_run_ids: [next] };
+}
+
+/**
+ * Continue a run stopped at its pause, on the edited file the person uploaded to the
+ * data catalog. Only the person who started the run may, and they must still be able
+ * to change the thread. The adapter fetches the file as them, refuses one the pieces
+ * could not load, and starts the rest of the flow; this keeps the thread's run open
+ * and follows the new run from here on. If the adapter refuses, the run stays paused.
+ */
+export async function resumeFlow(
+    deps: FlowDeps,
+    plan: { thread_id: string; model_id: string; flow: FlowPlan },
+    record: UnifiedExecutionRecord,
+    body: any,
+    authorization: string | undefined
+): Promise<UnifiedExecutionRecord> {
+    if (!authorization) {
+        throw new UnifiedExecutionError(
+            401,
+            "a Tapis token is required to resume a flow",
+            "AUTH_REQUIRED"
+        );
+    }
+    const child = ((record.adapter_run_ids || []) as FlowChild[])[0];
+    if (record.status !== AWAITING_EDIT || !child?.run_id) {
+        throw new UnifiedExecutionError(
+            409,
+            "this run is not waiting for an edit",
+            "FLOW_NOT_AWAITING_EDIT"
+        );
+    }
+    // Before anything is sent: the caller may change this thread, and is the person
+    // who started the run (its plan is theirs).
+    const context = await deps.flows.flowContext(
+        { thread_id: plan.thread_id, model_id: plan.model_id },
+        authorization,
+        "write"
+    );
+    if (!context.is_flow || !context.caller || context.caller !== plan.flow.planned_by) {
+        throw new UnifiedExecutionError(
+            403,
+            "only the user who started this run may resume it",
+            "FLOW_RESUME_NOT_YOURS"
+        );
+    }
+    const replacements = body?.replacements;
+    const keys =
+        replacements && typeof replacements === "object" && !Array.isArray(replacements)
+            ? Object.keys(replacements)
+            : [];
+    const given = keys.length === 1 ? replacements[keys[0]] : null;
+    if (!given || typeof given.url !== "string" || given.url.length > 2000) {
+        throw new UnifiedExecutionError(
+            422,
+            "a resume gives one edited file for the one output the flow stopped for",
+            "FLOW_REPLACEMENT_INVALID"
+        );
+    }
+    if (child.pause?.output_key && keys[0] !== child.pause.output_key) {
+        throw new UnifiedExecutionError(
+            422,
+            "the file to replace is not the one this run stopped for",
+            "FLOW_REPLACEMENT_NOT_EDITABLE",
+            { editable: [child.pause.output_key] }
+        );
+    }
+    let result: any;
+    try {
+        result = await deps.adapterRequest(
+            `/runs/${encodeURIComponent(child.run_id)}/resume`,
+            {
+                method: "POST",
+                body: {
+                    replacements: {
+                        [keys[0]]: {
+                            url: given.url,
+                            ...(typeof given.dataset_id === "string"
+                                ? { dataset_id: given.dataset_id }
+                                : {}),
+                            ...(typeof given.resource_id === "string"
+                                ? { resource_id: given.resource_id }
+                                : {})
+                        }
+                    }
+                }
+            },
+            authorization
+        );
+    } catch (error) {
+        if ((error as { code?: string })?.code === "RUN_NOT_AWAITING_EDIT") {
+            // The adapter already resumed this run: an earlier resume got through but
+            // this record was not updated. Follow what the adapter has instead of
+            // refusing for good.
+            const followed = await reconcileFlow(deps, record, authorization);
+            if (followed.status !== AWAITING_EDIT) return followed;
+        }
+        throw error;
+    }
+    if (typeof result?.run_id !== "string") {
+        throw new UnifiedExecutionError(
+            502,
+            "SVO adapter returned an incomplete resume",
+            "FLOW_RESUME_INVALID"
+        );
+    }
+    const resumed: FlowChild = {
+        ...child,
+        paused_run_id: child.paused_run_id || child.run_id,
+        last_pause: child.pause || child.last_pause || null,
+        pause: null,
+        run_id: result.run_id,
+        status: result.status || "running",
+        tapis_workflow_id: result.tapis_workflow_id || result.pipelineId || null,
+        tapis_run_id: result.tapis_run_id || result.uuid || null,
+        steps: child.steps,
+        error_message: null
+    };
+    // The adapter has resumed the run. If this write fails the answer is still the
+    // resumed run, and the next look at the run (a poll of the paused one reports
+    // "resumed" and the run that followed) brings the record up to date.
+    const updated = await deps.store
+        .update(record.id, {
+            status: "adapter_running",
+            adapter_run_ids: [resumed],
+            failure_code: null,
+            error_message: null
+        })
+        .catch(() => null);
+    return updated || { ...record, status: "adapter_running", adapter_run_ids: [resumed] };
 }
 
 /** One stage per step of the flow. There is no model stage: a flow has no model job. */

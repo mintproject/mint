@@ -62,7 +62,19 @@ export function getSemanticSearchApiUrl(): string {
   return url.replace(/\/$/, '');
 }
 
-/** Returns the SVO adapter API base URL used by the spatial-layer catalog. */
+/**
+ * Returns the Ensemble Manager API base URL, version prefix included and no
+ * trailing slash (e.g. http://localhost:3001/v1). Empty when none is configured.
+ */
+export function getEnsembleManagerApiUrl(): string {
+  const url = window.__MINT_CONFIG__?.ENSEMBLE_MANAGER_API ?? '';
+  return url.replace(/\/$/, '');
+}
+
+/**
+ * Returns the SVO adapter API base URL. The adapter is an internal engine behind
+ * the Ensemble Manager and the catalog API; the browser no longer calls it.
+ */
 export function getSvoAdapterApiUrl(): string {
   const url = getRuntimeConfig().SVO_ADAPTER_API ?? '';
   return url.replace(/\/$/, '');

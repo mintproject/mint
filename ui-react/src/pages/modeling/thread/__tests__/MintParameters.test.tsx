@@ -126,6 +126,7 @@ describe('MintParameters', () => {
       AUTH_CLIENT_ID: '',
       AUTH_REALM: '',
       AUTH_PROVIDER: 'keycloak',
+      ENSEMBLE_MANAGER_API: 'http://em/v1',
       SVO_ADAPTER_API: 'http://adapter',
     };
     const fetchMock = vi.fn().mockImplementation((input: string | URL) => {
@@ -212,9 +213,13 @@ describe('MintParameters', () => {
         ).map((option) => option.textContent),
       ).toEqual(['All boundaries', '2 — Central High Plains', '8 — Gulf Coast']);
     });
+    // The layers come from the Ensemble Manager; the browser does not call the adapter.
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://adapter/spatial/layers',
+      'http://em/v1/spatial/layers',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContain(
+      'http://adapter/spatial/layers',
     );
 
     vi.unstubAllGlobals();
@@ -228,6 +233,7 @@ describe('MintParameters', () => {
       AUTH_CLIENT_ID: '',
       AUTH_REALM: '',
       AUTH_PROVIDER: 'keycloak',
+      ENSEMBLE_MANAGER_API: 'http://em/v1',
       SVO_ADAPTER_API: 'http://adapter',
     };
     vi.stubGlobal(

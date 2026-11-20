@@ -18,6 +18,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+from . import gather_fetch
 from .models import DataObjectContract, ReadinessStatus
 from .planner import _contract_from_registry, compatibility
 
@@ -370,6 +371,7 @@ def _check(flow: dict[str, Any], refused_settings: Iterable[str]) -> Checked:
         result.depends_on[position] = sorted(after)
 
     _check_outputs(flow, by_position, result)
+    _check_pause(flow, by_position, result)
     _check_thread_bindings(flow, flow_inputs, flow_parameters, problems)
     return result
 
@@ -390,6 +392,71 @@ def _check_outputs(flow: dict[str, Any], by_position: dict[int, dict[str, Any]],
             result.problems.append(Problem("FLOW_OUTPUT", f"flow output {index}: the step has no such output", position))
         elif kind == "value" and output["value"] not in piece_values(piece):
             result.problems.append(Problem("FLOW_OUTPUT", f"flow output {index}: the step returns no such value", position))
+
+
+_EDIT_KEY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+
+def editable_problem(spec: Any) -> str | None:
+    """Why ``editable`` on a flow output is malformed, or None. It names the file the
+    person edits (``file``, a plain name), may name a check the edited file must pass
+    (``check``) and the key of the step's reported summary that names the file
+    (``key``)."""
+    if not isinstance(spec, dict) or set(spec) - {"file", "check", "key"}:
+        return "editable is an object with a file, and optionally a check and a key"
+    name = spec.get("file")
+    if (not isinstance(name, str) or not name or "/" in name or "\\" in name or name.startswith(".")
+            or len(name) > gather_fetch.MAX_NAME):
+        return "editable.file must be a plain file name"
+    if spec.get("check") not in (None, "", *gather_fetch.EDIT_CHECKS):
+        return f"editable.check must be one of {', '.join(gather_fetch.EDIT_CHECKS)}"
+    if spec.get("key") is not None and not (isinstance(spec["key"], str) and _EDIT_KEY.match(spec["key"])):
+        return "editable.key must be a lower-case name such as lexicon_uri"
+    return None
+
+
+def _check_pause(flow: dict[str, Any], by_position: dict[int, dict[str, Any]], result: Checked) -> None:
+    """A flow may stop after a step for the person to edit one of its files. The
+    first cut: one pause, one editable file output on the paused step, and a later
+    step that reads it."""
+    problems = result.problems
+    pauses = sorted(position for position, step in by_position.items() if step.get("pause_after") is True)
+    outputs = [o for o in flow.get("outputs") or [] if isinstance(o, dict) and "editable" in o]
+    for output in outputs:
+        why = editable_problem(output["editable"])
+        if why:
+            problems.append(Problem("FLOW_PAUSE", why, output.get("step") if _is_position(output.get("step")) else None))
+    if not pauses:
+        if outputs:
+            problems.append(Problem("FLOW_PAUSE", "an output is marked editable but no step pauses"))
+        return
+    if len(pauses) > 1:
+        problems.append(Problem("FLOW_PAUSE", "a flow may pause only once", pauses[1]))
+        return
+    pause = pauses[0]
+    here = [o for o in outputs if o.get("step") == pause and "output" in o]
+    if len(here) != 1 or len(outputs) != 1:
+        problems.append(Problem(
+            "FLOW_PAUSE", "a paused step needs exactly one file output marked editable, naming the file to edit; "
+                          "no other output may be editable", pause))
+        return
+    ancestors: set[int] = set()
+    todo = [pause]
+    while todo:
+        number = todo.pop()
+        if number not in ancestors:
+            ancestors.add(number)
+            todo.extend(result.depends_on.get(number, []))
+    later = [position for position in by_position if position not in ancestors]
+    if not later:
+        problems.append(Problem("FLOW_PAUSE", "no step runs after the pause", pause))
+        return
+    reads = any(
+        isinstance(wire, dict) and (wire.get("from") or {}).get("step") == pause
+        and (wire.get("from") or {}).get("output") == here[0]["output"]
+        for position in later for wire in by_position[position].get("wires") or [])
+    if not reads:
+        problems.append(Problem("FLOW_PAUSE", "no step after the pause reads the editable output", pause))
 
 
 _THREAD_ROLES = ("region", "start_date", "end_date")

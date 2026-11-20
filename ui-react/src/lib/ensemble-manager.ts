@@ -257,6 +257,34 @@ export interface UnifiedAdapterRun {
   tapis_run_id?: string | null;
 }
 
+/** What a flow run stopped for an edit shows: the file to edit, and where to send the edit. */
+export interface UnifiedRunPause {
+  /** How the run names the output to replace: send the edit under this key. */
+  output_key: string;
+  /** The file's name, and its `tapis://` location (download it through the files route). */
+  file: string | null;
+  file_location: string | null;
+  paused_after_step: number | null;
+  paused_at: string | null;
+  /** Why the last edit was refused or failed, when one was: another may be sent. */
+  error?: string | null;
+}
+
+/** The edit a flow run continued on: who, when, which catalog file, and what the run fetched. */
+export interface UnifiedRunReplacement {
+  output: string;
+  file?: string | null;
+  /** What the file had to be (`lexicon`, `json`). */
+  check?: string | null;
+  url?: string;
+  dataset_id?: string | null;
+  resource_id?: string | null;
+  replaced_by?: string;
+  replaced_at?: string;
+  sha256?: string;
+  bytes?: number;
+}
+
 export interface UnifiedRunSnapshot {
   run_id?: string;
   parent_execution_id?: string | null;
@@ -300,6 +328,12 @@ export interface UnifiedRunSnapshot {
     [key: string]: unknown;
   } | null;
   adapter_runs?: UnifiedAdapterRun[];
+  /** The user who started a flow run: only they may resume it. */
+  started_by?: string;
+  /** Set while the run is `awaiting_edit`. */
+  pause?: UnifiedRunPause | null;
+  /** Set once the run has continued on an edit. */
+  replacement?: UnifiedRunReplacement | null;
   failure_code?: string | null;
   error_message?: string | null;
   [key: string]: unknown;
@@ -518,6 +552,27 @@ export function cancelUnifiedRun(
     `/plans/runs/${encodeURIComponent(runId)}/cancel`,
     'POST',
     undefined,
+    signal,
+  );
+}
+
+/**
+ * Continue a flow run that stopped for an edit, on a file the user uploaded to the
+ * catalog. Ensemble Manager checks the user started the run and may change the
+ * thread; the adapter fetches the file as them and refuses one the flow cannot use.
+ */
+export function resumeUnifiedRun(
+  ensembleManagerApi: string,
+  runId: string,
+  outputKey: string,
+  edit: { url: string; dataset_id?: string; resource_id?: string },
+  signal?: AbortSignal,
+): Promise<UnifiedRunSnapshot> {
+  return unifiedRequest<UnifiedRunSnapshot>(
+    ensembleManagerApi,
+    `/plans/runs/${encodeURIComponent(runId)}/resume`,
+    'POST',
+    { replacements: { [outputKey]: edit } },
     signal,
   );
 }

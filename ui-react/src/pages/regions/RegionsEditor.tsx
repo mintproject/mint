@@ -30,7 +30,7 @@ import {
   generateRegionId,
   type NewRegionFromGeoJSON,
 } from './regionUtils';
-import { getSvoAdapterApiUrl } from '@/lib/config';
+import { fetchSpatialLayers, spatialLayersAvailable } from '@/lib/spatial-layers';
 import { getRegionImportAccess, importRegions } from '@/lib/region-import-api';
 import { createRegionSubcategory } from '@/lib/region-category-api';
 
@@ -601,16 +601,14 @@ function AddRegionsDialog({
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const adapterApi = getSvoAdapterApiUrl();
-    if (!open || !adapterApi) return;
+    if (!open || !spatialLayersAvailable()) return;
     const controller = new AbortController();
-    void fetch(`${adapterApi}/spatial/layers`, { signal: controller.signal })
-      .then((response) => (response.ok ? response.json() : { layers: [] }))
-      .then((payload: { layers?: RemoteSpatialLayerOption[] }) => {
-        setSourceOptions(payload.layers ?? []);
+    void fetchSpatialLayers<RemoteSpatialLayerOption>(controller.signal)
+      .then((layers) => {
+        setSourceOptions(layers);
       })
       .catch(() => {
-        // The custom URL field remains usable when the adapter is unavailable.
+        // The custom URL field remains usable when the layer catalog is unavailable.
       });
     return () => controller.abort();
   }, [open]);

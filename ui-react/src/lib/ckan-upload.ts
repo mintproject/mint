@@ -135,7 +135,8 @@ function declaredExtension(format: string): string | null {
 
 /**
  * Whether the files fit the input, before anything is created. The rule:
- * - the input must name a standard variable (its datasets are found by it);
+ * - the input must name a standard variable (its datasets are found by it), unless
+ *   `variableOptional` (a file edited in place of a step's output belongs to no input);
  * - an input that takes one file takes exactly one;
  * - a missing format accepts any file, with a note saying so;
  * - the format `directory` (also `folder`, `any`, `*`) on a collection accepts any
@@ -151,10 +152,12 @@ export function checkUploadAgainstInput(params: {
   variables: string[];
   multiple: boolean;
   inputName: string;
+  /** A file that is no input's data (an edit) needs no standard variable. */
+  variableOptional?: boolean;
 }): { error: string | null; notes: string[] } {
   const { files, inputName } = params;
   const refuse = (error: string) => ({ error, notes: [] });
-  if (params.variables.filter(Boolean).length === 0) {
+  if (!params.variableOptional && params.variables.filter(Boolean).length === 0) {
     return refuse(
       `The input "${inputName}" names no standard variable, so a dataset made for it could not be found or read by a run. Nothing was uploaded.`,
     );
@@ -387,6 +390,10 @@ export async function uploadFilesToCatalog(params: {
   format?: string | null;
   /** An input that takes a collection takes many files; any other takes one. */
   multiple: boolean;
+  /** No standard variable is recorded or checked: for a file that replaces a step's output. */
+  variableOptional?: boolean;
+  /** What the dataset is for, in its notes. Defaults to the flow and input. */
+  notes?: string;
   /** The thread's dates and region, which the dataset is made to cover. */
   startDate?: string | null;
   endDate?: string | null;
@@ -404,6 +411,7 @@ export async function uploadFilesToCatalog(params: {
     variables: params.variables,
     multiple: params.multiple,
     inputName: params.inputName,
+    variableOptional: params.variableOptional,
   });
   if (fit.error) throw new UploadError(fit.error);
   if (!params.organizationId) throw new UploadError('Choose an organisation.');
@@ -420,7 +428,7 @@ export async function uploadFilesToCatalog(params: {
     organizationId: params.organizationId,
     isPublic: params.isPublic,
     title: `Uploaded files, ${day}, ${params.username}`,
-    notes: `Uploaded through DYNAMO for ${params.flowName} / ${params.inputName}.`,
+    notes: params.notes ?? `Uploaded through DYNAMO for ${params.flowName} / ${params.inputName}.`,
     now,
     startDate: threadDates ? start : day,
     endDate: threadDates ? end : day,
@@ -450,7 +458,7 @@ export async function uploadFilesToCatalog(params: {
           package_id: pkg.id,
           name,
           format: formatFromName(name),
-          mint_standard_variables: variable,
+          ...(variable ? { mint_standard_variables: variable } : {}),
         },
         file,
         name,

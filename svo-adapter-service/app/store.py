@@ -90,6 +90,12 @@ class InMemoryHasura:
     def _op_ListDataObjects(self, v):
         return {"adapter_data_object": list(STORE.data_object.values())}
 
+    def _op_ListOwnDataObjects(self, v):
+        return {"adapter_data_object": [
+            row for row in STORE.data_object.values()
+            if row.get("owner_username") == v["owner"] or row.get("shared")
+        ]}
+
     def _op_ExistingCkanDataObjects(self, v):
         return {
             "adapter_data_object": [
@@ -108,6 +114,39 @@ class InMemoryHasura:
 
     def _op_GetRun(self, v):
         return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
+
+    def _op_GetRunSegment(self, v):
+        return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
+
+    def _op_ResumeRunIf(self, v):
+        # Compare-and-set: only a completed run that nothing has resumed yet.
+        row = STORE.run.get(v["id"])
+        if row and row.get("status") == "completed" and not row.get("resumed_run_id"):
+            row["resumed_run_id"] = v["child"]
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
+
+    def _op_ResumeRollbackIf(self, v):
+        row = STORE.run.get(v["id"])
+        if row and row.get("resumed_run_id") == v["child"]:
+            row["resumed_run_id"] = v.get("was")
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
+
+    def _op_ResumeRetryIf(self, v):
+        row = STORE.run.get(v["id"])
+        if row and row.get("status") == "completed" and row.get("resumed_run_id") == v["was"]:
+            row["resumed_run_id"] = v["child"]
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
+
+    def _op_GetRunStatus(self, v):
+        return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
+
+    def _op_ListPausedRuns(self, v):
+        return {"adapter_workflow_run": [
+            r for r in STORE.run.values()
+            if r.get("paused_after_step") is not None and r.get("status") == "completed"]}
 
     def _op_GetRunByIdempotency(self, v):
         rows = [
@@ -178,7 +217,15 @@ class InMemoryHasura:
 
     # --- writes --------------------------------------------------------------
     def _op_InsertDataObject(self, v):
-        row = _insert(STORE.data_object, v["obj"], nested_key="variables")
+        obj = dict(v["obj"])
+        previous = STORE.data_object.get(obj.get("id") or "")
+        if previous:
+            # The real upsert never updates owner_username or shared: it keeps the
+            # first writer's owner and the row's flag.
+            for kept in ("owner_username", "shared"):
+                if previous.get(kept) and kept not in obj:
+                    obj[kept] = previous[kept]
+        row = _insert(STORE.data_object, obj, nested_key="variables")
         return {"insert_adapter_data_object_one": row}
 
     def _op_ReconcileCkanDataObject(self, v):

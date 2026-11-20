@@ -107,6 +107,17 @@ query ModelInputRequirement($ds_id: String!) {
 LIST_DATA_OBJECTS_QUERY = """
 query ListDataObjects {
   adapter_data_object {
+    id label resource_uri format source_catalog owner_username owner_execution_id shared
+    variables { standard_variable_uri local_name unit spatial_type crs }
+  }
+}
+"""
+
+# The data objects a user may use: their own and the shared catalog rows. An unshared
+# row with no owner (made before owners were recorded) matches no user.
+LIST_OWN_DATA_OBJECTS_QUERY = """
+query ListOwnDataObjects($owner: String!) {
+  adapter_data_object(where: {_or: [{owner_username: {_eq: $owner}}, {shared: {_eq: true}}]}) {
     id label resource_uri format source_catalog
     variables { standard_variable_uri local_name unit spatial_type crs }
   }
@@ -118,6 +129,7 @@ DATA_OBJECT_CONTRACT_QUERY = """
 query DataObjectContract($id: String!) {
   adapter_data_object(where: {id: {_eq: $id}}) {
     id label resource_uri format extension mime_type source_catalog
+    owner_username owner_execution_id shared
     variables {
       id standard_variable_uri local_name unit dimensionality
       spatial_type crs grid_id grid_description temporal_resolution schema_json

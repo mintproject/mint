@@ -36,7 +36,7 @@ const calls = (m: ReturnType<typeof stubAdapter>, method: string) =>
   m.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === method);
 
 beforeEach(() => {
-  window.__MINT_CONFIG__ = { SVO_ADAPTER_API: 'http://adapter' } as never;
+  window.__MINT_CONFIG__ = { ENSEMBLE_MANAGER_API: 'http://em/v1' } as never;
   localStorage.clear();
 });
 afterEach(() => {
@@ -76,7 +76,7 @@ describe('CredentialsPage', () => {
 
     await waitFor(() => expect(calls(fetchMock, 'PUT')).toHaveLength(1));
     const [url, init] = calls(fetchMock, 'PUT')[0] as unknown as [string, RequestInit];
-    expect(url).toBe('http://adapter/secrets/model_server');
+    expect(url).toBe('http://em/v1/secrets/model_server');
     expect(JSON.parse(String(init.body))).toEqual({
       fields: { api_key: 'SECRET0', chat_base_url: 'SECRET1', embedding_base_url: 'SECRET2' },
     });
@@ -119,7 +119,7 @@ describe('CredentialsPage', () => {
     expect(calls(fetchMock, 'DELETE')).toHaveLength(0);
     fireEvent.click(await screen.findByRole('button', { name: /^delete$/i, hidden: false }));
     await waitFor(() => expect(calls(fetchMock, 'DELETE')).toHaveLength(1));
-    expect(String(calls(fetchMock, 'DELETE')[0]![0])).toBe('http://adapter/secrets/model_server');
+    expect(String(calls(fetchMock, 'DELETE')[0]![0])).toBe('http://em/v1/secrets/model_server');
   });
 
   it('explains a run-in-progress lock', async () => {

@@ -39,6 +39,16 @@ export const FLOW_ERROR_CODES = [
   'GATHER_TOO_LARGE',
   'GATHER_RESOURCE_FAILED',
   'GATHER_STAGING_FAILED',
+  'GATHER_FILE_INVALID',
+  'FLOW_NOT_AWAITING_EDIT',
+  'FLOW_RESUME_NOT_YOURS',
+  'RUN_RESUME_FORBIDDEN',
+  'FLOW_REPLACEMENT_INVALID',
+  'FLOW_REPLACEMENT_NOT_EDITABLE',
+  'FLOW_REPLACEMENT_REFUSED',
+  'FLOW_RESUME_VALUE_MISSING',
+  'FLOW_RESUME_VALUE_REFUSED',
+  'FLOW_RESUME_ARGUMENT_CLASH',
 ] as const;
 
 type Details = Record<string, unknown>;
@@ -133,6 +143,7 @@ const GATHER_TITLES: Record<string, string> = {
   GATHER_TOO_LARGE: 'The files are too large to gather',
   GATHER_RESOURCE_FAILED: 'A file could not be fetched',
   GATHER_STAGING_FAILED: 'The files could not be placed on the computing system',
+  GATHER_FILE_INVALID: 'The edited file cannot be used',
 };
 
 /** A failed gather step: the title for its code, with the file and host when known. */
@@ -353,7 +364,49 @@ export function flowErrorMessage(error: unknown): FlowErrorMessage | null {
         ],
       };
     }
+    case 'FLOW_NOT_AWAITING_EDIT':
+      return {
+        title: 'This run is not waiting for an edit',
+        lines: ['It may already have continued, or been cancelled. Refresh the run to see.'],
+      };
+    case 'FLOW_RESUME_NOT_YOURS':
+    case 'RUN_RESUME_FORBIDDEN':
+      return {
+        title: 'Only the user who started this run can continue it',
+        lines: ['You can watch the run, but the edit and the continue button are theirs.'],
+      };
+    case 'FLOW_REPLACEMENT_INVALID':
+    case 'FLOW_REPLACEMENT_NOT_EDITABLE':
+      return {
+        title: 'That is not the file this run stopped for',
+        lines: [
+          'Upload the edited copy of the file shown above, one file only.',
+          ...(serverMessage ? [serverMessage] : []),
+        ],
+      };
+    case 'FLOW_REPLACEMENT_REFUSED':
+      return {
+        title: 'The edited file was refused',
+        lines: [
+          'It must be a file in the data catalog, uploaded from this page.',
+          ...(serverMessage ? [serverMessage] : []),
+        ],
+      };
+    case 'FLOW_RESUME_VALUE_REFUSED':
+    case 'FLOW_RESUME_ARGUMENT_CLASH':
+      return {
+        title: 'The run cannot be continued safely',
+        lines: [
+          'Something the first part reported cannot be passed on. Cancel the run and run the flow again.',
+        ],
+      };
+    case 'FLOW_RESUME_VALUE_MISSING':
+      return {
+        title: 'The first part of the run did not leave what the rest needs',
+        lines: ['The run cannot continue. Cancel it and run the flow again.'],
+      };
     case 'GATHER_RESOURCE_NEEDS_LOGIN':
+    case 'GATHER_FILE_INVALID':
     case 'GATHER_ADDRESS_REFUSED':
     case 'GATHER_TOO_LARGE':
     case 'GATHER_RESOURCE_FAILED':

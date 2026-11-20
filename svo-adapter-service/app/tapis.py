@@ -867,11 +867,7 @@ def _app_piece_task(
         env: {"type": "string", "value_from": {"args": str(arg)}} for env, arg in env_map.items()}
     for env, arg in (("TAPIS_BASE_URL", "tapis_base_url"), ("TAPIS_TOKEN", "tapis_token"), ("ALLOCATION", "allocation")):
         inputs[env] = {"type": "string", "value_from": {"args": arg}}
-    for wire in step.get("wires") or []:
-        arg = (wire.get("from") or {}).get("arg")
-        if arg and arg not in params:
-            params[str(arg)] = {
-                "type": "string", "required": True, "description": "A dataset the flow takes as an input"}
+    _declare_wire_params(step, params)
     linked, taken_away = _flow_inputs(step, env_map, task_ids_by_step, steps_by_number)
     for env in taken_away:
         inputs.pop(env, None)
@@ -933,6 +929,20 @@ def _app_piece_task(
     }
 
 
+def _declare_wire_params(step: dict[str, Any], params: dict[str, dict[str, Any]]) -> None:
+    """Declare the pipeline arguments a flow step's links read: a flow input, or a
+    value an earlier segment of the run reported."""
+    for wire in step.get("wires") or []:
+        source = wire.get("from") or {}
+        if source.get("arg") and source["arg"] not in params:
+            params[str(source["arg"])] = {
+                "type": "string", "required": True, "description": "A dataset the flow takes as an input"}
+        if source.get("resume") and source["resume"] not in params:
+            params[str(source["resume"])] = {
+                "type": "string", "required": True, "managed": True, "managed_source": "resume",
+                "description": "What an earlier segment of this run reported; set when the run resumes"}
+
+
 def gather_ids(step: dict[str, Any]) -> list[str]:
     """The gather tasks a flow step reads, in the order its links name them."""
     found: list[str] = []
@@ -952,7 +962,14 @@ def _gather_task(collection: dict[str, Any]) -> dict[str, Any]:
         "label": str(collection.get("label") or ""),
         "resources": [{"name": str(r.get("name") or ""), "url": str(r["url"])}
                       for r in collection.get("resources") or []],
-        "max_bytes": int(settings.flow_collection_max_bytes),
+        "max_bytes": int(collection.get("max_bytes") or settings.flow_collection_max_bytes),
+        # An edited file is checked before it is stored (gather_fetch.check_edit), and
+        # may be put into the summary a later step is handed (see flow_segments).
+        "check": str(collection["check"]) if collection.get("check") else "",
+        "merge_key": str((collection.get("merge") or {}).get("key") or ""),
+        # An edited file's address is handed to the task as an argument of the run, so a
+        # link that carries a credential never sits in the registered pipeline.
+        "url_input": bool(collection.get("url_arg")),
         # What the task itself holds the run to, whatever its inputs say.
         "tapis_host": (urllib.parse.urlsplit(settings.tapis_base_url).hostname or "").lower(),
         "tapis_systems": [name.strip() for name in settings.flow_collection_tapis_systems.split(",")
@@ -963,18 +980,25 @@ def _gather_task(collection: dict[str, Any]) -> dict[str, Any]:
         "single": bool(collection.get("single")),
         "catalog_host": (settings.flow_collection_catalog_host or "").strip().lower(),
     }
+    inputs = {
+        "TAPIS_TOKEN": {"type": "string", "value_from": {"args": "tapis_token"}},
+        "TAPIS_BASE_URL": {"type": "string", "value_from": {"args": "tapis_base_url"}},
+        "STAGING_URI": {"type": "string", "value_from": {"args": "flow_staging_uri"}},
+    }
+    outputs = {"result": {"type": "string"}}
+    if spec["url_input"]:
+        inputs["EDIT_URL"] = {"type": "string", "value_from": {"args": str(collection["url_arg"])}}
+    if spec["merge_key"]:
+        inputs["CARRIED"] = {"type": "string", "value_from": {"args": str(collection["merge"]["carried_arg"])}}
+        outputs["carried"] = {"type": "string"}
     return {
         "id": spec["gather_id"],
         "type": "function",
         "runtime": "python:3.11",
         "installer": "pip",
         "description": f"Gather {spec['label']}"[:200],
-        "output": {"result": {"type": "string"}},
-        "input": {
-            "TAPIS_TOKEN": {"type": "string", "value_from": {"args": "tapis_token"}},
-            "TAPIS_BASE_URL": {"type": "string", "value_from": {"args": "tapis_base_url"}},
-            "STAGING_URI": {"type": "string", "value_from": {"args": "flow_staging_uri"}},
-        },
+        "output": outputs,
+        "input": inputs,
         # Each file is retried inside the task; a second run of the whole task would
         # only copy it all again.
         "execution_profile": {"max_retries": 0, "max_exec_time": GATHER_MAX_EXEC_SECONDS},
@@ -1005,9 +1029,15 @@ def _flow_inputs(
     def value_from(source: dict[str, Any]) -> dict[str, Any]:
         if "arg" in source:
             return {"args": str(source["arg"])}
+        if "resume" in source:
+            # Made by a segment that ran before this one (flow_segments): carried
+            # in as a pipeline argument, since a task of another pipeline cannot be named.
+            return {"args": str(source["resume"])}
         if "gather" in source:
             # A flow input that takes a collection: the folder its gather task wrote.
-            return {"task_output": {"task_id": str(source["gather"]), "output_id": "result"}}
+            # An edited file's task also hands on the summary it was put into.
+            return {"task_output": {
+                "task_id": str(source["gather"]), "output_id": str(source.get("gather_output") or "result")}}
         number = int(source["step"])
         ids = flow_output_ids(steps_by_number[number]) or {"outputs": {}, "values": {}}
         output_id = (ids["values"][str(source["value"])] if "value" in source
@@ -1027,7 +1057,7 @@ def _flow_inputs(
         if index == 0:
             for env in source_envs:
                 inputs[env] = dict(bound)
-            if "step" in wire["from"] or "gather" in wire["from"]:
+            if "step" in wire["from"] or "gather" in wire["from"] or "resume" in wire["from"]:
                 inputs["SOURCE_RESULT"] = dict(bound)
     for wire in wires:
         if "setting" not in wire["to"]:
@@ -1351,13 +1381,7 @@ def generate_tapis_workflow(
             )
             if s.get("wires") is not None:
                 # A flow step: what it receives is stated link by link.
-                for wire in s["wires"]:
-                    arg = (wire.get("from") or {}).get("arg")
-                    if arg and arg not in params:
-                        params[str(arg)] = {
-                            "type": "string", "required": True,
-                            "description": "A dataset the flow takes as an input",
-                        }
+                _declare_wire_params(s, params)
                 linked, taken_away = _flow_inputs(s, env_map, task_ids_by_step, steps_by_number)
                 for env in taken_away:
                     inputs.pop(env, None)

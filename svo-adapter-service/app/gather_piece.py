@@ -28,7 +28,7 @@ from . import gather_fetch
 GATHER_MAX_EXEC_SECONDS = 6 * 3600
 
 _SCRIPT = r'''
-import json, os, tempfile, time
+import hashlib, json, os, tempfile, time
 from owe_python_sdk.runtime import execution_context as _ctx
 
 _SPEC = json.loads(__SPEC__)
@@ -61,6 +61,8 @@ def _gather():
         _die("GATHER_STAGING_FAILED", "the run's staging folder was not given as tapis://system/path")
     system = staging["system"]
     folder = staging["path"].rstrip("/") + "/inputs/" + _SPEC["gather_id"]
+    # An edited file's address comes in as a task input, not in the plan.
+    resources = [{"name": "", "url": _in("EDIT_URL")}] if _SPEC.get("url_input") else _SPEC["resources"]
 
     def tapis(method, path, body=None, headers=None, timeout=_READ_TIMEOUT):
         # The only requests the token is sent with, and only to the Tapis host.
@@ -163,11 +165,11 @@ def _gather():
             return
 
     names, taken = [], set()
-    for index, resource in enumerate(_SPEC["resources"]):
+    for index, resource in enumerate(resources):
         names.append(unique_name(choose_name(resource.get("name"), resource.get("url"), index), taken))
 
     budget = Budget(int(_SPEC["max_bytes"]))
-    for index, resource in enumerate(_SPEC["resources"]):
+    for index, resource in enumerate(resources):
         try:
             place = check_url(resource["url"])
             host = place.get("host") or "tapis://" + place["system"]
@@ -194,6 +196,20 @@ def _gather():
         if spill is None:
             _die("GATHER_RESOURCE_FAILED", "resource %d at %s: %s" % (index, host, last.message),
                  index=index, host=host, http_status=last.status)
+        if _SPEC.get("check"):
+            # An edited file is read once more here, before it is stored, so that a
+            # file the pieces would refuse stops the run at its first step.
+            spill.seek(0)
+            try:
+                check_edit(_SPEC["check"], spill.read(), names[index])
+            except ValueError as error:
+                spill.close()
+                _die("GATHER_FILE_INVALID", "%s cannot be used: %s" % (names[index], error), index=index)
+        digest = hashlib.sha256()
+        spill.seek(0)
+        for block in iter(lambda: spill.read(CHUNK), b""):
+            digest.update(block)
+        sha256 = digest.hexdigest()
         try:
             upload(names[index], spill, size)
         finally:
@@ -203,9 +219,26 @@ def _gather():
     # A collection's result is its folder; one file given to an ordinary input is the file.
     result = "tapis://%s/%s" % (system, folder + ("/" + names[0] if _SPEC.get("single") else ""))
     _ctx.set_output("result", result)
+    reported = {"result": result}
+    if _SPEC.get("merge_key"):
+        # A step that was handed a summary of what earlier steps wrote gets it back
+        # with the edited file's place put where the original file's was.
+        try:
+            carried = json.loads(_in("CARRIED"))
+        except ValueError:
+            carried = None
+        if not isinstance(carried, dict):
+            _die("GATHER_RESOURCE_FAILED", "the value to carry on was not a JSON object")
+        carried[_SPEC["merge_key"]] = result
+        reported["carried"] = json.dumps(carried, sort_keys=True)
+        _ctx.set_output("carried", reported["carried"])
+    if _SPEC.get("single"):
+        # What was fetched, for the run's record of an edit.
+        reported["sha256"] = sha256
+        reported["bytes"] = size
     # Tapis Workflows does not report a task's named outputs: print them, last, for
     # the adapter to read back from the task's stdout.
-    print(json.dumps({"status": "ok", "svo_flow_outputs": {"result": result}}))
+    print(json.dumps({"status": "ok", "svo_flow_outputs": reported}))
 
 
 try:

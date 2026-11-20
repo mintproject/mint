@@ -20,8 +20,11 @@ The rules, in one place:
   checked again. No credential is ever sent to an ``https`` resource: nothing in
   this module takes one.
 """
+import csv
 import http.client
+import io
 import ipaddress
+import json
 import re
 import socket
 import ssl
@@ -309,6 +312,101 @@ def copy_stream(response, out, budget, deadline=None):
         budget.take(len(chunk))
         out.write(chunk)
         written += len(chunk)
+
+
+# --- an edited file -----------------------------------------------------------
+
+EDIT_CHECKS = ("json", "lexicon")
+_LEXICON_KEYS = {"schema_version", "name", "description", "groups"}
+_GROUP_KEYS = {"name", "terms", "description"}
+
+
+def _lexicon_group(name, terms):
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("a group has no name")
+    if not isinstance(terms, list) or not terms:
+        raise ValueError("the group %r has no terms" % name)
+    if any(not isinstance(term, str) or not term.strip() for term in terms):
+        raise ValueError("the group %r has an empty term, or one that is not text" % name)
+
+
+def check_lexicon(data, name):
+    """Whether ``data`` (bytes) loads as a lexicon, or ValueError saying why not.
+
+    The rules of the library's own loader (``semantic_sensemaking.lexicon.io``):
+    a ``.csv`` name has ``group`` and ``term`` columns; anything else is JSON, either
+    the structured form (``groups``, each with a ``name`` and a non-empty ``terms``
+    list of text) or a flat ``{"Group": ["term", ...]}`` object whose keys starting
+    with ``_`` are comments. Group names may not repeat. The reasons never repeat
+    the file's content beyond a group's name.
+    """
+    names = []
+    if str(name).lower().endswith(".csv"):
+        try:
+            reader = csv.DictReader(io.StringIO(data.decode("utf-8-sig"), newline=""))
+            fields = {str(f).strip().lower() for f in (reader.fieldnames or [])}
+            if not {"group", "term"} <= fields:
+                raise ValueError("a CSV lexicon needs 'group' and 'term' columns")
+            groups = {}
+            for row in reader:
+                row = {str(k).strip().lower(): (v or "").strip() for k, v in row.items() if k}
+                group, term = row.get("group", ""), row.get("term", "")
+                if not group and not term:
+                    continue
+                if not group or not term:
+                    raise ValueError("line %d needs both a group and a term" % reader.line_num)
+                groups.setdefault(group, []).append(term)
+        except UnicodeDecodeError:
+            raise ValueError("the file is not UTF-8 text")
+        except csv.Error:
+            raise ValueError("the file is not readable as CSV")
+        if not groups:
+            raise ValueError("no groups were found")
+        return
+    try:
+        document = json.loads(data.decode("utf-8"))
+    except UnicodeDecodeError:
+        raise ValueError("the file is not UTF-8 text")
+    except ValueError:
+        raise ValueError("the file is not valid JSON")
+    if not isinstance(document, dict):
+        raise ValueError("expected an object of groups, such as {\"Group\": [\"term\"]}")
+    if "groups" in document:
+        if set(document) - _LEXICON_KEYS:
+            raise ValueError("unexpected keys: %s" % ", ".join(sorted(map(str, set(document) - _LEXICON_KEYS))[:5]))
+        if document.get("schema_version", 1) != 1:
+            raise ValueError("schema_version must be 1")
+        if not isinstance(document["groups"], list) or not document["groups"]:
+            raise ValueError("groups must be a list with at least one group")
+        for group in document["groups"]:
+            if not isinstance(group, dict) or set(group) - _GROUP_KEYS:
+                raise ValueError("each group needs a name and terms, and nothing else but a description")
+            _lexicon_group(group.get("name"), group.get("terms"))
+            names.append(group["name"])
+    else:
+        for group, terms in document.items():
+            if str(group).startswith("_"):
+                continue
+            _lexicon_group(group, terms)
+            names.append(group)
+        if not names:
+            raise ValueError("no groups were found")
+    if len(set(names)) != len(names):
+        raise ValueError("group names may not repeat")
+
+
+def check_edit(kind, data, name):
+    """Run the named check on an edited file's bytes, or ValueError. ``json`` only
+    asks that it parses; ``lexicon`` is :func:`check_lexicon`."""
+    if kind == "lexicon":
+        check_lexicon(data, name)
+    elif kind == "json":
+        try:
+            json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            raise ValueError("the file is not valid JSON")
+    elif kind:
+        raise ValueError("no such check")
 
 
 # --- file names ---------------------------------------------------------------

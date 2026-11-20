@@ -14,7 +14,7 @@ const respond = (status: number, body: unknown = {}) =>
   vi.fn(async () => ({ ok: status < 400, status, json: async () => body }));
 
 beforeEach(() => {
-  window.__MINT_CONFIG__ = { SVO_ADAPTER_API: 'http://adapter/' } as never;
+  window.__MINT_CONFIG__ = { ENSEMBLE_MANAGER_API: 'http://em/v1/' } as never;
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -27,7 +27,7 @@ describe('user secrets API', () => {
     vi.stubGlobal('fetch', fetchMock);
     expect(await listUserSecrets()).toEqual([{ name: 'a', fields: ['x'] }]);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('http://adapter/secrets');
+    expect(url).toBe('http://em/v1/secrets');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
   });
 
@@ -36,7 +36,7 @@ describe('user secrets API', () => {
     vi.stubGlobal('fetch', fetchMock);
     await saveUserSecret('model_server', { api_key: 'k' });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('http://adapter/secrets/model_server');
+    expect(url).toBe('http://em/v1/secrets/model_server');
     expect(init.method).toBe('PUT');
     expect(JSON.parse(String(init.body))).toEqual({ fields: { api_key: 'k' } });
   });
@@ -46,7 +46,7 @@ describe('user secrets API', () => {
     vi.stubGlobal('fetch', fetchMock);
     await deleteUserSecret('a');
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('http://adapter/secrets/a');
+    expect(url).toBe('http://em/v1/secrets/a');
     expect(init.method).toBe('DELETE');
   });
 

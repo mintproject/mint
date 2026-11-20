@@ -152,6 +152,41 @@ describe('MintRuns for a flow', () => {
     expect(screen.getByTestId('cancel-workflow')).toBeInTheDocument();
   });
 
+  it('shows a run stopped for an edit with the controls only to the user who started it', () => {
+    const paused: UnifiedRunSnapshot = {
+      ...run,
+      status: 'awaiting_edit',
+      started_by: 'alice',
+      model_child_id: 'exec-1',
+      pause: {
+        output_key: '1:1',
+        file: 'lexicon_draft.json',
+        file_location: 'tapis://ls6/scratch/alice/out/lexicon_draft.json',
+        paused_after_step: 1,
+        paused_at: null,
+      },
+    };
+    const mine = renderRuns({
+      unifiedRuns: { 'flow-1': paused },
+      onResumeWorkflow: vi.fn(),
+      currentUsername: 'alice',
+    });
+    expect(screen.getByTestId('flow-paused')).toHaveTextContent(
+      'review and edit lexicon_draft.json',
+    );
+    expect(screen.getByRole('button', { name: 'Upload the edited file' })).toBeInTheDocument();
+    mine.unmount();
+    renderRuns({
+      unifiedRuns: { 'flow-1': paused },
+      onResumeWorkflow: vi.fn(),
+      currentUsername: 'bob',
+    });
+    expect(screen.getByTestId('flow-paused')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Upload the edited file' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('before sending: no publishers request, no maximum run time, no publish controls', () => {
     renderRuns({ threadData: threadData(false), unifiedRuns: undefined });
     expect(screen.getByTestId('submit-runs-flow-1')).toBeInTheDocument();

@@ -32,8 +32,18 @@ class Settings(BaseSettings):
     # forward the caller's JWT instead (see hasura.HasuraClient).
     hasura_admin_secret: str | None = None
     # Shared server-to-server secret for Ensemble Manager-owned model-output
-    # registration and deferred-plan binding. Never expose this to the UI.
+    # registration and deferred-plan binding. Never expose this to the UI. It is
+    # its own credential: it never falls back to the Hasura admin secret. Unset,
+    # every route that needs it answers 503.
     internal_service_secret: str | None = None
+    # Browser origins allowed to call this service directly (CORS), comma-separated.
+    # Empty = none: the web app reaches the adapter through the Ensemble Manager.
+    cors_origins: str = ""
+    # Front door: user routes are reachable only through the Ensemble Manager or the
+    # catalog API, which send internal_service_secret together with the user's own
+    # token. Off = today's behaviour. Tapis-task callbacks, operator routes and the
+    # public reference reads stay reachable (see main._FRONT_DOOR_OPEN).
+    require_front_door: bool = False
     # Dedicated credential for /admin/secrets (never the Hasura or EM secret).
     secrets_admin_secret: str | None = None
     # Operator credential for the other /admin/* routes and POST /transform-specs,
@@ -68,6 +78,15 @@ class Settings(BaseSettings):
     # runner's token, as a bearer credential, to this host and no other, so it can
     # read private catalog files. Empty disables it.
     flow_collection_catalog_host: str = ""
+    # A flow may stop after a step for the user to edit a file (design:
+    # docs/design/2026-11-20-flow-pause-for-edit.md). Off by default: with it off a
+    # flow runs through its pause as it always did, and no run can be resumed.
+    flow_pause_enabled: bool = False
+    # The largest edited file a resume accepts, in bytes. The gather step that
+    # fetches it holds to this, and counts the bytes itself.
+    flow_edit_max_bytes: int = 5 * 1024 * 1024
+    # A run left paused this long is cancelled by the sweep, in days.
+    flow_pause_max_days: int = 14
 
     # Tapis Workflows. Submission emulates SUBSIDE's manager so adapter-generated
     # pipelines are interchangeable with SUBSIDE's: same pipeline shape, registered
@@ -217,6 +236,10 @@ class Settings(BaseSettings):
     @property
     def cancel_admin_list(self) -> list[str]:
         return [s.strip() for s in self.cancel_admins.split(",") if s.strip()]
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [s.strip() for s in self.cors_origins.split(",") if s.strip()]
 
     @property
     def secrets_encryption_key_list(self) -> list[str]:

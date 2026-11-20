@@ -3,6 +3,7 @@ import { getConfiguration } from "@/classes/mint/mint-functions";
 import { TapisExecutionService } from "@/classes/tapis/adapters/TapisExecutionService";
 import { BadRequestError, HttpError, NotFoundError } from "@/classes/common/errors";
 import type { Readable } from "stream";
+import { createHasuraUnifiedExecutionStore } from "./unifiedExecutionStore";
 import { getTokenFromAuthorizationHeader } from "@/utils/authUtils";
 
 /**
@@ -140,6 +141,28 @@ const safeFilename = (path: string) => {
     return cleaned && cleaned !== "." && cleaned !== ".." ? cleaned : "download";
 };
 
+/**
+ * The one file a flow run stopped for an edit asks its user to download: the place
+ * the run's own record names, while the run is waiting. It is not a result (nothing
+ * is filed until the run ends), so the results rule below would refuse it. Only that
+ * exact file, only while the run waits; Tapis still decides, with the user's token,
+ * whether they may read it.
+ */
+const pausedFile = async (execution: any): Promise<TapisLocation | null> => {
+    const runId = execution?.runid;
+    if (typeof runId !== "string" || !runId.startsWith("ue_")) {
+        return null;
+    }
+    const record = await createHasuraUnifiedExecutionStore()
+        .getById(runId.slice(3))
+        .catch(() => null);
+    if (!record || record.status !== "awaiting_edit") {
+        return null;
+    }
+    const child = ((record.adapter_run_ids || []) as Array<Record<string, any>>)[0];
+    return locationFromUri(child?.pause?.file_location);
+};
+
 const executionFilesService: ExecutionFilesService = {
     /**
      * List the files that an execution archived.
@@ -222,6 +245,16 @@ const executionFilesService: ExecutionFilesService = {
     ): Promise<ExecutionFileContent> {
         const path = normaliseRequestedPath(rawPath);
         const { execution, tapis } = await loadExecution(executionId, authorizationHeader);
+        const waiting = await pausedFile(execution);
+        if (
+            waiting &&
+            waiting.path === path &&
+            rawSystemId !== undefined &&
+            waiting.systemId === rawSystemId
+        ) {
+            const { stream, contentType } = await tapis.openArchiveFile(waiting.systemId, path);
+            return { stream, contentType, filename: safeFilename(path) };
+        }
         const urls = executionResultUrls(execution);
 
         const systems = Array.from(new Set(urls.map((entry) => entry.location.systemId)));

@@ -1,4 +1,5 @@
 import { buildApp } from './app.js'
+import { warnIfAdapterSecretMissing } from './flows.js'
 
 const PORT = Number(process.env.PORT || 3000)
 
@@ -7,6 +8,7 @@ async function main() {
 
   await app.listen({ port: PORT, host: '0.0.0.0' })
   app.log.info(`model-catalog-api listening on port ${PORT}`)
+  warnIfAdapterSecretMissing(app.log)
 
   // Graceful shutdown
   const shutdown = async () => {
