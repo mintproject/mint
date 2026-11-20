@@ -2910,10 +2910,25 @@ async def propose_for_flow(body: FlowProposeIn, authorization: str | None = Head
         view["lossy"] = bool(spec.get("is_lossy"))
         views.setdefault(str(view["id"]), view)
     approvals: dict[str, str | None] = {}
-    for spec in await _registry(h, plannable=False):
+    registry = await _registry(h, plannable=False)
+    for spec in registry:
         for key in (spec.get("mint_etl_process_id"), spec.get("id")):
             if key and str(key) in views and str(key) not in approvals:
                 approvals[str(key)] = stored_source.decision(spec, caller)
+
+    # Providers: model configurations (registry rows synced from MINT, visible to the
+    # caller) and the data objects the caller may use (shared, or their own).
+    models = []
+    for spec in _visible_pieces(registry, caller):
+        config_id = spec.get("mint_model_config_id")
+        outputs = flow_graph.piece_outputs(_piece_view(spec)) if config_id else {}
+        if outputs:
+            models.append({"configuration_id": config_id, "label": spec.get("label") or spec.get("name"),
+                           "outputs": outputs})
+    datasets = [{"data_object_id": row["id"], "label": row.get("label"), "format": row.get("format"),
+                 "contracts": [_data_object_to_contract({**row, "variables": [variable]})
+                               for variable in row.get("variables") or []]}
+                for row in await _discoverable_objects(h)]
 
     by_catalog_id = {str(step.etl_process_id): views.get(str(step.etl_process_id))
                      for step in body.steps if step.etl_process_id}
@@ -2924,7 +2939,8 @@ async def propose_for_flow(body: FlowProposeIn, authorization: str | None = Head
                         "settings": step.settings, "wires": step.wires} for step in body.steps],
              "outputs": body.outputs},
             views, body.purpose, approvals=approvals,
-            max_chain=body.max_chain, max_results=body.max_results)
+            max_chain=body.max_chain, max_results=body.max_results,
+            models=models, datasets=datasets)
     except flow_propose.ProposeError as error:
         raise HTTPException(422, detail={"code": error.code, "message": error.message}) from error
 

@@ -16,16 +16,24 @@ const CKAN = 'https://ckan.example.org';
 // The picker itself is covered elsewhere; here it just chooses a variable.
 vi.mock('@/components/autocomplete/StandardVariableCombobox', () => ({
   StandardVariableCombobox: ({
+    value,
+    preferredIds,
     onChange,
   }: {
+    value: { label: string } | null;
+    preferredIds?: string[];
     onChange: (v: { id: string; label: string; description: string | null }) => void;
   }) => (
-    <button
-      type="button"
-      onClick={() => onChange({ id: 'sv-1', label: 'precipitation_flux', description: null })}
-    >
-      pick variable
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => onChange({ id: 'sv-1', label: 'precipitation_flux', description: null })}
+      >
+        pick variable
+      </button>
+      <output data-testid="picked">{value?.label ?? ''}</output>
+      <output data-testid="picker-ranking">{(preferredIds ?? []).join(',')}</output>
+    </>
   ),
 }));
 
@@ -133,6 +141,31 @@ const tree = {
               ],
             },
             {
+              id: 'flow-2',
+              label: 'Wet flow',
+              flow: { configuration_id: 'flow-2' },
+              regions: [],
+              outputs: [],
+              child_configurations: [],
+              inputs: [
+                {
+                  input: {
+                    id: 'in-3',
+                    label: 'Rainfall',
+                    has_format: 'csv',
+                    presentations: [
+                      {
+                        presentation: {
+                          id: 'p2',
+                          standard_variable: { id: 'sv-2', label: 'rainfall_amount' },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+            {
               id: 'model-1',
               label: 'Rain model',
               flow: null,
@@ -209,6 +242,7 @@ let calls: string[] = [];
 let createStatus = 200;
 let order: string[] = [];
 let licenseCalls = 0;
+let semantic: (url: string) => ReturnType<typeof json>;
 
 class FakeXhr {
   upload = { onprogress: null as null | ((e: { loaded: number }) => void) };
@@ -249,6 +283,7 @@ beforeEach(() => {
   calls = [];
   order = [];
   licenseCalls = 0;
+  semantic = () => json({ results: [] });
   clearLicenseCache();
   createStatus = 200;
   localStorage.setItem('mint.access_token', 'SECRET-USER-TOKEN');
@@ -259,6 +294,7 @@ beforeEach(() => {
     vi.fn(async (url: string, init?: RequestInit) => {
       const u = String(url);
       calls.push(u);
+      if (u.includes('/search?') || u.includes('/similar?')) return semantic(u);
       if (u.includes('license_list')) {
         licenseCalls += 1;
         return json({
@@ -402,6 +438,74 @@ describe('DatasetUploadPage', () => {
     expect(screen.getByTestId('who-can-use')).toHaveTextContent(
       /Rain model.*the format does not fit/,
     );
+  });
+
+  describe('semantic recommendations', () => {
+    const suggestions = {
+      results: [
+        {
+          id: 'sv-2',
+          label: 'rainfall_amount',
+          description: 'Rain that fell in a day',
+          score: 0.9,
+        },
+        { id: 'sv-1', label: 'precipitation_flux', description: 'Water falling', score: 0.8 },
+      ],
+    };
+
+    it('suggests variables from the description and never picks one itself', async () => {
+      semantic = (u) => (u.includes('/search?') ? json(suggestions) : json({ results: [] }));
+      renderPage();
+      await userEvent.type(screen.getByLabelText('Description'), 'Daily rain gauge readings');
+      const panel = await screen.findByTestId('suggested-variables');
+      expect(panel).toHaveTextContent('Suggested standard variables');
+      expect(panel).toHaveTextContent('Rain that fell in a day');
+      expect(
+        calls.some((u) => u.includes('/search?') && u.includes('target=svo') && u.includes('rain')),
+      ).toBe(true);
+      expect(screen.getByTestId('picked')).toHaveTextContent('');
+      // The picker's own list is ranked by the same suggestions.
+      expect(screen.getByTestId('picker-ranking')).toHaveTextContent('sv-2,sv-1');
+    });
+
+    it('"Use this" sets the picker', async () => {
+      semantic = (u) => (u.includes('/search?') ? json(suggestions) : json({ results: [] }));
+      renderPage();
+      await userEvent.type(screen.getByLabelText('Description'), 'Daily rain gauge readings');
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Use rainfall_amount as the standard variable' }),
+      );
+      expect(screen.getByTestId('picked')).toHaveTextContent('rainfall_amount');
+      expect(screen.getByTestId('who-can-use')).toHaveTextContent('Wet flow');
+    });
+
+    it('lists close matches under the exact list, labelled not exact', async () => {
+      semantic = (u) =>
+        u.includes('/similar?')
+          ? json({ target: 'svo', id: 'sv-1', results: [{ id: 'sv-2', label: 'rainfall_amount' }] })
+          : json({ results: [] });
+      renderPage();
+      await userEvent.click(screen.getByText('pick variable'));
+      const close = await screen.findByTestId('close-matches');
+      expect(close).toHaveTextContent('Close matches (not an exact fit)');
+      expect(close).toHaveTextContent(/Wet flow.*matched on rainfall_amount/);
+      expect(close).not.toHaveTextContent('Rain flow');
+      expect(screen.getByTestId('who-can-use')).toHaveTextContent('Rain flow');
+    });
+
+    it('hides the suggestion sections quietly when the service is down', async () => {
+      semantic = () => json({ error: 'down' }, 503);
+      renderPage();
+      await userEvent.type(screen.getByLabelText('Description'), 'Daily rain gauge readings');
+      await userEvent.click(screen.getByText('pick variable'));
+      await waitFor(() =>
+        expect(screen.getByText(/Suggestions are unavailable/)).toBeInTheDocument(),
+      );
+      expect(screen.queryByTestId('suggested-variables')).toBeNull();
+      expect(screen.queryByTestId('close-matches')).toBeNull();
+      expect(screen.getByTestId('who-can-use')).toHaveTextContent('Rain flow');
+      expect(screen.getByRole('button', { name: 'Upload' })).toBeEnabled();
+    });
   });
 
   it('warns about mixed extensions', async () => {

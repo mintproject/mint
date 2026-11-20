@@ -172,6 +172,62 @@ class SemanticSearchContractTests(unittest.TestCase):
             },
         )
 
+    def test_etl_piece_embedding_text_includes_contract(self):
+        text = main.etl_piece_embedding_text("Clip", None, "Inputs: DEM Outputs: Slope")
+        self.assertEqual(text, "Clip. . Data contract: Inputs: DEM Outputs: Slope")
+
+    def test_etl_piece_search_only_reads_public_and_shared(self):
+        connection = FakeConnection(
+            [("p1", "Clip", "Clips", "public", "alice", 0.9)],
+            [
+                ("p1", "input", 0, "sv:dem", "DEM", "geotiff"),
+                ("p1", "output", 0, "sv:slope", "Slope", "geotiff"),
+            ],
+        )
+        with patch.object(main, "vector_literal", return_value="[0,0]"):
+            results = main.search_etl_pieces(connection, "slope", 5)
+
+        sql = connection.queries[0][0]
+        self.assertIn("p.visibility IN ('public', 'shared')", sql)
+        self.assertNotIn("private'", sql.replace("('public', 'shared')", ""))
+        self.assertEqual(results[0]["inputs"][0]["standard_variable_uri"], "sv:dem")
+        self.assertEqual(results[0]["outputs"][0]["label"], "Slope")
+        self.assertEqual(results[0]["visibility"], "public")
+
+    def test_etl_piece_search_falls_back_to_keywords_without_model(self):
+        connection = FakeConnection([])
+        with patch.object(main, "vector_literal", side_effect=RuntimeError("no model")):
+            results = main.search_etl_pieces(connection, "slope", 5)
+
+        self.assertEqual(results, [])
+        self.assertNotIn("embedding", connection.queries[0][0])
+        self.assertIn("p.visibility IN ('public', 'shared')", connection.queries[0][0])
+
+    def test_similar_unknown_variable_is_404(self):
+        with self.assertRaises(main.HTTPException) as caught:
+            main.similar_variables(FakeConnection([]), "sv:none", 5)
+        self.assertEqual(caught.exception.status_code, 404)
+
+    def test_similar_unindexed_variable_returns_status(self):
+        response = main.similar_variables(FakeConnection([(False,)]), "sv:a", 5)
+        self.assertEqual(response["results"], [])
+        self.assertEqual(response["status"], "not_indexed")
+
+    def test_similar_excludes_itself_and_shapes_results(self):
+        connection = FakeConnection([(True,)], [("sv:b", "B", "desc", 0.8)])
+        response = main.similar_variables(connection, "sv:a", 5)
+        self.assertEqual(connection.queries[1][1], ("sv:a", "sv:a", 5))
+        self.assertEqual(
+            response["results"], [{"id": "sv:b", "label": "B", "description": "desc", "score": 0.8}]
+        )
+
+    def test_pending_rows_skips_current_and_flags_stale(self):
+        rows = [("a", "A", "d", "c", "A. d. Models and workflows: c", True),
+                ("b", "B", "d", "c", "old", True),
+                ("c", "C", "d", "c", None, False)]
+        pending = main.pending_rows(rows, main.embedding_text, force=False)
+        self.assertEqual([row[0] for row, _ in pending], ["b", "c"])
+
 
 if __name__ == "__main__":
     unittest.main()

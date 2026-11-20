@@ -59,6 +59,8 @@ import { FLOW_LAYOUT_OPTIONS, flowCanvasHeight } from '@/lib/flow-graph-layout';
 import { flowStepsGraph, type FlowLabels } from '@/lib/flow-steps';
 import { slugFromUri } from '@/lib/uri';
 
+import { CloseVariableProposals } from './CloseVariableProposals';
+import { DescribeStepSearch } from './DescribeStepSearch';
 import { ProposalList } from './ProposalList';
 import { StepCard, slotKey, type SlotKey } from './StepCard';
 
@@ -68,7 +70,7 @@ export interface FlowAuthoringFormProps {
   /** The pieces the signed-in user may see. */
   pieces: PickerPiece[];
   token: string | null;
-  /** Wait before a change is checked. Tests set 0. */
+  /** Wait before a change is checked or a description searched. Tests set 0. */
   checkDelayMs?: number;
 }
 
@@ -561,6 +563,13 @@ export function FlowAuthoringForm({
             </Button>
           </div>
         )}
+        {draft.steps.length < MAX_STEPS && (
+          <DescribeStepSearch
+            pieces={pieces}
+            delayMs={checkDelayMs}
+            onAdd={(pieceId) => change(addStep(draft, pieceId))}
+          />
+        )}
       </section>
 
       <section aria-label="Find a piece for a wanted result">
@@ -611,8 +620,51 @@ export function FlowAuthoringForm({
             result={suggestion.result}
             {...proposalProps}
             onProduces={(entry) => change(applyProduces(draft, entry))}
+            canUseDataset={(entry, need) =>
+              Boolean(
+                summaries[entry.piece]?.input_contracts[String(need.input)]?.standard_variable_uri,
+              )
+            }
+            onUseDataset={(entry, need, dataset) => {
+              const uri =
+                summaries[entry.piece]?.input_contracts[String(need.input)]?.standard_variable_uri;
+              if (!uri) return;
+              change({
+                ...draft,
+                inputs: [
+                  ...draft.inputs,
+                  {
+                    key: `input${draft.inputs.length + 1}`,
+                    label: dataset.label ?? '',
+                    standardVariable: uri,
+                    standardVariableLabel: slugFromUri(uri),
+                    format: dataset.format ?? '',
+                    optional: false,
+                  },
+                ],
+              });
+            }}
           />
         )}
+        {suggestion?.slot === 'want' &&
+          wanted &&
+          token &&
+          typeof suggestion.result === 'object' &&
+          'proposal' in suggestion.result &&
+          suggestion.result.proposal.produces.length === 0 && (
+            <CloseVariableProposals
+              wanted={wanted}
+              draft={draft}
+              token={token}
+              pieceLabel={pieceLabel}
+              delayMs={checkDelayMs}
+              onAdd={(entry) => change(applyProduces(draft, entry))}
+              onWant={(variable) => {
+                setWanted(variable);
+                setSuggestion(null);
+              }}
+            />
+          )}
       </section>
 
       <section aria-label="Flow outputs">

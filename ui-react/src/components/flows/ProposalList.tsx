@@ -5,9 +5,12 @@
  * nothing is ranked (they come shortest first). A proposal that rests on a piece
  * with a blank contract carries a warning, because blank fits anything.
  */
+import { Link } from 'react-router-dom';
+
 import { Button } from '@/components/ui/button';
-import type { Proposal, ProposeResult } from '@/lib/flow-authoring-api';
+import type { NeedProviders, Proposal, ProposeResult } from '@/lib/flow-authoring-api';
 import type { ProposedChain, ProposedSource } from '@/lib/flow-authoring';
+import { slugFromUri } from '@/lib/uri';
 
 export type SuggestionKind = 'input' | 'output' | 'want';
 
@@ -20,6 +23,17 @@ export interface ProposalListProps {
   onChain?: (chain: ProposedChain) => void;
   onNext?: (next: Proposal['next'][number]) => void;
   onProduces?: (entry: Proposal['produces'][number]) => void;
+  /** Add a flow input bound to a dataset's variable (see `canUseDataset`). */
+  onUseDataset?: (
+    entry: Proposal['produces'][number],
+    need: Proposal['produces'][number]['inputs'][number],
+    dataset: NeedProviders['datasets'][number],
+  ) => void;
+  /** Whether a dataset can become a flow input for this need (button vs advice). */
+  canUseDataset?: (
+    entry: Proposal['produces'][number],
+    need: Proposal['produces'][number]['inputs'][number],
+  ) => boolean;
 }
 
 const approvalNote = (approval?: string | null) =>
@@ -123,6 +137,13 @@ export function ProposalList(props: ProposalListProps) {
                       : need.chains.length > 0
                         ? `needs ${need.chains[0]!.pieces.length} converter step(s)`
                         : 'nothing in the flow fits'}
+                    {!need.met && need.providers && (
+                      <Providers
+                        providers={need.providers}
+                        canUse={props.canUseDataset?.(item, need) ?? false}
+                        onUse={(dataset) => props.onUseDataset?.(item, need, dataset)}
+                      />
+                    )}
                   </li>
                 ))}
               </ul>
@@ -142,5 +163,45 @@ export function ProposalList(props: ProposalListProps) {
         </p>
       )}
     </div>
+  );
+}
+
+/** What could supply an unmet input: advice, since neither makes the need met. */
+function Providers({
+  providers,
+  canUse,
+  onUse,
+}: {
+  providers: NeedProviders;
+  canUse: boolean;
+  onUse: (dataset: NeedProviders['datasets'][number]) => void;
+}) {
+  if (providers.models.length === 0 && providers.datasets.length === 0) return null;
+  return (
+    <ul className="ml-4 list-disc text-muted-foreground" data-testid="need-providers">
+      {providers.models.map((model) => (
+        <li key={model.configuration_id}>
+          Run model{' '}
+          <Link
+            className="underline"
+            to={`/modelconfigurations/${slugFromUri(model.configuration_id)}`}
+          >
+            {model.label || model.configuration_id}
+          </Link>{' '}
+          first{model.output ? ` (its output ${model.output} fits)` : ''}
+        </li>
+      ))}
+      {providers.datasets.map((dataset) => (
+        <li key={dataset.data_object_id}>
+          {canUse ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => onUse(dataset)}>
+              Use dataset {dataset.label || dataset.data_object_id} as a flow input
+            </Button>
+          ) : (
+            <>Use dataset {dataset.label || dataset.data_object_id} as a flow input</>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

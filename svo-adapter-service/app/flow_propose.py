@@ -20,6 +20,16 @@ The search is bounded: chains are at most ``MAX_CHAIN`` pieces, the whole reques
 tries at most ``MAX_EXPANSIONS`` pieces against a state, and at most
 ``MAX_RESULTS`` of each list come back. When a bound stopped the search the answer
 says so (``cut``).
+
+Providers. An input nothing in the flow or the pieces can meet may still be provided
+by something that is not a piece: a model configuration that declares an output
+fitting it ("run model X first") or a data object the caller may use whose contract
+fits it ("use dataset Y as a flow input"). Each unmet need carries
+``providers: {"models": [...], "datasets": [...]}``, found with the same ``_fits``
+rule and bounded the same way. Providers are suggestions only: a model is not a flow
+step today, so a provider never makes a need ``met`` or a piece ``complete``. The
+candidates are given by the caller, who has already limited them to what the user
+may see; this module reads nothing.
 """
 from __future__ import annotations
 
@@ -32,6 +42,7 @@ from .planner import _apply_transform, _contract_from_registry, _transform_accep
 MAX_CHAIN = 3
 MAX_EXPANSIONS = 2000
 MAX_RESULTS = 20
+MAX_CANDIDATES = 1000  # models, and datasets, looked at per request
 
 # A contract left blank on these is a wildcard for the fit rule, so it offers too much.
 _WILDCARD_FIELDS = ("standard_variable_uri", "format")
@@ -61,6 +72,8 @@ class _Budget:
         self.left -= 1
         return True
 
+
+_NO_PROVIDERS = {"models": [], "datasets": []}
 
 Source = tuple[dict[str, Any], DataObjectContract]
 
@@ -104,13 +117,17 @@ def _wire_from(ref: dict[str, Any]) -> dict[str, Any]:
 
 class _Context:
     def __init__(self, pieces: dict[str, dict[str, Any]], approvals: dict[str, str | None],
-                 budget: _Budget, max_chain: int, max_results: int) -> None:
+                 budget: _Budget, max_chain: int, max_results: int,
+                 models: list[dict[str, Any]] | None = None,
+                 datasets: list[dict[str, Any]] | None = None) -> None:
         self.pieces = pieces
+        self.cut = len(models or []) > MAX_CANDIDATES or len(datasets or []) > MAX_CANDIDATES
+        self.models = _candidates(models, "configuration_id")
+        self.datasets = _candidates(datasets, "data_object_id")
         self.approvals = approvals
         self.budget = budget
         self.max_chain = max_chain
         self.max_results = max_results
-        self.cut = False
         self.warnings: dict[tuple[str, int], dict[str, Any]] = {}
         # Pieces a chain may use: one input in, a first output out (the rule of
         # planner._apply_transform), in a stable order.
@@ -134,6 +151,31 @@ class _Context:
         if len(items) > self.max_results:
             self.cut = True
         return items[:self.max_results]
+
+
+def _candidates(items: list[dict[str, Any]] | None, key: str) -> list[dict[str, Any]]:
+    """The first ``MAX_CANDIDATES`` of ``items`` in a stable order (by ``key``)."""
+    usable = [item for item in items or [] if isinstance(item, dict) and item.get(key)]
+    return sorted(usable, key=lambda item: str(item[key]))[:MAX_CANDIDATES]
+
+
+def _providers(ctx: _Context, contract: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """Models and datasets whose declared contract fits ``contract`` exactly. These
+    do not make a need met (see the module docstring)."""
+    target = _contract_from_registry(contract)
+    models: list[dict[str, Any]] = []
+    for model in ctx.models:
+        for position, out in sorted((model.get("outputs") or {}).items()):
+            made = flow_graph._addressable(_contract_from_registry(out), f"model/{model['configuration_id']}/{position}")
+            if _fits(made, target):
+                models.append({"configuration_id": model["configuration_id"], "label": model.get("label"),
+                               "output": position, "format": out.get("format")})
+    datasets: list[dict[str, Any]] = []
+    for dataset in ctx.datasets:
+        if any(_fits(have, target) for have in dataset.get("contracts") or []):
+            datasets.append({"data_object_id": dataset["data_object_id"], "label": dataset.get("label"),
+                             "format": dataset.get("format")})
+    return {"models": ctx.trim(models), "datasets": ctx.trim(datasets)}
 
 
 def _direct(ctx: _Context, sources: list[Source], piece_id: str, position: int,
@@ -214,21 +256,29 @@ def propose(
     max_chain: int = MAX_CHAIN,
     max_results: int = MAX_RESULTS,
     max_expansions: int = MAX_EXPANSIONS,
+    models: list[dict[str, Any]] | None = None,
+    datasets: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Answer ``purpose`` for ``flow``. ``pieces`` are the pieces the caller may see,
-    by id (each as ``main._piece_view`` gives it, with a ``label``). Raises
+    by id (each as ``main._piece_view`` gives it, with a ``label``). ``models`` are
+    ``{"configuration_id", "label", "outputs": {position: contract}}`` and
+    ``datasets`` are ``{"data_object_id", "label", "format", "contracts":
+    [DataObjectContract]}``, both already limited to what the caller may see; they
+    only feed ``providers`` and never make a need met. Raises
     ``ProposeError`` for a purpose it cannot read; never any other error."""
     try:
-        return _propose(flow, pieces, purpose, approvals or {}, max_chain, max_results, max_expansions)
+        return _propose(flow, pieces, purpose, approvals or {}, max_chain, max_results, max_expansions,
+                        models, datasets)
     except ProposeError:
         raise
     except Exception as error:  # noqa: BLE001 — the flow is user-written JSON
         raise ProposeError("FLOW_MALFORMED", f"the flow could not be read: {type(error).__name__}") from error
 
 
-def _propose(flow, pieces, purpose, approvals, max_chain, max_results, max_expansions) -> dict[str, Any]:
+def _propose(flow, pieces, purpose, approvals, max_chain, max_results, max_expansions,
+             models=None, datasets=None) -> dict[str, Any]:
     ctx = _Context(pieces, approvals, _Budget(max(0, min(int(max_expansions), MAX_EXPANSIONS))),
-                   max(1, min(int(max_chain), MAX_CHAIN)), max(1, min(int(max_results), MAX_RESULTS)))
+                   max(1, min(int(max_chain), MAX_CHAIN)), max(1, min(int(max_results), MAX_RESULTS)), models, datasets)
     checked = flow_graph.check(flow)
     result: dict[str, Any] = {"purpose": purpose, "direct": [], "chains": [], "next": [], "produces": []}
 
@@ -247,6 +297,8 @@ def _propose(flow, pieces, purpose, approvals, max_chain, max_results, max_expan
         result["direct"] = _direct(ctx, sources, str(piece.get("id")), position, contract)
         if not result["direct"]:
             result["chains"] = _chains(ctx, sources, contract)
+        result["providers"] = _providers(ctx, contract) if not (result["direct"] or result["chains"]) \
+            else dict(_NO_PROVIDERS)
     elif set(purpose) == {"step", "output"}:
         step = _find_step(flow, purpose["step"])
         source = checked.outputs.get(step["position"], {}).get(purpose["output"]) \
@@ -274,8 +326,9 @@ def _propose(flow, pieces, purpose, approvals, max_chain, max_results, max_expan
                 for in_position, contract in sorted(flow_graph.piece_inputs(piece).items()):
                     direct = _direct(ctx, sources, piece_id, in_position, contract)
                     chains = [] if direct else _chains(ctx, sources, contract)
-                    needs.append({"input": in_position, "direct": direct, "chains": chains,
-                                  "met": bool(direct or chains)})
+                    met = bool(direct or chains)
+                    needs.append({"input": in_position, "direct": direct, "chains": chains, "met": met,
+                                  "providers": dict(_NO_PROVIDERS) if met else _providers(ctx, contract)})
                 produces.append({**ctx.piece_ref(piece_id), "output": out_position, "inputs": needs,
                                  "complete": all(need["met"] for need in needs)})
         result["produces"] = ctx.trim(produces)

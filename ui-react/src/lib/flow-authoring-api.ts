@@ -42,6 +42,17 @@ export interface PieceRef {
   approval?: string | null;
 }
 
+/** Suggestions for an unmet need. They never make the need met. */
+export interface NeedProviders {
+  models: {
+    configuration_id: string;
+    label?: string | null;
+    output?: string | null;
+    format?: string | null;
+  }[];
+  datasets: { data_object_id: string; label?: string | null; format?: string | null }[];
+}
+
 export interface Proposal {
   direct: { source: ProposedSource; fits: boolean; wire: WireJson }[];
   chains: (ProposedChain & {
@@ -58,6 +69,7 @@ export interface Proposal {
       met: boolean;
       direct: { source: ProposedSource; wire: WireJson }[];
       chains: ProposedChain[];
+      providers?: NeedProviders;
     }[];
   })[];
   cut: boolean;

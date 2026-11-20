@@ -172,12 +172,43 @@ MODEL_CONFIGURATION_CONTEXT_SQL = """
 """
 
 
+ETL_PIECE_CONTEXT_SQL = """
+    SELECT p.id,
+           p.label,
+           p.description,
+           concat_ws(' ',
+             'Inputs:', COALESCE(io.inputs, ''),
+             'Outputs:', COALESCE(io.outputs, '')
+           ) AS io_context,
+           p.semantic_text,
+           p.embedding IS NOT NULL AS has_embedding
+    FROM modelcatalog_etl_process p
+    LEFT JOIN LATERAL (
+      SELECT string_agg(concat_ws(' ', sv.label, sv.description), '; ' ORDER BY c.position)
+               FILTER (WHERE c.role = 'input') AS inputs,
+             string_agg(concat_ws(' ', sv.label, sv.description), '; ' ORDER BY c.position)
+               FILTER (WHERE c.role = 'output') AS outputs
+      FROM modelcatalog_etl_process_contract c
+      JOIN modelcatalog_standard_variable sv ON sv.id = c.standard_variable_uri
+      WHERE c.etl_process_id = p.id
+    ) io ON TRUE
+"""
+
+
 def catalog_variable_rows(conn):
     return conn.execute(CATALOG_VARIABLE_CONTEXT_SQL).fetchall()
 
 
 def catalog_configuration_rows(conn):
     return conn.execute(MODEL_CONFIGURATION_CONTEXT_SQL).fetchall()
+
+
+def catalog_etl_piece_rows(conn):
+    return conn.execute(ETL_PIECE_CONTEXT_SQL).fetchall()
+
+
+def etl_piece_embedding_text(label, description, io_context):
+    return f"{label or ''}. {description or ''}. Data contract: {io_context or ''}"
 
 
 def embedding_text(label, description, model_context):
@@ -188,45 +219,49 @@ def configuration_embedding_text(label, description, searchable_context):
     return f"{label or ''}. {description or ''}. Catalog context: {searchable_context or ''}"
 
 
+EMBEDDING_UPDATE_SQL = {
+    "svo": "UPDATE modelcatalog_standard_variable SET semantic_text = %s, embedding = %s::vector WHERE id = %s",
+    "model_configuration": "UPDATE modelcatalog_configuration SET semantic_text = %s, embedding = %s::vector WHERE id = %s",
+    "etl_piece": "UPDATE modelcatalog_etl_process SET semantic_text = %s, embedding = %s::vector WHERE id = %s",
+}
+
+
+def pending_rows(rows, text_builder, force: bool):
+    """Rows whose stored semantic_text is stale or that have no embedding yet."""
+    pending = []
+    for row in rows:
+        text = text_builder(row[1], row[2], row[3])
+        if force or row[4] != text or not row[5]:
+            pending.append((row, text))
+    return pending
+
+
 def index_catalog_embeddings(force: bool = False) -> int:
-    """Index new/changed SVO and configuration context."""
+    """Index new/changed SVO, configuration and ETL piece context."""
     with psycopg.connect(DATABASE_URL) as conn:
-        variable_rows = catalog_variable_rows(conn)
-        variable_pending = [
-            (row, embedding_text(row[1], row[2], row[3]))
-            for row in variable_rows
-            if force or row[4] != embedding_text(row[1], row[2], row[3]) or not row[5]
+        pending = [
+            ("svo", row, text)
+            for row, text in pending_rows(catalog_variable_rows(conn), embedding_text, force)
         ]
-
-        configuration_rows = catalog_configuration_rows(conn)
-        configuration_pending = [
-            (row, configuration_embedding_text(row[1], row[2], row[3]))
-            for row in configuration_rows
-            if force
-            or row[4] != configuration_embedding_text(row[1], row[2], row[3])
-            or not row[5]
+        pending += [
+            ("model_configuration", row, text)
+            for row, text in pending_rows(
+                catalog_configuration_rows(conn), configuration_embedding_text, force
+            )
         ]
-
-        pending = variable_pending + configuration_pending
+        pending += [
+            ("etl_piece", row, text)
+            for row, text in pending_rows(
+                catalog_etl_piece_rows(conn), etl_piece_embedding_text, force
+            )
+        ]
         if not pending:
             return 0
 
-        vectors = model().encode([text for _, text in pending], normalize_embeddings=True)
-        variable_count = len(variable_pending)
-        for index, ((row, text), vector) in enumerate(zip(pending, vectors)):
-            entity_id = row[0]
+        vectors = model().encode([text for _, _, text in pending], normalize_embeddings=True)
+        for (target, row, text), vector in zip(pending, vectors):
             literal = "[" + ",".join(str(value) for value in vector.tolist()) + "]"
-            if index < variable_count:
-                conn.execute(
-                    "UPDATE modelcatalog_standard_variable SET semantic_text = %s, embedding = %s::vector "
-                    "WHERE id = %s",
-                    (text, literal, entity_id),
-                )
-            else:
-                conn.execute(
-                    "UPDATE modelcatalog_configuration SET semantic_text = %s, embedding = %s::vector WHERE id = %s",
-                    (text, literal, entity_id),
-                )
+            conn.execute(EMBEDDING_UPDATE_SQL[target], (text, literal, row[0]))
         conn.commit()
         return len(pending)
 
@@ -304,7 +339,7 @@ async def catalog_event():
 @app.get("/search")
 def search(
     q: str = Query(min_length=1),
-    target: Literal["svo", "model_configuration"] = Query(default="svo"),
+    target: Literal["svo", "model_configuration", "etl_piece"] = Query(default="svo"),
     limit: int = Query(default=20, ge=1, le=100),
     region_id: list[str] | None = Query(default=None),
     category_id: list[str] | None = Query(default=None),
@@ -324,6 +359,17 @@ def search(
         filters.region_ids = resolve_region_ids(conn, filters.region_ids)
         results = search_target(conn, target, q, limit, filters)
     return {"target": target, "query": q, "filters": filters.as_response(), "results": results}
+
+
+@app.get("/similar")
+def similar(
+    id: str = Query(min_length=1),
+    target: Literal["svo"] = Query(default="svo"),
+    limit: int = Query(default=10, ge=1, le=100),
+):
+    """Return the standard variables nearest by embedding to the given one."""
+    with psycopg.connect(DATABASE_URL) as conn:
+        return similar_variables(conn, id, limit)
 
 
 class SearchFilters(BaseModel):
@@ -482,7 +528,119 @@ def search_target(conn, target: str, query: str, limit: int, filters: SearchFilt
         return search_svos(conn, query, limit, filters)
     if target == "model_configuration":
         return search_configurations(conn, query, limit, filters)
-    raise HTTPException(status_code=422, detail="target must be svo or model_configuration")
+    if target == "etl_piece":
+        return search_etl_pieces(conn, query, limit)
+    raise HTTPException(
+        status_code=422, detail="target must be svo, model_configuration or etl_piece"
+    )
+
+
+def similar_variables(conn, variable_id: str, limit: int):
+    row = conn.execute(
+        "SELECT embedding IS NOT NULL FROM modelcatalog_standard_variable WHERE id = %s",
+        (variable_id,),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="standard variable not found")
+    if not row[0]:
+        return {"target": "svo", "id": variable_id, "status": "not_indexed", "results": []}
+    rows = conn.execute(
+        """
+        SELECT sv.id, sv.label, sv.description,
+               1 - (sv.embedding <=> origin.embedding) AS score
+        FROM modelcatalog_standard_variable sv,
+             (SELECT embedding FROM modelcatalog_standard_variable WHERE id = %s) origin
+        WHERE sv.id <> %s AND sv.embedding IS NOT NULL
+        ORDER BY sv.embedding <=> origin.embedding
+        LIMIT %s
+        """,
+        (variable_id, variable_id, limit),
+    ).fetchall()
+    return {
+        "target": "svo",
+        "id": variable_id,
+        "results": [
+            {"id": r[0], "label": r[1], "description": r[2], "score": float(r[3] or 0)}
+            for r in rows
+        ],
+    }
+
+
+# The service has no caller identity (the browser calls it directly, with no
+# token), so it must never return a private piece. Callers merge in their own
+# private pieces from Hasura.
+ETL_PIECE_VISIBILITY_SQL = "p.visibility IN ('public', 'shared')"
+
+
+def try_vector_literal(query: str) -> str | None:
+    """Embed the query, or return None so callers can fall back to keywords."""
+    try:
+        return vector_literal(query)
+    except Exception:
+        log.exception("embedding model unavailable; falling back to keyword search")
+        return None
+
+
+def search_etl_pieces(conn, query: str, limit: int):
+    query_vector = try_vector_literal(query)
+    if query_vector is not None:
+        score_sql = """(0.7 * (1 - (p.embedding <=> %s::vector)) +
+              0.3 * ts_rank(to_tsvector('english', coalesce(p.semantic_text, '')),
+                            plainto_tsquery('english', %s)))"""
+        embedded_sql = "p.embedding IS NOT NULL"
+        params = (query_vector, query, limit)
+        ranking_source = "0.7 embedding + 0.3 english_text_search"
+    else:
+        score_sql = """ts_rank(
+              to_tsvector('english', concat_ws(' ', p.label, p.description, p.semantic_text)),
+              plainto_tsquery('english', %s))"""
+        embedded_sql = """to_tsvector('english', concat_ws(' ', p.label, p.description, p.semantic_text))
+              @@ plainto_tsquery('english', %s)"""
+        params = (query, query, limit)
+        ranking_source = "english_text_search (embedding unavailable)"
+    rows = conn.execute(
+        f"""
+        SELECT p.id, p.label, p.description, p.visibility, p.owner_username,
+               {score_sql} AS score
+        FROM modelcatalog_etl_process p
+        WHERE {ETL_PIECE_VISIBILITY_SQL}
+          AND {embedded_sql}
+        ORDER BY score DESC
+        LIMIT %s
+        """,
+        params,
+    ).fetchall()
+    if not rows:
+        return []
+    contract_rows = conn.execute(
+        """
+        SELECT c.etl_process_id, c.role, c.position, c.standard_variable_uri, sv.label, c.format
+        FROM modelcatalog_etl_process_contract c
+        LEFT JOIN modelcatalog_standard_variable sv ON sv.id = c.standard_variable_uri
+        WHERE c.etl_process_id = ANY(%s::text[])
+        ORDER BY c.etl_process_id, c.role, c.position
+        """,
+        ([row[0] for row in rows],),
+    ).fetchall()
+    contracts = defaultdict(lambda: {"input": [], "output": []})
+    for piece_id, role, position, uri, label, fmt in contract_rows:
+        contracts[piece_id][role].append(
+            {"position": position, "standard_variable_uri": uri, "label": label, "format": fmt}
+        )
+    return [
+        {
+            "id": row[0],
+            "label": row[1],
+            "description": row[2],
+            "score": float(row[5] or 0),
+            "ranking_source": ranking_source,
+            "visibility": row[3],
+            "owner_username": row[4],
+            "inputs": contracts[row[0]]["input"],
+            "outputs": contracts[row[0]]["output"],
+        }
+        for row in rows
+    ]
 
 
 def search_svos(conn, query: str, limit: int, filters: SearchFilters):

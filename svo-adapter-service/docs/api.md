@@ -121,6 +121,16 @@ that caller may see (another user's private piece is never used or named). Nothi
   that make it, and for each of their inputs the `direct` sources or `chains`, and `met`.
   `complete` is true when every input is met.
 
+An input nothing meets (`met` false, or `direct` and `chains` empty for `{"step", "input"}`)
+also carries `providers`, found with the same exact fit rule:
+`{"models": [{"configuration_id", "label", "output", "format"}], "datasets": [{"data_object_id", "label", "format"}]}`.
+`models` are model configurations whose declared output fits the input ("run model X first");
+`datasets` are data objects the caller may use, shared or their own and never another user's
+("use dataset Y as a flow input"). Providers are suggestions: a model is not a flow step, so a
+provider never makes a need `met` or a piece `complete`. A met input has both lists empty.
+For `{"step", "input"}` they are top-level `providers`. They share `max_results` and `cut`, and
+at most 1000 models and 1000 datasets are searched per request (`cut` is true past that).
+
 Every piece carries `label` and the caller's `approval` (`builtin`, `own`, `approved`,
 `opt_in`, `denied`, or null when the adapter has no registry row for it). `warnings` holds
 `BLANK_CONTRACT` for a matched input that leaves its standard variable or format blank,
