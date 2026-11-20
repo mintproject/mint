@@ -36,7 +36,7 @@ import executionEnginesRouter from "@/api/api-v1/paths/executionEngines/tapis";
 import problemStatementsRouter from "@/api/api-v1/paths/problemStatements";
 import unifiedExecutionRouter from "@/api/api-v1/paths/unifiedExecution";
 import regionsRouter from "@/api/api-v1/paths/regions";
-import { secretsRouter, spatialRouter } from "@/api/api-v1/paths/adapterFront";
+import { piecesRouter, secretsRouter, spatialRouter } from "@/api/api-v1/paths/adapterFront";
 import { warnIfAdapterSecretMissing } from "@/api/api-v1/services/adapterConfig";
 import { createAdapterFrontService } from "@/api/api-v1/services/adapterFrontService";
 import regionsService from "@/api/api-v1/services/regionsService";
@@ -114,6 +114,7 @@ warnIfAdapterSecretMissing(console);
 const adapterFrontService = createAdapterFrontService();
 app.use(`/${version}/spatial`, spatialRouter(adapterFrontService));
 app.use(`/${version}/secrets`, secretsRouter(adapterFrontService));
+app.use(`/${version}/etl-pieces`, piecesRouter(adapterFrontService));
 const unifiedExecutionStore = createHasuraUnifiedExecutionStore();
 const unifiedExecutionService = createUnifiedExecutionService(
     {

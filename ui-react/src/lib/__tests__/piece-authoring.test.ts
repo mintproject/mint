@@ -84,7 +84,7 @@ describe('the form', () => {
 
 describe('the adapter calls', () => {
   function adapter(response: unknown, status = 200) {
-    setMintConfig({ SVO_ADAPTER_API: 'http://adapter.test/' });
+    setMintConfig({ ENSEMBLE_MANAGER_API: 'http://em.test/v1/' });
     localStorage.setItem('mint.access_token', 'tok-1');
     return vi
       .spyOn(globalThis, 'fetch')
@@ -95,13 +95,13 @@ describe('the adapter calls', () => {
     const fetchMock = adapter({ dry_run: true, process_id: 'p' });
     await registerPiece(buildRequest(filled(), true));
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('http://adapter.test/pieces/from-repository');
+    expect(url).toBe('http://em.test/v1/etl-pieces/from-repository');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok-1');
     expect(JSON.parse(init.body as string).dry_run).toBe(true);
   });
 
   it('refuses to call without a token', async () => {
-    setMintConfig({ SVO_ADAPTER_API: 'http://adapter.test' });
+    setMintConfig({ ENSEMBLE_MANAGER_API: 'http://em.test/v1' });
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     await expect(listApprovals()).rejects.toMatchObject({ status: 401 });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -121,9 +121,7 @@ describe('the adapter calls', () => {
     const fetchMock = adapter({ approved: true });
     await setApproval('https://w3id.org/etl/a', true, 'abc');
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(
-      'http://adapter.test/transform-specs/https%3A%2F%2Fw3id.org%2Fetl%2Fa/approval',
-    );
+    expect(url).toBe('http://em.test/v1/etl-pieces/https%3A%2F%2Fw3id.org%2Fetl%2Fa/approval');
     expect(init.method).toBe('PUT');
     expect(JSON.parse(init.body as string)).toEqual({ approved: true, reviewed_sha256: 'abc' });
     await getApproval('x');

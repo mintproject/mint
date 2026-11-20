@@ -1,6 +1,6 @@
 import { Router, type Response } from "express";
 import { UnifiedExecutionError } from "@/classes/common/errors";
-import type { AdapterFrontService } from "@/api/api-v1/services/adapterFrontService";
+import type { AdapterAnswer, AdapterFrontService } from "@/api/api-v1/services/adapterFrontService";
 
 function sendError(res: Response, error: unknown) {
     if (error instanceof UnifiedExecutionError) {
@@ -194,6 +194,131 @@ export function secretsRouter(service: AdapterFrontService) {
             return sendError(res, error);
         }
     });
+
+    return router;
+}
+
+/** Relay the adapter's answer as it came: status, `Retry-After` and body. */
+function relay(res: Response, answer: AdapterAnswer) {
+    if (answer.retryAfter) res.set("Retry-After", answer.retryAfter);
+    return res.status(answer.status).type("application/json").send(answer.body);
+}
+
+/**
+ * @openapi
+ * /etl-pieces/from-repository:
+ *   post:
+ *     summary: Register an ETL piece from a pinned commit of a public repository.
+ *     description: >
+ *       With `dry_run` true it previews what would be stored. Served by the SVO
+ *       adapter with the caller's own token; the adapter's status codes, error
+ *       bodies and `Retry-After` are returned as they came.
+ *     operationId: registerPieceFromRepository
+ *     security:
+ *       - BearerAuth: []
+ *       - oauth2: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: true
+ *     responses:
+ *       default:
+ *         description: The adapter's answer, unchanged.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties: true
+ * /etl-pieces/approvals:
+ *   get:
+ *     summary: The pieces the caller may review or approve.
+ *     operationId: listPieceApprovals
+ *     security:
+ *       - BearerAuth: []
+ *       - oauth2: []
+ *     responses:
+ *       default:
+ *         description: The adapter's answer, unchanged.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties: true
+ * /etl-pieces/{specId}/approval:
+ *   get:
+ *     summary: One piece's approval state and source.
+ *     operationId: getPieceApproval
+ *     security:
+ *       - BearerAuth: []
+ *       - oauth2: []
+ *     parameters:
+ *       - in: path
+ *         name: specId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       default:
+ *         description: The adapter's answer, unchanged.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties: true
+ *   put:
+ *     summary: Approve a piece (with the hash that was shown) or withdraw its approval.
+ *     operationId: setPieceApproval
+ *     security:
+ *       - BearerAuth: []
+ *       - oauth2: []
+ *     parameters:
+ *       - in: path
+ *         name: specId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: true
+ *     responses:
+ *       default:
+ *         description: The adapter's answer, unchanged.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties: true
+ */
+export function piecesRouter(service: AdapterFrontService) {
+    const router = Router();
+    router.use((_req, res, next) => {
+        res.set("Cache-Control", "no-store");
+        next();
+    });
+
+    router.post("/from-repository", async (req, res) =>
+        relay(res, await service.registerPiece(req.body, req.headers.authorization))
+    );
+    // Static before the parameterised route below.
+    router.get("/approvals", async (req, res) =>
+        relay(res, await service.listPieceApprovals(req.headers.authorization))
+    );
+    router.get("/:specId/approval", async (req, res) =>
+        relay(res, await service.getPieceApproval(req.params.specId, req.headers.authorization))
+    );
+    router.put("/:specId/approval", async (req, res) =>
+        relay(
+            res,
+            await service.setPieceApproval(req.params.specId, req.body, req.headers.authorization)
+        )
+    );
 
     return router;
 }

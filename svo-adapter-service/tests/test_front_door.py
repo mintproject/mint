@@ -4,6 +4,7 @@ setting, step 4 gives data objects an owner, step 5 is the front-door switch."""
 from __future__ import annotations
 
 import os
+import re
 
 os.environ["SVO_ADAPTER_DEMO_MODE"] = "1"  # MUST precede importing app.config
 
@@ -227,7 +228,7 @@ def test_the_front_door_without_a_secret_setting_answers_503(front_door, monkeyp
 
 def test_callbacks_operator_routes_and_public_reads_stay_reachable(front_door):
     for method, path in (("POST", "/runs/r1/signal"), ("GET", "/runs/r1/credentials"),
-                         ("POST", "/runs/r1/token")):
+                         ("POST", "/runs/r1/token"), ("GET", "/runs/r1/steps/1/secrets")):
         resp = client.request(method, path, json={})
         assert (resp.json().get("detail") or {}).get("code") != "FRONT_DOOR_REQUIRED", path
     resp = client.post("/admin/poll")  # the operator guard answers, not the front door
@@ -243,13 +244,13 @@ def test_the_open_routes_are_exactly_the_designs_route_table():
         for route in app.routes
         if getattr(route, "path", "")
         for method in (getattr(route, "methods", None) or set()) - {"HEAD", "OPTIONS"}
-        if _front_door_open(method, route.path)
+        if _front_door_open(method, re.sub(r"\{[^}]+\}", "1", route.path))
         and not route.path.startswith(("/admin", "/ui", "/docs", "/openapi", "/redoc"))
         and (method, route.path) != ("POST", "/transform-specs")
     )
     assert open_routes == sorted([
         ("POST", "/runs/{run_id}/signal"), ("GET", "/runs/{run_id}/credentials"),
-        ("POST", "/runs/{run_id}/token"),
+        ("POST", "/runs/{run_id}/token"), ("GET", "/runs/{run_id}/steps/{step}/secrets"),
         ("GET", "/"), ("GET", "/health"), ("GET", "/objectives"), ("GET", "/objectives/{objective_id}"),
         ("GET", "/runtime-defaults"), ("GET", "/spatial/layers"), ("GET", "/etl/common-variables"),
         ("GET", "/dfc-targets"), ("GET", "/forecast/ntgam/options"),
@@ -428,3 +429,22 @@ def test_a_literal_star_origin_is_refused_while_the_front_door_is_on(monkeypatch
     assert main_module._cors_origins() == []
     monkeypatch.setattr(settings, "cors_origins", "https://a.example,*")
     assert main_module._cors_origins() == []
+
+
+def test_every_route_a_task_calls_is_exempt_and_every_user_route_needs_the_secret(front_door):
+    # The routes the generated task code and the Workflows callbacks call (signal,
+    # credentials, token, step secrets) are exempt; a user route without the secret is
+    # refused, whatever token it carries.
+    task_routes = (("POST", "/runs/r1/signal"), ("GET", "/runs/r1/credentials"),
+                   ("POST", "/runs/r1/token"), ("GET", "/runs/r1/steps/2/secrets"))
+    for method, path in task_routes:
+        assert _front_door_open(method, path), path
+    user_routes = (("GET", "/runs/r1"), ("POST", "/runs/r1/poll"), ("POST", "/runs/r1/cancel"),
+                   ("GET", "/runs/r1/provenance"), ("GET", "/runs/r1/steps/x/secrets"),
+                   ("POST", "/runs/r1/steps/2/secrets"), ("PUT", "/secrets/x"),
+                   ("POST", "/pieces/from-repository"), ("GET", "/pieces/approvals"),
+                   ("PUT", "/transform-specs/p1/approval"))
+    for method, path in user_routes:
+        assert not _front_door_open(method, path), (method, path)
+        resp = client.request(method, path, headers=ALICE, json={})
+        assert resp.status_code == 403 and resp.json()["detail"]["code"] == "FRONT_DOOR_REQUIRED", path

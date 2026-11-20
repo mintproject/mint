@@ -341,13 +341,17 @@ async def _operator_route_guard(request: Request, call_next):
 
 
 # Routes a call needs no front door for, when SVO_ADAPTER_REQUIRE_FRONT_DOOR is on:
-# the three Tapis-task callbacks (their own per-run HMAC), the operator routes (their
+# the four Tapis-task callbacks (their own per-run HMAC), the operator routes (their
 # own operator secrets), the public reference reads, and the adapter console's files.
 # Everything else is a user route or a service-only route, and needs the shared secret.
 _FRONT_DOOR_OPEN: tuple[tuple[str, str], ...] = (
     ("POST", r"/runs/[^/]+/signal"),
     ("GET", r"/runs/[^/]+/credentials"),
     ("POST", r"/runs/[^/]+/token"),
+    # The running task fetches its one-time step secrets: no service secret, but the
+    # route is gated by the runner's own Tapis token (it must be the run's submitter)
+    # and the step's single-use HMAC credential (X-Step-Secret-Token).
+    ("GET", r"/runs/[^/]+/steps/\d+/secrets"),
     ("GET", r"/"),
     ("GET", r"/health"),
     ("GET", r"/objectives"),

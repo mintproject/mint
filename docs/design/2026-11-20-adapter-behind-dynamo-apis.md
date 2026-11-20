@@ -594,6 +594,24 @@ Steps are in "Migration order". Summary:
   8. The user approves Step 5 on dev and on production.
   9. Checked by reading the code, not by a write on dev.
 
+- 2026-11-20, turning the front door on (`SVO_ADAPTER_REQUIRE_FRONT_DOOR`), found by
+  auditing every caller of the adapter:
+  - The step-secret fetch, `GET /runs/{id}/steps/{step}/secrets`, is a fourth task callback.
+    The running Tapis task calls it with the runner's token and its one-time HMAC credential,
+    never the service secret, so it is exempt from the front door. Its own gate is the whole
+    check: the token must be the run's submitter, the credential is single-use and bound to
+    the run and step, and the run must be active.
+  - **The piece routes are fronted by the Ensemble Manager**, at `/v1/etl-pieces`:
+    `POST /from-repository` (with `dry_run`), `GET /approvals`, `GET` and `PUT /{id}/approval`.
+    Reason: pieces are the EM's `etl-pieces` family in this design's route table, and the
+    catalog holds the stored model rows, not the adapter's registry copy or its approvals.
+    The EM relays the adapter's status, body and `Retry-After` unchanged (`adapterForward`),
+    because the page reads the adapter's own error codes.
+  - The EM's workflow task-log read (`logsService`) now sends the service secret.
+  - Still direct, so they fail with the front door on: the dso-dynamo MCP tools (they call
+    the adapter without the secret; the MCP is a separate repo and moves in Step 2), and the
+    adapter's own console under `/ui/` for every route except the operator and public ones.
+
 ## User feedback / decisions
 
 None yet. Open questions 1 to 9 are for the user's review.
