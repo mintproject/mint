@@ -250,8 +250,13 @@ export function WorkflowCanvas<T extends { id: string }>({
     };
   }, [autoLayout, graphKey, height, layoutOptions]);
 
+  // The layout is a snapshot taken when the graph's shape last changed, so its
+  // node objects go stale as a node's data does (a step's state, say). Take the
+  // geometry from the layout and the node itself from the current props.
+  const currentNodes = new Map(positions.map((position) => [position.node.id, position.node]));
   const displayedPositions = layout.positions.map((position) => ({
     ...position,
+    node: currentNodes.get(position.node.id) ?? position.node,
     ...(positionOverrides[position.node.id] ?? {}),
   }));
   const displayedEdges = refreshWorkflowEdgeEndpoints(
