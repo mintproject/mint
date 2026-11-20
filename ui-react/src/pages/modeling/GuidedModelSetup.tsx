@@ -85,6 +85,16 @@ function initialIds(value: string | null, searchValue: string | null): string[] 
   return [...new Set(values)];
 }
 
+function modelNamesParam(value: string | null): Record<string, string> {
+  if (!value) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
 function dateInputValue(value: Date | null | undefined): string {
   if (!value) return '';
   const date = value instanceof Date ? value : new Date(value);
@@ -152,11 +162,29 @@ export function GuidedModelSetup({
   const [setThreadModels] = useSetThreadModelsMutation();
   const [updateThread] = useUpdateThreadMutation();
 
-  const [goal, setGoal] = useState('');
+  // An upload hands over what it already knows. These only seed the fields;
+  // the user still edits them and confirms.
+  const uploadedVariable = searchParams.get('variable');
+  const closeModelIds = useMemo(
+    () => initialIds(null, searchParams.get('closeModelIds')),
+    [searchParams],
+  );
+  const modelNames = useMemo(() => modelNamesParam(searchParams.get('modelNames')), [searchParams]);
+  const recommendedForData = uploadedVariable
+    ? startingModelIds.filter((id) => !closeModelIds.includes(id))
+    : [];
+  const contextModelIds = startingModelIds.filter(
+    (id) => !recommendedForData.includes(id) && !closeModelIds.includes(id),
+  );
+  const nameOf = (id: string) => displayLabel(id, modelNames[id]);
+
+  const [goal, setGoal] = useState(() => searchParams.get('goal') ?? '');
   const [outcome, setOutcome] = useState('');
-  const [regionId, setRegionId] = useState('');
-  const [startDate, setStartDate] = useState('2000-01-01');
-  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [regionId, setRegionId] = useState(() => searchParams.get('regionId') ?? '');
+  const [startDate, setStartDate] = useState(() => searchParams.get('startDate') || '2000-01-01');
+  const [endDate, setEndDate] = useState(
+    () => searchParams.get('endDate') || new Date().toISOString().slice(0, 10),
+  );
   const [selectedDatasetMetadata, setSelectedDatasetMetadata] = useState<Dataset[]>([]);
   const [destination, setDestination] = useState<'new' | 'existing'>('new');
   const [existingProblemStatementId, setExistingProblemStatementId] = useState('');
@@ -444,11 +472,11 @@ export function GuidedModelSetup({
         </div>
       </div>
 
-      {(modelId || datasetId) && (
+      {(startingModelIds.length > 0 || startingDatasetIds.length > 0) && (
         <section className="rounded-lg border bg-muted/30 p-4" aria-label="Starting context">
           <div className="mb-2 text-sm font-semibold">Starting context</div>
           <div className="flex flex-wrap gap-2 text-sm">
-            {startingModelIds.map((id) => (
+            {contextModelIds.map((id) => (
               <button
                 key={`model-${id}`}
                 type="button"
@@ -472,6 +500,41 @@ export function GuidedModelSetup({
           <p className="mt-2 text-xs text-muted-foreground">
             Confirm or remove these starting items below before continuing.
           </p>
+        </section>
+      )}
+
+      {uploadedVariable && (recommendedForData.length > 0 || closeModelIds.length > 0) && (
+        <section className="rounded-lg border p-5" aria-label="Models for your uploaded data">
+          <h2 className="mb-1 font-semibold">Models that can use your data</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Pick the ones to carry into setup. Nothing is saved until you confirm.
+          </p>
+          <div className="grid gap-5 md:grid-cols-2">
+            <RecommendationGroup title="Recommended" empty="No model takes this variable exactly.">
+              {recommendedForData.map((id) => (
+                <RecommendationCard
+                  key={id}
+                  title={nameOf(id)}
+                  evidence={`Takes ${uploadedVariable}, the variable of your uploaded data`}
+                  checked={selectedModelIds.has(id)}
+                  onToggle={() => toggle(setSelectedModelIds, id)}
+                />
+              ))}
+            </RecommendationGroup>
+            {closeModelIds.length > 0 && (
+              <RecommendationGroup title="Close matches" empty="">
+                {closeModelIds.map((id) => (
+                  <RecommendationCard
+                    key={id}
+                    title={nameOf(id)}
+                    evidence="Close match, not an exact fit"
+                    checked={selectedModelIds.has(id)}
+                    onToggle={() => toggle(setSelectedModelIds, id)}
+                  />
+                ))}
+              </RecommendationGroup>
+            )}
+          </div>
         </section>
       )}
 
