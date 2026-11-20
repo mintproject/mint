@@ -36,6 +36,8 @@ import executionEnginesRouter from "@/api/api-v1/paths/executionEngines/tapis";
 import problemStatementsRouter from "@/api/api-v1/paths/problemStatements";
 import unifiedExecutionRouter from "@/api/api-v1/paths/unifiedExecution";
 import regionsRouter from "@/api/api-v1/paths/regions";
+import { secretsRouter, spatialRouter } from "@/api/api-v1/paths/adapterFront";
+import { createAdapterFrontService } from "@/api/api-v1/services/adapterFrontService";
 import regionsService from "@/api/api-v1/services/regionsService";
 import { createScenarioService, defaultScenarioDeps } from "@/api/api-v1/services/scenarioService";
 import { createHasuraUnifiedExecutionStore } from "@/api/api-v1/services/unifiedExecutionStore";
@@ -107,6 +109,9 @@ app.use(`/${version}/executionEngines`, executionEnginesRouter());
 app.use(`/${version}/modelBindings`, modelBindingsRouter());
 app.use(`/${version}/tapis`, tapisRouter());
 app.use(`/${version}/regions`, regionsRouter(regionsService));
+const adapterFrontService = createAdapterFrontService();
+app.use(`/${version}/spatial`, spatialRouter(adapterFrontService));
+app.use(`/${version}/secrets`, secretsRouter(adapterFrontService));
 const unifiedExecutionStore = createHasuraUnifiedExecutionStore();
 const unifiedExecutionService = createUnifiedExecutionService(
     {

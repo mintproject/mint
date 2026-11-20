@@ -200,6 +200,11 @@ def _ensemble_config(urls: dict[str, str]) -> str:
         # Required to sign opaque legacy unified-plan IDs. Never reuse the
         # Hasura admin secret for this purpose.
         "unified_plan_secret": _env("UNIFIED_PLAN_SECRET", ""),
+        # Sent to the adapter as X-Ensemble-Manager-Secret. Its own credential,
+        # never the Hasura admin secret: the Ensemble Manager and the adapter no
+        # longer fall back to that. Applied by the config sync (managed).
+        **({"svo_adapter_internal_secret": _env("SVO_ADAPTER_INTERNAL_SERVICE_SECRET")}
+           if _env("SVO_ADAPTER_INTERNAL_SERVICE_SECRET") else {}),
         "tapis_webhook_base_url": urls["ensemble"],
         "graphql": {
             "endpoint": f"{urls['graphql']}/v1/graphql",
@@ -336,6 +341,9 @@ def build_specs(
                 "HASURA_ADMIN_SECRET": admin_secret,
                 # POST /flows asks the adapter whether a flow's pieces fit together.
                 "SVO_ADAPTER_API_URL": _env("SVO_ADAPTER_API_URL", urls["svo"]),
+                # Proves to the adapter that the flow check came through the catalog
+                # (the adapter's front door). Only present when set in the environment.
+                **_optional_env("SVO_ADAPTER_INTERNAL_SERVICE_SECRET"),
                 "TAPIS_JWKS_URI": _env("TAPIS_JWKS_URI", "https://portals.tapis.io/v3/tenants/portals"),
                 "TAPIS_TOKEN_ISSUER": _env("TAPIS_TOKEN_ISSUER", "https://portals.tapis.io/v3/tokens"),
                 "REGION_IMPORT_BODY_LIMIT": _env("REGION_IMPORT_BODY_LIMIT", "10485760"),
@@ -378,6 +386,9 @@ def build_specs(
                 "SVO_ADAPTER_CKAN_URL": _env("SVO_ADAPTER_CKAN_URL", "https://ckan.tacc.utexas.edu"),
                 "SVO_ADAPTER_STAC_API_URL": _env("SVO_ADAPTER_STAC_API_URL", "https://stacapi.pods.portals.tapis.io/api/v1"),
                 "SVO_ADAPTER_GEO_ACTOR_ID": _env("SVO_ADAPTER_GEO_ACTOR_ID", ""),
+                # Browser origins that may call the adapter directly: the dev web
+                # app only. Without this no origin is allowed.
+                "SVO_ADAPTER_CORS_ORIGINS": _env("SVO_ADAPTER_CORS_ORIGINS", urls["ui"]),
                 # Run signals: the model task posts liveness back to this URL with
                 # a per-run HMAC token (svo-adapter-service/app/run_state.py).
                 # Empty secrets leave signalling and the staleness sweep off.
@@ -401,6 +412,12 @@ def build_specs(
                     # Operator credential for /admin/* and POST /transform-specs;
                     # unset = those routes answer 503.
                     "SVO_ADAPTER_ADMIN_ROUTE_SECRET",
+                    # The Ensemble Manager / catalog shared secret. Its own value, set
+                    # on all three pods; unset = the routes that need it answer 503.
+                    "SVO_ADAPTER_INTERNAL_SERVICE_SECRET",
+                    # Refuse user routes not called through the Ensemble Manager or
+                    # the catalog (off unless set to true; dev goes first).
+                    "SVO_ADAPTER_REQUIRE_FRONT_DOOR",
                     # Read the registry as the calling user (owner/visibility scoping).
                     "SVO_ADAPTER_REGISTRY_USER_SCOPED",
                     # Allow Python source stored with a piece to run.
@@ -1137,6 +1154,9 @@ def sync_svo_runtime(t: Any, spec: dict[str, Any], *, restart: bool = True) -> i
         "SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS",
         "SVO_ADAPTER_SECRETS_ADMIN_SECRET",
         "SVO_ADAPTER_ADMIN_ROUTE_SECRET",
+        "SVO_ADAPTER_INTERNAL_SERVICE_SECRET",
+        "SVO_ADAPTER_REQUIRE_FRONT_DOOR",
+        "SVO_ADAPTER_CORS_ORIGINS",
         "SVO_ADAPTER_REGISTRY_USER_SCOPED",
         "SVO_ADAPTER_STORED_SOURCE_ENABLED",
         "SVO_ADAPTER_CKAN_SYNC_ORG",

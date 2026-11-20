@@ -365,16 +365,33 @@ export function buildRows(body: Json, plan: FlowRegistration, pieces: Json, user
   }
 }
 
-async function checkWithAdapter(check: Json, authorization: string): Promise<Json> {
+/** The adapter's address and the headers that identify this call to it: the
+ *  caller's own token, which the adapter verifies, and the shared service secret,
+ *  which proves the call came through the catalog (the adapter's front door). The
+ *  secret is its own setting; with none set only the token is sent. */
+function adapterTarget(authorization: string): { base: string; headers: Record<string, string> } {
   const base = process.env.SVO_ADAPTER_API_URL
   if (!base) {
     throw new FlowError(503, 'FLOWS_NOT_CONFIGURED', 'this deployment has no SVO adapter to check a flow with')
   }
+  const secret = process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET
+  return {
+    base: base.replace(/\/$/, ''),
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: authorization,
+      ...(secret ? { 'X-Ensemble-Manager-Secret': secret } : {}),
+    },
+  }
+}
+
+async function checkWithAdapter(check: Json, authorization: string): Promise<Json> {
+  const { base, headers } = adapterTarget(authorization)
   let response: Response
   try {
-    response = await globalThis.fetch(`${base.replace(/\/$/, '')}/flows/check`, {
+    response = await globalThis.fetch(`${base}/flows/check`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: authorization },
+      headers,
       body: JSON.stringify(check),
       signal: AbortSignal.timeout(30_000),
     })
@@ -507,5 +524,51 @@ export async function custom_flows_post(req: any, reply: any): Promise<void> {
       return
     }
     reply.code(502).send({ error: 'The catalog refused the flow', code: 'FLOW_WRITE_FAILED', details: message })
+  }
+}
+
+/**
+ * GET /flows/{id}/availability: whether the caller could run each step of a stored
+ * flow. The adapter answers; this route only carries the caller's token and the
+ * service secret to it. The adapter still verifies the token itself and names no
+ * piece the caller cannot see, so nothing is decided here.
+ */
+export async function custom_flows_id_availability_get(req: any, reply: any): Promise<void> {
+  try {
+    const authorization = req.headers?.authorization as string | undefined
+    if (!authorization || !usernameFromBearer(authorization)) {
+      throw new FlowError(401, 'TAPIS_AUTH_REQUIRED', 'a valid Tapis bearer token is required')
+    }
+    const id = fullId(req.params?.id, 'id')
+    if (!id) throw new FlowError(400, 'FLOW_REQUEST_INVALID', 'a flow id is required')
+    const { base, headers } = adapterTarget(authorization)
+    let response: Response
+    try {
+      response = await globalThis.fetch(`${base}/flows/${encodeURIComponent(id)}/availability`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(30_000),
+      })
+    } catch {
+      throw new FlowError(502, 'FLOW_AVAILABILITY_UNAVAILABLE', 'the SVO adapter could not be reached')
+    }
+    if (response.status === 401) throw new FlowError(401, 'TAPIS_AUTH_REQUIRED', 'a valid Tapis bearer token is required')
+    if (response.status === 422) {
+      // FLOW_NOT_FOUND: the configuration does not exist or is not a flow.
+      const body = (await response.json().catch(() => ({}))) as Json
+      reply.code(422).send(body.detail ?? body)
+      return
+    }
+    if (!response.ok) {
+      throw new FlowError(502, 'FLOW_AVAILABILITY_UNAVAILABLE', `the SVO adapter answered ${response.status}`)
+    }
+    reply.code(200).send(await response.json())
+  } catch (error: any) {
+    if (error instanceof FlowError) {
+      reply.code(error.status).send({ error: error.message, code: error.code, ...error.details })
+      return
+    }
+    req.log?.error({ err: error }, 'Flow availability failed')
+    reply.code(502).send({ error: 'The flow availability could not be read', code: 'FLOW_AVAILABILITY_UNAVAILABLE' })
   }
 }

@@ -113,6 +113,17 @@ query ListDataObjects {
 }
 """
 
+# One user's data objects. Rows with no owner (made before owners were recorded)
+# match no user.
+LIST_OWN_DATA_OBJECTS_QUERY = """
+query ListOwnDataObjects($owner: String!) {
+  adapter_data_object(where: {owner_username: {_eq: $owner}}) {
+    id label resource_uri format source_catalog
+    variables { standard_variable_uri local_name unit spatial_type crs }
+  }
+}
+"""
+
 # Reads a registered data object + its variable contract(s) from adapter schema.
 DATA_OBJECT_CONTRACT_QUERY = """
 query DataObjectContract($id: String!) {

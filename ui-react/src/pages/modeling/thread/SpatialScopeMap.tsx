@@ -7,7 +7,7 @@ import 'leaflet/dist/leaflet.css';
 
 import { parseGeometry } from '@/pages/regions/regionUtils';
 import { LIST_REGISTERED_BOUNDARY_REGIONS } from '@/graphql/queries/regions';
-import { getSvoAdapterApiUrl } from '@/lib/config';
+import { fetchSpatialLayers, spatialLayersAvailable } from '@/lib/spatial-layers';
 
 interface SpatialLayerCatalogEntry {
   id: string;
@@ -98,7 +98,7 @@ export function SpatialScopeMap({
   disabled = false,
   height = '360px',
 }: SpatialScopeMapProps) {
-  const adapterApi = getSvoAdapterApiUrl();
+  const layersAvailable = spatialLayersAvailable();
   const [catalogLayers, setCatalogLayers] = useState<SpatialLayerCatalogEntry[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState('');
   const [layerFeatures, setLayerFeatures] = useState<GeoJSON.Feature[]>([]);
@@ -152,16 +152,11 @@ export function SpatialScopeMap({
   );
 
   useEffect(() => {
-    if (!adapterApi) return;
+    if (!layersAvailable) return;
     const controller = new AbortController();
-    void fetch(`${adapterApi}/spatial/layers`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Spatial layer catalog returned ${response.status}`);
-        return (await response.json()) as { layers?: SpatialLayerCatalogEntry[] };
-      })
-      .then((payload) => {
+    void fetchSpatialLayers<SpatialLayerCatalogEntry>(controller.signal)
+      .then((nextLayers) => {
         if (controller.signal.aborted) return;
-        const nextLayers = payload.layers ?? [];
         setCatalogLayers(nextLayers);
         setSelectedLayerId((current) => {
           const availableLayers = [...registeredLayers, ...nextLayers];
@@ -186,7 +181,7 @@ export function SpatialScopeMap({
         }
       });
     return () => controller.abort();
-  }, [adapterApi, registeredLayers, sourceUri]);
+  }, [layersAvailable, registeredLayers, sourceUri]);
 
   const selectedLayer = layers.find((layer) => layer.id === selectedLayerId);
 

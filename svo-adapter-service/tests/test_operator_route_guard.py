@@ -79,10 +79,12 @@ def test_the_right_secret_reaches_the_handler(live):
     assert resp.status_code == 400
 
 
-def test_a_refusal_still_carries_cors_headers(live):
+def test_a_refusal_from_an_unlisted_origin_carries_no_allow_origin_header(live):
+    # CORS lists no origin by default (SVO_ADAPTER_CORS_ORIGINS), so a browser page
+    # cannot read even this refusal.
     resp = client.post("/admin/poll", headers={"Origin": "https://example.org"})
     assert resp.status_code == 403
-    assert resp.headers.get("access-control-allow-origin") == "*"
+    assert "access-control-allow-origin" not in resp.headers
 
 
 def test_demo_mode_is_not_guarded():

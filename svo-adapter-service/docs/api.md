@@ -462,9 +462,34 @@ not of the code with the call appended.
 
 Ensemble Manager-owned model-output handoffs additionally require the server-only
 `X-Ensemble-Manager-Secret` header. Configure the same value as
-`SVO_ADAPTER_INTERNAL_SERVICE_SECRET` on the adapter and
-`SVO_ADAPTER_INTERNAL_SERVICE_SECRET` (or `svo_adapter_internal_secret`) on
-Ensemble Manager. Do not expose this value to the browser.
+`SVO_ADAPTER_INTERNAL_SERVICE_SECRET` on the adapter, on the Model Catalog API and
+on Ensemble Manager (there also as `svo_adapter_internal_secret`). Do not expose this
+value to the browser. It is a credential of its own: neither side falls back to the
+Hasura admin secret, and an adapter with no value set answers 503 on every route that
+needs it (`POST /plans/deferred/{id}/bind`, `POST /runs/{id}/register-output`,
+owned `POST /data-objects`, bound and composite `POST /workflows/submit`).
+
+Other settings for the adapter as an internal engine behind the Ensemble Manager and
+the catalog API:
+
+- `SVO_ADAPTER_CORS_ORIGINS` lists the browser origins that may call the adapter
+  directly, comma-separated. Default: none.
+- `SVO_ADAPTER_REQUIRE_FRONT_DOOR` (default off). When on, every route refuses a call
+  that lacks the secret above (403 `FRONT_DOOR_REQUIRED`) or that comes from a browser
+  origin, and answers 503 if no secret is configured. The secret only proves the call
+  came through the front door: each route still verifies the user's own token with
+  Tapis. Still reachable without the secret: the three Tapis-task callbacks
+  (`POST /runs/{id}/signal`, `GET /runs/{id}/credentials`, `POST /runs/{id}/token`,
+  each with its own per-run credential), the operator routes (their own secrets),
+  the public reference reads (`/health`, `/objectives`, `/objectives/{id}`,
+  `/runtime-defaults`, `/spatial/layers`, `/etl/common-variables`, `/dfc-targets`,
+  `/forecast/ntgam/options`), and the adapter console's files.
+- `POST /data-objects` needs a signed-in user and records them as the owner
+  (`owner_username`); `GET /data-objects` lists only the caller's own. Objects made
+  before owners were recorded have none and are listed for no user.
+- `POST /forecast/run` needs a signed-in user. `GET /transform-specs` shows an
+  anonymous caller only public pieces, and a signed-in caller public and shared
+  pieces plus their own.
 
 Operator routes require the `X-Admin-Secret` header, matching
 `SVO_ADAPTER_ADMIN_ROUTE_SECRET`. These are every `/admin/*` route except

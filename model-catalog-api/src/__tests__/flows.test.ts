@@ -10,6 +10,7 @@ vi.mock('../hasura/client.js', () => ({
 
 import {
   custom_flows_post,
+  custom_flows_id_availability_get,
   planRegistration,
   buildRows,
   registrationMutation,
@@ -68,6 +69,7 @@ function adapterAnswers(answer: unknown, status = 200) {
 beforeEach(() => {
   mockQuery.mockReset(); mockMutate.mockReset()
   process.env.SVO_ADAPTER_API_URL = 'https://adapter.example/'
+  delete process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET
   mockQuery.mockResolvedValue({ data: { modelcatalog_software_by_pk: null, modelcatalog_software_version_by_pk: null } })
   mockMutate.mockResolvedValue({ data: {} })
 })
@@ -355,5 +357,73 @@ describe('a pause for the person to edit a file', () => {
     expect(reply._status).toBe(201)
     const { variables } = mockMutate.mock.calls[0][0]
     expect(variables.flow.outputs_json[0].editable).toEqual(EDITABLE)
+  })
+})
+
+describe('the service secret', () => {
+  it('goes to the adapter with the flow check when one is set, and not otherwise', async () => {
+    process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET = 'service-only'
+    let fetchMock = adapterAnswers({ ok: true, problems: [], pieces: PIECES })
+    await custom_flows_post(makeReq(BODY()), makeReply())
+    expect(fetchMock.mock.calls[0][1].headers['X-Ensemble-Manager-Secret']).toBe('service-only')
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(ALICE)
+
+    delete process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET
+    fetchMock = adapterAnswers({ ok: true, problems: [], pieces: PIECES })
+    await custom_flows_post(makeReq(BODY()), makeReply())
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('X-Ensemble-Manager-Secret')
+  })
+})
+
+describe('GET /flows/{id}/availability', () => {
+  const makeAvailabilityReq = (id: string, authorization: string | undefined = ALICE) =>
+    ({ params: { id }, headers: { authorization }, log: { error: vi.fn() } })
+
+  it('asks the adapter as the caller, with the secret, for the full flow id', async () => {
+    process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET = 'service-only'
+    const answer = { flow_id: C, steps: [{ position: 1, runnable: true }] }
+    const fetchMock = adapterAnswers(answer)
+    const reply = makeReply()
+    await custom_flows_id_availability_get(makeAvailabilityReq('dictionary'), reply)
+
+    expect(reply._status).toBe(200)
+    expect(reply._body).toEqual(answer)
+    const [url, request] = fetchMock.mock.calls[0]
+    expect(url).toBe(`https://adapter.example/flows/${encodeURIComponent(C)}/availability`)
+    expect(request.headers.Authorization).toBe(ALICE)
+    expect(request.headers['X-Ensemble-Manager-Secret']).toBe('service-only')
+  })
+
+  it.each([['', 401], ['Bearer not-a-jwt', 401]])('needs a signed-in caller', async (authorization, status) => {
+    const fetchMock = adapterAnswers({})
+    const reply = makeReply()
+    await custom_flows_id_availability_get(makeAvailabilityReq('dictionary', authorization as any), reply)
+    expect(reply._status).toBe(status)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('passes on a flow that does not exist, and the adapter refusing the token', async () => {
+    adapterAnswers({ detail: { code: 'FLOW_NOT_FOUND', flow_id: C } }, 422)
+    let reply = makeReply()
+    await custom_flows_id_availability_get(makeAvailabilityReq('dictionary'), reply)
+    expect([reply._status, reply._body.code]).toEqual([422, 'FLOW_NOT_FOUND'])
+
+    adapterAnswers({}, 401)
+    reply = makeReply()
+    await custom_flows_id_availability_get(makeAvailabilityReq('dictionary'), reply)
+    expect([reply._status, reply._body.code]).toEqual([401, 'TAPIS_AUTH_REQUIRED'])
+  })
+
+  it('says so when no adapter is configured, or it cannot be reached', async () => {
+    delete process.env.SVO_ADAPTER_API_URL
+    let reply = makeReply()
+    await custom_flows_id_availability_get(makeAvailabilityReq('dictionary'), reply)
+    expect([reply._status, reply._body.code]).toEqual([503, 'FLOWS_NOT_CONFIGURED'])
+
+    process.env.SVO_ADAPTER_API_URL = 'https://adapter.example'
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+    reply = makeReply()
+    await custom_flows_id_availability_get(makeAvailabilityReq('dictionary'), reply)
+    expect([reply._status, reply._body.code]).toEqual([502, 'FLOW_AVAILABILITY_UNAVAILABLE'])
   })
 })

@@ -75,6 +75,7 @@ from .hasura import (
     HasuraError,
     STANDARD_VARIABLES_QUERY,
     LIST_DATA_OBJECTS_QUERY,
+    LIST_OWN_DATA_OBJECTS_QUERY,
     MODEL_INPUT_REQUIREMENT_QUERY,
     TRANSFORM_REGISTRY_QUERY,
     get_client,
@@ -339,10 +340,73 @@ async def _operator_route_guard(request: Request, call_next):
     return await call_next(request)
 
 
+# Routes a call needs no front door for, when SVO_ADAPTER_REQUIRE_FRONT_DOOR is on:
+# the three Tapis-task callbacks (their own per-run HMAC), the operator routes (their
+# own operator secrets), the public reference reads, and the adapter console's files.
+# Everything else is a user route or a service-only route, and needs the shared secret.
+_FRONT_DOOR_OPEN: tuple[tuple[str, str], ...] = (
+    ("POST", r"/runs/[^/]+/signal"),
+    ("GET", r"/runs/[^/]+/credentials"),
+    ("POST", r"/runs/[^/]+/token"),
+    ("GET", r"/"),
+    ("GET", r"/health"),
+    ("GET", r"/objectives"),
+    ("GET", r"/objectives/[^/]+"),
+    ("GET", r"/runtime-defaults"),
+    ("GET", r"/spatial/layers"),
+    ("GET", r"/etl/common-variables"),
+    ("GET", r"/dfc-targets"),
+    ("GET", r"/forecast/ntgam/options"),
+    ("GET", r"/ui(/.*)?"),
+    ("GET", r"/docs"),
+    ("GET", r"/openapi\.json"),
+)
+_FRONT_DOOR_OPEN_RE = tuple((m, re.compile(p)) for m, p in _FRONT_DOOR_OPEN)
+
+
+def _front_door_open(method: str, path: str) -> bool:
+    path = path.rstrip("/") or "/"
+    if path == "/admin" or path.startswith("/admin/"):
+        return True  # operator routes, each with its own secret
+    if method == "POST" and path == "/transform-specs":
+        return True
+    return any(m == method and rx.fullmatch(path) for m, rx in _FRONT_DOOR_OPEN_RE)
+
+
+@app.middleware("http")
+async def _front_door_guard(request: Request, call_next):
+    """With the front door on, a user route is served only to a call that carries the
+    Ensemble Manager / catalog shared secret and comes from no browser origin. The
+    caller's own token is still checked by the route: the secret only proves the
+    call came through the front door, never who the user is."""
+    if (
+        settings.require_front_door
+        and request.method != "OPTIONS"
+        and not settings.demo_mode
+        and not _front_door_open(request.method, request.url.path)
+    ):
+        if not settings.internal_service_secret:
+            return JSONResponse({"detail": {
+                "code": "INTERNAL_SERVICE_NOT_CONFIGURED",
+                "message": "the front door is on but no internal service secret is configured",
+            }}, status_code=503)
+        if request.headers.get("Origin") or not _internal_service_authorized(
+            request.headers.get("X-Ensemble-Manager-Secret")
+        ):
+            return JSONResponse({"detail": {
+                "code": "FRONT_DOOR_REQUIRED",
+                "message": "call this route through the Ensemble Manager or the catalog API",
+            }}, status_code=403)
+    return await call_next(request)
+
+
+# Registered after the front-door guard so CORS stays outermost and a refusal still
+# carries CORS headers for an allowed origin. No origins are allowed unless
+# SVO_ADAPTER_CORS_ORIGINS lists them.
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origin_list,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -387,8 +451,37 @@ async def _caller_or_none(token: str | None) -> str | None:
 
 
 def _internal_service_authorized(secret: str | None) -> bool:
-    expected = settings.internal_service_secret or settings.hasura_admin_secret
+    """True for the Ensemble Manager / catalog shared secret. It is a credential of
+    its own: the Hasura admin secret is never accepted in its place."""
+    expected = settings.internal_service_secret
     return bool(expected and secret and hmac.compare_digest(secret, expected))
+
+
+def _require_internal_service(secret: str | None, message: str) -> None:
+    """Refuse a call without the shared secret. An adapter with no secret set
+    answers 503, so a missing setting is never an open door or a quiet 403."""
+    if not settings.internal_service_secret:
+        raise HTTPException(503, detail={
+            "code": "INTERNAL_SERVICE_NOT_CONFIGURED",
+            "message": "no internal service secret is configured on this adapter",
+        })
+    if not _internal_service_authorized(secret):
+        raise HTTPException(403, detail={
+            "code": "INTERNAL_SERVICE_AUTH_REQUIRED", "message": message})
+
+
+async def _caller_or_demo(token: str | None) -> str | None:
+    """Tapis username for a route that needs a signed-in user, or 401. The local
+    demo has no accounts, so it answers None (an open caller) when no token is sent."""
+    username = await _caller_or_none(token)
+    if username:
+        return username
+    if settings.demo_mode and not token:
+        return None
+    raise HTTPException(401, detail={
+        "code": "TAPIS_AUTH_REQUIRED",
+        "message": "a valid Tapis bearer token is required",
+    })
 
 
 # Marks a reader that may see every run: the Ensemble Manager, or an admin.
@@ -568,7 +661,7 @@ GET_DATA_OBJECT = """
 query GetDataObject($id: String!) {
   adapter_data_object_by_pk(id: $id) {
     id label resource_uri format extension mime_type source_catalog
-    owner_execution_id owner_model_child_id owner_tenant
+    owner_execution_id owner_model_child_id owner_tenant owner_username
   }
 }
 """
@@ -795,18 +888,28 @@ async def register_data_object(
     authorization: str | None = Header(None),
     internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
 ):
-    if (
-        body.owner_execution_id or body.owner_model_child_id or body.owner_tenant
-    ) and not _internal_service_authorized(internal_secret):
-        raise HTTPException(
-            403,
-            detail={
-                "code": "INTERNAL_SERVICE_AUTH_REQUIRED",
-                "message": "owned model-output data objects require Ensemble Manager authentication",
-            },
-        )
-    h = get_client(_bearer(authorization))
+    token = _bearer(authorization)
+    h = get_client(token)
+    if body.owner_execution_id or body.owner_model_child_id or body.owner_tenant:
+        # The server-owned model-output handoff: the Ensemble Manager's secret is the
+        # credential. A token, when it forwards one, still names the owner.
+        _require_internal_service(
+            internal_secret, "owned model-output data objects require Ensemble Manager authentication")
+        owner = await _caller_or_none(token)
+    else:
+        # Every other write is a user's, and is recorded against them. Without this
+        # check the write ran on the adapter's admin Hasura credential for anyone.
+        owner = await _caller_or_demo(token)
+        if body.id:
+            existing = (await h.execute(GET_DATA_OBJECT, {"id": body.id}))["adapter_data_object_by_pk"]
+            if existing and existing.get("owner_username") != owner:
+                raise HTTPException(403, detail={
+                    "code": "DATA_OBJECT_NOT_OWNED",
+                    "message": "this data object id belongs to another user",
+                })
     obj = body.model_dump(exclude_none=True)
+    if owner:
+        obj["owner_username"] = owner
     variables = obj.pop("variables", [])
     if variables:
         obj["variables"] = {"data": variables}
@@ -952,8 +1055,9 @@ def _contract_insert_obj(c: dict[str, Any]) -> dict[str, Any]:
 @app.get("/transform-specs", tags=["Core: Registry"])
 async def list_transform_specs(authorization: str | None = Header(None)):
     """The transform registry (specs + their input/output contracts)."""
-    h = get_client(_bearer(authorization))
-    return await _registry(h, plannable=False)
+    token = _bearer(authorization)
+    h = get_client(token)
+    return _visible_pieces(await _registry(h, plannable=False), await _caller_or_none(token))
 
 
 @app.post("/transform-specs", tags=["Core: Registry"])
@@ -1098,6 +1202,22 @@ async def _registry(h: Any, *, plannable: bool = True,
         return registry
     username = await _caller_or_none(getattr(h, "_bearer", None))
     return stored_source.plannable(registry, username, opt_in)
+
+
+def _visible_pieces(registry: list[dict[str, Any]], username: str | None) -> list[dict[str, Any]]:
+    """Pieces a caller may see: public ones, shared ones for a signed-in caller, and
+    their own. The same rule as the Hasura select permissions on
+    ``adapter.transform_spec``, applied here because the admin-secret read returns
+    every row while ``registry_user_scoped`` is off. Applying it again to rows
+    Hasura already filtered changes nothing."""
+    def visible(spec: dict[str, Any]) -> bool:
+        visibility = spec.get("visibility") or "public"
+        if visibility == "public":
+            return True
+        if not username:
+            return False
+        return visibility == "shared" or spec.get("owner_username") == username
+    return [spec for spec in registry if visible(spec)]
 
 
 async def _load_edge_map(
@@ -1999,11 +2119,8 @@ async def bind_deferred_plan(
     internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
 ):
     """Bind one server-owned model output to a deferred adapter plan."""
-    if not _internal_service_authorized(internal_secret):
-        raise HTTPException(403, detail={
-            "code": "INTERNAL_SERVICE_AUTH_REQUIRED",
-            "message": "deferred-plan binding is an internal Ensemble Manager operation",
-        })
+    _require_internal_service(
+        internal_secret, "deferred-plan binding is an internal Ensemble Manager operation")
     if not body.parent_execution_id.startswith("ue_"):
         raise HTTPException(422, detail={
             "code": "INVALID_PARENT_EXECUTION_ID",
@@ -3172,10 +3289,15 @@ async def discover_reachable_sources(body: dict[str, Any]):
 
 @app.get("/data-objects", tags=["Core: Registry"])
 async def list_data_objects(authorization: str | None = Header(None)):
-    """Registered data objects (the 'we have this SVO input' sources) — id, label,
-    and each variable's standard_variable_uri + unit/format."""
-    h = get_client(_bearer(authorization))
-    return (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
+    """The caller's own registered data objects — id, label, and each variable's
+    standard_variable_uri + unit/format. Objects registered before owners were
+    recorded have none, and are listed for no user."""
+    token = _bearer(authorization)
+    owner = await _caller_or_demo(token)
+    h = get_client(token)
+    if owner is None:  # the local demo, signed out
+        return (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
+    return (await h.execute(LIST_OWN_DATA_OBJECTS_QUERY, {"owner": owner}))["adapter_data_object"]
 
 
 # ── MINT Data Catalog compatibility layer ─────────────────────────────────────
@@ -4094,11 +4216,9 @@ async def submit_workflow(
         )
     idempotency_key = body.idempotency_key or idempotency_header
     stored_plan_id, bound_plan_id = _resolve_bound_plan_id(body.plan_id)
-    if bound_plan_id and not _internal_service_authorized(internal_secret):
-        raise HTTPException(403, detail={
-            "code": "INTERNAL_SERVICE_AUTH_REQUIRED",
-            "message": "bound deferred plans require Ensemble Manager authentication",
-        })
+    if bound_plan_id:
+        _require_internal_service(
+            internal_secret, "bound deferred plans require Ensemble Manager authentication")
     plan = (await h.execute(GET_PLAN, {"id": stored_plan_id}))["adapter_workflow_plan_by_pk"]
     if not plan:
         raise HTTPException(404, "plan not found")
@@ -4206,11 +4326,8 @@ async def submit_workflow(
 
     derived: dict[str, Any] | None = None
     if body.model_task is not None:
-        if not _internal_service_authorized(internal_secret):
-            raise HTTPException(403, detail={
-                "code": "INTERNAL_SERVICE_AUTH_REQUIRED",
-                "message": "composite model descriptors require Ensemble Manager authentication",
-            })
+        _require_internal_service(
+            internal_secret, "composite model descriptors require Ensemble Manager authentication")
         if _composite_task_contains_secret(body.model_task):
             raise HTTPException(422, detail={
                 "code": "COMPOSITE_MODEL_TASK_SECRET",
@@ -5881,7 +5998,14 @@ async def get_run_provenance(
 
 
 @app.post("/runs/{run_id}/register-output", tags=["Core: Runs"])
-async def register_output(run_id: str, body: RegisterOutputIn, authorization: str | None = Header(None)):
+async def register_output(
+    run_id: str,
+    body: RegisterOutputIn,
+    authorization: str | None = Header(None),
+    internal_secret: str | None = Header(None, alias="X-Ensemble-Manager-Secret"),
+):
+    _require_internal_service(
+        internal_secret, "output registration is an internal Ensemble Manager operation")
     h = get_client(_bearer(authorization))
     obj = body.output_data_object.model_dump(exclude_none=True)
     variables = obj.pop("variables", [])
@@ -5996,9 +6120,11 @@ async def ntgam_scenario(body: dict[str, Any], authorization: str | None = Heade
 
 
 @app.post("/forecast/run", tags=["NTGAM forecast"])
-async def ntgam_run(body: dict[str, Any]):
+async def ntgam_run(body: dict[str, Any], authorization: str | None = Header(None)):
     """Run the SUBSIDE screening model on an assembled scenario (returns risk score,
-    risk factors, and the annual subsidence projection)."""
+    risk factors, and the annual subsidence projection). Needs a signed-in user: it
+    runs the model on this service's own compute."""
+    await _caller_or_demo(_bearer(authorization))
     scenario = body.get("scenario") or body
     if not isinstance(scenario, dict) or not scenario:
         raise HTTPException(422, "a scenario object is required")

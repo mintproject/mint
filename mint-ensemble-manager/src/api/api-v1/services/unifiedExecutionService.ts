@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { UnifiedExecutionError } from "@/classes/common/errors";
 import { ModelSecretDeclaration, Region } from "@/classes/mint/mint-types";
 import { getConfiguration } from "@/classes/mint/mint-functions";
+import { adapterBaseUrl, adapterInternalSecret } from "./adapterConfig";
 import { deriveRegionSource, InputSource, RegionGeometryError } from "./inputStepDerivation";
 import {
     createHasuraUnifiedExecutionStore,
@@ -177,24 +178,6 @@ interface AdapterPlanResponse {
     message?: string;
 }
 
-function adapterBaseUrl(): string {
-    const prefs = getConfiguration() as { svo_adapter_api?: string };
-    return (prefs.svo_adapter_api || process.env.SVO_ADAPTER_API || "").replace(/\/$/, "");
-}
-
-function adapterInternalSecret(): string {
-    const prefs = getConfiguration() as {
-        svo_adapter_internal_secret?: string;
-        graphql?: { secret?: string };
-    };
-    return (
-        process.env.SVO_ADAPTER_INTERNAL_SERVICE_SECRET ||
-        prefs.svo_adapter_internal_secret ||
-        prefs.graphql?.secret ||
-        ""
-    );
-}
-
 function unifiedPlanSecret(): string {
     const prefs = getConfiguration() as {
         unified_plan_secret?: string;
@@ -268,7 +251,7 @@ function decodePlan(planId: string): LegacyPlan {
     }
 }
 
-async function adapterRequest(
+export async function adapterRequest(
     path: string,
     init: { method?: string; body?: unknown; idempotencyKey?: string },
     authorization?: string

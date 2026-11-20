@@ -73,6 +73,35 @@ class StorageTests(unittest.TestCase):
         config = json.loads(specs["ensemble"]["environment_variables"]["ENSEMBLE_MANAGER_CONFIG_JSON"])
         self.assertEqual(config["unified_plan_secret"], "test-signing-secret")
 
+    def test_the_service_secret_is_set_only_from_the_environment_and_never_the_hasura_secret(self):
+        env = {"HASURA_GRAPHQL_ADMIN_SECRET": "hasura-admin"}
+        with patch.dict(os.environ, env, clear=True):
+            specs = deploy.build_specs("mintproject", "develop", "https://portals.tapis.io")
+        config = json.loads(specs["ensemble"]["environment_variables"]["ENSEMBLE_MANAGER_CONFIG_JSON"])
+        self.assertNotIn("svo_adapter_internal_secret", config)
+        self.assertNotIn("SVO_ADAPTER_INTERNAL_SERVICE_SECRET", specs["svo"]["environment_variables"])
+        self.assertNotIn("SVO_ADAPTER_INTERNAL_SERVICE_SECRET", specs["api"]["environment_variables"])
+
+        env["SVO_ADAPTER_INTERNAL_SERVICE_SECRET"] = "service-only"
+        with patch.dict(os.environ, env, clear=True):
+            specs = deploy.build_specs("mintproject", "develop", "https://portals.tapis.io")
+        config = json.loads(specs["ensemble"]["environment_variables"]["ENSEMBLE_MANAGER_CONFIG_JSON"])
+        self.assertEqual(config["svo_adapter_internal_secret"], "service-only")
+        for pod in ("svo", "api"):
+            self.assertEqual(
+                specs[pod]["environment_variables"]["SVO_ADAPTER_INTERNAL_SERVICE_SECRET"], "service-only")
+        redacted = deploy.redact_spec(specs["svo"])["environment_variables"]
+        self.assertEqual(redacted["SVO_ADAPTER_INTERNAL_SERVICE_SECRET"], "***")
+
+    def test_svo_allows_only_the_dev_web_app_origin_and_leaves_the_front_door_off(self):
+        with patch.dict(os.environ, {}, clear=True):
+            svo = deploy.build_specs("mintproject", "develop", "https://portals.tapis.io")["svo"]
+        self.assertEqual(
+            svo["environment_variables"]["SVO_ADAPTER_CORS_ORIGINS"],
+            "https://mintdevui.pods.portals.tapis.io",
+        )
+        self.assertNotIn("SVO_ADAPTER_REQUIRE_FRONT_DOOR", svo["environment_variables"])
+
     def test_svo_uses_configured_geo_actor_id(self):
         with patch.dict(
             os.environ,
@@ -1149,6 +1178,26 @@ class SvoRuntimeSyncTests(unittest.TestCase):
             t.pods.update_pod.call_args.kwargs["environment_variables"],
             applied["environment_variables"],
         )
+
+    def test_sync_resends_the_service_secret_front_door_and_cors_settings(self):
+        # A runtime sync only resends managed keys, so these must be in that list.
+        wanted = {
+            "SVO_ADAPTER_GEO_ACTOR_ID": "z8LGLpm7lVqrK",
+            "SVO_ADAPTER_INTERNAL_SERVICE_SECRET": "service-only",
+            "SVO_ADAPTER_REQUIRE_FRONT_DOOR": "true",
+            "SVO_ADAPTER_CORS_ORIGINS": "https://mintdevui.pods.portals.tapis.io",
+        }
+        spec = {"pod_id": deploy.PODS["svo"], "environment_variables": dict(wanted)}
+        running = {
+            "image": "ghcr.io/mintproject/svo-adapter:develop",
+            "status_container": {"start_time": "old-start"},
+            "environment_variables": {"KEEP_ME": "yes"},
+        }
+        t = Mock()
+        t.pods.get_pod.side_effect = [running, {"environment_variables": {"KEEP_ME": "yes", **wanted}}]
+        self.assertEqual(deploy.sync_svo_runtime(t, spec, restart=False), 0)
+        self.assertEqual(
+            t.pods.update_pod.call_args.kwargs["environment_variables"], {"KEEP_ME": "yes", **wanted})
 
     def test_sync_fails_when_signal_wiring_does_not_converge(self):
         spec = {

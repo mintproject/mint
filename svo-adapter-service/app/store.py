@@ -90,6 +90,12 @@ class InMemoryHasura:
     def _op_ListDataObjects(self, v):
         return {"adapter_data_object": list(STORE.data_object.values())}
 
+    def _op_ListOwnDataObjects(self, v):
+        return {"adapter_data_object": [
+            row for row in STORE.data_object.values()
+            if row.get("owner_username") == v["owner"]
+        ]}
+
     def _op_ExistingCkanDataObjects(self, v):
         return {
             "adapter_data_object": [

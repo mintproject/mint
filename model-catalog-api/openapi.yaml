@@ -8078,6 +8078,36 @@ paths:
       summary: Register a flow of ETL pieces
       tags:
         - ModelConfiguration
+  /flows/{id}/availability:
+    get:
+      operationId: custom_flows_id_availability_get
+      description: >-
+        Whether the caller could run each step of a stored flow, without planning it.
+        The SVO adapter answers with the caller's own token; a piece another user keeps
+        private is reported as `piece_missing` and nothing else. The flow id may be the
+        full configuration id (URL-encoded) or the short id after the catalog prefix.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Each step of the flow and whether the caller may run it.
+        "401":
+          description: Missing or invalid bearer token.
+        "422":
+          description: No such flow (`FLOW_NOT_FOUND`).
+        "502":
+          description: The SVO adapter could not be reached or refused the request.
+        "503":
+          description: This deployment has no SVO adapter configured.
+      security:
+        - BearerAuth: []
+      summary: Which steps of a flow the caller can run
+      tags:
+        - ModelConfiguration
   /regions/categories:
     post:
       operationId: custom_regions_categories_post
