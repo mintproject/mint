@@ -394,8 +394,14 @@ async def _front_door_guard(request: Request, call_next):
                 "code": "INTERNAL_SERVICE_NOT_CONFIGURED",
                 "message": "the front door is on but no internal service secret is configured",
             }}, status_code=503)
-        if request.headers.get("Origin") or not _internal_service_authorized(
-            request.headers.get("X-Ensemble-Manager-Secret")
+        # The Ensemble Manager's own calls carry the secret as X-Ensemble-Manager-Secret,
+        # which also grants powers (reading every run, owned model outputs, bound
+        # plans). A user's call forwarded by the Ensemble Manager carries it as
+        # X-Front-Door-Secret, which only opens the door: those routes check the
+        # user's own token and never see the other header.
+        if request.headers.get("Origin") or not (
+            _internal_service_authorized(request.headers.get("X-Ensemble-Manager-Secret"))
+            or _internal_service_authorized(request.headers.get("X-Front-Door-Secret"))
         ):
             return JSONResponse({"detail": {
                 "code": "FRONT_DOOR_REQUIRED",

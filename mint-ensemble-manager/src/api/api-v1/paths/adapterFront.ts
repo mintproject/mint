@@ -322,3 +322,32 @@ export function piecesRouter(service: AdapterFrontService) {
 
     return router;
 }
+
+/**
+ * The adapter's user routes that the dso-dynamo MCP used to call directly, forwarded
+ * with the caller's token and the shared service secret. Only the fixed list in
+ * `adapterAllowlist.ts` is served; anything else answers 404. Mounted at `/adapter`,
+ * so `GET /v1/adapter/standard-variables` is the adapter's `GET /standard-variables`.
+ * Documented here rather than as one OpenAPI path per route: the validator ignores
+ * `/adapter/...` (see `server.ts`), and the adapter checks each body itself.
+ */
+export function adapterForwardRouter(service: AdapterFrontService) {
+    const router = Router();
+    router.use((_req, res, next) => {
+        res.set("Cache-Control", "no-store");
+        next();
+    });
+    router.all("/*", async (req, res) =>
+        relay(
+            res,
+            await service.forwardAllowed(
+                req.method,
+                req.path,
+                req.query as Record<string, unknown>,
+                req.body,
+                req.headers.authorization
+            )
+        )
+    );
+    return router;
+}

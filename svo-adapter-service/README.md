@@ -366,6 +366,8 @@ still end the stage at once. The pipeline task's `max_exec_time` is
 
 ## Demo UI (zero infra)
 
+> The bundled console stops working for user routes when `SVO_ADAPTER_REQUIRE_FRONT_DOOR` is on; the DYNAMO UI replaces it.
+
 A bundled standalone single-page UI (`static/index.html`) walks the whole flow —
 register the ETL pieces, check readiness, plan, generate, and run a Tapis
 Workflows pipeline. **Demo mode** backs every Hasura call with an in-memory store
