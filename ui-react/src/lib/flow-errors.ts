@@ -79,26 +79,70 @@ function list(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-/** One readable line for a link between settings; unknown shapes fall back to JSON. */
-export function describeFlowLink(link: unknown): string {
-  if (link && typeof link === 'object') {
-    const l = link as Details;
-    const from = l.from ?? l.source ?? l.from_step ?? l.source_step;
-    const to = l.to ?? l.target ?? l.to_step ?? l.target_step ?? l.name;
-    if (from != null && to != null) return `${text(to)} is taken from ${text(from)}`;
-  }
-  return text(link);
+/** `lexicon_uri` as `lexicon uri`. */
+function settingLabel(name: string): string {
+  return name.replace(/[_-]+/g, ' ').trim() || name;
 }
 
-/** The author's settings as `name: value` lines then one line per link. */
-export function flowSettingsLines(settings: {
-  defaults?: Record<string, unknown>;
-  links?: unknown[];
-}): string[] {
-  const defaults = Object.entries(settings.defaults ?? {}).map(
-    ([name, value]) => `${name}: ${text(value)}`,
+/** A setting's value in words; never raw JSON. */
+function valueWords(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value == null) return 'not set';
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(valueWords).join(', ');
+  if (typeof value === 'object') {
+    return Object.entries(value as Details)
+      .map(([key, item]) => `${settingLabel(key)} ${valueWords(item)}`)
+      .join(', ');
+  }
+  return String(value);
+}
+
+/** The steps of a flow as the plan lists them, for naming a step in a line. */
+type StepNames = ReadonlyArray<{ step: string | number; name?: string }>;
+
+function stepLabel(step: unknown, steps: StepNames): string {
+  const found = steps.find((s) => String(s.step) === String(step));
+  return `Step ${text(step)}${found?.name ? `, ${found.name}` : ''}`;
+}
+
+function wholeNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+/**
+ * One readable line for a setting a flow fills from an earlier step's output:
+ * "Step 3, Score lexicon - lexicon uri: taken from step 2's output 1". An
+ * unknown shape shows the setting's name, or just that the flow sets it.
+ */
+export function describeFlowLink(link: unknown, steps: StepNames = []): string {
+  const l = link && typeof link === 'object' ? (link as Details) : {};
+  const setting = typeof l.setting === 'string' && l.setting ? settingLabel(l.setting) : '';
+  const from = l.from && typeof l.from === 'object' ? (l.from as Details) : null;
+  const fromStep = from?.step;
+  const output = wholeNumber(from?.output);
+  if (!setting || fromStep == null || output == null) {
+    return `${setting || 'A setting'}: set by the flow`;
+  }
+  const label = typeof from?.label === 'string' && from.label ? from.label : `output ${output + 1}`;
+  const owner = l.step != null ? `${stepLabel(l.step, steps)} - ` : '';
+  return `${owner}${setting}: taken from step ${text(fromStep)}'s ${label}`;
+}
+
+/** One readable line for a value the flow's author fixed. */
+export function describeFlowDefault(name: string, value: unknown): string {
+  return `${settingLabel(name)}: ${valueWords(value)}`;
+}
+
+/** The author's settings as one line per fixed value then one line per link. */
+export function flowSettingsLines(
+  settings: { defaults?: Record<string, unknown>; links?: unknown[] },
+  steps: StepNames = [],
+): string[] {
+  const defaults = Object.entries(settings.defaults ?? {}).map(([name, value]) =>
+    describeFlowDefault(name, value),
   );
-  const links = (settings.links ?? []).map(describeFlowLink);
+  const links = (settings.links ?? []).map((link) => describeFlowLink(link, steps));
   return [...defaults, ...links];
 }
 

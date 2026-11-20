@@ -339,17 +339,75 @@ export function parametersComplete(threadData: ThreadExecutionData | null): bool
   });
 }
 
+/** A model's runs were submitted and every one has finished. */
+export function modelRunsFinished(summary: ExecutionSummary | undefined): boolean {
+  if (!summary) return false;
+  return (
+    summary.submitted_runs > 0 &&
+    summary.total_runs > 0 &&
+    summary.successful_runs + summary.failed_runs >= summary.total_runs
+  );
+}
+
+/** A model has at least one finished, successful run whose results can be read. */
+export function modelHasResults(summary: ExecutionSummary | undefined): boolean {
+  return !!summary && summary.successful_runs > 0;
+}
+
 /** Every model's runs have been submitted and have all finished. */
 export function runsComplete(threadData: ThreadExecutionData | null): boolean {
   if (!threadData) return false;
   const modelIds = Object.keys(threadData.execution_summary ?? {});
   if (modelIds.length === 0) return false;
-  return modelIds.every((mid) => {
-    const s = threadData.execution_summary[mid]!;
-    return (
-      s.submitted_runs > 0 && s.successful_runs + s.failed_runs >= s.total_runs && s.total_runs > 0
-    );
-  });
+  return modelIds.every((mid) => modelRunsFinished(threadData.execution_summary[mid]));
+}
+
+/** At least one model on the thread has a finished successful run to show. */
+export function anyResults(threadData: ThreadExecutionData | null): boolean {
+  if (!threadData) return false;
+  return Object.values(threadData.execution_summary ?? {}).some(modelHasResults);
+}
+
+/** How many of the thread's models have finished all their runs. */
+export function finishedModelCount(threadData: ThreadExecutionData | null): {
+  finished: number;
+  total: number;
+} {
+  const modelIds = Object.keys(threadData?.models ?? {});
+  const finished = modelIds.filter((mid) =>
+    modelRunsFinished(threadData?.execution_summary?.[mid]),
+  ).length;
+  return { finished, total: modelIds.length };
+}
+
+/**
+ * The thread models a Parameters save must reset: those with no execution
+ * summary yet (newly added), a different run count, or different parameter
+ * values than the ones stored. Every other model keeps its runs and counts.
+ */
+export function changedParameterModelIds(
+  threadData: ThreadExecutionData,
+  ensembles: Record<string, { id: string; bindings: Record<string, string[]> }>,
+  summaries: Record<string, { total_runs: number }>,
+): string[] {
+  const changed: string[] = [];
+  for (const [mid, ensemble] of Object.entries(ensembles)) {
+    const model = threadData.models[mid];
+    if (!model || !ensemble.id) continue;
+    const stored = threadData.execution_summary?.[mid];
+    const storedBindings = threadData.model_ensembles[mid]?.bindings ?? {};
+    const sameParameters = userParameters(model)
+      .filter((p) => !p.value)
+      .every((p) => {
+        const before = storedBindings[p.id ?? ''] ?? [];
+        const after = ensemble.bindings[p.id ?? ''] ?? [];
+        return before.length === after.length && before.every((v, i) => v === after[i]);
+      });
+    if (!stored || !sameParameters || stored.total_runs !== summaries[mid]?.total_runs) {
+      changed.push(ensemble.id);
+    }
+  }
+  return changed;
 }
 
 /** True while any model still has runs the execution engine has not finished. */

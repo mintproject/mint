@@ -17,13 +17,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type { FlowSettings, RequiredSecret, SendsDataTo } from '@/lib/ensemble-manager';
-import { describeFlowLink } from '@/lib/flow-errors';
+import type { FlowSettings, FlowStep, RequiredSecret, SendsDataTo } from '@/lib/ensemble-manager';
+import { describeFlowDefault, describeFlowLink } from '@/lib/flow-errors';
 
 /** What the user must see or settle before a flow run is submitted. */
 export interface FlowRunGate {
   /** The author's settings, when there are any to accept. */
   settings?: FlowSettings;
+  /** The flow's steps, to name the step a setting belongs to. */
+  steps?: FlowStep[];
   /** Outside services the run sends data to; ticked on every run. */
   sendsDataTo?: SendsDataTo[];
   /** Saved credentials the flow needs; set only when the plan is not ready. */
@@ -34,10 +36,6 @@ interface FlowSettingsDialogProps {
   gate: FlowRunGate | null;
   onConfirm: () => void;
   onCancel: () => void;
-}
-
-function valueText(value: unknown): string {
-  return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
 export function FlowSettingsDialog({ gate, onConfirm, onCancel }: FlowSettingsDialogProps) {
@@ -95,16 +93,14 @@ export function FlowSettingsDialog({ gate, onConfirm, onCancel }: FlowSettingsDi
             {defaults.length > 0 && (
               <ul className="space-y-1 text-sm" data-testid="flow-settings-defaults">
                 {defaults.map(([name, value]) => (
-                  <li key={name}>
-                    <span className="font-medium">{name}</span>: {valueText(value)}
-                  </li>
+                  <li key={name}>{describeFlowDefault(name, value)}</li>
                 ))}
               </ul>
             )}
             {links.length > 0 && (
               <ul className="space-y-1 text-sm" data-testid="flow-settings-links">
                 {links.map((link, index) => (
-                  <li key={index}>{describeFlowLink(link)}</li>
+                  <li key={index}>{describeFlowLink(link, gate?.steps)}</li>
                 ))}
               </ul>
             )}

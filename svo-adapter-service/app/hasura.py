@@ -510,8 +510,7 @@ USER_ACTIVE_RUN = """
 query UserActiveRun($user: String!) {
   adapter_workflow_run(
     where: {submitted_by: {_eq: $user}, status: {_in: ["submitting", "running"]}}
-    limit: 1
-  ) { id }
+  ) { id tapis_workflow_id tapis_run_id }
 }
 """
 

@@ -123,6 +123,22 @@ class StorageTests(unittest.TestCase):
         )
         self.assertNotIn("cors_allow_origins", graphql["networking"]["default"])
 
+    def test_ensemble_networking_allows_the_browser_methods_the_ui_uses(self):
+        ensemble = deploy.build_specs("mintproject", "develop", "https://portals.tapis.io")["ensemble"]
+        default = ensemble["networking"]["default"]
+        self.assertEqual(default["cors_allow_methods"], ["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+        self.assertEqual(default["cors_allow_headers"], ["Authorization", "Content-Type"])
+        self.assertEqual(default["cors_allow_origins"], ["https://mintdevui.pods.portals.tapis.io"])
+        self.assertEqual(default["cors_max_age"], 100)
+
+    def test_ensemble_update_still_does_not_resubmit_networking(self):
+        spec = deploy.build_specs("mintproject", "develop", "https://portals.tapis.io")["ensemble"]
+        t = Mock()
+        t.pods.get_pod.return_value = dict(spec, networking={"default": {"cors_allow_methods": ["GET"]}})
+        with patch.object(deploy, "wait_for_pod_image", return_value=spec):
+            deploy.upsert_pod(t, spec, recreate=False, start=False, restart=False)
+        self.assertNotIn("networking", t.pods.update_pod.call_args.kwargs)
+
     def test_graphql_live_deploy_requires_auth_configuration(self):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(SystemExit) as ctx:

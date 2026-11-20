@@ -113,9 +113,10 @@ export function MintResults({
 }: MintResultsProps) {
   const modelIds = Object.keys(threadData.execution_summary ?? {});
 
+  // One submitted model is enough to browse: the others show as not run yet.
   const paramsDone =
     modelIds.length > 0 &&
-    modelIds.every((mid) => {
+    modelIds.some((mid) => {
       const s = threadData.execution_summary[mid];
       return s && (s.submitted_for_execution || s.submission_time);
     });
@@ -271,7 +272,9 @@ export function MintResults({
             return (
               <li key={mid} className="rounded-md border px-4 py-3">
                 <h4 className="mb-1 text-sm font-medium">{model.name}</h4>
-                <p className="text-sm text-gray-500">Please execute some runs first.</p>
+                <p className="text-sm text-gray-500">
+                  Not run yet. Send this model's runs from the Runs step.
+                </p>
               </li>
             );
           }

@@ -34,7 +34,10 @@ import {
   type ThreadModelSummaryInsert,
 } from '@/graphql/generated/thread-execution';
 import {
+  anyResults,
+  changedParameterModelIds,
   datasetsComplete,
+  finishedModelCount,
   executionFromGQL,
   hasUnfinishedRuns,
   parametersComplete,
@@ -462,12 +465,15 @@ export function MintThread({
       if (!threadId || !threadExecutionData) return;
       const modelParams: ThreadModelParameterInsert[] = [];
       const summaries: ThreadModelSummaryInsert[] = [];
+      // Only models whose parameters changed are rewritten; the rest keep their
+      // runs and counts (see UpdateThreadParametersDocument).
+      const changedIds = new Set(changedParameterModelIds(threadExecutionData, ensembles, summary));
 
       for (const [modelId, ensemble] of Object.entries(ensembles)) {
         const model = threadExecutionData.models[modelId];
         // `bindings` holds data and parameter bindings side by side; only the
         // adjustable parameters belong in thread_model_parameter.
-        if (!model || !ensemble.id) continue;
+        if (!model || !ensemble.id || !changedIds.has(ensemble.id)) continue;
         for (const param of userParameters(model).filter((p) => !p.value)) {
           for (const value of ensemble.bindings[param.id] ?? []) {
             modelParams.push({
@@ -489,13 +495,13 @@ export function MintThread({
 
       await updateThreadParameters({
         variables: {
-          threadId,
           event: {
             thread_id: threadId,
             event: 'SELECT_PARAMETERS',
             userid: user?.username ?? 'anonymous',
             notes: notes || null,
           },
+          changedThreadModelIds: [...changedIds],
           summaries,
           modelParams,
         },
@@ -866,7 +872,9 @@ export function MintThread({
         const secretsNotReady = flowPlan.secrets_ready === false;
         if (secretsNotReady || hasAuthorSettings || sendsDataTo.length > 0) {
           const proceed = await askFlowAcceptance({
-            ...(hasAuthorSettings ? { settings: authorSettings } : {}),
+            ...(hasAuthorSettings
+              ? { settings: authorSettings, steps: flowPlan.flow_steps ?? [] }
+              : {}),
             ...(sendsDataTo.length > 0 ? { sendsDataTo } : {}),
             ...(secretsNotReady ? { requiredSecrets: flowPlan.required_secrets ?? [] } : {}),
           });
@@ -1156,6 +1164,8 @@ export function MintThread({
     parametersComplete:
       !adapterPlansLoading && !adapterPlanError && parametersComplete(threadExecutionData),
     runsComplete: runsComplete(threadExecutionData),
+    resultsAvailable: anyResults(threadExecutionData),
+    finishedModels: finishedModelCount(threadExecutionData),
   });
 
   function renderStep() {

@@ -108,4 +108,30 @@ describe('deriveStepStates', () => {
       ).variables.summary,
     ).toBe('drawdown');
   });
+
+  describe('Results with partly finished runs', () => {
+    const thread = makeThread({
+      name: 'X',
+      thread_models: [{ id: 'tm' } as never],
+    });
+    const base = { datasetsComplete: true, parametersComplete: true };
+
+    it('unlocks Results when one model has results, and keeps Runs pending', () => {
+      const s = deriveStepStates(thread, {
+        ...base,
+        runsComplete: false,
+        resultsAvailable: true,
+        finishedModels: { finished: 2, total: 3 },
+      });
+      expect(s.results.locked).toBe(false);
+      expect(s.runs.status).not.toBe('done');
+      expect(s.runs.summary).toBe('2 of 3 complete');
+    });
+
+    it('keeps Results locked while nothing has results', () => {
+      const s = deriveStepStates(thread, { ...base, finishedModels: { finished: 0, total: 3 } });
+      expect(s.results.locked).toBe(true);
+      expect(s.runs.summary).toBe('Pending');
+    });
+  });
 });

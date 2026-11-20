@@ -358,7 +358,20 @@ def build_specs(
             "pod_id": PODS["ensemble"],
             "image": image("ensemble"),
             "description": "MINT dev Ensemble Manager",
-            "networking": {"default": {"protocol": "http", "port": 3000}},
+            # The browser calls this pod directly, including PUT and DELETE
+            # (saved credentials, piece approvals), which a preflight blocks
+            # unless the methods are allowed. Applied when the pod is created
+            # or recreated; an ordinary update keeps the live networking.
+            "networking": {
+                "default": {
+                    "protocol": "http",
+                    "port": 3000,
+                    "cors_allow_origins": [urls["ui"]],
+                    "cors_allow_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                    "cors_allow_headers": ["Authorization", "Content-Type"],
+                    "cors_max_age": 100,
+                }
+            },
             "resources": {"cpu_request": 500, "cpu_limit": 2000, "mem_request": 1024, "mem_limit": 4096},
             "environment_variables": {
                 "REDIS_URL": _env("MINTDEV_REDIS_URL", f"redis://{PODS['redis']}:6379"),

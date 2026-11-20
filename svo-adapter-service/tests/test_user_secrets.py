@@ -263,6 +263,72 @@ def test_a_finished_run_releases_the_lock():
     assert client.delete("/secrets/model_server", headers=ALICE).status_code == 200
 
 
+# --- stale runs: Tapis is asked before a run blocks a change ---------------------
+def _tapis_run(run_id="run-1", status="running"):
+    STORE.run[run_id] = {"id": run_id, "submitted_by": "alice", "status": status,
+                         "tapis_workflow_id": "pipe", "tapis_run_id": "uuid"}
+
+
+def _tapis_says(monkeypatch, status, detail=None, unreachable=False):
+    def get_status(*_a, **_k):
+        return None if unreachable else status
+    monkeypatch.setattr("app.poller.tapis_mod.get_run_status", get_status)
+    monkeypatch.setattr("app.poller.tapis_mod.get_run_detail", lambda *_a, **_k: detail or {"tasks": []})
+
+
+def test_a_run_tapis_finished_no_longer_blocks_a_change(monkeypatch):
+    _put()
+    _tapis_run()
+    _tapis_says(monkeypatch, "COMPLETED", {"tasks": [{"task_id": "model", "status": "COMPLETED"}]})
+    assert _put(body={"fields": {"api_key": "new-value-ok"}}).status_code == 200
+    assert STORE.run["run-1"]["status"] == "completed"
+
+
+def test_a_run_tapis_finished_as_failed_is_closed_failed(monkeypatch):
+    _put()
+    _tapis_run()
+    _tapis_says(monkeypatch, "COMPLETED", {"tasks": [{"task_id": "model", "status": "failed"}]})
+    assert client.delete("/secrets/model_server", headers=ALICE).status_code == 200
+    assert STORE.run["run-1"]["status"] == "failed"
+
+
+def test_a_run_tapis_still_runs_blocks_and_names_the_run(monkeypatch):
+    _put()
+    _tapis_run()
+    _tapis_says(monkeypatch, "ACTIVE")
+    locked = _put(body={"fields": {"api_key": "swapped-value"}})
+    assert locked.status_code == 409 and locked.json()["detail"]["code"] == "SECRET_LOCKED_BY_RUN"
+    assert locked.json()["detail"]["run_id"] == "run-1" and "run-1" in locked.json()["detail"]["message"]
+    assert STORE.run["run-1"]["status"] == "running"
+
+
+def test_an_unreachable_tapis_still_refuses(monkeypatch):
+    _put()
+    _tapis_run()
+    _tapis_says(monkeypatch, None, unreachable=True)
+    assert _put(body={"fields": {"api_key": "swapped-value"}}).status_code == 409
+    assert STORE.run["run-1"]["status"] == "running"
+
+
+def test_unreadable_task_detail_keeps_the_run_open(monkeypatch):
+    _put()
+    _tapis_run()
+    _tapis_says(monkeypatch, "COMPLETED", {"tasks_error": "ApiException: 403"})
+    assert _put(body={"fields": {"api_key": "swapped-value"}}).status_code == 409
+    assert STORE.run["run-1"]["status"] == "running"
+
+
+def test_runs_past_the_bound_are_left_and_block(monkeypatch):
+    from app import poller
+    monkeypatch.setattr(poller, "RECONCILE_MAX_RUNS", 1)
+    _put()
+    _tapis_run("run-1")
+    _tapis_run("run-2")
+    _tapis_says(monkeypatch, "COMPLETED")
+    assert _put(body={"fields": {"api_key": "swapped-value"}}).status_code == 409
+    assert {r["status"] for r in STORE.run.values()} == {"completed", "running"}
+
+
 # --- rate limit ------------------------------------------------------------------
 def test_more_than_twenty_changes_in_ten_minutes_is_429():
     for i in range(20):

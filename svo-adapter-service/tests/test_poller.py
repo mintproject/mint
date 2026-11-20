@@ -212,3 +212,34 @@ def test_sweep_flags_a_task_that_started_but_never_submitted_a_job(monkeypatch):
     _patch_sweep(monkeypatch, [_armed_run(last_signal_at=started, started_at=started)])
 
     assert asyncio.run(poller.sweep_stalled()) == [{"run_id": "run-s", "phase": "no_job"}]
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("tasks", [
+    [{"task_id": "model", "status": "failed"}],
+    [{"task_id": "model", "status": "failed"}, {"task_id": "in0-step-0-aoi_from_boundary", "status": "completed"}],
+    [{"task_id": "model", "status": "FAILED"}],
+    [{"task_id": "model", "status": "error"}],
+    [{"task_id": "model", "status": "TERMINATED"}, {"task_id": "step-0-x", "status": "COMPLETED"}],
+    [{"task_id": "model", "status": "Cancelled"}],
+])
+def test_a_completed_pipeline_with_a_failed_required_task_ends_failed(tasks):
+    status, update = poller._terminal_update_set("COMPLETED", {"tasks": tasks})
+
+    assert status == "failed" and update["status"] == "failed"
+    assert "model" in update["error_message"]
+
+
+def test_a_completed_pipeline_with_every_task_completed_ends_completed():
+    status, update = poller._terminal_update_set("COMPLETED", {"tasks": [
+        {"task_id": "model", "status": "COMPLETED"},
+        {"task_id": "in0-step-0-aoi_from_boundary", "status": "completed"}]})
+
+    assert status == "completed" and "error_message" not in update
+
+
+def test_a_completed_pipeline_with_unreadable_detail_is_not_closed():
+    assert poller._terminal_update_set("COMPLETED", {"tasks_error": "ApiException: 403"}) == (None, {})
+    assert poller._terminal_update_set("COMPLETED", {"run_error": "boom"}) == (None, {})
