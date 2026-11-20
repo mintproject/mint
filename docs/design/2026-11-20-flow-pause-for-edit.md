@@ -3,7 +3,10 @@
 ## Status
 
 Approved (2026-11-20). Implementing.
-Phase B (a flow run from a thread) is checked on dev. Phases C and D are not started.
+Built in PR #456 (merged 2026-11-20) and deployed to dev. Formulation with a pause was checked
+live on dev on 2026-11-20 (see Decisions). Phase B (a flow run from a thread) was checked on dev
+on 2026-11-19. The flows-as-models phases C and D are outside this spec's checks. Not complete:
+the open items are listed under Remaining in Decisions.
 
 Checked against the `docs-phases` worktree. Paths below are relative to the monorepo root
 of that worktree unless they start with a service directory that is a sibling. Nothing was
@@ -530,6 +533,22 @@ Production needs its own go-ahead for each part.
 10. **One pause per run, one file per pause** in the first cut. Confirm.
 11. **Secret flows.** Confirm that a flow with secret settings cannot pause in the first cut.
 
+## Deviations
+
+Where the build differs from the approved design. Reasons are under Decisions.
+
+- **The edit is uploaded through CKAN** (PR #454), as a user upload. Neither route (a) (direct
+  to Tapis Files) nor route (b) (`POST /uploads`) was built. The next segment reads the file
+  as the runner. Recorded as a later user decision in open question 5.
+- **Resume routes.** The adapter's is `POST /runs/{id}/resume`, as designed. The EM's is
+  `POST /plans/runs/{runId}/resume`, not the designed `POST /v1/executions/{id}/resume`. Live on
+  2026-11-20, the UI's "Resume with this edit" called the EM route. It started segment 2 as
+  adapter run `6fa34cb2`, with a `gather-edit` task, and the run completed.
+- **The pause limit is 14 days.** Code: `config.py`, `flow_pause_max_days = 14`, with the
+  setting `SVO_ADAPTER_FLOW_PAUSE_ENABLED` (default off).
+- **The flow is a new configuration.** The live Formulation run used the combined flow. The
+  older "Formulation draft" flow stays.
+
 ## Decisions
 
 - 2026-11-20, proposed by the assistant, not confirmed: segments, not a waiting task (section 1).
@@ -563,6 +582,17 @@ Production needs its own go-ahead for each part.
   11. **Against this draft:** a flow with secrets may pause. Each segment binds the secrets
       of its own steps when it is submitted. Without this the Formulation flow, whose draft
       step needs the model-server credential, could not pause at all.
+
+- 2026-11-20, live check on dev (user's report): the Formulation flow paused after its draft;
+  its lexicon was edited; the run resumed; the counts used the edit.
+- 2026-11-20, what remains (Status line, Remaining):
+  - The flow form cannot choose an editable output for a new pause (D3 gap, see
+    `2026-11-20-flow-authoring-in-the-ui.md`).
+  - Not reported as built or checked: E2 (refusing a pause with no editable output at
+    `/flows/check` and `POST /flows`); a malformed edit returning the run to `awaiting_edit`;
+    cancel while paused.
+  - Not run on dev: the second account's resume refusal; the 14-day sweep.
+  - Scratch retention for `dynamo-runs/` is not decided (open question 3).
 
 ## User feedback / decisions
 

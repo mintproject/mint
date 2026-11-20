@@ -3,7 +3,9 @@
 ## Status
 
 Approved (2026-11-20). Implementing.
-Not yet reviewed by the user.
+D1 and D2 are built (PR #455, which also merged the admin approval). D3 (the flow form) and the
+D4 proposal route are in PR #459 (merged 2026-11-20). D5 (ranking by meaning) is not started.
+Not complete: the open items are listed under Remaining in Decisions.
 
 Parts D1 to D5 each merge and deploy to dev on their own (see Rollout/rollback).
 
@@ -588,6 +590,20 @@ check. D1 and D2 do not depend on each other. Secret arguments wait on `feat/flo
 9. **Secret arguments and `sends_data_to` in D1.** Wait for `feat/flow-step-secrets`, or ship
    without them?
 
+## Deviations
+
+Where the build differs from the approved design. Reasons are under Decisions.
+
+- **Routes are reached through the EM's forward.** The form's check and proposals call
+  `/v1/adapter/flows/check` and `/v1/adapter/flows/propose`, not the catalog (decision of
+  2026-11-20 below).
+- **Piece routes, as built.** The adapter's are `POST /pieces/from-repository`,
+  `GET /pieces/approvals`, and `GET` and `PUT /transform-specs/{id}/approval`. The design named the
+  first and last of these the same way; it did not name a listing route. The browser reaches them
+  through the EM at `POST /v1/etl-pieces/from-repository`, `GET /v1/etl-pieces/approvals`, and
+  `GET` and `PUT /v1/etl-pieces/{id}/approval` (#457). This is the deviation: the browser never
+  calls the adapter directly.
+
 ## Decisions
 
 - 2026-11-20 (implementing D3/D4): with the adapter's front door on, the form's live check and
@@ -624,6 +640,28 @@ check. D1 and D2 do not depend on each other. Secret arguments wait on `feat/flo
   7. A form, with a read-only graph view.
   8. Proposal limits: depth 3, 2000 expansions, as proposed.
   9. D1 ships with `secrets` and `sends_data_to`, built on `feat/flow-step-secrets`.
+
+- 2026-11-20, what was merged (PR descriptions and the user's report; code paths not all read):
+  #455 registers a piece from a repository commit and adds admin approval (D1 and D2); #459 is
+  the flow form, with the check and proposals through the EM's forward (D3, and the D4 route
+  `flows/propose`).
+- 2026-11-20, what remains:
+  - D5 (ranking by meaning) is not started. It waits for the measurement this spec requires.
+  - The form's graph view can lag the step list.
+  - The form cannot choose an editable output for a new pause (see the pause spec).
+  - Live on dev (2026-11-20): the flow form page loads, and `/v1/adapter/flows/propose` returned
+    200. No flow was saved from the form.
+  - Not run live: piece registration from GitHub and approval from the page. The two credential
+    pieces were registered and approved through the operator routes instead. Saving the three
+    sensemaking flows from the form (D3). Proposals on the SUBSIDE flow (D4). A second account
+    running an approved piece is not reported.
+  - `feat/flow-step-secrets` shipped in #450. `secrets` and `sends_data_to` are declared on the
+    piece and shown in the pre-run dialog. Live, the Narrative flow fetched the stored
+    `model_server` credential and its frames were labelled by the chat model (`labeled_by: chat`);
+    the key appeared in no output or settings file. Open question 6 (whether the approved hash
+    covers `sends_data_to` and secrets) is not confirmed here.
+  - The upload page's map and metadata work (PR #461) is in progress. It is not part of this
+    spec.
 
 ## User feedback / decisions
 
