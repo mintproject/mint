@@ -3,9 +3,12 @@
  */
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GetConfigurationDocument } from '@/graphql/generated/graphql';
+import { GET_CONFIGURATION_FLOW } from '@/graphql/queries/flows';
+import { clearFlowAvailabilityCache } from '@/lib/flow-availability';
+import { setMintConfig } from '@/test/utils/mint-config';
 import { renderWithProviders } from '@/test/utils/render';
 import { ConfigurationDetail } from '@/components/configuration/ConfigurationDetail';
 
@@ -232,5 +235,148 @@ describe('ConfigurationDetail', () => {
 
     expect(screen.getByText('float')).toBeInTheDocument();
     expect(screen.getByText('0.5')).toBeInTheDocument();
+  });
+});
+
+// ─── Flows ────────────────────────────────────────────────────────────────────
+
+describe('ConfigurationDetail for a flow', () => {
+  const flowMock = (flow: unknown) => ({
+    request: { query: GET_CONFIGURATION_FLOW, variables: { id: 'cfg1' } },
+    result: { data: { modelcatalog_configuration_flow_by_pk: flow } },
+  });
+  const piece = (id: string, label: string) => ({
+    __typename: 'modelcatalog_etl_process',
+    id,
+    label,
+    description: `${label} description`,
+    owner_username: 'alice',
+    visibility: 'public',
+  });
+  const step = (
+    position: number,
+    etl_process_id: string | null,
+    etl_process: unknown,
+    extra = {},
+  ) => ({
+    __typename: 'modelcatalog_configuration_step',
+    position,
+    etl_process_id,
+    etl_process,
+    settings_json: {},
+    wires_json: [],
+    pause_after: false,
+    ...extra,
+  });
+  const flow = {
+    __typename: 'modelcatalog_configuration_flow',
+    configuration_id: 'cfg1',
+    outputs_json: [],
+    thread_bindings_json: { region: { input: 'ds1' }, collections: ['ds1'] },
+    steps: [
+      step(1, 'p1', piece('p1', 'Ingest'), {
+        settings_json: { top_n: '25' },
+        wires_json: [{ to: { input: 0 }, from: { flow_input: 'ds1' } }],
+      }),
+      step(2, 'p2', piece('p2', 'Score'), {
+        wires_json: [
+          { to: { input: 0 }, from: { step: 1, output: 1 } },
+          { to: { setting: 'top_n' }, from: { step: 1, value: 'job_uuid' } },
+          { to: {}, from: { step: 1 } },
+        ],
+      }),
+      step(3, 'hidden', null, { wires_json: [{ to: { input: 0 }, from: { step: 2, output: 0 } }] }),
+    ],
+  };
+
+  beforeEach(() => {
+    clearFlowAvailabilityCache();
+    setMintConfig({});
+  });
+  afterEach(() => {
+    delete (window as { __MINT_CONFIG__?: unknown }).__MINT_CONFIG__;
+  });
+
+  it('shows a Steps section with each piece, its owner, settings and readable wires', async () => {
+    renderWithProviders(<ConfigurationDetail configurationId="cfg1" />, {
+      apolloMocks: [configQueryMock, flowMock(flow)],
+    });
+    const section = await screen.findByTestId('flow-steps-section');
+    expect(section).toHaveTextContent('Steps (3)');
+    expect(screen.getByTestId('flow-steps-canvas')).toBeInTheDocument();
+
+    const first = screen.getByTestId('flow-steps-step-1');
+    expect(first).toHaveTextContent('1. Ingest');
+    expect(first).toHaveTextContent('Ingest description');
+    expect(first).toHaveTextContent('Owner: alice');
+    expect(first).toHaveTextContent('public');
+    expect(first).toHaveTextContent('top_n = 25');
+    expect(first).toHaveTextContent('input 0 ← flow input Precipitation');
+
+    const second = screen.getByTestId('flow-steps-step-2');
+    expect(second).toHaveTextContent('input 0 ← step 1, output 1');
+    expect(second).toHaveTextContent('setting top_n ← step 1, value job_uuid');
+    expect(second).toHaveTextContent('runs after step 1');
+
+    expect(screen.getByTestId('flow-steps-step-3')).toHaveTextContent(
+      "This step's piece was deleted or is not visible to you.",
+    );
+    expect(section).toHaveTextContent("The thread's region fills: Precipitation");
+    expect(section).toHaveTextContent('Takes a collection of files: Precipitation');
+  });
+
+  it('marks each step runnable or not, and says the flow is unavailable, when the adapter answers', async () => {
+    setMintConfig({ SVO_ADAPTER_API: 'http://adapter' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          flow_id: 'cfg1',
+          available: false,
+          steps: [
+            { position: 1, runnable: true, reason: null },
+            { position: 2, runnable: false, reason: 'not_approved' },
+            { position: 3, runnable: false, reason: 'piece_missing' },
+          ],
+        }),
+      })),
+    );
+    try {
+      renderWithProviders(<ConfigurationDetail configurationId="cfg1" />, {
+        apolloMocks: [configQueryMock, flowMock(flow)],
+      });
+      expect(await screen.findByText(/This flow is not available to you/)).toBeInTheDocument();
+      expect(screen.getByTestId('flow-steps-step-1')).toHaveTextContent('Runnable');
+      expect(screen.getByTestId('flow-steps-step-2')).toHaveTextContent(
+        'Not runnable: the piece is not approved for your account',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('shows no Steps section for a model that is not a flow', async () => {
+    renderWithProviders(<ConfigurationDetail configurationId="cfg1" />, {
+      apolloMocks: [configQueryMock, flowMock(null)],
+    });
+    await screen.findByText('Default Configuration');
+    await waitFor(() => expect(screen.getByText('Threshold')).toBeInTheDocument());
+    expect(screen.queryByTestId('flow-steps-section')).not.toBeInTheDocument();
+  });
+
+  it('still renders the page when the flow query fails', async () => {
+    renderWithProviders(<ConfigurationDetail configurationId="cfg1" />, {
+      apolloMocks: [
+        configQueryMock,
+        {
+          request: { query: GET_CONFIGURATION_FLOW, variables: { id: 'cfg1' } },
+          error: new Error('field not found'),
+        },
+      ],
+    });
+    expect(await screen.findByText('Default Configuration')).toBeInTheDocument();
+    expect(screen.queryByTestId('flow-steps-section')).not.toBeInTheDocument();
   });
 });

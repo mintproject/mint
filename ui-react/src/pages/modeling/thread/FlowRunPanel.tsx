@@ -10,11 +10,11 @@ import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 import {
-  WORKFLOW_NODE_WIDTH,
   WorkflowCanvas,
   type WorkflowCanvasEdge,
   type WorkflowCanvasPosition,
 } from '@/components/modeling/WorkflowCanvas';
+import { FLOW_LAYOUT_OPTIONS, flowCanvasHeight, layoutFlowGraph } from '@/lib/flow-graph-layout';
 import { EnsembleManagerError, type UnifiedRunSnapshot } from '@/lib/ensemble-manager';
 import { flowErrorMessage, stepErrorText } from '@/lib/flow-errors';
 
@@ -50,11 +50,6 @@ const STEP_PILL_CLASS: Record<FlowStepState, string> = {
   skipped: 'bg-gray-100 text-gray-500',
 };
 
-const NODE_HEIGHT = 128;
-const LAYER_GAP = 100;
-const ROW_GAP = 24;
-const CANVAS_MIN_HEIGHT = 240;
-const LAYOUT_OPTIONS = { nodeHeight: NODE_HEIGHT };
 const TERMINAL_RUN_STATUSES = ['completed', 'failed', 'cancelled'];
 
 /** A step's state from the word the Ensemble Manager reports for it. */
@@ -88,67 +83,19 @@ export interface FlowStageGraph {
 }
 
 /**
- * Nodes, positions and edges for a flow's stages.
- *
- * A step sits one layer right of the deepest step it depends on (the longest
- * path from a root), so steps with the same dependencies share a layer and run
- * side by side, and a step with several dependencies has one edge from each.
- * The canvas's own auto layout refines these starting positions.
+ * Nodes, positions and edges for a flow's stages: one node per stage, one edge
+ * per `depends_on` entry, laid out by `layoutFlowGraph`.
  */
 export function flowStageGraph(stages: readonly FlowStage[]): FlowStageGraph {
-  const byId = new Map(stages.map((stage) => [stage.stage_id, stage]));
-  const layerOf = new Map<string, number>();
-  const layer = (id: string, trail: Set<string>): number => {
-    const known = layerOf.get(id);
-    if (known !== undefined) return known;
-    if (trail.has(id)) return 0; // a cycle: do not recurse forever
-    trail.add(id);
-    const deps = (byId.get(id)?.depends_on ?? []).filter((dep) => byId.has(dep));
-    const value = deps.length === 0 ? 0 : Math.max(...deps.map((dep) => layer(dep, trail))) + 1;
-    trail.delete(id);
-    layerOf.set(id, value);
-    return value;
-  };
-
   const nodes: FlowGraphNode[] = stages.map((stage) => ({
     id: stage.stage_id,
     label: flowStepLabel(stage),
     state: flowStepState(stage.status),
   }));
-  const rowsUsed = new Map<number, number>();
-  const hasDependents = new Set(stages.flatMap((stage) => stage.depends_on ?? []));
-  const positions = nodes.map((node) => {
-    const column = layer(node.id, new Set());
-    const row = rowsUsed.get(column) ?? 0;
-    rowsUsed.set(column, row + 1);
-    const deps = (byId.get(node.id)?.depends_on ?? []).filter((dep) => byId.has(dep));
-    return {
-      node,
-      x: 24 + column * (WORKFLOW_NODE_WIDTH + LAYER_GAP),
-      y: 24 + row * (NODE_HEIGHT + ROW_GAP),
-      hasInputPort: deps.length > 0,
-      hasOutputPort: hasDependents.has(node.id),
-      inputPortSide: 'left' as const,
-      outputPortSide: 'right' as const,
-    };
-  });
-  const at = new Map(positions.map((position) => [position.node.id, position]));
-  const edges: WorkflowCanvasEdge[] = stages.flatMap((stage) =>
-    (stage.depends_on ?? [])
-      .filter((dep) => at.has(dep))
-      .map((dep) => {
-        const from = at.get(dep)!;
-        const to = at.get(stage.stage_id)!;
-        return {
-          id: `${dep}-to-${stage.stage_id}`,
-          source: dep,
-          target: stage.stage_id,
-          from: { x: from.x + WORKFLOW_NODE_WIDTH, y: from.y + NODE_HEIGHT / 2 },
-          to: { x: to.x, y: to.y + NODE_HEIGHT / 2 },
-        };
-      }),
+  const links = stages.flatMap((stage) =>
+    (stage.depends_on ?? []).map((dep) => ({ from: dep, to: stage.stage_id })),
   );
-  return { nodes, positions, edges };
+  return { nodes, ...layoutFlowGraph(nodes, links) };
 }
 
 function FlowStepNode({ node }: { node: FlowGraphNode }) {
@@ -230,10 +177,7 @@ export function FlowRunPanel({
   const graph = flowStageGraph(stages);
   const tapisWorkflow = run.tapis_workflow;
   const active = !TERMINAL_RUN_STATUSES.includes(String(run.status ?? ''));
-  const canvasHeight = Math.max(
-    CANVAS_MIN_HEIGHT,
-    ...graph.positions.map((position) => position.y + NODE_HEIGHT + 24),
-  );
+  const canvasHeight = flowCanvasHeight(graph.positions);
 
   return (
     <div
@@ -261,7 +205,7 @@ export function FlowRunPanel({
         edges={graph.edges}
         renderNode={(node) => <FlowStepNode node={node} />}
         height={canvasHeight}
-        layoutOptions={LAYOUT_OPTIONS}
+        layoutOptions={FLOW_LAYOUT_OPTIONS}
         markerId={`flow-graph-arrow-${run.run_id ?? 'current'}`}
         testId="flow-graph-canvas"
       />

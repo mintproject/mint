@@ -270,6 +270,112 @@ def test_checking_or_planning_a_flow_needs_a_signed_in_caller(monkeypatch):
     main_module._CALLER_CACHE.clear()
 
 
+# --- whether this caller could run a stored flow --------------------------------
+
+def availability(flow_id="cfg-1", headers=AUTH):
+    return client.get(f"/flows/{flow_id}/availability", headers=headers)
+
+
+def as_registry(monkeypatch, **by_name):
+    """Rewrite the registry rows named here, as the catalog would hold them."""
+    real = main_module._registry
+
+    async def registry(h, **kwargs):
+        rows = await real(h, **kwargs)
+        return [{**row, **by_name[row["name"]]} if row.get("name") in by_name else row for row in rows]
+    monkeypatch.setattr(main_module, "_registry", registry)
+
+
+def test_a_flow_whose_pieces_the_caller_may_run_is_available(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    response = availability()
+    assert response.status_code == 200, response.text
+    assert response.json() == {"flow_id": "cfg-1", "available": True, "steps": [
+        {"position": position, "runnable": True, "reason": None} for position in (1, 2, 3)]}
+
+
+def test_a_deleted_piece_is_reported_as_missing(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    steps_flow = {"configuration_id": "cfg-1", "label": "x", "parameters": [], "outputs": [],
+                  "thread_bindings": {}, "steps": [
+                      {"position": 1, "etl_process_id": pieces["ingest"], "settings": {}, "wires": []},
+                      {"position": 2, "etl_process_id": None, "settings": {}, "wires": []}]}
+
+    async def load(h, configuration_id):
+        return steps_flow
+    monkeypatch.setattr(main_module, "_load_flow", load)
+    body = availability().json()
+    assert body["available"] is False
+    assert body["steps"] == [{"position": 1, "runnable": True, "reason": None},
+                             {"position": 2, "runnable": False, "reason": "piece_missing"}]
+
+
+def test_another_users_private_piece_is_missing_and_nothing_about_it_leaks(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    as_registry(monkeypatch, score={"visibility": "private", "owner_username": "someone-else"})
+    response = availability()
+    body = response.json()
+    assert body["available"] is False
+    assert [(s["position"], s["reason"]) for s in body["steps"]] == [
+        (1, None), (2, "piece_missing"), (3, None)]
+    assert "someone-else" not in response.text and "score" not in response.text
+    assert pieces["score"] not in response.text
+
+
+def test_a_public_unapproved_stored_piece_is_not_approved(monkeypatch):
+    monkeypatch.setattr(settings, "stored_source_enabled", True)
+    piece = register("stored", ["corpus"], ["clean"], stored=True)
+    stored_flow({}, monkeypatch, outputs=[], steps=[
+        {"position": 1, "etl_process_id": piece, "settings": {}, "wires": []}])
+    body = availability().json()
+    assert body["available"] is False
+    assert body["steps"] == [{"position": 1, "runnable": False, "reason": "not_approved"}]
+
+
+def test_stored_code_is_reported_as_disabled_when_the_deployment_turns_it_off(monkeypatch):
+    monkeypatch.setattr(settings, "stored_source_enabled", False)
+    piece = register("stored", ["corpus"], ["clean"], stored=True)
+    stored_flow({}, monkeypatch, outputs=[], steps=[
+        {"position": 1, "etl_process_id": piece, "settings": {}, "wires": []}])
+    assert availability().json()["steps"][0]["reason"] == "stored_source_disabled"
+
+
+def test_the_callers_own_unapproved_piece_is_runnable(monkeypatch):
+    monkeypatch.setattr(settings, "stored_source_enabled", True)
+    monkeypatch.setattr("app.main.tapis.userinfo_username", lambda token: "alice")
+    piece = register("stored", ["corpus"], ["clean"], stored=True)
+    as_registry(monkeypatch, stored={"owner_username": "alice", "visibility": "private"})
+    stored_flow({}, monkeypatch, outputs=[], steps=[
+        {"position": 1, "etl_process_id": piece, "settings": {}, "wires": []}])
+    assert availability().json() == {"flow_id": "cfg-1", "available": True, "steps": [
+        {"position": 1, "runnable": True, "reason": None}]}
+
+
+def test_availability_of_an_unknown_or_non_flow_configuration_is_flow_not_found(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    response = availability("no-such-config")
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "FLOW_NOT_FOUND"
+
+
+def test_availability_of_a_malformed_stored_flow_is_not_a_server_error(pieces, monkeypatch):
+    flow = stored_flow(pieces, monkeypatch)
+    flow["steps"].extend(["nope", {"position": "x", "etl_process_id": 7}])
+    response = availability()
+    assert response.status_code == 200, response.text
+    assert response.json()["available"] is False
+
+
+def test_availability_needs_a_signed_in_caller(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    monkeypatch.setattr("app.main.tapis.userinfo_username", lambda token: None)
+    main_module._CALLER_CACHE.clear()
+    assert availability(headers={}).status_code == 401
+    assert availability().status_code == 401
+    main_module._CALLER_CACHE.clear()
+
+
 # --- what a flow's author may not do to whoever runs it ------------------------
 
 def submit(plan_id, **body):

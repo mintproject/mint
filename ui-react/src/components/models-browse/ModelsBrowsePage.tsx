@@ -23,14 +23,17 @@ import {
 import { groupConfigurations, rankModelGroups } from '@/lib/groupConfigurations';
 import {
   buildConfigurationWhere,
+  filterRowsByKind,
   filtersToParams,
   hasActiveFilters,
   parseFilters,
   type ModelBrowseFilters,
+  type ModelKind,
 } from '@/lib/modelBrowseFilters';
 import { slugMatchPattern } from '@/lib/uri';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
+import { useFlowConfigurationIds } from '@/hooks/useFlowConfigurationIds';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfigurationDetail } from '@/components/configuration/ConfigurationDetail';
@@ -101,6 +104,7 @@ export function ModelsBrowsePage({
   };
 
   const facetOptions = useFacetOptions();
+  const flows = useFlowConfigurationIds();
   const hasuraFilters = useMemo(
     () => (semanticQueryActive && !semanticSearch.error ? { ...facetFilters, q: '' } : filters),
     [facetFilters, filters, semanticQueryActive, semanticSearch.error],
@@ -153,11 +157,13 @@ export function ModelsBrowsePage({
   }, [data, semanticQueryActive, semanticSearch.results]);
 
   const groups = useMemo(() => {
+    const rows = semanticRows?.rows ?? data?.modelcatalog_configuration ?? [];
+    // Without the flow ids the kind cannot be told apart, so it is not applied.
     const grouped = groupConfigurations(
-      semanticRows?.rows ?? data?.modelcatalog_configuration ?? [],
+      flows.known ? filterRowsByKind(rows, facetFilters.kind, flows.ids) : rows,
     );
     return semanticRows ? rankModelGroups(grouped, semanticRows.rankById) : grouped;
-  }, [data, semanticRows]);
+  }, [data, semanticRows, flows, facetFilters.kind]);
   const visibleGroups = useMemo(
     () =>
       showOwnedOnly
@@ -241,6 +247,9 @@ export function ModelsBrowsePage({
               onChange={(ids) => updateFacet({ variableIds: ids })}
               loading={facetOptions.loading}
             />
+            {flows.known && (
+              <KindFacet value={facetFilters.kind} onChange={(kind) => updateFacet({ kind })} />
+            )}
             {user?.username && (
               <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs">
                 <Switch
@@ -265,6 +274,7 @@ export function ModelsBrowsePage({
               expandAll={active}
               basePath={basePath}
               ownedIds={ownedIds}
+              flowIds={flows.ids}
               emptyMessage={
                 showOwnedOnly ? 'You have not registered any model configurations.' : undefined
               }
@@ -294,6 +304,35 @@ export function ModelsBrowsePage({
         confirmLabel="Delete configuration"
         variant="destructive"
       />
+    </div>
+  );
+}
+
+const KIND_OPTIONS: { value: ModelKind; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'models', label: 'Models' },
+  { value: 'flows', label: 'Flows' },
+];
+
+/** All / Models / Flows: a flow is a model configuration made of ETL pieces. */
+function KindFacet({ value, onChange }: { value: ModelKind; onChange: (kind: ModelKind) => void }) {
+  return (
+    <div role="group" aria-label="Kind" className="flex overflow-hidden rounded-md border text-xs">
+      {KIND_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={
+            value === option.value
+              ? 'bg-accent px-2 py-1 font-medium'
+              : 'px-2 py-1 text-muted-foreground hover:bg-accent'
+          }
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
