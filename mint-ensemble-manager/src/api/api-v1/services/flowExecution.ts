@@ -356,6 +356,8 @@ export interface FlowRequiredSecret {
     label: string;
     /** The field names the steps need. */
     fields: string[];
+    /** Fields the steps use only when the stored credential has them. */
+    optional?: string[];
     /** The positions of the steps that use it. */
     steps: number[];
     /** Whether the runner has stored it with the adapter. */
@@ -375,6 +377,7 @@ interface PlanSecretJson {
     name: string;
     label?: unknown;
     fields?: unknown;
+    optional?: unknown;
     steps?: unknown;
     stored?: unknown;
 }
@@ -403,6 +406,9 @@ function readSecrets(planJson: AdapterPlanJson | null | undefined): {
             name: item.name,
             label: typeof item.label === "string" ? item.label : item.name,
             fields: Array.isArray(item.fields) ? item.fields.map(String) : [],
+            ...(Array.isArray(item.optional) && item.optional.length > 0
+                ? { optional: item.optional.map(String) }
+                : {}),
             steps: Array.isArray(item.steps) ? item.steps.map(Number) : [],
             stored: item.stored === true
         }));

@@ -752,6 +752,14 @@ A piece asks for the secrets it needs in its catalog row, in `runtime_json`:
   (`[a-z0-9_-]{1,64}`). `env` maps a **task input** (`[A-Z][A-Z0-9_]{0,63}`) to a **field**
   of the stored secret (`[a-z0-9_]{1,32}`). A piece may declare several secrets, but one
   task input is filled by one secret.
+- `optional` (optional) lists field names, each a value of that entry's `env`, that the
+  piece can run without (`"optional": ["embedding_base_url"]`). They are not needed to plan
+  or submit, and the step fetch returns an optional field only when the stored secret has
+  it (no empty strings), so the task input is simply absent. Not a list of field-name
+  strings, a name that is not an `env` value, or a repeat is refused as
+  `SECRET_DECLARATION_INVALID`. A secret whose fields are all optional still has to be
+  stored (any credential by that name satisfies it). If two steps use one secret, a field
+  either of them requires is required. A declaration without `optional` behaves as before.
 - `sends_data_to` is a plain statement shown to the runner before a run: `service` up to
   200 characters, `what` up to 300.
 - An invalid declaration is refused where a plan reads it (422
@@ -778,7 +786,7 @@ A piece asks for the secrets it needs in its catalog row, in `runtime_json`:
 
 | Field | Meaning |
 |---|---|
-| `secrets` | `[{name, label, fields, steps, stored}]`: each secret the flow needs, the sorted field names the steps need, the step positions, and whether the caller has stored it (with all those fields). |
+| `secrets` | `[{name, label, fields, optional?, steps, stored}]`: each secret the flow needs, the sorted field names the steps require, the sorted optional field names (`optional` is left out when there are none), the step positions, and whether the caller has stored it (with all the required fields). |
 | `secrets_ready` | `true` when every one is stored, or there are none. |
 | `sends_data_to` | `[{step, piece, service, what}]`: what each step says it sends, and to whom. |
 | `planned_by` | the Tapis username that made the plan (every flow plan). A run that binds a secret is submitted only by that user: anyone else gets 403 `FLOW_PLAN_NOT_YOURS`. |
@@ -788,7 +796,7 @@ A flow whose secret is not stored is planned (200) with `secrets_ready: false`. 
 in a plan.
 
 **Submit.** `POST /workflows/submit` binds the submitter's secrets to the run (the run's
-`bound_secrets`: per step the secret ids, versions, names and env map, never a value; a
+`bound_secrets`: per step the secret ids, versions, names, env map and optional fields, never a value; a
 `bound` event is recorded). Refusals:
 
 | Refusal | Status | `detail.code` |

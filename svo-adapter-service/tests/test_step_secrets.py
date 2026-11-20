@@ -373,6 +373,95 @@ def test_the_pipeline_gives_the_step_its_adapter_inputs_and_only_its_own_credent
     assert "MODEL_API_KEY" not in task["input"] and "CHAT_BASE_URL" not in task["input"]
 
 
+# --- optional fields ----------------------------------------------------------------
+OPTIONAL_SECRETS = [{"name": "model_server", "label": "Model server",
+                     "env": {"MODEL_API_KEY": "api_key", "CHAT_BASE_URL": "chat_base_url",
+                             "EMBEDDING_BASE_URL": "embedding_base_url"},
+                     "optional": ["embedding_base_url"]}]
+EMBED = "https://embed.example"
+
+
+def _finish_runs():
+    for run in STORE.run.values():
+        run["status"] = "completed"
+
+
+def test_an_optional_declaration_is_normalised_and_a_bad_one_refused():
+    ok = step_secrets.parse_secrets(OPTIONAL_SECRETS)
+    assert ok[0]["optional"] == ["embedding_base_url"]
+    assert step_secrets.parse_secrets([{"name": "a", "env": {"X": "f"}, "optional": []}]) == [
+        {"name": "a", "label": "a", "env": {"X": "f"}}]
+    for bad in ("f", ["g"], [1], ["F"], ["f", "f"]):  # string, not in env, not a string, field rule, twice
+        with pytest.raises(step_secrets.StepSecretError) as caught:
+            step_secrets.parse_secrets([{"name": "a", "env": {"X": "f"}, "optional": bad}])
+        assert caught.value.detail["code"] == "SECRET_DECLARATION_INVALID"
+
+
+def test_needs_separates_required_from_optional_fields():
+    steps = [{"step": 1, "secrets": step_secrets.parse_secrets(OPTIONAL_SECRETS)}]
+    need = step_secrets.needs(steps)["model_server"]
+    assert need["fields"] == ["api_key", "chat_base_url"] and need["optional"] == ["embedding_base_url"]
+    # A step that requires the field makes it required for the secret.
+    steps.append({"step": 2, "secrets": step_secrets.parse_secrets([
+        {"name": "model_server", "env": {"E": "embedding_base_url"}}])})
+    need = step_secrets.needs(steps)["model_server"]
+    assert "embedding_base_url" in need["fields"] and "optional" not in need
+    assert "optional" not in step_secrets.needs(
+        [{"step": 1, "secrets": step_secrets.parse_secrets(SECRETS)}])["model_server"]
+
+
+def test_all_optional_secret_must_still_be_stored(monkeypatch, captured):
+    one_step_flow(monkeypatch, secrets=[{"name": "model_server", "env": {"E": "embedding_base_url"},
+                                         "optional": ["embedding_base_url"]}])
+    plan_id = plan().json()["plan_id"]
+    assert submit(plan_id).status_code == 422
+    put_secret(body={"fields": {"api_key": VALUE}})
+    plan_json = plan().json()["plan_json"]
+    assert plan_json["secrets"][0]["fields"] == [] and plan_json["secrets_ready"] is True
+    assert submit(plan().json()["plan_id"]).status_code == 200
+
+
+def test_submit_is_not_refused_for_a_missing_optional_field_but_is_for_a_required_one(monkeypatch, captured):
+    one_step_flow(monkeypatch, secrets=OPTIONAL_SECRETS)
+    put_secret()  # api_key and chat_base_url only
+    plan_json = plan().json()["plan_json"]
+    assert plan_json["secrets"][0]["optional"] == ["embedding_base_url"]
+    assert plan_json["secrets_ready"] is True and plan_json["secrets"][0]["stored"] is True
+    assert submit(plan().json()["plan_id"]).status_code == 200
+    _finish_runs()  # a credential is locked while a run holds it
+    put_secret(body={"fields": {"api_key": VALUE, "embedding_base_url": EMBED}})  # a required field gone
+    refused = submit(plan().json()["plan_id"])
+    assert refused.status_code == 422 and refused.json()["detail"]["code"] == "FLOW_SECRET_MISSING"
+    assert refused.json()["detail"]["secrets"] == [{"name": "model_server", "fields": ["api_key", "chat_base_url"]}]
+
+
+def test_fetch_returns_present_optional_fields_and_omits_absent_ones(monkeypatch, captured):
+    one_step_flow(monkeypatch, secrets=OPTIONAL_SECRETS)
+    put_secret()
+    run_id = submit(plan().json()["plan_id"]).json()["run_id"]
+    credential = captured["submits"][0]["args"]["step_secret_token_1"]["value"]
+    assert fetch(run_id, credential).json() == {"inputs": {"MODEL_API_KEY": VALUE, "CHAT_BASE_URL": BASE}}
+    # With the field stored, it comes too.
+    _finish_runs()
+    put_secret(body={"fields": {"api_key": VALUE, "chat_base_url": BASE, "embedding_base_url": EMBED}})
+    run_id = submit(plan().json()["plan_id"]).json()["run_id"]
+    credential = captured["submits"][-1]["args"]["step_secret_token_1"]["value"]
+    assert fetch(run_id, credential).json() == {"inputs": {
+        "MODEL_API_KEY": VALUE, "CHAT_BASE_URL": BASE, "EMBEDDING_BASE_URL": EMBED}}
+
+
+def test_a_required_field_lost_after_submit_still_fails_the_fetch_when_an_optional_one_is_declared(
+        monkeypatch, captured):
+    one_step_flow(monkeypatch, secrets=OPTIONAL_SECRETS)
+    put_secret()
+    run_id = submit(plan().json()["plan_id"]).json()["run_id"]
+    credential = captured["submits"][0]["args"]["step_secret_token_1"]["value"]
+    row = next(iter(STORE.secret.values()))
+    row["ciphertext"] = secrets_store.seal(row, {"api_key": VALUE})
+    response = fetch(run_id, credential)
+    assert response.status_code == 409 and response.json()["detail"]["code"] == "SECRET_FIELDS_INCOMPLETE"
+
+
 # --- submit -----------------------------------------------------------------------
 @pytest.fixture
 def captured(monkeypatch):

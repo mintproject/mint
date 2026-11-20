@@ -4370,7 +4370,8 @@ async def _resolve_flow_secrets(
             "message": "this service is not set up to hand secrets to a step"})
     return [step_secrets.bound_entry(step["step"], [
         {"id": str(rows[d["name"]]["id"]), "version": int(rows[d["name"]]["version"]),
-         "name": d["name"], "env": d["env"]} for d in step["secrets"]]) for step in steps]
+         "name": d["name"], "env": d["env"],
+         **({"optional": d["optional"]} if d.get("optional") else {})} for d in step["secrets"]]) for step in steps]
 
 
 async def _bind_flow_secrets_and_check_conflict(
@@ -5512,7 +5513,10 @@ async def fetch_step_secrets(
                 or int(row["version"]) != int(item["version"])):
             raise _refuse(409, "FLOW_SECRET_CHANGED")
         try:
+            skippable = set(item.get("optional") or [])
             for env_key, field_name in (item.get("env") or {}).items():  # task input -> field
+                if field_name in skippable and field_name not in fields:
+                    continue  # an optional field the stored secret lacks: leave the input out
                 values[env_key] = fields[field_name]
         except KeyError:
             raise _refuse(409, "SECRET_FIELDS_INCOMPLETE")
