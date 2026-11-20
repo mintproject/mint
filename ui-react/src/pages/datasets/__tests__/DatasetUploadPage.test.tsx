@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -199,7 +199,12 @@ const tree = {
 
 vi.mock('@/graphql/generated/modeling', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/graphql/generated/modeling')>()),
-  useGetModelTreeWithRegionsQuery: () => ({ data: tree, loading: false }),
+  // Honour `skip` like the real hook, so a page that never asks for the tree
+  // gets none.
+  useGetModelTreeWithRegionsQuery: (options?: { skip?: boolean }) => ({
+    data: options?.skip ? undefined : tree,
+    loading: false,
+  }),
 }));
 vi.mock('@/graphql/generated/graphql', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/graphql/generated/graphql')>()),
@@ -465,6 +470,32 @@ describe('DatasetUploadPage', () => {
       expect(screen.getByTestId('picked')).toHaveTextContent('');
       // The picker's own list is ranked by the same suggestions.
       expect(screen.getByTestId('picker-ranking')).toHaveTextContent('sv-2,sv-1');
+    });
+
+    it('ranks suggestions by who can use them before any variable is chosen', async () => {
+      const ranked = {
+        results: [
+          { id: 'sv-9', label: 'unused_thing', description: 'Nothing takes this', score: 0.95 },
+          ...suggestions.results.slice().reverse(),
+        ],
+      };
+      semantic = (u) => (u.includes('/search?') ? json(ranked) : json({ results: [] }));
+      renderPage();
+      await userEvent.type(screen.getByLabelText('Description'), 'Daily rain gauge readings');
+      await userEvent.upload(screen.getByLabelText('Choose files to upload'), [csv('rain.csv')]);
+      const panel = await screen.findByTestId('suggested-variables');
+      await waitFor(() =>
+        expect(
+          within(panel)
+            .getAllByTestId('suggestion-use')
+            .map((n) => n.textContent),
+        ).toEqual([
+          'Input to 1 flow and 1 model',
+          'Input to 1 flow',
+          'No registered flow or model takes this as an input',
+        ]),
+      );
+      expect(screen.getByTestId('picked')).toHaveTextContent('');
     });
 
     it('"Use this" sets the picker', async () => {
