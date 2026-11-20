@@ -55,9 +55,17 @@ export function ETLProcessBrowsePage() {
             Browse reusable transformations registered in the MINT catalog.
           </p>
         </div>
-        <Button asChild>
-          <Link to="/etl/register">Register ETL process</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild>
+            <Link to="/etl/register-piece">Register a piece</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/etl/approvals">Approvals</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/etl/register">Register ETL process</Link>
+          </Button>
+        </div>
       </div>
       {loading && <p className="text-muted-foreground">Loading ETL processes…</p>}
       {error && (

@@ -368,6 +368,27 @@ class InMemoryHasura:
         return {"update_adapter_transform_spec_by_pk": row and {
             "id": row["id"], "approved_source_sha256": row.get("approved_source_sha256")}}
 
+    def _op_GetApprovalSpec(self, v):
+        return {"adapter_transform_spec_by_pk": STORE.transform_spec.get(v["id"])}
+
+    def _op_ApprovalEvents(self, v):
+        wanted = v.get("contains") or {}
+        events = [e for e in reversed(STORE.provenance)
+                  if e.get("event_type") == "transform_spec_approval_set"
+                  and all((e.get("payload_json") or {}).get(k) == val for k, val in wanted.items())]
+        return {"adapter_provenance_event": events[:v.get("limit", 100)]}
+
+    def _op_UpsertMintETLSpec(self, v):
+        # The real upsert leaves approved_source_sha256 out of its update columns.
+        kept = (STORE.transform_spec.get(v["obj"].get("id")) or {}).get("approved_source_sha256")
+        row = _insert(STORE.transform_spec, v["obj"], nested_key="contracts")
+        if kept:
+            row["approved_source_sha256"] = kept
+        return {"insert_adapter_transform_spec_one": {"id": row["id"]}}
+
+    def _op_DeleteSpecContracts(self, v):
+        return {"delete_adapter_transform_contract": {"affected_rows": 0}}
+
     def _op_GetMintSpecIds(self, v):
         mint_rows = [
             {"mint_model_config_id": r["mint_model_config_id"]}

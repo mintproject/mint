@@ -345,7 +345,7 @@ With it on, a caller may run a stored-source piece when:
 | Case | Chosen by the planner automatically? |
 |---|---|
 | The caller owns the piece | Yes |
-| The piece is shared or public and an admin approved it as it is now: its source, the function called, the run arguments it is handed and the arguments it declares (`PUT /admin/transform-spec-approval`) | Yes |
+| The piece is shared or public and an admin approved it as it is now: its source, the function called, the run arguments it is handed and the arguments it declares (`PUT /transform-specs/{id}/approval` by a catalog administrator, or `PUT /admin/transform-spec-approval` by the operator) | Yes |
 | The piece is shared or public and unapproved, and the caller named it (`allow_unapproved_piece_ids` on `POST /plans`, `allow_unapproved` on `POST /transform-specs/{id}/test`) | No |
 | Anything else, including another user's private piece | Not runnable |
 
@@ -414,6 +414,10 @@ plans through the existing adapter workflow tables.
 | GET | `/data-objects` | List registered data objects. |
 | GET | `/transform-specs` | List registered transform specs and contracts. |
 | POST | `/transform-specs` | Register one transform spec and its contracts. Operator route (`X-Admin-Secret`). |
+| POST | `/pieces/from-repository` | Register a piece whose code is one `.py` file of a PUBLIC GitHub repository at a pinned commit (`{label, repository, commit, path, entrypoint, inputs, outputs, arguments, secrets, sends_data_to, visibility, dry_run}`). `commit` is the full 40-character SHA; a branch, tag or short SHA is refused. The adapter fetches the file from `raw.githubusercontent.com` over https (public addresses only, no redirect followed, 64 kB limit) and stores it as fetched with its SHA-256. The commit must also be in the history of the repository's default branch (checked with GitHub's REST API, no token, by comparing `default_branch...commit`; a fork-only commit is refused with `PIECE_COMMIT_NOT_ON_BRANCH`, a GitHub rate limit gives `PIECE_PROVENANCE_RATE_LIMITED`), and the branch is recorded as `origin.verified_on_branch`. The piece id is always chosen by the adapter. At most 30 calls per user per hour (previews included, 429 `PIECE_RATE_LIMITED`) and 200 pieces per owner. `dry_run` (default true) returns what would be stored and writes nothing; a live call writes the catalog row with the caller's token (the caller owns it, `private` unless `visibility` says otherwise) and puts it in the registry so it can be approved at once. Bearer token required. |
+| GET | `/pieces/approvals` | Pieces with stored source the caller may see, each with its hash, whether it is approved as it is now (`lapsed` when an approval no longer matches), and who approved it and when. `is_admin` says whether the caller may approve. Bearer token required. |
+| GET | `/transform-specs/{id}/approval` | What an approver is shown for one piece: source and its SHA-256, function called, `env_from_args`, declared arguments, `secrets`, `sends_data_to`, origin (repository, commit, path), contracts, and the approval history. Bearer token required. |
+| PUT | `/transform-specs/{id}/approval` | Approve or withdraw (`{approved, reviewed_sha256}`) as a member of `modelcatalog_admin`, checked by reading that table with the caller's own token (403 `ADMIN_REQUIRED`; 503 `ADMIN_CHECK_UNAVAILABLE` if it cannot be read). Approving needs the `approval_sha256` the page showed (409 `APPROVAL_STALE` if the piece changed). Writes the same record as the operator route plus `approved_by` and `approved_at`. |
 | POST | `/transform-specs/{id}/test` | Generate a one-piece Tapis workflow for dry-run inspection, or submit it when `dry_run` is false. Requires a valid Tapis bearer token (401 `TAPIS_AUTH_REQUIRED`), except in demo mode. |
 | GET | `/standard-variables` | List standard variables known by the registry. |
 | GET | `/reachable/{data_object_id}` | List SVO variables reachable from a registered source. |

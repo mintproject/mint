@@ -212,6 +212,73 @@ mutation SetSpecApproval($id: String!, $sha: String) {
 }
 """
 
+# The piece an approval is about: everything the approval hash covers, plus what
+# the approval page shows. One query serves the page and the route that records it.
+GET_APPROVAL_SPEC_QUERY = """
+query GetApprovalSpec($id: String!) {
+  adapter_transform_spec_by_pk(id: $id) {
+    id name version description owner_username visibility mint_etl_process_id
+    parameters_schema_json env_from_args approved_source_sha256
+    contracts { role standard_variable_uri unit format }
+  }
+}
+"""
+
+# Approval events, newest first. ``contains`` is a jsonb fragment of the payload:
+# {"transform_spec_id": "..."} for one piece, {} for all of them.
+APPROVAL_EVENTS_QUERY = """
+query ApprovalEvents($contains: jsonb!, $limit: Int!) {
+  adapter_provenance_event(
+    where: {event_type: {_eq: "transform_spec_approval_set"}, payload_json: {_contains: $contains}}
+    order_by: {created_at: desc}
+    limit: $limit
+  ) { id payload_json created_at }
+}
+"""
+
+# Read with the CALLER's token: is the caller a catalog admin? A user may read only
+# their own row of this table.
+CATALOG_ADMIN_QUERY = """
+query CatalogAdmin($username: String!) {
+  modelcatalog_admin(where: {username: {_eq: $username}}) { username }
+}
+"""
+
+# The caller's own pieces, to apply the per-owner cap. A list, not an aggregate:
+# the catalog does not allow aggregates on this table.
+COUNT_OWN_PIECES_QUERY = """
+query CountOwnPieces($owner: String!, $limit: Int!) {
+  modelcatalog_etl_process(where: {owner_username: {_eq: $owner}}, limit: $limit) { id }
+}
+"""
+
+STANDARD_VARIABLES_QUERY = """
+query PieceStandardVariables($ids: [String!]!) {
+  modelcatalog_standard_variable(where: {id: {_in: $ids}}) { id }
+}
+"""
+
+# Written with the CALLER's token, so the catalog's insert permission applies and
+# Hasura sets the owner from the token.
+CREATE_ETL_PROCESS_MUTATION = """
+mutation CreatePieceFromRepository($object: modelcatalog_etl_process_insert_input!) {
+  insert_modelcatalog_etl_process_one(object: $object) { id label owner_username visibility }
+}
+"""
+
+# One catalog piece in full, for putting it in the adapter's registry.
+GET_ETL_PROCESS_QUERY = """
+query GetEtlProcess($id: String!) {
+  modelcatalog_etl_process_by_pk(id: $id) {
+    id label description version owner_username visibility runtime_kind runtime_json
+    contracts(order_by: [{role: asc}, {position: asc}]) {
+      role position standard_variable_uri unit format dimensionality
+      spatial_type crs_requirement temporal_resolution schema_requirement_json
+    }
+  }
+}
+"""
+
 # Delete spec rows whose mint_model_config_id is NOT in the live MINT set.
 # Rows with null mint_model_config_id (hand-created or legacy) are untouched.
 DELETE_OBSOLETE_MINT_SPECS_MUTATION = """

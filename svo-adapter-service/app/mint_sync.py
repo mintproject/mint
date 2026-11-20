@@ -420,6 +420,37 @@ def _infer_transform_type(config: dict[str, Any]) -> str:
     return "transform"
 
 
+class SpecIdCollision(ValueError):
+    """The id belongs to a registry spec that is not the catalog piece."""
+
+
+async def sync_one_etl_process(hasura_client: Any, process: dict[str, Any]) -> dict[str, Any] | None:
+    """Put one catalog ETL process into the adapter's registry now, as the full
+    sync would, instead of at its next run. Returns the registry row, or None
+    when the process cannot be a registry row. ``hasura_client`` is the adapter's
+    own (admin) client: it writes the adapter schema. An approval already
+    recorded for the piece is kept; it still has to match the piece to count."""
+    from .hasura import (
+        DELETE_SPEC_CONTRACTS_MUTATION, GET_APPROVAL_SPEC_QUERY, UPSERT_ETL_TRANSFORM_SPEC_MUTATION)
+
+    row = etl_process_to_spec_row(process, [])
+    if row is None:
+        return None
+    # The registry row's id is the process id. Never replace a row that is some
+    # other spec (a MINT configuration's, or one registered by hand).
+    existing = (await hasura_client.execute(GET_APPROVAL_SPEC_QUERY, {"id": row["id"]})
+                ).get("adapter_transform_spec_by_pk")
+    if existing and existing.get("mint_etl_process_id") != row["id"]:
+        raise SpecIdCollision(f"a registry spec with id {row['id']} already exists and is not this piece")
+    contracts = row.pop("contracts", None)
+    await hasura_client.execute(DELETE_SPEC_CONTRACTS_MUTATION, {"ids": [row["id"]]})
+    row["mint_synced_at"] = "now()"
+    if contracts:
+        row["contracts"] = contracts
+    await hasura_client.execute(UPSERT_ETL_TRANSFORM_SPEC_MUTATION, {"obj": row})
+    return row
+
+
 async def sync_mint_to_adapter(
     hasura_client: Any,
     mint_client: MintCatalogClient | None = None,

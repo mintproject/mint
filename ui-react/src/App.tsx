@@ -12,6 +12,9 @@ import { ModelsBrowsePage } from './components/models-browse/ModelsBrowsePage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ETLProcessRegisterPage } from './pages/ETLProcessRegisterPage';
 import { ETLProcessBrowsePage } from './pages/ETLProcessBrowsePage';
+import { PieceFromRepositoryPage } from './pages/PieceFromRepositoryPage';
+import { PieceApprovalsPage } from './pages/PieceApprovalsPage';
+import { PieceApprovalPage } from './pages/PieceApprovalPage';
 
 // Pages — modeling
 import { ModelingHome } from './pages/modeling/ModelingHome';
@@ -84,6 +87,31 @@ export function App() {
             element={
               <ProtectedRoute>
                 <ETLProcessRegisterPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/etl/register-piece"
+            element={
+              <ProtectedRoute>
+                <PieceFromRepositoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/etl/approvals"
+            element={
+              <ProtectedRoute>
+                <PieceApprovalsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/etl/approvals/:specId"
+            element={
+              <ProtectedRoute>
+                <PieceApprovalPage />
               </ProtectedRoute>
             }
           />
