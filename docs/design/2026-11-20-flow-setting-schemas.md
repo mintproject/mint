@@ -2,7 +2,7 @@
 
 ## Status
 
-In Review (2026-11-20). Nothing implemented.
+Approved (2026-11-20). Implementing.
 
 Checked against `origin/develop` at the time of writing, and against the dev catalog
 (`mintdevgraphql`) with read-only queries. Paths are relative to the monorepo root unless they
@@ -329,3 +329,4 @@ The old pieces stay registered, so rolling back means pointing the flows back at
   to configure defaults for the flow".
 - 2026-11-20: asked whether an author can hide a setting entirely: "yes". Asked whether models
   get dropdowns now or later: "yes now".
+- 2026-11-20: "ok lets do it": spec approved.
