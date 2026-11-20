@@ -1073,7 +1073,8 @@ export function MintRuns({
     modelIds.length > 0 &&
     modelIds.every((mid) => {
       const model = threadData.models[mid];
-      if (!model) return true;
+      // A flow's optional settings may be empty; Run checks the required ones.
+      if (!model || model.isFlow) return true;
       const bindings = threadData.model_ensembles[mid]?.bindings ?? {};
       return userParameters(model)
         .filter((p) => !p.value)

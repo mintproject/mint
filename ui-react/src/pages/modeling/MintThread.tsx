@@ -72,6 +72,7 @@ import { useAuth } from '@/lib/auth/useAuth';
 import { cn } from '@/lib/utils';
 
 import { FlowSettingsDialog } from './thread/FlowSettingsDialog';
+import { FlowSettingsMissingError, missingFlowSettings } from '@/lib/flow-errors';
 import { MintSummary } from './thread/MintSummary';
 import { MintParameters } from './thread/MintParameters';
 import type { PublishRequest } from '@/lib/publish-outputs';
@@ -852,6 +853,11 @@ export function MintThread({
         });
         if (!flowPlan.plan_id)
           throw new Error('Ensemble Manager did not return an execution plan.');
+        // Settings the run must supply and the thread has no value for. Asked
+        // of the plan, before anything is submitted, so that a missing output
+        // folder is a message and not a failed run.
+        const missing = missingFlowSettings(flowPlan);
+        if (missing.length > 0) throw new FlowSettingsMissingError(missing);
         const authorSettings = flowPlan.flow_settings;
         const hasAuthorSettings =
           Object.keys(authorSettings?.defaults ?? {}).length > 0 ||

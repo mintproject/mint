@@ -92,8 +92,40 @@ function problemLines(problems: unknown[]): string[] {
   });
 }
 
+/** A flow's plan asks for settings the thread has no value for. */
+export class FlowSettingsMissingError extends Error {
+  constructor(readonly settings: string[]) {
+    super(`This flow needs a value for: ${settings.join(', ')}`);
+    this.name = 'FlowSettingsMissingError';
+  }
+}
+
+/**
+ * The settings a flow's plan requires that have neither a default nor a value
+ * from the thread. Settings the service fills in itself are left out.
+ */
+export function missingFlowSettings(plan: {
+  parameters?: Array<{ name: string; required?: boolean; default?: unknown; managed?: boolean }>;
+  parameter_values?: Record<string, unknown>;
+}): string[] {
+  const given = plan.parameter_values ?? {};
+  return (plan.parameters ?? [])
+    .filter((p) => p.required && !p.managed && (p.default === undefined || p.default === null))
+    .filter((p) => given[p.name] === undefined || given[p.name] === null || given[p.name] === '')
+    .map((p) => p.name);
+}
+
 /** The message for a flow refusal, or null for an error that is not one. */
 export function flowErrorMessage(error: unknown): FlowErrorMessage | null {
+  if (error instanceof FlowSettingsMissingError) {
+    return {
+      title: 'This flow needs a setting filled in',
+      lines: [
+        'Give these a value in the Parameters step, save, then run again.',
+        ...error.settings,
+      ],
+    };
+  }
   if (!(error instanceof EnsembleManagerError)) return null;
   const { code, details } = error;
   const serverMessage = error.message;
@@ -195,6 +227,17 @@ export function flowErrorMessage(error: unknown): FlowErrorMessage | null {
         title: 'The flow failed',
         lines: serverMessage ? [serverMessage] : ['A step failed. Open the run to see which one.'],
       };
+    case 'INVALID_PARAMETERS': {
+      // The adapter's answer when a setting is missing or has the wrong form.
+      const wrong = Object.entries(asDetails(field(details, 'parameters'))).map(
+        ([name, why]) => `${name}: ${text(why)}`,
+      );
+      if (wrong.length === 0) return null;
+      return {
+        title: 'A setting of this flow is missing or not usable',
+        lines: ['Correct these in the Parameters step, save, then run again.', ...wrong],
+      };
+    }
     default:
       return null;
   }

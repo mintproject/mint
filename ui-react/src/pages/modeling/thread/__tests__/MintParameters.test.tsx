@@ -576,6 +576,9 @@ describe('MintParameters', () => {
           onContinue={vi.fn()}
         />,
       );
+      // A flow whose step was saved opens read-only, as a finished step does.
+      const edit = screen.queryByTestId('edit-parameters-btn');
+      if (edit) fireEvent.click(edit);
       fireEvent.change(screen.getByTestId('param-input-param-t'), {
         target: { value: 'Maps, Charts' },
       });

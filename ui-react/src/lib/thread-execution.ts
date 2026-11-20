@@ -295,6 +295,10 @@ export function parametersComplete(threadData: ThreadExecutionData | null): bool
   if (modelIds.length === 0) return false;
   return modelIds.every((mid) => {
     if (!threadData.execution_summary[mid]) return false;
+    // A flow's settings are mostly optional and have no default in the catalog,
+    // so "every setting has a value" would never hold. Which ones a run must
+    // supply is known when the flow is planned, at Run, and is checked there.
+    if (threadData.models[mid]!.isFlow) return true;
     const bindings = threadData.model_ensembles[mid]?.bindings ?? {};
     return (
       userParameters(threadData.models[mid]!)

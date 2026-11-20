@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { EnsembleManagerError } from '@/lib/ensemble-manager';
-import { flowErrorMessage, FLOW_ERROR_CODES } from '@/lib/flow-errors';
+import {
+  flowErrorMessage,
+  FLOW_ERROR_CODES,
+  FlowSettingsMissingError,
+  missingFlowSettings,
+} from '@/lib/flow-errors';
 
 const refuse = (code: string, details?: unknown) =>
   flowErrorMessage(new EnsembleManagerError(422, 'refused', code, details));
@@ -78,5 +83,44 @@ describe('flowErrorMessage', () => {
   it('shows the server message for a failed flow', () => {
     const m = flowErrorMessage(new EnsembleManagerError(500, 'step two died', 'FLOW_FAILED'));
     expect(m?.lines).toEqual(['step two died']);
+  });
+});
+
+describe('settings a flow run must supply', () => {
+  const plan = {
+    parameters: [
+      { name: 'output_uri', required: true },
+      { name: 'top_n', required: false },
+      { name: 'title', required: true, default: 'Dictionary' },
+      { name: 'source_uri', required: true, managed: true },
+    ],
+  };
+
+  it('names a required setting with no default and no value from the thread', () => {
+    expect(missingFlowSettings(plan)).toEqual(['output_uri']);
+    expect(missingFlowSettings({ ...plan, parameter_values: { output_uri: '' } })).toEqual([
+      'output_uri',
+    ]);
+  });
+
+  it('is satisfied by a value the thread holds', () => {
+    expect(
+      missingFlowSettings({ ...plan, parameter_values: { output_uri: 'tapis://sys/out' } }),
+    ).toEqual([]);
+  });
+
+  it('reads as an instruction, with the settings named', () => {
+    const m = flowErrorMessage(new FlowSettingsMissingError(['output_uri']));
+    expect(m?.title).toMatch(/needs a setting/i);
+    expect(m?.lines).toContain('output_uri');
+  });
+
+  it("explains the adapter's refusal of a missing or malformed setting", () => {
+    const m = flowErrorMessage(
+      new EnsembleManagerError(422, 'x', 'INVALID_PARAMETERS', {
+        parameters: { output_uri: 'required' },
+      }),
+    );
+    expect(m?.lines).toContain('output_uri: required');
   });
 });
