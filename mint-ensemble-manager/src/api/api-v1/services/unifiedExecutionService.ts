@@ -2114,7 +2114,12 @@ export function createUnifiedExecutionService(
                     adapter_steps: [],
                     post_model_adapter: null,
                     flow_steps: plannedFlow.steps,
-                    flow_settings: plannedFlow.flow_settings
+                    flow_settings: plannedFlow.flow_settings,
+                    // The runner's own credentials the flow needs, and whether they are
+                    // stored with the adapter; what each step sends to whom. No value.
+                    required_secrets: plannedFlow.required_secrets,
+                    secrets_ready: plannedFlow.secrets_ready,
+                    sends_data_to: plannedFlow.sends_data_to
                 };
             }
             const { tokens: publish, offered: offeredPublishers } = await validatedPublishTokens(

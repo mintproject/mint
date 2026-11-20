@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .config import settings
+from . import step_secrets
 from .etl_contract import mint_label_mapping
 
 log = logging.getLogger(__name__)
@@ -313,6 +314,15 @@ def etl_process_to_spec_row(
         warnings.append(f"{process_id}: ETL process requires input and output contracts — skipped.")
         return None
     runtime = process.get("runtime_json") or {}
+    try:
+        # The catalog row's secret declarations travel inside the runtime that the
+        # row keeps whole (metadata.runtime). A malformed one is not synced: the
+        # piece then cannot be planned, rather than running without its secret.
+        declared = (step_secrets.parse_secrets(runtime.get("secrets"), process_id),
+                    step_secrets.parse_sends_data_to(runtime.get("sends_data_to"), process_id))
+    except step_secrets.StepSecretError as error:
+        warnings.append(f"{process_id}: {error.detail['message']} — skipped.")
+        return None
     app_id = runtime.get("tapis_app_id")
     app_version = runtime.get("tapis_app_version")
     visibility = process.get("visibility")
@@ -322,7 +332,9 @@ def etl_process_to_spec_row(
         "mint_etl_process_id": process_id,
         "visibility": process.get("visibility"),
         "runtime_kind": process.get("runtime_kind"),
-        "runtime": runtime,
+        "runtime": {**runtime,
+                    **({"secrets": declared[0]} if declared[0] else {}),
+                    **({"sends_data_to": declared[1]} if declared[1] else {})},
     }
     # MINT's ETL contract includes catalog ordering (`position`), while the
     # adapter contract table stores only execution-relevant fields. Normalize

@@ -162,6 +162,11 @@ class Settings(BaseSettings):
     # A dedicated ring, independent of the run-token keeper's; the first key
     # encrypts, every key decrypts. Empty makes the feature fail closed (503).
     secrets_encryption_keys: str = ""
+    # Key for the per-step fetch credential of a flow step bound to a runner's own
+    # secret (app/step_secrets.py): an HMAC over the run, the step and the secrets
+    # bound to it. Required when a run binds any secret (503 STEP_SECRETS_NOT_CONFIGURED
+    # otherwise), together with public_base_url, which tells the step where to fetch.
+    step_secret_key: str = ""
 
     # Output-side publication (design 2026-11-05-output-publish-etl.md): a run may
     # publish its outputs to CKAN + STAC through a registered catalog_register

@@ -280,6 +280,15 @@ app id and version, and never returned by any API.
 SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS=<comma-separated Fernet keys; first encrypts>
 ```
 
+A flow step bound to a runner's own secret also needs a key for its per-step fetch
+credential and the address a step fetches from (see `docs/api.md`, "Using your secrets in
+a flow"):
+
+```
+SVO_ADAPTER_STEP_SECRET_KEY=<random string; signs the per-step fetch credential>
+SVO_ADAPTER_PUBLIC_URL=<this service's address as a Workflows task reaches it>
+```
+
 This ring is separate from the run-token keeper's. An empty ring fails closed:
 seeding returns 503 `SECRETS_NOT_CONFIGURED`, and a composite run that declares
 secrets is refused at submit.

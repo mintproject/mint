@@ -327,6 +327,22 @@ class InMemoryHasura:
             return {"update_adapter_workflow_run": {"affected_rows": 1}}
         return {"update_adapter_workflow_run": {"affected_rows": 0}}
 
+    def _op_UserActiveRuns(self, v):
+        return {"adapter_workflow_run": [
+            r for r in STORE.run.values()
+            if r.get("submitted_by") == v["user"] and r.get("status") in ("submitting", "running")]}
+
+    def _op_GetRunStepSecrets(self, v):
+        return {"adapter_workflow_run_by_pk": STORE.run.get(v["id"])}
+
+    def _op_IssueStepSecretsIf(self, v):
+        # Compare-and-set on the whole bound_secrets value (a flow step's one-use claim).
+        row = STORE.run.get(v["id"])
+        if row and row.get("bound_secrets") == v["was"]:
+            row["bound_secrets"] = v["now"]
+            return {"update_adapter_workflow_run": {"affected_rows": 1}}
+        return {"update_adapter_workflow_run": {"affected_rows": 0}}
+
     # --- MINT catalog read (demo: no modelcatalog_* data in-memory) ----------
     def _op_ListMintConfigurations(self, v):
         return {"modelcatalog_configuration": []}

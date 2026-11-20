@@ -13,6 +13,7 @@ import json
 from typing import Any, Iterable, Iterator
 
 from .config import settings
+from .step_secrets import raw_declaration
 
 
 def _code(source: Any) -> str | None:
@@ -102,11 +103,102 @@ _SET_ONE_OUTPUT = '''if _svo_result is not None:
 '''
 
 
+# Inserted before the entrypoint is called when the step is bound to a runner's
+# secret (design 2026-11-19-user-secrets-for-flows.md, section 8). The wrapper trades
+# the runner's token and the step's own fetch credential for the secret values. It
+# never prints them: a failed fetch is one line with a code and a status, no
+# response body and no exception text. Masking what the piece prints or returns is
+# a best-effort guard, not a guarantee (a value split across writes, or transformed
+# by the piece, is not found).
+_FETCH_SECRETS = '''
+import sys as _svo_sys
+import urllib.request as _svo_request
+
+
+def _svo_fetch_failed(_status):
+    print(_svo_json.dumps({"status": "error", "code": "STEP_SECRET_FETCH_FAILED", "http_status": _status}))
+    _svo_sys.exit(1)
+
+
+class _SvoNoRedirect(_svo_request.HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        return None
+
+
+def _svo_fetch_secrets(_values):
+    _status = 0
+    try:
+        _url = "%s/runs/%s/steps/__STEP__/secrets" % (
+            str(_values.get("SVO_ADAPTER_URL") or "").rstrip("/"), _values.get("SVO_RUN_ID"))
+        _req = _svo_request.Request(_url, headers={
+            "Authorization": "Bearer " + str(_values.get("TAPIS_TOKEN") or ""),
+            "X-Step-Secret-Token": str(_values.get("SVO_STEP_SECRET_TOKEN") or "")})
+        with _svo_request.build_opener(_SvoNoRedirect).open(_req, timeout=30) as _resp:
+            _status = _resp.status
+            _fetched = _svo_json.loads(_resp.read().decode("utf-8")).get("inputs")
+        if _status == 200 and isinstance(_fetched, dict) and all(
+                isinstance(_k, str) and isinstance(_v, str) for _k, _v in _fetched.items()):
+            return _fetched
+    except Exception as _exc:
+        _code = getattr(_exc, "code", 0)
+        _status = _code if isinstance(_code, int) and _code else _status
+    _svo_fetch_failed(_status)
+
+
+_svo_fetched = _svo_fetch_secrets(_svo_inputs)
+_svo_inputs.update(_svo_fetched)
+_svo_inputs.pop("SVO_STEP_SECRET_TOKEN", None)
+_svo_hidden = sorted({_v for _v in _svo_fetched.values() if len(_v) >= 4}, key=len, reverse=True)
+
+
+def _svo_mask(_obj):
+    if isinstance(_obj, str):
+        for _v in _svo_hidden:
+            _obj = _obj.replace(_v, "***")
+        return _obj
+    if isinstance(_obj, dict):
+        return {_svo_mask(_k): _svo_mask(_v) for _k, _v in _obj.items()}
+    if isinstance(_obj, (list, tuple)):
+        return [_svo_mask(_v) for _v in _obj]
+    return _obj
+
+
+class _SvoMaskedStream:
+    def __init__(self, _inner):
+        self._inner = _inner
+
+    def write(self, _text):
+        return self._inner.write(_svo_mask(_text))
+
+    def flush(self):
+        return self._inner.flush()
+
+    def __getattr__(self, _name):
+        return getattr(self._inner, _name)
+
+
+def _svo_call_masked(_fn, _args):
+    _out, _err = _svo_sys.stdout, _svo_sys.stderr
+    _svo_sys.stdout, _svo_sys.stderr = _SvoMaskedStream(_out), _SvoMaskedStream(_err)
+    try:
+        return _svo_mask(_fn(*_args))
+    except Exception as _exc:
+        raise RuntimeError(_svo_mask("%s: %s" % (type(_exc).__name__, _exc))) from None
+    finally:
+        _svo_sys.stdout, _svo_sys.stderr = _out, _err
+'''
+_CALL_UNMASKED = "_svo_result = _svo_fn(_svo_inputs) if _svo_inspect.signature(_svo_fn).parameters else _svo_fn()"
+_CALL_MASKED = (
+    "_svo_result = _svo_call_masked(\n"
+    "    _svo_fn, (_svo_inputs,) if _svo_inspect.signature(_svo_fn).parameters else ())")
+
+
 def runnable_code(
     source: str,
     entrypoint: str | None,
     input_names: Iterable[str],
     output_ids: dict[str, dict[str, str]] | None = None,
+    secret_step: int | None = None,
 ) -> str:
     """The code to hand Tapis Workflows for a stored-source step.
 
@@ -116,11 +208,19 @@ def runnable_code(
 
     ``output_ids`` is given for a flow step with more than one output: the task
     output id for each output position and each value name.
+
+    ``secret_step`` is the step's position when the step is bound to a runner's
+    secret: the code then fetches the values before calling the entrypoint.
     """
     if not entrypoint or not entrypoint.isidentifier() or not defines_function(source, entrypoint):
         return source
     call = _CALL_ENTRYPOINT.replace(
         "__INPUT_NAMES__", json.dumps(sorted(input_names))).replace("__ENTRYPOINT__", entrypoint)
+    if secret_step is not None:
+        head, marker, tail = call.partition("\n_svo_fn = ")
+        assert marker and _CALL_UNMASKED in tail
+        call = (head + _FETCH_SECRETS.replace("__STEP__", str(int(secret_step))) + marker
+                + tail.replace(_CALL_UNMASKED, _CALL_MASKED))
     if output_ids:
         assert call.endswith(_SET_ONE_OUTPUT)
         call = call[:-len(_SET_ONE_OUTPUT)] + _SET_FLOW_OUTPUTS.lstrip("\n").replace(
@@ -134,7 +234,8 @@ def source_sha256(source: str) -> str:
 
 def approval_sha256(spec: dict[str, Any]) -> str | None:
     """What an approval is given for: the piece's source, the function called in
-    it, the run arguments it is handed and the arguments it declares.
+    it, the run arguments it is handed, the arguments it declares, the secrets it
+    asks for and the statement of where it sends data.
 
     The source alone is not enough. A piece runs with the token of whoever runs
     it, and which arguments reach the code decides what it can do with that:
@@ -152,6 +253,12 @@ def approval_sha256(spec: dict[str, Any]) -> str | None:
         "env_from_args": spec.get("env_from_args") or {},
         "arguments": declared,
     }
+    # Only when declared, so an approval given before this existed still holds for a
+    # piece that declares neither.
+    for key in ("secrets", "sends_data_to"):
+        declaration = raw_declaration(spec, key)
+        if declaration:
+            covered[key] = declaration
     text = json.dumps(covered, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
