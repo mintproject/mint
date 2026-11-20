@@ -93,7 +93,7 @@ class InMemoryHasura:
     def _op_ListOwnDataObjects(self, v):
         return {"adapter_data_object": [
             row for row in STORE.data_object.values()
-            if row.get("owner_username") == v["owner"]
+            if row.get("owner_username") == v["owner"] or row.get("shared")
         ]}
 
     def _op_ExistingCkanDataObjects(self, v):
@@ -219,9 +219,12 @@ class InMemoryHasura:
     def _op_InsertDataObject(self, v):
         obj = dict(v["obj"])
         previous = STORE.data_object.get(obj.get("id") or "")
-        if previous and previous.get("owner_username") and "owner_username" not in obj:
-            # The real upsert never updates owner_username: it keeps the first writer's.
-            obj["owner_username"] = previous["owner_username"]
+        if previous:
+            # The real upsert never updates owner_username or shared: it keeps the
+            # first writer's owner and the row's flag.
+            for kept in ("owner_username", "shared"):
+                if previous.get(kept) and kept not in obj:
+                    obj[kept] = previous[kept]
         row = _insert(STORE.data_object, obj, nested_key="variables")
         return {"insert_adapter_data_object_one": row}
 

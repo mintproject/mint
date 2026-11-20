@@ -312,17 +312,71 @@ def test_the_bind_path_that_proved_the_secret_may_use_a_model_output_row():
     assert asyncio.run(main_module._contract_rows(InMemoryHasura("alice.jwt"), "em-out")) == []
 
 
-def test_discovery_offers_a_user_their_own_objects_and_shared_catalog_rows_only():
+def test_discovery_offers_a_user_their_own_and_shared_objects_only():
     import asyncio
     STORE.data_object.update({
         "mine": {"id": "mine", "owner_username": "alice", "variables": []},
         "theirs": {"id": "theirs", "owner_username": "bob", "variables": []},
-        "ckan": {"id": "ckan", "source_catalog": "ckan:pkg", "variables": []},
+        "shared": {"id": "shared", "shared": True, "source_catalog": "ckan:pkg", "variables": []},
+        # Looks like a synced catalog row but is not flagged: nobody may use it.
+        "ckan-lookalike": {"id": "ckan-lookalike", "source_catalog": "ckan:pkg", "variables": []},
         "legacy": {"id": "legacy", "variables": []},
         "output": {"id": "output", "owner_execution_id": "ue_1", "variables": []},
     })
     ids = {row["id"] for row in asyncio.run(main_module._discoverable_objects(InMemoryHasura("alice.jwt")))}
-    assert ids == {"mine", "ckan"}
+    assert ids == {"mine", "shared"}
+
+
+def test_a_shared_row_is_usable_by_any_signed_in_user_by_id_and_in_lists():
+    STORE.data_object["sh"] = {"id": "sh", "label": "catalog", "resource_uri": "https://ckan/x",
+                               "shared": True, "variables": []}
+    for headers in (ALICE, BOB):
+        assert client.get("/data-objects/sh", headers=headers).status_code == 200
+        assert "sh" in [o["id"] for o in client.get("/data-objects", headers=headers).json()]
+    import asyncio
+    assert asyncio.run(main_module._contract_rows(InMemoryHasura("bob.jwt"), "sh"))
+    assert client.get("/data-objects/sh").status_code == 401
+
+
+def test_an_unshared_ownerless_row_is_usable_by_nobody():
+    import asyncio
+    STORE.data_object["old"] = {"id": "old", "label": "o", "resource_uri": "x", "variables": [],
+                                "source_catalog": "ckan:pkg"}
+    for token in ("alice.jwt", "bob.jwt"):
+        assert asyncio.run(main_module._contract_rows(InMemoryHasura(token), "old")) == []
+        assert asyncio.run(main_module._discoverable_objects(InMemoryHasura(token))) == []
+    assert client.get("/data-objects/old", headers=ALICE).status_code == 404
+
+
+def test_a_user_cannot_set_shared_or_overwrite_a_shared_row():
+    resp = client.post("/data-objects", json={**OBJ, "id": "mine", "shared": True}, headers=ALICE)
+    assert resp.status_code == 200
+    assert not STORE.data_object["mine"].get("shared")
+    out = client.post("/runs/r1/register-output", headers=SERVICE,
+                      json={"output_data_object": {**OBJ, "id": "out", "shared": True}})
+    assert out.status_code == 200
+    assert not STORE.data_object["out"].get("shared")
+
+    STORE.data_object["sh"] = {"id": "sh", "label": "catalog", "resource_uri": "x", "shared": True,
+                               "variables": []}
+    for headers in (ALICE, BOB):
+        resp = client.post("/data-objects", json={**OBJ, "id": "sh", "label": "mine"}, headers=headers)
+        assert resp.status_code == 403
+    owned = {**OBJ, "id": "sh", "owner_execution_id": "ue_1"}
+    assert client.post("/data-objects", json=owned, headers=SERVICE).status_code == 403
+    assert client.post("/runs/r1/register-output", headers=SERVICE,
+                       json={"output_data_object": {**OBJ, "id": "sh"}}).status_code == 403
+    assert STORE.data_object["sh"]["label"] == "catalog"
+
+
+def test_the_ckan_sync_marks_the_public_rows_it_registers_as_shared():
+    from app import ckan_sync
+    obj = ckan_sync._resource_to_data_object(
+        {"id": "r1", "url": "https://ckan.example/r1.tif", "name": "heads",
+         "mint_standard_variables": "groundwater__hydraulic_head"},
+        [], pkg_name="pkg", pkg_title="Pkg")
+    assert obj is not None and obj["shared"] is True
+    assert "shared" in ckan_sync._RECONCILE_DATA_OBJECT.split("update_columns")[1]
 
 
 # --- the secret holder cannot overwrite a row someone else owns --------------

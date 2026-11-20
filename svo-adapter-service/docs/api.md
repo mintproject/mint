@@ -485,8 +485,16 @@ the catalog API:
   `/runtime-defaults`, `/spatial/layers`, `/etl/common-variables`, `/dfc-targets`,
   `/forecast/ntgam/options`), and the adapter console's files.
 - `POST /data-objects` needs a signed-in user and records them as the owner
-  (`owner_username`); `GET /data-objects` lists only the caller's own. Objects made
-  before owners were recorded have none and are listed for no user.
+  (`owner_username`). A data object is usable by a user, by id and in the planner's
+  lists, when it is shared or they own it: `GET /data-objects`, `GET /data-objects/{id}`,
+  `/plans`, `/readiness/check`, `/reachable/{id}`, `/plans/dfc-fanout`, flow inputs and
+  the discovery paths all apply that one rule. `shared` is set only by the CKAN sync, on
+  rows from public datasets (it reads with `include_private: false`); it cannot be sent
+  in a request body, and no registration may overwrite a shared row. An unshared row
+  with no owner (made before owners were recorded) is usable by no user. The deferred-
+  plan bind, which has proved the shared secret, may use any row. `owner_execution_id`
+  alone grants a user nothing. The first sync after the migration marks the existing
+  catalog rows shared.
 - `POST /forecast/run` needs a signed-in user. `GET /transform-specs` shows an
   anonymous caller only public pieces, and a signed-in caller public and shared
   pieces plus their own.

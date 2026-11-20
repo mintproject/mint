@@ -250,6 +250,11 @@ def _resource_to_data_object(
         "label": name,
         "resource_uri": url,
         "source_catalog": catalog,
+        # Every user may use a synced row as a source. That is safe only because
+        # _fetch_all_resources reads with include_private=False, so every synced
+        # dataset is public. Do NOT set this flag if the sync ever includes private
+        # datasets: it would expose their locations to every signed-in user.
+        "shared": True,
     }
     if adapter_fmt:
         obj["format"] = adapter_fmt
@@ -328,7 +333,7 @@ mutation ReconcileCkanDataObject($id: String!, $obj: adapter_data_object_insert_
     object: $obj
     on_conflict: {
       constraint: data_object_pkey
-      update_columns: [label description resource_uri format extension mime_type source_catalog]
+      update_columns: [label description resource_uri format extension mime_type source_catalog shared]
     }
   ) { id label resource_uri }
 }

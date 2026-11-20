@@ -530,33 +530,25 @@ def _require_run_reader(run: dict[str, Any] | None, reader: str) -> dict[str, An
 
 
 # --- who may use a data object -------------------------------------------------
-# A data object names storage and data. A user may use one they registered. A row
-# the Ensemble Manager registered for a model output carries its user's name when
-# the EM forwarded their token (owner_execution_id alone grants a user nothing: the
-# adapter cannot tell who may read that execution). A row with no owner (made before
-# owners were recorded) is usable by no user, except in the local demo, which has no
-# accounts. Only a call that already proved the
-# shared secret (the deferred-plan bind) may use any row.
+# A user may use a data object that is shared (catalog rows the CKAN sync registered
+# from public datasets) or that they own. A row the Ensemble Manager registered for a
+# model output carries its user's name when the EM forwarded their token;
+# owner_execution_id alone grants a user nothing, because the adapter cannot tell who
+# may read that execution. An unshared row with no owner (made before owners were
+# recorded) is usable by no user, except in the local demo, which has no accounts.
+# Only a call that already proved the shared secret (the deferred-plan bind) may use
+# any row.
 
 def _data_object_usable(row: dict[str, Any] | None, caller: str | None, *, service: bool = False) -> bool:
     if not row:
         return False
-    if service:
+    if service or row.get("shared"):
         return True
     if settings.demo_mode and not row.get("owner_username"):
         return True  # the local demo has no accounts: its seeded and token-less rows are shared
     if caller is None:
         return False
     return row.get("owner_username") == caller
-
-
-def _shared_reference_object(row: dict[str, Any]) -> bool:
-    """A catalog row the CKAN sync registered: no owner, shared reference data the
-    planner picks from for everyone. It is never usable by id."""
-    return (
-        not row.get("owner_username") and not row.get("owner_execution_id")
-        and str(row.get("source_catalog") or "").startswith("ckan")
-    )
 
 
 async def _data_object_caller(h: Any) -> str | None:
@@ -577,14 +569,11 @@ async def _contract_rows(h: Any, object_id: str, *, service: bool = False) -> li
 
 
 async def _discoverable_objects(h: Any) -> list[dict[str, Any]]:
-    """Data objects the planner may pick as sources for this caller: their own and the
-    shared catalog reference rows. Never another user's."""
+    """Data objects the planner may pick as sources for this caller: shared ones and
+    their own. Never another user's."""
     caller = await _data_object_caller(h)
     rows = (await h.execute(LIST_DATA_OBJECTS_QUERY))["adapter_data_object"]
-    return [
-        row for row in rows
-        if _data_object_usable(row, caller) or _shared_reference_object(row)
-    ]
+    return [row for row in rows if _data_object_usable(row, caller)]
 
 
 def _refuse_data_object_clash(
@@ -597,6 +586,13 @@ def _refuse_data_object_clash(
     user registration) also may not take a row that has no owner at all."""
     if not existing:
         return
+    if existing.get("shared"):
+        # A catalog row every user relies on: no user, and no output registration,
+        # may replace it.
+        raise HTTPException(403, detail={
+            "code": "DATA_OBJECT_NOT_OWNED",
+            "message": "this data object id belongs to the shared catalog",
+        })
     existing_user = existing.get("owner_username")
     existing_execution = existing.get("owner_execution_id")
     if existing_execution is not None:
@@ -755,7 +751,7 @@ GET_DATA_OBJECT = """
 query GetDataObject($id: String!) {
   adapter_data_object_by_pk(id: $id) {
     id label resource_uri format extension mime_type source_catalog
-    owner_execution_id owner_model_child_id owner_tenant owner_username
+    owner_execution_id owner_model_child_id owner_tenant owner_username shared
   }
 }
 """
