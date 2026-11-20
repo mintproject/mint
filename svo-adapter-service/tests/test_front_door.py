@@ -245,7 +245,7 @@ def test_the_open_routes_are_exactly_the_designs_route_table():
         if getattr(route, "path", "")
         for method in (getattr(route, "methods", None) or set()) - {"HEAD", "OPTIONS"}
         if _front_door_open(method, re.sub(r"\{[^}]+\}", "1", route.path))
-        and not route.path.startswith(("/admin", "/ui", "/docs", "/openapi", "/redoc"))
+        and not route.path.startswith(("/admin", "/docs", "/openapi", "/redoc"))
         and (method, route.path) != ("POST", "/transform-specs")
     )
     assert open_routes == sorted([

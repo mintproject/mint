@@ -4,7 +4,7 @@
 #   - CKAN token (read at runtime from the local token file; NOT stored in the repo)
 #   - the SUBSIDE conda env python (has numpy/pandas + the screening model;
 #     subside/.venv intentionally does NOT carry these).
-# Open http://localhost:8090/ui/ and switch to the "NTGAM forecast" tab.
+# The NTGAM forecast is served at /forecast/ntgam/* (see /docs).
 set -euo pipefail
 cd "$(dirname "$0")"
 
