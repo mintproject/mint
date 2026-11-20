@@ -253,3 +253,139 @@ def test_no_purpose_is_an_empty_answer(pieces):
 def test_a_wrongly_typed_body_is_a_422(pieces):
     assert client.post("/flows/propose", headers=AUTH, json={"steps": "x"}).status_code == 422
     assert client.post("/flows/propose", headers=AUTH, json={"max_chain": "x"}).status_code == 422
+
+
+# --- providers: models and datasets that can supply an unmet input --------------
+
+def _budget_spec(name, inputs, outputs):
+    """A model configuration as the registry holds it: a transform spec synced from MINT."""
+    return {"id": f"spec-{name}", "name": name, "label": name, "visibility": "public",
+            "mint_model_config_id": f"https://example.org/configs/{name}",
+            "contracts": [
+                *({"role": "input", "standard_variable_uri": V + v, "format": f} for v, f in inputs),
+                *({"role": "output", "standard_variable_uri": V + v, "format": f} for v, f in outputs)]}
+
+
+def with_models(monkeypatch, *specs):
+    real = main_module._registry
+
+    async def registry(h, **kwargs):
+        return [*await real(h, **kwargs), *specs]
+    monkeypatch.setattr(main_module, "_registry", registry)
+
+
+def data_object(label, variable, fmt="csv"):
+    response = client.post("/data-objects", json={
+        "label": label, "resource_uri": f"https://example.org/{label}", "format": fmt,
+        "variables": [{"standard_variable_uri": V + variable}]})
+    assert response.status_code == 200, response.text
+    return response.json()["id"]
+
+
+def test_a_piece_needing_a_model_output_gets_that_model_as_a_provider(monkeypatch):
+    # The spring-flow shape: the extractor needs a drain budget that only a model run makes.
+    register("extract", [("drain_budget", "csv")], [("spring_flow", "csv")])
+    with_models(monkeypatch,
+                _budget_spec("modflow6", [("heads", "csv")], [("drain_budget", "csv")]),
+                _budget_spec("other", [], [("heads", "csv")]))
+    body = propose([], {"contract": {"standard_variable_uri": V + "spring_flow", "format": "csv"}}).json()
+    need = body["produces"][0]["inputs"][0]
+    assert need["met"] is False and body["produces"][0]["complete"] is False
+    assert need["providers"]["models"] == [{
+        "configuration_id": "https://example.org/configs/modflow6", "label": "modflow6",
+        "output": 1, "format": "csv"}]
+    assert need["providers"]["datasets"] == []
+
+
+def test_a_provider_does_not_make_the_need_met(monkeypatch):
+    register("extract", [("drain_budget", "csv")], [("spring_flow", "csv")])
+    with_models(monkeypatch, _budget_spec("modflow6", [], [("drain_budget", "csv")]))
+    body = propose([], {"contract": {"standard_variable_uri": V + "spring_flow"}}).json()
+    assert body["produces"][0]["inputs"][0]["met"] is False
+    assert body["produces"][0]["inputs"][0]["direct"] == [] and body["produces"][0]["inputs"][0]["chains"] == []
+
+
+def test_a_met_need_has_no_providers(pieces, monkeypatch):
+    with_models(monkeypatch, _budget_spec("m", [], [("clean", "csv")]))
+    body = propose(ingested(pieces), {"contract": {"standard_variable_uri": V + "counts", "format": "parquet"}}).json()
+    assert body["produces"][0]["inputs"][0]["providers"] == {"models": [], "datasets": []}
+
+
+def test_a_dataset_provider_appears_for_an_unmet_step_input():
+    # score needs clean/parquet; the flow has no input and no converter, so nothing meets it.
+    score = register("score2", [("clean", "parquet")], [("counts", "parquet")])
+    shared = data_object("clean-parquet", "clean", "parquet")
+    data_object("wrong-format", "clean", "csv")
+    data_object("wrong-variable", "other", "parquet")
+    body = client.post("/flows/propose", headers=AUTH, json={
+        "steps": [step(1, score)], "purpose": {"step": 1, "input": 1}}).json()
+    assert body["direct"] == [] and body["chains"] == []
+    assert body["providers"]["datasets"] == [{"data_object_id": shared, "label": "clean-parquet", "format": "parquet"}]
+    assert body["providers"]["models"] == []
+
+
+def test_another_users_private_data_object_never_appears(monkeypatch):
+    mine = data_object("mine", "clean")
+    theirs = data_object("theirs", "clean")
+    shared = data_object("shared", "clean")
+    register("needs", [("clean", "csv")], [("done", "csv")])
+    real = main_module.get_client
+
+    class Proxy:
+        def __init__(self, inner):
+            self._inner = inner
+            self._bearer = getattr(inner, "_bearer", None)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+        async def execute(self, query, variables=None):
+            data = await self._inner.execute(query, variables)
+            if query is main_module.LIST_DATA_OBJECTS_QUERY:
+                owners = {mine: ("me", False), theirs: ("someone-else", False), shared: (None, True)}
+                data = {"adapter_data_object": [
+                    {**row, "owner_username": owners[row["id"]][0], "shared": owners[row["id"]][1]}
+                    for row in data["adapter_data_object"]]}
+            return data
+
+    async def caller(h):
+        return "me"
+    monkeypatch.setattr(main_module, "get_client", lambda *a, **k: Proxy(real(*a, **k)))
+    monkeypatch.setattr(main_module, "_data_object_caller", caller)
+    body = client.post("/flows/propose", headers=AUTH, json={
+        "purpose": {"contract": {"standard_variable_uri": V + "done"}}}).json()
+    ids = [d["data_object_id"] for d in body["produces"][0]["inputs"][0]["providers"]["datasets"]]
+    assert ids == sorted([mine, shared]) and theirs not in ids
+    assert "someone-else" not in str(body) and "theirs" not in str(body)
+
+
+def _provider_flow():
+    return {"inputs": [], "steps": []}
+
+
+def test_providers_are_cut_at_the_limit_and_the_answer_says_so():
+    piece = {"id": "p", "label": "p", "contracts": [
+        {"role": "input", "position": 1, "standard_variable_uri": V + "x", "format": "csv"},
+        {"role": "output", "position": 1, "standard_variable_uri": V + "y", "format": "csv"}]}
+    models = [{"configuration_id": f"m{n}", "label": f"m{n}",
+               "outputs": {1: {"standard_variable_uri": V + "x", "format": "csv"}}} for n in range(5)]
+    body = flow_propose.propose(_provider_flow(), {"p": piece},
+                                {"contract": {"standard_variable_uri": V + "y"}}, models=models, max_results=2)
+    assert [m["configuration_id"] for m in body["produces"][0]["inputs"][0]["providers"]["models"]] == ["m0", "m1"]
+    assert body["cut"] is True
+    whole = flow_propose.propose(_provider_flow(), {"p": piece},
+                                 {"contract": {"standard_variable_uri": V + "y"}}, models=models)
+    assert len(whole["produces"][0]["inputs"][0]["providers"]["models"]) == 5 and whole["cut"] is False
+
+
+def test_candidates_beyond_the_cap_are_not_searched_and_say_so(monkeypatch):
+    monkeypatch.setattr(flow_propose, "MAX_CANDIDATES", 2)
+    piece = {"id": "p", "label": "p", "contracts": [
+        {"role": "input", "position": 1, "standard_variable_uri": V + "x", "format": "csv"},
+        {"role": "output", "position": 1, "standard_variable_uri": V + "y", "format": "csv"}]}
+    models = [{"configuration_id": f"m{n}", "label": None,
+               "outputs": {1: {"standard_variable_uri": V + "x", "format": "csv"}}} for n in range(4)]
+    body = flow_propose.propose(_provider_flow(), {"p": piece},
+                                {"contract": {"standard_variable_uri": V + "y"}}, models=models)
+    assert [m["configuration_id"] for m in body["produces"][0]["inputs"][0]["providers"]["models"]] == ["m0", "m1"]
+    assert body["cut"] is True
