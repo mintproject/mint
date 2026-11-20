@@ -35,6 +35,7 @@ import { SettingInput } from '@/components/common/SettingInput';
 import { useFlowSettings } from '@/hooks/useFlowSettings';
 import {
   settingText,
+  choiceText,
   settingTitle,
   type FlowSettings,
   type SettingDetails,
@@ -607,7 +608,11 @@ export function MintParameters({
                   </td>
                   <td className="px-2 py-1">
                     {!editMode ? (
-                      <span>{displayValue || view?.defaultText || '—'}</span>
+                      <span>
+                        {(view ? choiceText(view.details, displayValue || view.defaultText) : '') ||
+                          displayValue ||
+                          '—'}
+                      </span>
                     ) : isRegionGeoJson ? (
                       <span className="text-gray-500">Region GeoJSON</span>
                     ) : (

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   choiceLabel,
+  choiceText,
   fetchFlowSettings,
   settingText,
   settingTitle,
@@ -30,6 +31,18 @@ describe('naming and showing a setting', () => {
   it('labels a choice by its title, else its value', () => {
     expect(choiceLabel({ value: 'a', title: 'Automatic' })).toBe('Automatic');
     expect(choiceLabel({ value: 5 })).toBe('5');
+  });
+
+  it('reads a value as its choice title, else as itself', () => {
+    const details = {
+      choices: [
+        { value: 'auto', title: 'Prototype counting' },
+        { value: 'longest_match', title: 'Longest term wins' },
+      ],
+    };
+    expect(choiceText(details, 'longest_match')).toBe('Longest term wins');
+    expect(choiceText(details, 'other')).toBe('other');
+    expect(choiceText(undefined, '4')).toBe('4');
   });
 
   it('writes a value as the text an input shows', () => {

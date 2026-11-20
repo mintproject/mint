@@ -1212,11 +1212,8 @@ export const UpdateThreadDataDocument = gql`
     ) {
       affected_rows
     }
-    delete_thread_model_parameter(
-      where: { thread_model: { thread_id: { _eq: $threadId } } }
-    ) {
-      affected_rows
-    }
+    # The models' parameter values are kept: they do not depend on which data is
+    # bound, and dropping them lost every setting the runner had chosen.
     delete_dataslice_resource(
       where: { dataslice: { thread_data: { thread_id: { _eq: $threadId } } } }
     ) {
