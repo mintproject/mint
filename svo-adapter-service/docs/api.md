@@ -455,6 +455,51 @@ Tapis returns no failed-task details. Provider diagnostics are bounded and
 sanitized before persistence; credentials and signed URL parameters are not
 included.
 
+### Your own secrets
+
+A credential that belongs to the person running a flow (a model server key, a data
+provider login) is stored with the adapter once, with the runner's own Tapis token. The
+adapter asks Tapis who the token belongs to; a user can only store, list or delete their
+own. No route returns a stored value. The routes are tagged `Integrations`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| PUT | `/secrets/{name}` | Store or replace your secret `name`. Body `{"fields": {"<field>": "<value>", ...}}`; extra keys are refused and values must be strings. Answers `{name, fields, version, created_at, updated_at}`, field names only. |
+| GET | `/secrets` | List your secrets, sorted by name: `[{name, fields, version, created_at, updated_at, last_used_at}]`. Never values. A secret a model's owner stored for a model is not listed. |
+| DELETE | `/secrets/{name}` | Delete your secret. 404 `SECRET_NOT_FOUND` when you have none by that name. |
+
+Limits: `name` matches `[a-z0-9_-]{1,64}`, field names `[a-z0-9_]{1,32}`, at most 16
+fields, 4096 bytes in total (422 otherwise; the answer never repeats a value).
+
+Refusals, on all three routes unless noted:
+
+- 401 `TAPIS_AUTH_REQUIRED` when the token is missing or not valid.
+- 503 `SECRETS_NOT_CONFIGURED` when the adapter has no encryption key
+  (`SVO_ADAPTER_SECRETS_ENCRYPTION_KEYS`).
+- `PUT` and `DELETE` only: 409 `SECRET_LOCKED_BY_RUN` while you have a run in progress
+  (`submitting` or `running`). Every step of your run holds your token, so a stored secret
+  cannot be changed until the run has finished. Listing is never locked.
+- `PUT` and `DELETE` only: 429 `SECRET_RATE_LIMITED` beyond 20 changes per user in 10
+  minutes.
+
+Every change is recorded with who made it and when (`created`, `replaced`, `deleted`
+events); `updated_at` in the list is the last change. Responses carry
+`Cache-Control: no-store`.
+
+Store a secret without typing the value into your shell history. Put it in an
+environment variable first (for example with `read -rs MODEL_API_KEY`), then:
+
+```bash
+read -rs MODEL_API_KEY            # type the key; it is not echoed or recorded
+jq -n --arg key "$MODEL_API_KEY" --arg url "https://models.example.org/v1" \
+    '{fields: {api_key: $key, base_url: $url}}' |
+  curl -sS -X PUT "$SVO_ADAPTER_URL/secrets/model_server" \
+    -H "Authorization: Bearer $TAPIS_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data-binary @-
+unset MODEL_API_KEY
+```
+
 ### Who can read a run
 
 `GET /runs`, `GET /runs/{run_id}`, `GET /runs/{run_id}/provenance` and

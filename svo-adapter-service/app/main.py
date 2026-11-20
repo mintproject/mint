@@ -38,7 +38,7 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, StrictStr
 from starlette.concurrency import run_in_threadpool
 
 from pathlib import Path
@@ -4190,6 +4190,14 @@ def _admin_secret_guard(admin_secret: str | None) -> None:
                                          "message": "no secrets encryption key is configured"})
 
 
+def _require_owner_configuration(configuration_id: str) -> None:
+    """A model owner's secret always belongs to a configuration. An empty one
+    would mean the same as a runner's own secret (``scope='user'``)."""
+    if not configuration_id.strip():
+        raise HTTPException(422, detail={"code": "SECRET_CONFIGURATION_REQUIRED",
+                                         "message": "a model-owner secret needs a configuration_id"})
+
+
 @app.put("/admin/secrets", tags=["Integrations"])
 async def admin_put_secret(
     body: AdminSecretIn,
@@ -4200,6 +4208,7 @@ async def admin_put_secret(
     _admin_secret_guard(internal_secret)
     if body.scope != secrets_store.SCOPE_MODEL_OWNER:
         raise HTTPException(422, detail={"code": "SECRET_SCOPE_UNSUPPORTED"})
+    _require_owner_configuration(body.configuration_id)
     if not body.acknowledged:
         raise HTTPException(422, detail={
             "code": "ACKNOWLEDGEMENT_REQUIRED",
@@ -4247,12 +4256,116 @@ async def admin_delete_secret(
 ):
     """Delete a stored secret. Returns metadata of the removed row."""
     _admin_secret_guard(internal_secret)
+    if body.scope == secrets_store.SCOPE_MODEL_OWNER:
+        _require_owner_configuration(body.configuration_id)
     store = secrets_store.FernetSecretStore(get_client(None))
     row = await store.find(body.scope, body.owner_username, body.name, body.configuration_id)
     if not row:
         raise HTTPException(404, detail={"code": "SECRET_NOT_FOUND"})
     await store.delete(row, actor="admin")
     return row
+
+
+# --- a runner's own secrets (scope 'user') ----------------------------------
+# Stored, listed and deleted with the runner's own Tapis token. No route returns a
+# value. The adapter reads and writes the tables with its admin client; no Hasura
+# role has any permission on them (graphql_engine/tests/test_adapter_secret_metadata.py).
+class UserSecretIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fields: dict[str, StrictStr]
+
+
+_SECRET_CHANGE_RATE: dict[str, list[float]] = {}
+_SECRET_CHANGE_RATE_WINDOW = 600.0
+_SECRET_CHANGE_RATE_LIMIT = 20
+_NO_STORE = {"Cache-Control": "no-store"}
+
+
+def _secret_change_rate_ok(username: str, now_ts: float) -> bool:
+    stamps = [t for t in _SECRET_CHANGE_RATE.get(username, []) if now_ts - t < _SECRET_CHANGE_RATE_WINDOW]
+    ok = len(stamps) < _SECRET_CHANGE_RATE_LIMIT
+    if ok:
+        stamps.append(now_ts)
+    _SECRET_CHANGE_RATE[username] = stamps
+    return ok
+
+
+async def _secret_caller(authorization: str | None) -> str:
+    """The signed-in caller (Tapis says who the token belongs to), or 401; 503
+    when the store has no encryption key."""
+    username = await _require_signed_in(_bearer(authorization))
+    if not username:
+        raise HTTPException(401, detail={"code": "TAPIS_AUTH_REQUIRED",
+                                         "message": "a valid Tapis bearer token is required"})
+    if not secrets_store.secrets_configured():
+        raise HTTPException(503, detail={"code": "SECRETS_NOT_CONFIGURED",
+                                         "message": "no secrets encryption key is configured"})
+    return username
+
+
+async def _guard_secret_change(h, username: str) -> None:
+    """Rate limit, then refuse while the caller has a run in progress: a step of
+    that run holds the same token and could otherwise swap the stored secret."""
+    if not _secret_change_rate_ok(username, time.time()):
+        raise HTTPException(429, detail={"code": "SECRET_RATE_LIMITED"}, headers=_NO_STORE)
+    if await secrets_store.user_has_active_run(h, username):
+        raise HTTPException(409, detail={
+            "code": "SECRET_LOCKED_BY_RUN",
+            "message": "you have a run in progress; change this credential when it has finished"},
+            headers=_NO_STORE)
+
+
+def _user_secret_summary(row: dict[str, Any], *, last_used: bool = False) -> dict[str, Any]:
+    out = {"name": row["name"], "fields": secrets_store.text_array(row.get("fields")),
+           "version": row["version"], "created_at": row.get("created_at"),
+           "updated_at": row.get("updated_at")}
+    if last_used:
+        out["last_used_at"] = row.get("last_used_at")
+    return out
+
+
+@app.put("/secrets/{name}", tags=["Integrations"])
+async def put_user_secret(
+    name: str,
+    body: UserSecretIn,
+    authorization: str | None = Header(None),
+):
+    """Store or replace the caller's own secret. Returns names and dates, never values."""
+    secrets_store.register_values(body.fields.values())
+    username = await _secret_caller(authorization)
+    h = get_client(None)
+    await _guard_secret_change(h, username)
+    try:
+        secrets_store.validate_name(name)
+        secrets_store.validate_fields(body.fields)
+        saved = await secrets_store.FernetSecretStore(h).put(
+            scope=secrets_store.SCOPE_USER, owner=username, name=name, configuration_id="",
+            pinned_app_id="", pinned_app_version="", fields=body.fields, actor=username)
+    except secrets_store.SecretError as exc:
+        raise HTTPException(422, detail={"code": "SECRET_INVALID", "message": str(exc)})
+    return JSONResponse(jsonable_encoder(_user_secret_summary(saved)), headers=_NO_STORE)
+
+
+@app.get("/secrets", tags=["Integrations"])
+async def list_user_secrets(authorization: str | None = Header(None)):
+    """The caller's own secrets: name, field names and dates. Never values."""
+    username = await _secret_caller(authorization)
+    rows = await secrets_store.list_user_secrets(get_client(None), username)
+    return JSONResponse(jsonable_encoder([_user_secret_summary(r, last_used=True) for r in rows]), headers=_NO_STORE)
+
+
+@app.delete("/secrets/{name}", tags=["Integrations"])
+async def delete_user_secret(name: str, authorization: str | None = Header(None)):
+    """Delete the caller's own secret. 404 when they have none by that name."""
+    username = await _secret_caller(authorization)
+    h = get_client(None)
+    await _guard_secret_change(h, username)
+    store = secrets_store.FernetSecretStore(h)
+    row = await store.find(secrets_store.SCOPE_USER, username, name, "")
+    if not row:
+        raise HTTPException(404, detail={"code": "SECRET_NOT_FOUND"}, headers=_NO_STORE)
+    await store.delete(row, actor=username)
+    return JSONResponse(jsonable_encoder(_user_secret_summary(row)), headers=_NO_STORE)
 
 
 _TOKEN_FETCH_RATE: dict[str, list[float]] = {}
