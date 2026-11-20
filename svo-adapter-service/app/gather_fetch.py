@@ -218,8 +218,12 @@ def check_status(status):
     raise GatherError("GATHER_RESOURCE_FAILED", "the server answered HTTP %d" % status, http_status=status)
 
 
-def open_https(url, timeout):
+def open_https(url, timeout, bearer=None, bearer_host=None):
     """GET an ``https`` link, following redirects by hand.
+
+    ``bearer`` is sent as ``Authorization: Bearer`` only to a hop whose host is
+    exactly ``bearer_host`` (lower-cased; the port is always 443). It is decided
+    again on every hop, so a redirect to any other host carries no credential.
 
     Returns ``(connection, response)`` for a 200; the caller reads the body and
     closes both. Every hop is checked as a first link is, and resolved to public
@@ -235,9 +239,11 @@ def open_https(url, timeout):
         failure = None
         for address in resolve_public(place["host"]):
             connection = PinnedHTTPSConnection(place["host"], address, timeout)
+            headers = {"User-Agent": USER_AGENT, "Accept": "*/*", "Accept-Encoding": "identity"}
+            if bearer and bearer_host and place["host"].lower() == bearer_host:
+                headers["Authorization"] = "Bearer " + bearer
             try:
-                connection.request("GET", place["target"], headers={
-                    "User-Agent": USER_AGENT, "Accept": "*/*", "Accept-Encoding": "identity"})
+                connection.request("GET", place["target"], headers=headers)
                 response = connection.getresponse()
                 break
             except ssl.SSLCertVerificationError:

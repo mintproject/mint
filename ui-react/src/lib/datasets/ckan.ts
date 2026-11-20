@@ -24,6 +24,7 @@
  * inherit their parent package's coverage.
  */
 
+import { getAccessToken } from '../auth/token-store';
 import { getDataCatalogApiUrl } from '../config';
 import { boundingBoxesOverlap, geoJsonBoundingBox, type BoundingBox } from '../geo/bbox';
 
@@ -97,10 +98,16 @@ async function ckanAction<T>(
     if (value !== undefined && value !== '') query.set(key, String(value));
   }
 
+  // Signed in: read as the user, so the catalog's private datasets (an upload the
+  // user made, an organisation's own data) are visible to them. Anonymous reads
+  // are unchanged. CKAN's Tapis sign-in takes the token as a bearer credential.
+  const token = getAccessToken();
+  if (token && action === 'package_search') query.set('include_private', 'true');
+
   const url = `${getDataCatalogApiUrl()}/api/3/action/${action}?${query.toString()}`;
   const res = await fetch(url, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(init?.signal ? { signal: init.signal } : {}),
   });
 

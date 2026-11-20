@@ -622,3 +622,45 @@ describe('overlapsDateRange', () => {
     expect(overlapsDateRange(pkg, new Date('2023-12-31'), new Date('2024-06-01'))).toBe(true);
   });
 });
+
+// ─── Private datasets for a signed-in user ────────────────────────────────────
+
+describe('reading the catalog as a signed-in user', () => {
+  afterEach(() => localStorage.clear());
+
+  it('sends the bearer token and asks for private datasets when a token exists', async () => {
+    localStorage.setItem('mint.access_token', 'USER-TOKEN');
+    let auth: string | null = null;
+    server.use(
+      http.get('*/api/3/action/package_search', ({ request }) => {
+        lastUrl = new URL(request.url);
+        auth = request.headers.get('authorization');
+        return HttpResponse.json({ success: true, result: { count: 0, results: [] } });
+      }),
+      http.get('*/api/3/action/package_show', ({ request }) => {
+        auth = request.headers.get('authorization');
+        return HttpResponse.json({ success: true, result: { id: 'p' } });
+      }),
+    );
+    await searchPackages({});
+    expect(auth).toBe('Bearer USER-TOKEN');
+    expect(lastUrl!.searchParams.get('include_private')).toBe('true');
+    auth = null;
+    await showPackage('p');
+    expect(auth).toBe('Bearer USER-TOKEN');
+  });
+
+  it('is unchanged when anonymous', async () => {
+    let auth: string | null = 'unset';
+    server.use(
+      http.get('*/api/3/action/package_search', ({ request }) => {
+        lastUrl = new URL(request.url);
+        auth = request.headers.get('authorization');
+        return HttpResponse.json({ success: true, result: { count: 0, results: [] } });
+      }),
+    );
+    await searchPackages({});
+    expect(auth).toBeNull();
+    expect(lastUrl!.searchParams.has('include_private')).toBe(false);
+  });
+});

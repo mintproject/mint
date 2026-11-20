@@ -96,7 +96,8 @@ def _gather():
         except ValueError as error:
             raise GatherError("GATHER_RESOURCE_FAILED", "the link is not allowed: %s" % error)
         if place["scheme"] == "https":
-            connection, response = open_https(resource["url"], _READ_TIMEOUT)
+            connection, response = open_https(
+                resource["url"], _READ_TIMEOUT, token, _SPEC.get("catalog_host") or None)
         elif place["system"] not in _SPEC["tapis_systems"]:
             raise GatherError("GATHER_RESOURCE_FAILED", "a collection may not read from this Tapis system")
         else:
@@ -199,7 +200,8 @@ def _gather():
             spill.close()
         print(json.dumps({"status": "gathered", "index": index, "name": names[index], "bytes": size}))
 
-    result = "tapis://%s/%s" % (system, folder)
+    # A collection's result is its folder; one file given to an ordinary input is the file.
+    result = "tapis://%s/%s" % (system, folder + ("/" + names[0] if _SPEC.get("single") else ""))
     _ctx.set_output("result", result)
     # Tapis Workflows does not report a task's named outputs: print them, last, for
     # the adapter to read back from the task's stdout.

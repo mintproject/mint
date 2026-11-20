@@ -2136,6 +2136,14 @@ def _collection_tapis_systems() -> list[str]:
     return [name.strip() for name in settings.flow_collection_tapis_systems.split(",") if name.strip()]
 
 
+def _gatherable_https(url: Any) -> bool:
+    """Whether ``url`` is an ``https`` link the gather task would fetch."""
+    try:
+        return isinstance(url, str) and gather_fetch.check_url(url)["scheme"] == "https"
+    except ValueError:
+        return False
+
+
 def _flow_collections(body: FlowPlanIn, flow: dict[str, Any], used: list[str]) -> dict[str, str]:
     """The flow inputs this plan gathers, each with the id of its gather task
     (``gather-1``, ``gather-2`` ... in the order the steps first read the inputs).
@@ -2447,7 +2455,8 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             if (isinstance(source, dict) and isinstance(source.get("flow_input"), str)
                     and source["flow_input"] not in used):
                 used.append(source["flow_input"])
-    gathers = _flow_collections(body, flow, used)
+    collection_gathers = _flow_collections(body, flow, used)
+    gathers = dict(collection_gathers)
     region_input, region_text = _flow_region(body.region, used, body.inputs, flow)
     unbound = [input_id for input_id in used
                if input_id not in body.inputs and input_id != region_input and input_id not in gathers]
@@ -2465,6 +2474,15 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
                 "code": "DATA_OBJECT_NOT_FOUND", "input": input_id, "data_object_id": body.inputs[input_id]})
         bound[input_id] = found[0]
 
+    # An ordinary input bound to a file at an https link is gathered too: the pieces
+    # read storage (tapis:// and local paths), not a web link. It becomes a gather of
+    # one resource, and its steps read the staged file. A tapis:// data object is read
+    # in place, as before; a link the gather task would refuse is left to the step.
+    singles = [input_id for input_id in used
+               if input_id in bound and _gatherable_https(bound[input_id].get("resource_uri"))]
+    wanted = [input_id for input_id in used if input_id in gathers or input_id in singles]
+    gathers = {input_id: f"gather-{n}" for n, input_id in enumerate(wanted, start=1)}
+
     checked = flow_graph.check({
         "inputs": [
             *({"id": input_id, "contract": _data_object_to_contract(row)} for input_id, row in bound.items()),
@@ -2476,7 +2494,7 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             # Files gathered into one input are taken the same way.
             *({"id": input_id,
                "contract": _marked_input_contract(input_id, rows, specs, "inline:flow-collection")}
-              for input_id in gathers),
+              for input_id in collection_gathers),
         ],
         "parameters": flow["parameters"],
         "steps": [{
@@ -2561,7 +2579,7 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             if definition is not None:
                 definition.update({
                     "required": False, "managed": True, "managed_source": "gather",
-                    "description": "Not set by anyone: this input is a collection, gathered by the run"})
+                    "description": "Not set by anyone: this input is gathered by the run into its own folder"})
             continue
         if definition is None:
             definition = {"name": arg, "type": "string"}
@@ -2576,8 +2594,12 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         })
 
     flow_collections = [
-        {"input": input_id, "label": body.collections[input_id].label, "gather": gather_id,
-         "resources": [{"name": r.name, "url": r.url} for r in body.collections[input_id].resources]}
+        ({"input": input_id, "label": body.collections[input_id].label, "gather": gather_id,
+          "resources": [{"name": r.name, "url": r.url} for r in body.collections[input_id].resources]}
+         if input_id in body.collections else
+         # One file: the step reads the staged file, not a folder holding it.
+         {"input": input_id, "label": input_id, "gather": gather_id, "single": True,
+          "resources": [{"name": "", "url": str(bound[input_id]["resource_uri"])}]})
         for input_id, gather_id in gathers.items()]
     if flow_collections:
         # Filled in at submit, never by the caller: the run's own folder in the
@@ -2615,7 +2637,9 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         "inputs": [{"input_id": input_id,
                     **({} if input_id in gathers else {"arg": arg}),
                     **({"region": True} if input_id == region_input
-                       else {"collection": gathers[input_id]} if input_id in gathers
+                       else {"collection": gathers[input_id]} if input_id in collection_gathers
+                       else {"collection": gathers[input_id], "data_object_id": body.inputs[input_id]}
+                       if input_id in gathers
                        else {"data_object_id": body.inputs[input_id]})}
                    for input_id, arg in args.items()],
         "collections": flow_collections,

@@ -1049,3 +1049,53 @@ def test_the_flow_check_passes_collections_on_unchanged(pieces):
     assert checked({"collections": ["in:corpus"]})["ok"] is True
     result = checked({"collections": ["in:nope"]})
     assert [p["code"] for p in result["problems"]] == ["FLOW_THREAD_BINDING"]
+
+
+# --- an ordinary input bound to a file at an https link -----------------------------
+
+CATALOG_FILE = "https://ckan.example.org/dataset/p1/resource/r1/download/corpus.csv"
+
+
+def test_an_ordinary_input_bound_to_an_https_file_is_gathered_as_one_file(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    inputs = {"in:corpus": data_object("corpus", CATALOG_FILE),
+              "in:lexicon": data_object("lexicon", "tapis://sys/lexicon.csv")}
+    response = plan(inputs)
+    assert response.status_code == 200, response.text
+    plan_json = response.json()["plan_json"]
+    assert plan_json["flow"]["collections"] == [{
+        "input": "in:corpus", "label": "in:corpus", "gather": "gather-1", "single": True,
+        "resources": [{"name": "", "url": CATALOG_FILE}]}]
+    # The step reads the gather task's file; no source_uri is made for the input.
+    assert plan_json["steps"][0]["wires"] == [{"to": {"input": 1}, "from": {"gather": "gather-1"}}]
+    parameters = {p["name"]: p for p in plan_json["parameters"]}
+    assert CATALOG_FILE not in [p.get("default") for p in parameters.values()]
+    assert parameters["source_uri_2"]["default"] == "tapis://sys/lexicon.csv"
+    flow_inputs = {i["input_id"]: i for i in plan_json["flow"]["inputs"]}
+    assert flow_inputs["in:corpus"]["collection"] == "gather-1" and "arg" not in flow_inputs["in:corpus"]
+    body = response.json()
+    pipeline = tapis.generate_tapis_workflow({"id": body["plan_id"], "plan_json": plan_json})
+    ids = [task["id"] for task in pipeline["tasks"]]
+    assert ids[0] == "gather-1" and ids.index("gather-1") < ids.index("step-1-unit_convert")
+    code = next(t for t in pipeline["tasks"] if t["id"] == "gather-1")["code"]
+    assert '"single": true' in code.replace("\\", "")
+
+
+def test_a_tapis_ordinary_input_is_read_in_place_with_no_gather(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    plan_json = plan().json()["plan_json"]
+    assert plan_json["flow"]["collections"] == []
+    parameters = {p["name"]: p for p in plan_json["parameters"]}
+    assert parameters["source_uri"]["default"] == "tapis://sys/docs"
+
+
+def test_gathers_are_numbered_across_collections_and_single_files(monkeypatch):
+    collection_flow(monkeypatch, collections=("in:lexicon",))
+    inputs = {"in:corpus": data_object("corpus", CATALOG_FILE)}
+    response = client.post("/plans/flow", headers=AUTH, json={
+        "flow_id": "cfg-1", "inputs": inputs,
+        "collections": {"in:lexicon": {"label": "Words", "resources": FILES}}})
+    assert response.status_code == 200, response.text
+    gathers = [(c["input"], c["gather"], bool(c.get("single")))
+               for c in response.json()["plan_json"]["flow"]["collections"]]
+    assert gathers == [("in:corpus", "gather-1", True), ("in:lexicon", "gather-2", False)]
