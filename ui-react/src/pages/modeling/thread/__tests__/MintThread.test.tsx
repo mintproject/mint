@@ -728,6 +728,7 @@ describe('MintThread with a flow', () => {
           name: 'model_server',
           label: 'Model server',
           fields: ['api_key'],
+          optional: ['embedding_base_url'],
           steps: ['s1'],
           stored: false,
         },
@@ -736,7 +737,9 @@ describe('MintThread with a flow', () => {
     });
     const list = await screen.findByTestId('flow-required-secrets');
     expect(list).toHaveTextContent('This flow needs these saved credentials:');
-    expect(list).toHaveTextContent(/Model server.*model_server: api_key\) is not stored yet/);
+    expect(list).toHaveTextContent(
+      /Model server.*model_server: api_key; optional embedding_base_url\) is not stored yet/,
+    );
     expect(list).toHaveTextContent(/Other.*is stored/);
     expect(screen.getByRole('link', { name: /saved credentials/i })).toHaveAttribute(
       'href',

@@ -519,6 +519,7 @@ describe("running a flow from a thread", () => {
                     name: "model_server",
                     label: "Model server",
                     fields: ["api_key", "chat_base_url"],
+                    optional: ["embedding_base_url"],
                     steps: [1],
                     stored: false
                 }
@@ -582,6 +583,7 @@ describe("running a flow from a thread", () => {
                 "fields",
                 "label",
                 "name",
+                "optional",
                 "steps",
                 "stored"
             ]);

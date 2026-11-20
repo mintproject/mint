@@ -62,7 +62,11 @@ def _invalid(why: str, piece: Any = None) -> StepSecretError:
 
 
 def parse_secrets(value: Any, piece: Any = None) -> list[dict[str, Any]]:
-    """The normalised ``secrets`` declaration: ``[{name, label, env}]``, or []."""
+    """The normalised ``secrets`` declaration: ``[{name, label, env}]``, or [].
+
+    An entry may also carry ``optional``: a list of field names (each a value of
+    its ``env``) the step can run without. It is kept only when non-empty, so a
+    declaration without it normalises exactly as it always did."""
     if value in (None, [], ()):
         return []
     if not isinstance(value, list) or not 1 <= len(value) <= MAX_SECRETS:
@@ -71,8 +75,8 @@ def parse_secrets(value: Any, piece: Any = None) -> list[dict[str, Any]]:
     seen_names: set[str] = set()
     seen_env: set[str] = set()
     for entry in value:
-        if not isinstance(entry, dict) or not set(entry) <= {"name", "label", "env"}:
-            raise _invalid("each secret is an object with name, label and env", piece)
+        if not isinstance(entry, dict) or not set(entry) <= {"name", "label", "env", "optional"}:
+            raise _invalid("each secret is an object with name, label, env and optionally optional", piece)
         name = entry.get("name")
         if not isinstance(name, str) or not NAME_RE.match(name):
             raise _invalid("a secret name must match [a-z0-9_-]{1,64}", piece)
@@ -93,8 +97,29 @@ def parse_secrets(value: Any, piece: Any = None) -> list[dict[str, Any]]:
             if key.upper() in seen_env:
                 raise _invalid(f"the task input {key} is filled by two secrets", piece)
             seen_env.add(key.upper())
-        out.append({"name": name, "label": label, "env": dict(env)})
+        declared = {"name": name, "label": label, "env": dict(env)}
+        optional = _parse_optional(entry.get("optional"), name, env, piece)
+        if optional:
+            declared["optional"] = optional
+        out.append(declared)
     return out
+
+
+def _parse_optional(value: Any, name: str, env: dict[str, str], piece: Any) -> list[str]:
+    """The ``optional`` field names of one secret: strings, field-shaped, each a
+    value of ``env``, none twice."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise _invalid(f"optional of secret {name!r} must be a list of field names", piece)
+    for item in value:
+        if not FIELD_RE.match(item):
+            raise _invalid("an optional field must be a secret field name [a-z0-9_]{1,32}", piece)
+        if item not in env.values():
+            raise _invalid(f"optional field {item!r} of secret {name!r} is not a value of its env map", piece)
+    if len(set(value)) != len(value):
+        raise _invalid(f"optional of secret {name!r} lists a field twice", piece)
+    return list(value)
 
 
 def parse_sends_data_to(value: Any, piece: Any = None) -> list[dict[str, str]]:
@@ -242,18 +267,30 @@ def secret_steps(plan_json: dict[str, Any]) -> list[dict[str, Any]]:
 # The plan's account of them
 # ---------------------------------------------------------------------------
 def needs(steps: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """By secret name: its label, the sorted field names the steps need and the
-    positions of the steps that use it."""
+    """By secret name: its label, the sorted field names the steps need (``fields``),
+    the sorted fields they only use when present (``optional``, left out when
+    there are none, so older plans keep their shape) and the positions of
+    the steps that use it. A field any step requires is required. A secret whose
+    fields are all optional still has to be stored: ``fields`` is then empty and
+    the secret's presence is the whole requirement."""
     found: dict[str, dict[str, Any]] = {}
     for step in steps:
         for declaration in step.get("secrets") or []:
             entry = found.setdefault(declaration["name"], {
                 "name": declaration["name"], "label": declaration.get("label") or declaration["name"],
-                "fields": set(), "steps": []})
-            entry["fields"].update(declaration["env"].values())
+                "fields": set(), "optional": set(), "steps": []})
+            skippable = set(declaration.get("optional") or [])
+            entry["fields"].update(set(declaration["env"].values()) - skippable)
+            entry["optional"].update(skippable)
             entry["steps"].append(step.get("step"))
-    return {name: {**entry, "fields": sorted(entry["fields"]), "steps": sorted(entry["steps"])}
-            for name, entry in sorted(found.items())}
+    out: dict[str, dict[str, Any]] = {}
+    for name, entry in sorted(found.items()):
+        optional = sorted(entry["optional"] - entry["fields"])
+        out[name] = {**entry, "fields": sorted(entry["fields"]), "steps": sorted(entry["steps"]),
+                     **({"optional": optional} if optional else {})}
+        if not optional:
+            out[name].pop("optional", None)
+    return out
 
 
 def sends_data_summary(steps: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:

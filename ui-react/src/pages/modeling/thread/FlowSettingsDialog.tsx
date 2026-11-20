@@ -78,8 +78,11 @@ export function FlowSettingsDialog({ gate, onConfirm, onCancel }: FlowSettingsDi
               {secrets.map((secret) => (
                 <li key={secret.name}>
                   <span className="font-medium">{secret.label || secret.name}</span> ({secret.name}
-                  {secret.fields?.length ? `: ${secret.fields.join(', ')}` : ''}){' '}
-                  {secret.stored ? 'is stored' : 'is not stored yet'}
+                  {secret.fields?.length ? `: ${secret.fields.join(', ')}` : ''}
+                  {secret.optional?.length
+                    ? `${secret.fields?.length ? '; ' : ': '}optional ${secret.optional.join(', ')}`
+                    : ''}
+                  ) {secret.stored ? 'is stored' : 'is not stored yet'}
                 </li>
               ))}
             </ul>

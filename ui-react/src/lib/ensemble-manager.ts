@@ -166,6 +166,8 @@ export interface RequiredSecret {
   name: string;
   label?: string;
   fields?: string[];
+  /** Fields the flow uses only when the stored credential has them. */
+  optional?: string[];
   steps?: string[];
   stored?: boolean;
 }
