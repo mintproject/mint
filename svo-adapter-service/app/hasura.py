@@ -398,7 +398,7 @@ query GetFlow($id: String!) {
     id label
     parameters { parameter { id label } }
     flow {
-      outputs_json thread_bindings_json
+      outputs_json thread_bindings_json settings_json
       steps(order_by: {position: asc}) { position etl_process_id settings_json wires_json pause_after }
     }
   }

@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from . import gather_fetch
+from . import flow_settings, gather_fetch
 from .models import DataObjectContract, ReadinessStatus
 from .planner import _contract_from_registry, compatibility
 
@@ -178,13 +178,15 @@ def _check(flow: dict[str, Any], refused_settings: Iterable[str]) -> Checked:
       the piece's catalog row with its contracts, or ``None`` when it was deleted;
     - ``outputs``: which step outputs are the flow's outputs;
     - ``thread_bindings``: which inputs and parameters the thread's region and
-      dates fill in, and ``collections``, the inputs that each take a collection.
+      dates fill in, and ``collections``, the inputs that each take a collection;
+    - ``settings``: what the author decided about each setting (see ``flow_settings``).
 
     ``refused_settings`` are argument names a flow may neither set nor wire: the
     ones the adapter manages and the ones that carry a secret.
     """
     result = Checked()
     problems = result.problems
+    wired_by_position: dict[int, set[str]] = {}
     # Compared without regard to case: TAPIS_TOKEN is refused as tapis_token is.
     refused = {str(name).lower() for name in refused_settings}
 
@@ -369,11 +371,47 @@ def _check(flow: dict[str, Any], refused_settings: Iterable[str]) -> Checked:
             for output_position, contract in piece_outputs(piece).items()
         }
         result.depends_on[position] = sorted(after)
+        wired_by_position[position] = wired_settings
 
+    _check_settings(flow, by_position, wired_by_position, problems)
     _check_outputs(flow, by_position, result)
     _check_pause(flow, by_position, result)
     _check_thread_bindings(flow, flow_inputs, flow_parameters, problems)
     return result
+
+
+def _check_settings(
+    flow: dict[str, Any],
+    by_position: dict[int, dict[str, Any]],
+    wired_by_position: dict[int, set[str]],
+    problems: list[Problem],
+) -> None:
+    """The author's decisions about settings: they must name settings of the flow's
+    pieces, and a setting that is hidden or fixed must still have a value to run on."""
+    rules = flow.get("settings")
+    pieces = {position: step["piece"] for position, step in by_position.items()
+              if isinstance(step.get("piece"), dict)}
+    known = {name for piece in pieces.values() for name in piece_arguments(piece)}
+    shape = flow_settings.rules_problems(rules, known)
+    for message in shape:
+        problems.append(Problem("FLOW_SETTING_INVALID", message))
+    if shape or not rules:
+        return
+    given = {name for step in by_position.values() if isinstance(step.get("settings"), dict)
+             for name in step["settings"]}
+    for position in sorted(pieces):
+        wired = wired_by_position.get(position, set())
+        for name in flow_settings.hidden_without_value(rules, pieces[position], given, wired):
+            problems.append(Problem(
+                "FLOW_SETTING_HIDDEN_WITHOUT_VALUE",
+                f"{name} is hidden from the runner but the piece needs it and nothing gives it a value: "
+                "set a value or a default, or show it", position))
+    for name in sorted(n for n in rules if flow_settings.is_fixed(rules, n)):
+        has_value = name in given or any(
+            flow_settings.piece_default(piece, name) is not None for piece in pieces.values())
+        if not has_value:
+            problems.append(Problem(
+                "FLOW_SETTING_FIXED_WITHOUT_VALUE", f"{name} is fixed but has no value to fix it to"))
 
 
 def _check_outputs(flow: dict[str, Any], by_position: dict[int, dict[str, Any]], result: Checked) -> None:
