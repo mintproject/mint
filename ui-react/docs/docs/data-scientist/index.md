@@ -8,5 +8,7 @@ Read [Why the details you enter matter](../reference/why-metadata.md) first, the
 2. [Register a model](register-model.md): the form, field by field.
 3. [Register data](register-data.md): what to provide so a dataset can be found.
 4. [Connect resources with transformations](transformations.md): register steps that convert one kind of data into another.
+5. [Upload a dataset](upload-a-dataset.md): add your own files to the catalog from DYNAMO, with their variable, dates and coverage.
+6. [Build a flow and register a piece](build-a-flow.md): register a piece of code from a GitHub commit, then link pieces into a flow.
 
 When you have finished, try your own model as a facilitator would: start a thread, choose your model, and check that the inputs can be filled with data and the outputs make sense.

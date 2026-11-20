@@ -37,6 +37,56 @@ DYNAMO cannot make an application private or remove it. Ask the application's ow
 
 Reload the page and try again. If you were signed in, try signing out and back in. If it keeps happening, note the page and the time and report it.
 
+## A flow asks for saved credentials
+
+The dialog is titled *Saved credentials needed*. The flow calls an outside service that needs a key or password, and you have not stored it yet. Select **Open saved credentials**, add the credential with the names the dialog lists, and start the run again. See [Saved credentials](saved-credentials.md).
+
+## I cannot change a saved credential
+
+The page says *You have a run in progress. Change this credential when it has finished.* A credential cannot be saved, replaced or deleted while one of your runs is in progress. Wait for the run to finish, then try again.
+
+If the page says you have changed credentials too many times, wait a few minutes and try again.
+
+## A flow says it needs a setting filled in
+
+Some settings have no default and no value. Give each one a value in the **Parameters** step, save, then run again. The message lists the settings it needs.
+
+## A flow says it is already running
+
+The message gives the name of the run already in progress. Wait for that run to finish, or cancel it in the **Flow steps** panel, then run again.
+
+## A step says Not runnable for you
+
+The step's piece has been removed, is not visible to your account, or has not been approved for your account. Ask the flow's owner to check the step. Pieces that are shared or public need an administrator's approval, and their status is listed at `/etl/approvals`.
+
+## A collection input or file was refused
+
+The message says *This input takes one file*, or it names a file that cannot be used. Change the selection in the **Datasets** step, keeping only the files the input takes, then run again. An upload takes up to 500 files at once, and 2 GB in all.
+
+## A run is waiting for my edit, but I cannot upload
+
+Only the person who started the run can upload the edited file and resume it. Anyone else sees a line naming that person. Ask them to continue the run.
+
+## My edited file was not accepted
+
+The panel says *The last edit could not be used*, with the reason. Download the file again if you need the original, make the change, upload the corrected copy, and select **Resume with this edit**.
+
+## A paused run was cancelled
+
+A run left waiting for 14 days is cancelled. Start the flow again from the Runs step.
+
+## I cannot create a dataset in any organisation
+
+The upload page says *You cannot create datasets in any catalog organisation*. Ask a catalog administrator to add you to one. See [Upload a dataset](data-scientist/upload-a-dataset.md).
+
+## A model cannot read the dataset I uploaded
+
+A model reads its files directly, so it can use only public files. Upload the files again with **Make public** ticked, or, for a flow, keep the dataset private. A flow can read private files.
+
+## Saved credentials are not available on this server yet
+
+The server that stores credentials is not set up here. Ask your DYNAMO administrator.
+
 ## When you ask for help
 
 Give the page you were on, what you chose, and any message you saw. For a run, include its name and the message shown. Never send your password or sign-in details to anyone.

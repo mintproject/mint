@@ -8,6 +8,8 @@ Look at models and data before you commit to a setup. A model that fits your que
 2. Type part of a name in the filter box, or narrow the list with **Region**, **Category** and **Output variable**. Use the output variable when you know what you need to produce.
 3. Select a model to open its configurations, then select a configuration to read its details.
 
+To look only at **flows**, use the **Kind** buttons and choose **Flows**. A flow is a model made of linked steps, and it shows a **Flow** badge in the list. Choose **Models** to hide the flows, or **All** to see both. The buttons appear only when DYNAMO can tell flows apart. A flow's details include a **Steps** section that draws its steps and shows what each one uses. See [Run a flow](facilitator/run-a-flow.md).
+
 ![Animation: typing "hand" into the model filter, then selecting the HAND model configuration to see its inputs and outputs](assets/images/model-search.gif)
 
 On a configuration's details, check three things before you choose it. Read the description to see what it was built for. Read the **Inputs** to see what data it needs, in which format and unit, and whether each input is required. Read the **Outputs** to confirm it produces what you want. Mismatched inputs are the most common reason a setup fails later, so it is worth checking now.

@@ -8,4 +8,6 @@ There are three parts, and framing leads straight into the wizard:
 2. [Run the model wizard](use-model.md): a guided set of steps that takes your choices through to a finished run. You confirm the framing, choose the outcome, models and data, set the values, run, and read the results.
 3. [Review results](results.md): read the outcome and compare earlier runs.
 
+Some models are **flows**, made of linked steps. If your thread uses one, read [Run a flow](run-a-flow.md) for how it differs: choosing several files for one input, the checks before a run, and pausing for your own edit. A flow may need a key or password for an outside service. You store it once, under [Saved credentials](../saved-credentials.md).
+
 Use [Find models and data](../discovery.md) whenever you want to look around first. You must be signed in to start a modeling activity.

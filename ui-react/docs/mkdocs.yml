@@ -34,6 +34,7 @@
         "facilitator/index.md",
         "facilitator/frame-question.md",
         "facilitator/use-model.md",
+        "facilitator/run-a-flow.md",
         "facilitator/results.md"
       ]
     },
@@ -43,8 +44,13 @@
         "data-scientist/make-model.md",
         "data-scientist/register-model.md",
         "data-scientist/register-data.md",
-        "data-scientist/transformations.md"
+        "data-scientist/upload-a-dataset.md",
+        "data-scientist/transformations.md",
+        "data-scientist/build-a-flow.md"
       ]
+    },
+    {
+      "Saved credentials": "saved-credentials.md"
     },
     {
       "Troubleshooting": "troubleshooting.md"

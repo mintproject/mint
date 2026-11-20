@@ -45,3 +45,15 @@ A **problem statement** is the whole question. A **task** is one focused piece o
 ![Choosing between a new problem statement and a task on an existing one, with the Confirm and start setup button](../assets/images/wizard-save.png)
 
 Select **Confirm and start setup**. This saves your choices and opens the run model wizard, where you [continue step by step](use-model.md).
+
+## Find your way in a problem statement
+
+A problem statement page lists its **tasks**, and each task lists its own **sub-tasks** (threads).
+
+- Select the **chevron** beside a task to open or close its sub-tasks. Selecting the task's name does not change the list.
+- Sub-tasks are listed with the most recently changed first.
+- **Create new sub-task** adds another thread under a task.
+
+When you open a sub-task, its steps appear nested under its row in the list: Framing, Variables, Models, Datasets, Parameters, Runs, Results and Summary.
+
+The selected sub-task's wizard opens in the right-hand panel.

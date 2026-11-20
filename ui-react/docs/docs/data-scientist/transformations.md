@@ -39,3 +39,7 @@ This is the part that makes a transformation findable and chainable, so complete
 ![The input and output sections of the form, each with a variable, unit, and format](../assets/images/register-etl-contract.png)
 
 If the variables are wrong or left out, the transformation registers but never shows up where people need it. Use the same standard variables as the models and datasets it connects. See [Why the details you enter matter](../reference/why-metadata.md).
+
+## Register a piece from a commit
+
+A **piece** is a transformation, or one step of a flow, whose code lives in a commit of a public GitHub repository. Registering it pins the piece to that commit. A piece you share or make public needs an administrator's approval before others can run it. The form takes the inputs, outputs, arguments and data destinations of the piece, in the same way as the form above. See [Build a flow and register a piece](build-a-flow.md).
