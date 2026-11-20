@@ -399,6 +399,22 @@ describe('executionFromGQL', () => {
     expect(ex.results['outA']?.url).toBe('http://x/d.tif');
   });
 
+  it('keeps every resource when several rows bind one input (a collection)', () => {
+    const ex = executionFromGQL({
+      ...row,
+      data_bindings: [
+        { model_io_id: 'inA', resource: { id: 'r1', name: 'a.csv', url: 'http://x/a.csv' } },
+        { model_io_id: 'inA', resource: { id: 'r2', name: 'b.csv', url: 'http://x/b.csv' } },
+        { model_io_id: 'inB', resource: { id: 'r3', name: 'c.csv', url: 'http://x/c.csv' } },
+      ],
+    });
+    expect((ex.bindings['inA'] as { name: string }[]).map((r) => r.name)).toEqual([
+      'a.csv',
+      'b.csv',
+    ]);
+    expect((ex.bindings['inB'] as { name: string }).name).toBe('c.csv');
+  });
+
   it('falls back to WAITING when the engine has not set a status', () => {
     expect(executionFromGQL({ ...row, status: null }).status).toBe('WAITING');
   });

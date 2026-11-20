@@ -214,7 +214,12 @@ export function executionFromGQL(ex: ExecutionRow): Execution {
     bindings[pb.model_parameter_id] = pb.parameter_value;
   }
   for (const db of ex.data_bindings ?? []) {
-    bindings[db.model_io_id] = db.resource;
+    // Several rows under one input are a collection (a flow input that took many
+    // files): keep every resource. One row stays the single resource it always was.
+    const held = bindings[db.model_io_id];
+    bindings[db.model_io_id] = held
+      ? [...(Array.isArray(held) ? held : [held]), db.resource]
+      : db.resource;
   }
   const results: Record<string, ExecutionResult> = {};
   for (const r of ex.results ?? []) {

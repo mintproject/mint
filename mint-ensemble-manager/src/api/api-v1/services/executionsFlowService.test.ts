@@ -2,6 +2,7 @@ import executionsFlowService from "./executionsFlowService";
 import { getThreadMock } from "@/classes/common/__tests__/mocks/getThreadMock";
 import { getRegionMockTexas } from "@/classes/common/__tests__/mocks/getRegionMockTexas";
 import {
+    addExecutionDataBinding,
     getExecution,
     getRegionDetails,
     incrementThreadModelSubmittedRuns,
@@ -10,6 +11,7 @@ import {
     setThreadModelExecutionIds,
     updateExecutionStatusResultsAndSummary
 } from "@/classes/graphql/graphql_functions";
+import { executionToGQL } from "@/classes/graphql/graphql_adapter";
 import { getThread } from "@/classes/graphql/graphql_functions_v2";
 
 import { usernameFromToken } from "@/utils/authUtils";
@@ -196,6 +198,70 @@ describe("the thread's side of a flow run", () => {
             expect(incrementThreadModelSubmittedRuns).toHaveBeenCalledWith(threadModelId, 1);
             const [, summary] = (insertThreadModelExecutionSummary as jest.Mock).mock.calls[0];
             expect(summary.total_runs).toBe(1);
+        });
+    });
+
+    describe("recording what a run read", () => {
+        const PROVENANCE = {
+            inputs: [
+                {
+                    model_io_id: "in-corpus",
+                    resources: [
+                        { id: "r1", name: "a.csv", url: "https://x/a.csv" },
+                        { id: "r2", name: "b.csv", url: "https://x/b.csv" }
+                    ]
+                }
+            ],
+            parameters: [{ model_parameter_id: "par-top", name: "top_n", value: "9" }],
+            settings: { top_n: "9" },
+            unresolved: []
+        };
+
+        it("writes a collection input as one binding per resource, and the settings", async () => {
+            (setExecutions as jest.Mock).mockResolvedValue({});
+            await executionsFlowService.startFlowExecution(
+                THREAD,
+                MODEL,
+                "ue_parent-1",
+                "Bearer t",
+                PROVENANCE
+            );
+            const [[executions]] = (setExecutions as jest.Mock).mock.calls;
+            const written = executionToGQL(executions[0]);
+            expect(written.data_bindings.data).toEqual([
+                { model_io_id: "in-corpus", resource_id: "r1" },
+                { model_io_id: "in-corpus", resource_id: "r2" }
+            ]);
+            expect(written.parameter_bindings.data).toEqual([
+                { model_parameter_id: "par-top", parameter_value: "9" }
+            ]);
+        });
+
+        it("records the run without its bindings when the catalog refuses them", async () => {
+            (setExecutions as jest.Mock).mockResolvedValue(undefined);
+            await executionsFlowService.startFlowExecution(
+                THREAD,
+                MODEL,
+                "ue_parent-1",
+                "Bearer t",
+                PROVENANCE
+            );
+            expect(setExecutions).toHaveBeenCalledTimes(2);
+            expect((setExecutions as jest.Mock).mock.calls[1][0][0].bindings).toEqual({});
+            expect(setThreadModelExecutionIds).toHaveBeenCalled();
+        });
+
+        it("files an edited file as an input of the execution", async () => {
+            await executionsFlowService.recordFlowEdit("exec-1", "out-lexicon", {
+                name: "edited lexicon_draft.json",
+                url: "https://ckan/x.json",
+                dcid: "res-9"
+            });
+            expect(addExecutionDataBinding).toHaveBeenCalledWith("exec-1", "out-lexicon", {
+                name: "edited lexicon_draft.json",
+                url: "https://ckan/x.json",
+                dcid: "res-9"
+            });
         });
     });
 

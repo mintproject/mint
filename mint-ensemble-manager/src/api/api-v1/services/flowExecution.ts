@@ -14,6 +14,13 @@
 import { UnifiedExecutionError } from "@/classes/common/errors";
 import { Region } from "@/classes/mint/mint-types";
 import { deriveRegionSource, InputSource, RegionGeometryError } from "./inputStepDerivation";
+import {
+    buildFlowProvenance,
+    FlowProvenance,
+    inputsFromPlan,
+    ProvenanceInput,
+    settingsFromPlan
+} from "./flowProvenance";
 import { UnifiedExecutionRecord, UnifiedExecutionStore } from "./unifiedExecutionStore";
 
 /** What the plan id carries for a flow. Small: the plan id is an indexed column. */
@@ -96,13 +103,26 @@ export interface FlowThreadService {
         authorization: string,
         access?: "read" | "write"
     ): Promise<FlowThreadContext>;
-    /** Record a run that is about to start, for a caller who may change the thread. Returns the execution's id. */
+    /**
+     * Record a run that is about to start, for a caller who may change the thread, with
+     * what it reads and the settings it uses. Returns the execution's id.
+     */
     startFlowExecution(
         threadId: string,
         modelId: string,
         runId: string,
-        authorization: string
+        authorization: string,
+        provenance?: FlowProvenance
     ): Promise<string>;
+    /**
+     * Record the file a person edited at a pause as an input of the resumed run.
+     * `modelIoId` is the flow output the file replaces.
+     */
+    recordFlowEdit(
+        executionId: string,
+        modelIoId: string,
+        file: { name: string; url: string; dcid?: string | null }
+    ): Promise<void>;
     /** Close the run's record, filing each output as a result. Safe to call twice. */
     finishFlowExecution(
         threadId: string,
@@ -191,6 +211,8 @@ interface FlowChild {
     steps?: Array<Record<string, any>>;
     /** The flow's outputs as its submitter saw them, to file each as a result. */
     outputs?: { model_io_id: string; name: string }[];
+    /** Every setting the run used, never a credential; a link is a reference, not a value. */
+    settings?: Record<string, string>;
 }
 
 const TERMINAL = new Set(["completed", "failed"]);
@@ -500,6 +522,59 @@ export async function planFlow(
     };
 }
 
+/**
+ * What the run is about to read and the settings it will use, for its execution's
+ * record. The adapter's stored plan is the truth for both (it holds the datasets the
+ * run was planned on and the flow's fixed settings and links); when it cannot be read
+ * the thread's own bindings stand in for the inputs. Never blocks a run.
+ */
+async function provenanceFor(
+    deps: FlowDeps,
+    adapterPlanId: string,
+    context: FlowThreadContext,
+    values: Record<string, unknown>,
+    authorization: string
+): Promise<FlowProvenance | undefined> {
+    try {
+        let planJson: any = null;
+        try {
+            const stored = await deps.adapterRequest(
+                `/plans/${encodeURIComponent(adapterPlanId)}`,
+                { asUser: true },
+                authorization
+            );
+            planJson = stored?.plan_json || null;
+        } catch {
+            planJson = null;
+        }
+        const planned = planJson ? inputsFromPlan(planJson) : [];
+        const inputs: ProvenanceInput[] = planned.length
+            ? planned
+            : context.inputs
+                  .filter((input) => input.resources.length)
+                  .map((input) => ({
+                      model_io_id: input.model_io_id,
+                      files: input.resources.map(({ name, url }) => ({ name, url }))
+                  }));
+        const resources = new Map<string, { id: string; name?: string }>();
+        for (const input of context.inputs) {
+            for (const resource of input.resources) {
+                resources.set(resource.url, { id: resource.id, name: resource.name });
+            }
+        }
+        return buildFlowProvenance(
+            inputs,
+            settingsFromPlan(planJson || {}, values),
+            resources,
+            new Map(context.parameters.map((parameter) => [parameter.name, parameter.id]))
+        );
+    } catch (error) {
+        // The record of what a run read is useful, not worth refusing the run for.
+        console.error("could not work out a flow run's inputs and settings", error);
+        return undefined;
+    }
+}
+
 /** Start a planned flow. One run record, one execution, one pipeline. */
 export async function submitFlow(
     deps: FlowDeps,
@@ -575,13 +650,22 @@ export async function submitFlow(
         }));
     const runId = deps.parentRunId(parent.id);
     let executionId: string | null = parent.model_child_id || null;
+    let provenance: FlowProvenance | undefined;
     try {
         if (!executionId) {
+            provenance = await provenanceFor(
+                deps,
+                plan.flow.adapter_plan_id,
+                context,
+                values,
+                authorization
+            );
             executionId = await deps.flows.startFlowExecution(
                 plan.thread_id,
                 plan.model_id,
                 runId,
-                authorization
+                authorization,
+                provenance
             );
             // Kept at once, so a submission taken up again reuses this record.
             await deps.store.update(parent.id, { model_child_id: executionId });
@@ -609,7 +693,8 @@ export async function submitFlow(
             stage: "flow",
             tapis_workflow_id: result.tapis_workflow_id || null,
             tapis_run_id: result.tapis_run_id || null,
-            outputs: context.outputs
+            outputs: context.outputs,
+            ...(provenance ? { settings: provenance.settings } : {})
         };
         const updated = await deps.store.update(parent.id, {
             status: "adapter_running",
@@ -815,6 +900,33 @@ export async function reconcileFlow(
 }
 
 /**
+ * File the edited file as an input of the resumed run, so the run's record shows the
+ * edit was used. Best effort: the adapter has already resumed, and the run must be
+ * followed whether or not this write lands (the edit is also on the run as its
+ * `replacement`). Needs the flow output the file replaces: without it no row can hold it.
+ */
+async function recordEdit(
+    deps: FlowDeps,
+    record: UnifiedExecutionRecord,
+    child: FlowChild,
+    given: { url: string; dataset_id?: unknown; resource_id?: unknown },
+    outputKey: string
+): Promise<void> {
+    const modelIoId = child.pause?.model_io_id;
+    if (!record.model_child_id || !modelIoId) return;
+    const file = child.pause?.file || outputKey;
+    try {
+        await deps.flows.recordFlowEdit(record.model_child_id, modelIoId, {
+            name: `edited ${file}`,
+            url: given.url,
+            dcid: typeof given.resource_id === "string" ? given.resource_id : null
+        });
+    } catch (error) {
+        console.error("could not record the edited file as an input of the run", error);
+    }
+}
+
+/**
  * Continue a run stopped at its pause, on the edited file the person uploaded to the
  * data catalog. Only the person who started the run may, and they must still be able
  * to change the thread. The adapter fetches the file as them, refuses one the pieces
@@ -929,6 +1041,7 @@ export async function resumeFlow(
         steps: child.steps,
         error_message: null
     };
+    await recordEdit(deps, record, child, given, keys[0]);
     // The adapter has resumed the run. If this write fails the answer is still the
     // resumed run, and the next look at the run (a poll of the paused one reports
     // "resumed" and the run that followed) brings the record up to date.

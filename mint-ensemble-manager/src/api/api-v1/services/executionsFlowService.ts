@@ -9,6 +9,7 @@ import { ForbiddenError, NotFoundError } from "@/classes/common/errors";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { getMd5Hash, threadFromGQL, uuidv4 } from "@/classes/graphql/graphql_adapter";
 import {
+    addExecutionDataBinding,
     deleteThreadModelExecutionIds,
     getExecution,
     getRegionDetails,
@@ -148,7 +149,7 @@ const executionsFlowService: FlowThreadService = {
         };
     },
 
-    async startFlowExecution(threadId, modelId, runId, authorization): Promise<string> {
+    async startFlowExecution(threadId, modelId, runId, authorization, provenance): Promise<string> {
         const { thread } = await loadThreadAs(threadId, authorization, "write");
         const threadModelId = thread.model_ensembles?.[modelId]?.id;
         if (!threadModelId) throw new NotFoundError("Thread model not found");
@@ -173,10 +174,18 @@ const executionsFlowService: FlowThreadService = {
         if (inserted.errors) throw new Error("Error setting thread model execution summary");
         await deleteThreadModelExecutionIds(threadModelId);
 
+        // What the run reads and the settings it uses, as a model run records them.
+        const bindings: Execution["bindings"] = {};
+        for (const input of provenance?.inputs || []) {
+            bindings[input.model_io_id] = input.resources as any;
+        }
+        for (const parameter of provenance?.parameters || []) {
+            bindings[parameter.model_parameter_id] = parameter.value;
+        }
         const execution: Execution = {
             id: uuidv4(),
             modelid: modelId,
-            bindings: {},
+            bindings,
             execution_engine: "tapis",
             // The thread's screens find the run's live status through this id.
             runid: runId,
@@ -185,10 +194,21 @@ const executionsFlowService: FlowThreadService = {
             start_time: new Date(),
             selected: true
         };
-        await setExecutions([execution], threadModelId);
+        const written = await setExecutions([execution], threadModelId);
+        if (!written && Object.keys(bindings).length) {
+            // The catalog refused the record (a binding it has no row for rolls the
+            // whole write back). A run without its provenance is better than no run.
+            console.error("flow execution not recorded with its bindings; recording without");
+            execution.bindings = {};
+            await setExecutions([execution], threadModelId);
+        }
         await setThreadModelExecutionIds(threadModelId, [execution.id]);
         await incrementThreadModelSubmittedRuns(threadModelId, 1);
         return execution.id;
+    },
+
+    async recordFlowEdit(executionId, modelIoId, file): Promise<void> {
+        await addExecutionDataBinding(executionId, modelIoId, file);
     },
 
     async finishFlowExecution(threadId, modelId, executionId, status, outputs): Promise<void> {

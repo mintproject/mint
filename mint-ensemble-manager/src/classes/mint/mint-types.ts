@@ -607,7 +607,8 @@ export type Execution_Result = {
 };
 
 export interface InputBindings {
-    [input: string]: string | DataResource;
+    // A flow input that takes a collection holds one resource per file.
+    [input: string]: string | DataResource | DataResource[];
 }
 
 export type VariableMap = IdMap<Variable>;

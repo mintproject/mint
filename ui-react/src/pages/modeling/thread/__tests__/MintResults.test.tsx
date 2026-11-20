@@ -565,3 +565,65 @@ describe('MintResults tapis:// results', () => {
     expect(link).toHaveAttribute('target', '_blank');
   });
 });
+
+// ─── input bindings ───────────────────────────────────────────────────────────
+
+describe('MintResults input cell', () => {
+  const flowModel = {
+    ...mockModel,
+    input_files: [{ id: 'in-1', name: 'Documents' }],
+  };
+  const flowThread: ThreadExecutionData = {
+    ...mockThreadDataSubmitted,
+    models: { 'model-1': flowModel as never },
+  };
+
+  function renderWith(binding: unknown) {
+    const executions: ModelExecutionsMap = {
+      'model-1': {
+        loading: false,
+        executions: [
+          {
+            id: 'exec-1',
+            modelid: 'model-1',
+            status: 'SUCCESS',
+            bindings: { 'in-1': binding },
+            results: { 'out-1': { id: 'out-1', name: 'discharge.nc', url: 'https://x/d.nc' } },
+          },
+        ],
+      },
+    };
+    return renderWithProviders(
+      <MintResults
+        threadData={flowThread}
+        executions={executions}
+        canWrite
+        ingestionApiAvailable={false}
+        onContinue={vi.fn()}
+        onFetchRuns={vi.fn()}
+      />,
+    );
+  }
+
+  it('shows a collection as a file count that lists the names and links', () => {
+    renderWith([
+      { id: 'r1', name: 'a.csv', url: 'https://x/a.csv' },
+      { id: 'r2', name: 'b.csv', url: 'https://x/b.csv' },
+      { id: 'r3', name: 'c.csv', url: 'https://x/c.csv' },
+    ]);
+    expect(screen.getByText('3 files')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'b.csv' })).toHaveAttribute('href', 'https://x/b.csv');
+  });
+
+  it('still links a single file input', () => {
+    renderWith({ id: 'r1', name: 'a.csv', url: 'https://x/a.csv' });
+    expect(screen.getByRole('link', { name: 'a.csv' })).toBeInTheDocument();
+    expect(screen.queryByTestId('collection-binding')).not.toBeInTheDocument();
+  });
+
+  it('shows a dash when nothing was recorded for the input', () => {
+    renderWith(undefined);
+    expect(screen.queryByTestId('collection-binding')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'a.csv' })).not.toBeInTheDocument();
+  });
+});
