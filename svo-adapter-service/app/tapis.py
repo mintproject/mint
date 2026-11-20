@@ -29,6 +29,7 @@ import base64
 import json
 import re
 import time
+import urllib.parse
 import textwrap
 from typing import Any
 
@@ -930,6 +931,51 @@ def _app_piece_task(
     }
 
 
+def gather_ids(step: dict[str, Any]) -> list[str]:
+    """The gather tasks a flow step reads, in the order its links name them."""
+    found: list[str] = []
+    for wire in step.get("wires") or []:
+        gather = (wire.get("from") or {}).get("gather") if isinstance(wire, dict) else None
+        if isinstance(gather, str) and gather not in found:
+            found.append(gather)
+    return found
+
+
+def _gather_task(collection: dict[str, Any]) -> dict[str, Any]:
+    """The function task that copies one collection input into a folder."""
+    from .gather_piece import GATHER_MAX_EXEC_SECONDS, gather_code
+
+    spec = {
+        "gather_id": str(collection["gather"]),
+        "label": str(collection.get("label") or ""),
+        "resources": [{"name": str(r.get("name") or ""), "url": str(r["url"])}
+                      for r in collection.get("resources") or []],
+        "max_bytes": int(settings.flow_collection_max_bytes),
+        # What the task itself holds the run to, whatever its inputs say.
+        "tapis_host": (urllib.parse.urlsplit(settings.tapis_base_url).hostname or "").lower(),
+        "tapis_systems": [name.strip() for name in settings.flow_collection_tapis_systems.split(",")
+                          if name.strip()],
+        "resource_seconds": int(settings.flow_collection_resource_seconds),
+    }
+    return {
+        "id": spec["gather_id"],
+        "type": "function",
+        "runtime": "python:3.11",
+        "installer": "pip",
+        "description": f"Gather {spec['label']}"[:200],
+        "output": {"result": {"type": "string"}},
+        "input": {
+            "TAPIS_TOKEN": {"type": "string", "value_from": {"args": "tapis_token"}},
+            "TAPIS_BASE_URL": {"type": "string", "value_from": {"args": "tapis_base_url"}},
+            "STAGING_URI": {"type": "string", "value_from": {"args": "flow_staging_uri"}},
+        },
+        # Each file is retried inside the task; a second run of the whole task would
+        # only copy it all again.
+        "execution_profile": {"max_retries": 0, "max_exec_time": GATHER_MAX_EXEC_SECONDS},
+        "code": gather_code(spec),
+    }
+
+
 def _flow_inputs(
     step: dict[str, Any],
     env_map: dict[str, Any],
@@ -942,7 +988,8 @@ def _flow_inputs(
     Each linked input ``k`` of the piece arrives as ``SOURCE_<k>``, from a pipeline
     argument (a flow input) or from an earlier task's output. The first linked
     input is also given under the names a chain uses: the input the piece bound
-    to ``source_uri``, and ``SOURCE_RESULT`` when it comes from an earlier step.
+    to ``source_uri``, and ``SOURCE_RESULT`` when it comes from an earlier task (a
+    step, or the gather task of a collection input).
     A step with no linked input is handed no dataset at all, so the input it
     bound to ``source_uri`` is taken away. A linked setting replaces the argument
     the piece would otherwise have read for it.
@@ -952,6 +999,9 @@ def _flow_inputs(
     def value_from(source: dict[str, Any]) -> dict[str, Any]:
         if "arg" in source:
             return {"args": str(source["arg"])}
+        if "gather" in source:
+            # A flow input that takes a collection: the folder its gather task wrote.
+            return {"task_output": {"task_id": str(source["gather"]), "output_id": "result"}}
         number = int(source["step"])
         ids = flow_output_ids(steps_by_number[number]) or {"outputs": {}, "values": {}}
         output_id = (ids["values"][str(source["value"])] if "value" in source
@@ -971,7 +1021,7 @@ def _flow_inputs(
         if index == 0:
             for env in source_envs:
                 inputs[env] = dict(bound)
-            if "step" in wire["from"]:
+            if "step" in wire["from"] or "gather" in wire["from"]:
                 inputs["SOURCE_RESULT"] = dict(bound)
     for wire in wires:
         if "setting" not in wire["to"]:
@@ -1195,14 +1245,16 @@ def generate_tapis_workflow(
     task_ids_by_step: dict[int, str] = {}
     function_task_ids_by_step: dict[int, str] = {}
     steps_by_number = {int(s["step"]): s for s in steps}
+    # Flow inputs that take a collection are gathered before the steps that read them.
+    for collection in (plan_json.get("flow") or {}).get("collections") or []:
+        tasks.append(_gather_task(collection))
     for s in steps:
         task_id = f"step-{s['step']}-{(s.get('transform_type') or 'transform')}"
         app_id = s.get("tapis_app_id")
         declared_dependencies = [int(dep) for dep in (s.get("depends_on") or [])]
         dependency_ids = [
-            task_ids_by_step[dep]
-            for dep in declared_dependencies
-            if dep in task_ids_by_step
+            *gather_ids(s),
+            *(task_ids_by_step[dep] for dep in declared_dependencies if dep in task_ids_by_step),
         ]
         if app_id and s.get("wires") is not None:
             # A flow step: a Tapis Workflows job task returns nothing a later

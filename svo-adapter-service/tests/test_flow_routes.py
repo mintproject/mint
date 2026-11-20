@@ -527,3 +527,419 @@ def test_a_region_is_held_to_the_limits_a_models_region_input_has(monkeypatch, s
     assert response.status_code == 422, response.text
     if code:
         assert response.json()["detail"]["code"] == code
+
+
+# --- a flow input that takes a collection ---------------------------------------
+import uuid  # noqa: E402
+
+from app import flow_run  # noqa: E402
+
+FILES = [{"name": "a.csv", "url": "https://files.example.org/a.csv"},
+         {"name": "", "url": "https://other.example.net/get?id=7&sig=SECRET"},
+         {"name": "c.txt", "url": "tapis://corral/data/c.txt"}]
+
+
+@pytest.fixture(autouse=True)
+def tapis_storage_allowed(monkeypatch):
+    # The tests below gather one file from Tapis storage, which an adapter must be
+    # set up to allow. By default it is not: see the test of that.
+    monkeypatch.setattr(settings, "flow_collection_tapis_systems", "corral")
+
+
+def collection_flow(monkeypatch, collections=("in:corpus",), **over):
+    """ingest reads the corpus; score reads its result and a lexicon."""
+    pieces = {"ingest": register("ingest", ["corpus"], ["clean"]),
+              "score": register("score", ["clean", "lexicon"], ["counts"], settings_=["top_n"]),
+              "report": register("report", ["counts", "clean"], ["report"], settings_=["title"])}
+    stored_flow(pieces, monkeypatch, thread_bindings={"collections": list(collections)}, **over)
+    return pieces
+
+
+def plan_collection(files=FILES, input_id="in:corpus", label="Documents", inputs=None, **over):
+    body = {"flow_id": "cfg-1",
+            "inputs": inputs if inputs is not None else {"in:lexicon": data_object("lexicon", "tapis://sys/lexicon.csv")},
+            "collections": {input_id: {"label": label, "resources": files}}, **over}
+    return client.post("/plans/flow", headers=AUTH, json=body)
+
+
+def test_a_collection_input_is_gathered_by_one_task_that_its_steps_read_from(monkeypatch):
+    collection_flow(monkeypatch)
+    response = plan_collection()
+    assert response.status_code == 200, response.text
+    plan_json = response.json()["plan_json"]
+    assert plan_json["flow"]["collections"] == [
+        {"input": "in:corpus", "label": "Documents", "gather": "gather-1", "resources": FILES}]
+    assert plan_json["flow"]["inputs"] == [
+        {"input_id": "in:corpus", "collection": "gather-1"},
+        {"input_id": "in:lexicon", "arg": "source_uri_2", "data_object_id": plan_json["flow"]["inputs"][1]["data_object_id"]}]
+    steps = plan_json["steps"]
+    assert steps[0]["wires"] == [{"to": {"input": 1}, "from": {"gather": "gather-1"}}]
+    assert steps[1]["wires"][1] == {"to": {"input": 2}, "from": {"arg": "source_uri_2"}}
+    parameters = {p["name"]: p for p in plan_json["parameters"]}
+    # Nothing fills a source_uri for the collection input from a data object.
+    assert "source_uri" not in parameters and parameters["source_uri_2"]["default"] == "tapis://sys/lexicon.csv"
+    staging = parameters["flow_staging_uri"]
+    assert (staging["managed"], staging["managed_source"], staging["required"]) == (True, "run_folder", False)
+    assert staging["description"] == "The folder this run stages gathered inputs in"
+
+
+def test_the_pipeline_has_a_gather_task_before_the_steps_that_read_it(monkeypatch):
+    collection_flow(monkeypatch)
+    body = plan_collection().json()
+    pipeline = tapis.generate_tapis_workflow({"id": body["plan_id"], "plan_json": body["plan_json"]})
+    ids = [task["id"] for task in pipeline["tasks"]]
+    assert ids[0] == "gather-1" and ids.index("gather-1") < ids.index("step-1-unit_convert")
+    gather, first, second = (next(t for t in pipeline["tasks"] if t["id"] == i)
+                             for i in ("gather-1", "step-1-unit_convert", "step-2-unit_convert"))
+    assert gather["type"] == "function" and gather["output"] == {"result": {"type": "string"}}
+    assert gather["input"] == {
+        "TAPIS_TOKEN": {"type": "string", "value_from": {"args": "tapis_token"}},
+        "TAPIS_BASE_URL": {"type": "string", "value_from": {"args": "tapis_base_url"}},
+        "STAGING_URI": {"type": "string", "value_from": {"args": "flow_staging_uri"}}}
+    assert "depends_on" not in gather
+    # The spec is data in the code: the links are in it, and the task reads nothing else.
+    spec_line = next(line for line in gather["code"].splitlines() if line.startswith("_SPEC = json.loads("))
+    assert "files.example.org/a.csv" in spec_line and "gather-1" in spec_line
+    assert first["depends_on"] == [{"id": "gather-1"}]
+    assert first["input"]["SOURCE_1"]["value_from"] == {
+        "task_output": {"task_id": "gather-1", "output_id": "result"}}
+    assert second["depends_on"] == [{"id": "step-1-unit_convert"}]
+    assert pipeline["params"]["flow_staging_uri"]["required"] is False
+    assert "source_uri" not in pipeline["params"]
+
+
+def test_a_chain_written_for_source_uri_gets_the_gathered_folder_under_the_chain_names(monkeypatch):
+    piece = client.post("/transform-specs", json={
+        "name": "chain", "method": "tapis_function", "transform_type": "unit_convert",
+        "contracts": [{"role": "input", "standard_variable_uri": V + "corpus"},
+                      {"role": "output", "standard_variable_uri": V + "clean"}],
+        "parameters_schema_json": {"properties": {}},
+        "env_from_args": {"TAPIS_TOKEN": "tapis_token", "SOURCE_URI": "source_uri"}}).json()["id"]
+    stored_flow({}, monkeypatch, outputs=[], thread_bindings={"collections": ["in:corpus"]}, steps=[
+        {"position": 1, "etl_process_id": piece, "settings": {}, "wires": [from_input("in:corpus", 1)]}])
+    body = plan_collection(inputs={}).json()
+    pipeline = tapis.generate_tapis_workflow({"id": "x", "plan_json": body["plan_json"]})
+    task = next(t for t in pipeline["tasks"] if t["id"] == "step-1-unit_convert")
+    gathered = {"task_output": {"task_id": "gather-1", "output_id": "result"}}
+    assert task["input"]["SOURCE_URI"]["value_from"] == gathered
+    assert task["input"]["SOURCE_RESULT"]["value_from"] == gathered
+    # source_uri is declared by the piece but nobody sets it: it must not be required.
+    assert pipeline["params"]["source_uri"]["required"] is False
+
+
+def test_gather_tasks_are_numbered_in_the_order_the_steps_first_read_the_inputs(monkeypatch):
+    collection_flow(monkeypatch, collections=("in:corpus", "in:lexicon"))
+    body = {"flow_id": "cfg-1", "collections": {
+        "in:lexicon": {"label": "Lexicon", "resources": FILES[:1]},
+        "in:corpus": {"label": "Documents", "resources": FILES}}}
+    plan_json = client.post("/plans/flow", headers=AUTH, json=body).json()["plan_json"]
+    assert [(c["input"], c["gather"]) for c in plan_json["flow"]["collections"]] == [
+        ("in:corpus", "gather-1"), ("in:lexicon", "gather-2")]
+    pipeline = tapis.generate_tapis_workflow({"id": "x", "plan_json": plan_json})
+    assert [t["id"] for t in pipeline["tasks"][:2]] == ["gather-1", "gather-2"]
+    assert [d["id"] for d in next(t for t in pipeline["tasks"] if t["id"] == "step-2-unit_convert")["depends_on"]] == [
+        "gather-2", "step-1-unit_convert"]
+
+
+def test_a_marked_input_bound_the_ordinary_way_has_no_gather_task(monkeypatch):
+    collection_flow(monkeypatch)
+    response = plan(bound())
+    assert response.status_code == 200, response.text
+    plan_json = response.json()["plan_json"]
+    assert plan_json["flow"]["collections"] == []
+    assert "flow_staging_uri" not in {p["name"] for p in plan_json["parameters"]}
+    pipeline = tapis.generate_tapis_workflow({"id": "x", "plan_json": plan_json})
+    assert not any(t["id"].startswith("gather") for t in pipeline["tasks"])
+
+
+def test_a_flow_with_no_collection_is_planned_as_before(pieces, monkeypatch):
+    stored_flow(pieces, monkeypatch)
+    plan_json = plan().json()["plan_json"]
+    assert plan_json["flow"]["collections"] == []
+    assert "flow_staging_uri" not in {p["name"] for p in plan_json["parameters"]}
+
+
+def refused(response, code):
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == code
+    return detail
+
+
+def test_a_collection_for_an_input_the_flow_does_not_mark_is_refused(monkeypatch):
+    collection_flow(monkeypatch, collections=())
+    detail = refused(plan_collection(), "FLOW_COLLECTION_REFUSED")
+    assert detail["input"] == "in:corpus" and "does not mark" in detail["message"]
+    collection_flow(monkeypatch, collections=("in:lexicon",))
+    refused(plan_collection(), "FLOW_COLLECTION_REFUSED")
+
+
+def test_a_collection_and_a_data_object_for_the_same_input_are_refused(monkeypatch):
+    collection_flow(monkeypatch)
+    detail = refused(plan_collection(inputs=bound()), "FLOW_COLLECTION_REFUSED")
+    assert "bound to a data object" in detail["message"]
+
+
+def test_a_collection_may_not_fill_the_input_the_thread_region_fills(monkeypatch):
+    collection_flow(monkeypatch)
+    detail = refused(plan_collection(region={"input": "in:corpus", "source": BBOX}), "FLOW_COLLECTION_REFUSED")
+    assert "region" in detail["message"]
+
+
+def test_a_collection_for_an_input_no_step_reads_is_refused(monkeypatch):
+    collection_flow(monkeypatch, collections=("in:corpus", "in:ghost"))
+    refused(plan_collection(input_id="in:ghost"), "FLOW_COLLECTION_REFUSED")
+
+
+@pytest.mark.parametrize("url,reason", [
+    ("http://files.example.org/a.csv", "http links are refused"),
+    ("ftp://files.example.org/a.csv", "https://"),
+    ("file:///etc/passwd", "https://"),
+    ("https://user:pass@files.example.org/a.csv", "user name or password"),
+    ("https://files.example.org:8443/a.csv", "port 443"),
+    ("https://files.example.org/a.csv#part", "fragment"),
+    ("https://files.example.org/a b.csv", "space"),
+    ("tapis://corral/../etc/passwd", "'..'"),
+    ("tapis://bad system/a", "space"),
+    ("tapis://-sys/a", "system name"),
+    ("tapis://corral", "path"),
+])
+def test_each_bad_link_is_refused_naming_the_resource_and_the_reason(monkeypatch, url, reason):
+    collection_flow(monkeypatch)
+    files = [FILES[0], {"name": "x", "url": url}]
+    detail = refused(plan_collection(files), "FLOW_COLLECTION_RESOURCE_REFUSED")
+    assert detail["index"] == 1 and "resource 1" in detail["message"] and reason in detail["message"]
+    assert url not in detail["message"]
+
+
+def test_a_collection_holds_at_most_the_configured_number_of_resources(monkeypatch):
+    collection_flow(monkeypatch)
+    monkeypatch.setattr(settings, "flow_collection_max_resources", 2)
+    assert plan_collection(FILES[:2]).status_code == 200
+    detail = refused(plan_collection(FILES), "FLOW_COLLECTION_REFUSED")
+    assert detail["limit"] == 2
+
+
+@pytest.mark.parametrize("collections", [
+    {"in:corpus": {"label": "x", "resources": []}},
+    {"in:corpus": {"label": "x"}},
+    {"in:corpus": {"resources": FILES}},
+    {"in:corpus": {"label": "x" * 201, "resources": FILES}},
+    {"in:corpus": {"label": "x", "resources": [{"name": "a"}]}},
+    {"in:corpus": {"label": "x", "resources": [{"name": "a", "url": 5}]}},
+    {"in:corpus": {"label": "x", "resources": [{"name": "a", "url": "https://h/" + "a" * 2000}]}},
+    {"in:corpus": {"label": "x", "resources": [{"name": "n" * 256, "url": "https://h.example/a"}]}},
+    {"in:corpus": {"label": "x", "resources": [{"name": "a", "url": "https://h.example/a", "extra": 1}]}},
+    {"in:corpus": {"label": "x", "resources": "https://h.example/a"}},
+    {"in:corpus": "https://h.example/a"},
+    {"in:corpus": None},
+    ["in:corpus"],
+])
+def test_a_malformed_collection_is_a_422_never_a_500(monkeypatch, collections):
+    collection_flow(monkeypatch)
+    response = client.post("/plans/flow", headers=AUTH, json={"flow_id": "cfg-1", "inputs": {}, "collections": collections})
+    assert response.status_code == 422, response.text
+
+
+def test_a_marked_input_given_nothing_is_still_unbound(monkeypatch):
+    collection_flow(monkeypatch)
+    detail = refused(plan({"in:lexicon": data_object("lexicon", "tapis://sys/l")}), "FLOW_INPUT_NOT_BOUND")
+    assert detail["inputs"] == ["in:corpus"]
+
+
+def test_a_collection_is_checked_as_fitting_the_input_the_author_marked(monkeypatch):
+    # The files have no registered contract: they are taken as what the first piece
+    # input linked to the marked input asks for, so a second piece that asks for
+    # something else of the same input is still caught.
+    first, second = register("one", ["corpus"], ["clean"]), register("two", ["lexicon"], ["counts"])
+    stored_flow({}, monkeypatch, outputs=[], thread_bindings={"collections": ["in:corpus"]}, steps=[
+        {"position": 1, "etl_process_id": first, "settings": {}, "wires": [from_input("in:corpus", 1)]},
+        {"position": 2, "etl_process_id": second, "settings": {}, "wires": [from_input("in:corpus", 1)]}])
+    detail = refused(plan_collection(inputs={}), "FLOW_DOES_NOT_CHECK_OUT")
+    assert [(p["code"], p["step"]) for p in detail["problems"]] == [("FLOW_WIRE_DOES_NOT_FIT", 2)]
+
+
+# --- submitting a flow that gathers ----------------------------------------------
+
+@pytest.fixture
+def submitting(monkeypatch):
+    seen = {"submits": [], "roots": []}
+
+    def fake_submit(pipeline, args, **kwargs):
+        seen["submits"].append({"pipeline": pipeline, "args": args})
+        return {"uuid": "tapis-run-1", "pipelineId": pipeline["id"]}
+
+    monkeypatch.setattr(main_module.tapis, "submit_tapis_workflow", fake_submit)
+    monkeypatch.setattr(main_module.tapis, "userinfo_username", lambda token: "alice")
+    monkeypatch.setattr(main_module.tapis, "resolve_scratch_root",
+                        lambda token, user, system: seen["roots"].append((user, system)) or seen.get("root", "/scratch/alice"))
+    return seen
+
+
+def test_a_run_stages_what_it_gathers_in_a_folder_named_for_the_run(monkeypatch, submitting):
+    collection_flow(monkeypatch)
+    plan_id = plan_collection().json()["plan_id"]
+    response = submit(plan_id, accept_flow_settings=True)
+    assert response.status_code == 200, response.text
+    run_id = response.json()["run_id"]
+    uuid.UUID(run_id)
+    sent = submitting["submits"][0]["args"]
+    assert sent["flow_staging_uri"] == {"value": f"tapis://{settings.tapis_exec_system}/scratch/alice/dynamo-runs/{run_id}"}
+    assert submitting["roots"] == [("alice", settings.tapis_exec_system)]
+    # The run is recorded under the id the folder was named for.
+    assert client.get(f"/runs/{run_id}", headers=AUTH).json()["id"] == run_id
+
+
+def test_a_run_whose_scratch_folder_cannot_be_found_is_refused_with_what_to_do(monkeypatch, submitting):
+    collection_flow(monkeypatch)
+    plan_id = plan_collection().json()["plan_id"]
+    submitting["root"] = None
+    response = submit(plan_id, accept_flow_settings=True)
+    detail = refused(response, "FLOW_STAGING_UNRESOLVED")
+    assert detail["message"] == (
+        f"could not find your scratch folder on {settings.tapis_exec_system}: run any job there once")
+    assert submitting["submits"] == []
+    assert client.get("/runs", headers=AUTH).json()["runs"] == []  # nothing was recorded
+
+
+def test_a_dry_run_does_not_look_for_the_folder_and_says_it_would(monkeypatch, submitting):
+    collection_flow(monkeypatch)
+    plan_id = plan_collection().json()["plan_id"]
+    response = submit(plan_id, dry_run=True)
+    assert response.status_code == 200, response.text
+    assert submitting["roots"] == []
+    body = response.json()
+    assert body["flow_staging"]["resolved"] is False and "dynamo-runs" in body["flow_staging"]["message"]
+    assert "flow_staging_uri" not in body["args"]
+
+
+def test_a_plan_without_a_collection_never_looks_for_a_folder(monkeypatch, submitting, pieces):
+    stored_flow(pieces, monkeypatch)
+    response = submit(plan().json()["plan_id"], accept_flow_settings=True)
+    assert response.status_code == 200, response.text
+    assert submitting["roots"] == [] and "flow_staging_uri" not in submitting["submits"][0]["args"]
+
+
+def test_the_staging_folder_is_not_the_submitters_to_choose(monkeypatch, submitting):
+    collection_flow(monkeypatch)
+    plan_id = plan_collection().json()["plan_id"]
+    refused_ = submit(plan_id, args={"flow_staging_uri": "tapis://ls6/elsewhere"}, accept_flow_settings=True)
+    assert refused(refused_, "FLOW_ARGUMENT_FIXED")["arguments"] == ["flow_staging_uri"]
+    assert submitting["submits"] == []
+
+
+def test_the_tapis_address_is_not_the_submitters_to_choose(monkeypatch, submitting):
+    # Every step sends the runner's token to this address.
+    collection_flow(monkeypatch)
+    plan_id = plan_collection().json()["plan_id"]
+    refused_ = submit(plan_id, args={"tapis_base_url": "https://evil.example"}, accept_flow_settings=True)
+    assert refused(refused_, "FLOW_ARGUMENT_FIXED")["arguments"] == ["tapis_base_url"]
+    assert submitting["submits"] == []
+
+
+def test_a_run_is_given_the_adapters_own_tapis_address(monkeypatch, submitting):
+    collection_flow(monkeypatch)
+    plan_id = plan_collection().json()["plan_id"]
+    assert submit(plan_id, accept_flow_settings=True).status_code == 200
+    sent = submitting["submits"][0]
+    value = sent["args"]["tapis_base_url"]
+    assert (value.get("value") if isinstance(value, dict) else value) == settings.tapis_base_url
+    gather = next(task for task in sent["pipeline"]["tasks"] if task["id"] == "gather-1")
+    assert json.dumps(settings.tapis_base_url.split("//", 1)[1].split("/")[0].lower()) in gather["code"].replace("\\", "")
+
+
+def test_a_collection_reads_tapis_storage_only_where_the_adapter_allows_it(monkeypatch):
+    # The files come from a thread others may edit, and are read with the runner's token.
+    collection_flow(monkeypatch)
+    monkeypatch.setattr(settings, "flow_collection_tapis_systems", "")
+    detail = refused(plan_collection(), "FLOW_COLLECTION_RESOURCE_REFUSED")
+    assert detail["index"] == 2 and "corral" in detail["message"]
+    assert plan_collection(files=FILES[:2]).status_code == 200
+
+
+def output_flow(monkeypatch, **over):
+    """A flow whose last piece must be told where to write: a required output_uri."""
+    ingest = register("ingest", ["corpus"], ["clean"])
+    publish = client.post("/transform-specs", json={
+        "name": "write", "method": "tapis_function", "transform_type": "unit_convert",
+        "contracts": [{"role": "input", "standard_variable_uri": V + "clean"}],
+        "parameters_schema_json": {"properties": {"output_uri": {"type": "string"}}, "required": ["output_uri"]},
+        "env_from_args": {"TAPIS_TOKEN": "tapis_token", "OUTPUT_URI": "output_uri"}}).json()["id"]
+    stored_flow({}, monkeypatch, outputs=[], thread_bindings={"collections": ["in:corpus"]}, steps=[
+        {"position": 1, "etl_process_id": ingest, "settings": {}, "wires": [from_input("in:corpus", 1)]},
+        {"position": 2, "etl_process_id": publish, "settings": over.get("settings", {}),
+         "wires": [from_step(1, 1, 1)]}])
+
+
+def parameters_of(response):
+    return {p["name"]: p for p in response.json()["plan_json"]["parameters"]}
+
+
+def test_a_required_output_uri_nobody_gave_defaults_to_the_runs_outputs_folder(monkeypatch, submitting):
+    output_flow(monkeypatch)
+    response = plan_collection(inputs={})
+    output = parameters_of(response)["output_uri"]
+    assert (output["required"], output["default_source"], output.get("default")) == (False, "run_folder", None)
+    run = submit(response.json()["plan_id"])
+    assert run.status_code == 200, run.text
+    sent = submitting["submits"][0]["args"]
+    assert sent["output_uri"] == {"value": sent["flow_staging_uri"]["value"] + "/outputs"}
+
+
+def test_a_caller_who_gives_output_uri_keeps_it(monkeypatch, submitting):
+    output_flow(monkeypatch)
+    plan_id = plan_collection(inputs={}).json()["plan_id"]
+    run = submit(plan_id, args={"output_uri": "tapis://corral/mine"})
+    assert run.status_code == 200, run.text
+    assert submitting["submits"][0]["args"]["output_uri"] == {"value": "tapis://corral/mine"}
+
+
+def test_an_output_uri_the_flow_has_a_default_for_is_left_alone(monkeypatch, submitting):
+    output_flow(monkeypatch, settings={"output_uri": "tapis://corral/flows-choice"})
+    response = plan_collection(inputs={})
+    output = parameters_of(response)["output_uri"]
+    assert output["default"] == "tapis://corral/flows-choice" and "default_source" not in output or output["default_source"] == "flow"
+    run = submit(response.json()["plan_id"], accept_flow_settings=True)
+    assert run.status_code == 200, run.text
+    assert submitting["submits"][0]["args"]["output_uri"] == {"value": "tapis://corral/flows-choice"}
+
+
+def test_without_a_collection_output_uri_is_not_defaulted(monkeypatch):
+    ingest = register("ingest", ["corpus"], ["clean"])
+    publish = client.post("/transform-specs", json={
+        "name": "write", "method": "tapis_function", "transform_type": "unit_convert",
+        "contracts": [{"role": "input", "standard_variable_uri": V + "clean"}],
+        "parameters_schema_json": {"properties": {"output_uri": {"type": "string"}}, "required": ["output_uri"]},
+        "env_from_args": {"TAPIS_TOKEN": "tapis_token", "OUTPUT_URI": "output_uri"}}).json()["id"]
+    stored_flow({}, monkeypatch, outputs=[], steps=[
+        {"position": 1, "etl_process_id": ingest, "settings": {}, "wires": [from_input("in:corpus", 1)]},
+        {"position": 2, "etl_process_id": publish, "settings": {}, "wires": [from_step(1, 1, 1)]}])
+    output = parameters_of(plan({"in:corpus": data_object("corpus", "tapis://sys/docs")}))["output_uri"]
+    assert output["required"] is True and "default_source" not in output
+
+
+# --- what a run of it looks like -------------------------------------------------
+
+def test_the_gather_step_is_listed_first_and_the_steps_that_read_it_wait_for_it(monkeypatch):
+    collection_flow(monkeypatch)
+    plan_json = plan_collection().json()["plan_json"]
+    detail = {"tasks": [{"task_id": "gather-1", "status": "completed", "last_message": "done"},
+                        {"task_id": "step-1-unit_convert", "status": "active"}]}
+    steps = flow_run.view(plan_json, detail)["steps"]
+    assert steps[0] == {"step": "gather-1", "name": "Gather Documents", "task_id": "gather-1",
+                        "depends_on": [], "status": "completed", "message": "done"}
+    assert [(s["step"], s["status"], s["depends_on"]) for s in steps[1:]] == [
+        (1, "running", ["gather-1"]), (2, "pending", [1]), (3, "pending", [1, 2])]
+    assert flow_run.view(plan_json, {"tasks": []})["steps"][0]["status"] == "pending"
+
+
+def test_the_flow_check_passes_collections_on_unchanged(pieces):
+    steps = [{"position": 1, "etl_process_id": pieces["ingest"], "wires": [from_input("in:corpus", 1)]}]
+
+    def checked(bindings):
+        return client.post("/flows/check", headers=AUTH, json={
+            "inputs": [{"id": "in:corpus", "contract": {"standard_variable_uri": V + "corpus"}}],
+            "steps": steps, "thread_bindings": bindings}).json()
+    assert checked({"collections": ["in:corpus"]})["ok"] is True
+    result = checked({"collections": ["in:nope"]})
+    assert [p["code"] for p in result["problems"]] == ["FLOW_THREAD_BINDING"]

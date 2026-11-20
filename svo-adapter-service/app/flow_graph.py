@@ -177,7 +177,7 @@ def _check(flow: dict[str, Any], refused_settings: Iterable[str]) -> Checked:
       the piece's catalog row with its contracts, or ``None`` when it was deleted;
     - ``outputs``: which step outputs are the flow's outputs;
     - ``thread_bindings``: which inputs and parameters the thread's region and
-      dates fill in.
+      dates fill in, and ``collections``, the inputs that each take a collection.
 
     ``refused_settings`` are argument names a flow may neither set nor wire: the
     ones the adapter manages and the ones that carry a secret.
@@ -405,7 +405,13 @@ def _check_thread_bindings(
     if not isinstance(bindings, dict):
         problems.append(Problem("FLOW_THREAD_BINDING", "thread bindings are an object"))
         return
-    for role, target in sorted(bindings.items()):
+    # Not a role: the flow inputs that each take a collection of files.
+    collections = bindings.get("collections", [])
+    if not (isinstance(collections, list) and len(set(map(str, collections))) == len(collections)
+            and all(_is_name(item) and item in flow_inputs for item in collections)):
+        problems.append(Problem(
+            "FLOW_THREAD_BINDING", "collections: a list of the flow's inputs, each named once"))
+    for role, target in sorted((r, t) for r, t in bindings.items() if r != "collections"):
         known = isinstance(target, dict) and (
             (set(target) == {"input"} and _is_name(target["input"]) and target["input"] in flow_inputs)
             or (set(target) == {"parameter"} and _is_name(target["parameter"])

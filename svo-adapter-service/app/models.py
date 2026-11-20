@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -111,11 +111,29 @@ class FlowCheckIn(BaseModel):
     thread_bindings: dict[str, Any] = Field(default_factory=dict)
 
 
+class FlowCollectionResourceIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(max_length=255)
+    url: str = Field(min_length=1, max_length=2000)
+
+
+class FlowCollectionIn(BaseModel):
+    """The files bound to one flow input that takes a collection: one input made of
+    many files, in the order the thread holds them. The most it may hold is the
+    ``flow_collection_max_resources`` setting (checked where the plan is made)."""
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(max_length=200)
+    resources: list[FlowCollectionResourceIn] = Field(min_length=1)
+
+
 class FlowPlanIn(BaseModel):
     """Plan a flow stored on a model configuration."""
     flow_id: str = Field(min_length=1, max_length=500)
     # flow input id (a dataset specification of the configuration) -> data object id
     inputs: dict[str, str] = Field(default_factory=dict)
+    # flow input id -> its files, for an input the flow marks as taking a collection.
+    # Such an input is not also given in ``inputs``.
+    collections: dict[str, FlowCollectionIn] = Field(default_factory=dict)
     # The thread's region, for the flow input the flow marks as its region:
     # {"input": <flow input id>, "source": {"kind": "geojson", "geometry": ...} or
     # {"kind": "bbox", "bbox": [...]}}. The piece receives it as GeoJSON text.

@@ -4,7 +4,7 @@ import {
     UnifiedExecutionStep,
     UnifiedExecutionStore
 } from "./unifiedExecutionStore";
-import { FlowThreadContext } from "./flowExecution";
+import { FlowThreadContext, readThreadBindings } from "./flowExecution";
 
 jest.mock("@/classes/mint/mint-functions", () => ({
     getConfiguration: jest.fn().mockReturnValue({
@@ -245,6 +245,149 @@ describe("running a flow from a thread", () => {
             unbound.inputs[0].optional = true;
             await service().createPlan(BODY, AUTH);
             expect(calls("/plans/flow")[0].body.inputs).toEqual({});
+        });
+
+        describe("an input that takes a collection", () => {
+            const THREE = [
+                { id: "res-1", name: "a.csv", url: "https://files.example.org/a.csv" },
+                { id: "res-2", name: "b.csv", url: "https://other.example.net/b.csv" },
+                { id: "res-3", name: "c.txt", url: "tapis://corral/data/c.txt" }
+            ];
+
+            function collecting(inputs: FlowThreadContext["inputs"]) {
+                flows.flowContext.mockResolvedValue(
+                    context({ thread_bindings: { collections: ["in-corpus"] }, inputs })
+                );
+            }
+
+            const corpus = (resources: typeof THREE) => ({
+                model_io_id: "in-corpus",
+                name: "Documents",
+                format: "directory",
+                standard_variables: ["sv:text"],
+                optional: false,
+                resources
+            });
+
+            it("sends every resource, in order, as one input and registers no data object for it", async () => {
+                collecting([corpus(THREE)]);
+                await service().createPlan(BODY, AUTH);
+
+                expect(calls("/data-objects")).toHaveLength(0);
+                expect(calls("/plans/flow")[0].body).toEqual({
+                    flow_id: "cfg-flow",
+                    inputs: {},
+                    collections: {
+                        "in-corpus": {
+                            label: "Documents",
+                            resources: [
+                                { name: "a.csv", url: "https://files.example.org/a.csv" },
+                                { name: "b.csv", url: "https://other.example.net/b.csv" },
+                                { name: "c.txt", url: "tapis://corral/data/c.txt" }
+                            ]
+                        }
+                    }
+                });
+            });
+
+            it("still refuses several resources on an input the flow does not mark", async () => {
+                const two = context({ thread_bindings: { collections: ["some-other-input"] } });
+                two.inputs[0].resources.push({ id: "res-2", name: "More", url: "tapis://sys/more" });
+                flows.flowContext.mockResolvedValue(two);
+                await expect(service().createPlan(BODY, AUTH)).rejects.toMatchObject({
+                    statusCode: 422,
+                    code: "FLOW_FANOUT_UNSUPPORTED"
+                });
+                expect(calls("/plans/flow")).toHaveLength(0);
+            });
+
+            it("sends both forms when one input takes a collection and another a single dataset", async () => {
+                collecting([
+                    corpus(THREE),
+                    {
+                        model_io_id: "in-lexicon",
+                        name: "Lexicon",
+                        standard_variables: ["sv:terms"],
+                        optional: false,
+                        resources: [{ id: "res-9", name: "terms.csv", url: "tapis://sys/terms.csv" }]
+                    }
+                ]);
+                await service().createPlan(BODY, AUTH);
+
+                expect(calls("/data-objects")).toHaveLength(1);
+                expect(calls("/data-objects")[0].body.resource_uri).toBe("tapis://sys/terms.csv");
+                const sent = calls("/plans/flow")[0].body;
+                expect(sent.inputs).toEqual({ "in-lexicon": "do-1" });
+                expect(Object.keys(sent.collections)).toEqual(["in-corpus"]);
+                expect(sent.collections["in-corpus"].resources).toHaveLength(3);
+            });
+
+            it("takes a marked input with one resource as a collection too", async () => {
+                collecting([corpus(THREE.slice(0, 1))]);
+                await service().createPlan(BODY, AUTH);
+                expect(calls("/data-objects")).toHaveLength(0);
+                expect(calls("/plans/flow")[0].body.collections["in-corpus"].resources).toHaveLength(1);
+            });
+
+            it("treats a marked input with no resource as unbound, unless it is optional", async () => {
+                collecting([corpus([])]);
+                await expect(service().createPlan(BODY, AUTH)).rejects.toMatchObject({
+                    code: "FLOW_INPUT_UNBOUND"
+                });
+                expect(calls("/plans/flow")).toHaveLength(0);
+
+                const optional = { ...corpus([]), optional: true };
+                collecting([optional]);
+                await service().createPlan(BODY, AUTH);
+                expect(calls("/plans/flow")[0].body).toEqual({ flow_id: "cfg-flow", inputs: {} });
+            });
+
+            it("does not let the thread's region fill a collection input that has resources", async () => {
+                flows.flowContext.mockResolvedValue(
+                    context({
+                        thread_bindings: { region: { input: "in-corpus" }, collections: ["in-corpus"] },
+                        inputs: [corpus(THREE)],
+                        region: {
+                            id: "r",
+                            name: "r",
+                            geometries: [
+                                {
+                                    type: "Polygon",
+                                    coordinates: [
+                                        [
+                                            [-97.9, 30.1],
+                                            [-97.5, 30.1],
+                                            [-97.5, 30.5],
+                                            [-97.9, 30.1]
+                                        ]
+                                    ]
+                                }
+                            ]
+                        } as any
+                    })
+                );
+                await service().createPlan(BODY, AUTH);
+                expect(calls("/plans/flow")[0].body.region).toBeUndefined();
+                expect(calls("/plans/flow")[0].body.collections["in-corpus"]).toBeDefined();
+            });
+
+            it("reads the marker from the stored bindings, keeping only what is well formed", () => {
+                expect(
+                    readThreadBindings({
+                        region: { input: "in-1", junk: 1 },
+                        start_date: { parameter: "p" },
+                        end_date: "nope",
+                        collections: ["in-1", 5, null, "in-2"],
+                        unknown: { input: "x" }
+                    })
+                ).toEqual({
+                    region: { input: "in-1" },
+                    start_date: { parameter: "p" },
+                    collections: ["in-1", "in-2"]
+                });
+                expect(readThreadBindings(null)).toEqual({});
+                expect(readThreadBindings({ collections: "in-1" })).toEqual({});
+            });
         });
 
         describe("the thread's region", () => {
@@ -585,6 +728,48 @@ describe("running a flow from a thread", () => {
             ]);
             expect(run.status).toBe("adapter_running");
             expect(flows.finishFlowExecution).not.toHaveBeenCalled();
+        });
+
+        it("shows a gather step ahead of the steps that read it, by its own id", async () => {
+            const svc = await started();
+            poll({
+                status: "running",
+                flow: {
+                    steps: [
+                        {
+                            step: "gather-1",
+                            name: "Gather Documents",
+                            task_id: "gather-1",
+                            depends_on: [],
+                            status: "completed"
+                        },
+                        {
+                            step: 1,
+                            name: "ingest",
+                            task_id: "step-1-x",
+                            depends_on: ["gather-1"],
+                            status: "running"
+                        },
+                        {
+                            step: 2,
+                            name: "score",
+                            task_id: "step-2-x",
+                            depends_on: ["gather-1", 1],
+                            status: "pending"
+                        }
+                    ],
+                    outputs: []
+                }
+            });
+            const run = await svc.getRun("ue_parent-1", AUTH);
+            expect(
+                run.workflow_stages.map((s: any) => [s.stage_id, s.name, s.status, s.depends_on])
+            ).toEqual([
+                ["step-gather-1", "Gather Documents", "completed", []],
+                ["step-1", "ingest", "running", ["step-gather-1"]],
+                ["step-2", "score", "pending", ["step-gather-1", "step-1"]]
+            ]);
+            expect(run.workflow_stages[0].provider_ids).toMatchObject({ task_id: "gather-1" });
         });
 
         it("shows the run as one stage before its steps are known", async () => {

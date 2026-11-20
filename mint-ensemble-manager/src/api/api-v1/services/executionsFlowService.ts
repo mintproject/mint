@@ -22,7 +22,7 @@ import { getThread } from "@/classes/graphql/graphql_functions_v2";
 import getConfigurationFlowGQL from "@/classes/graphql/queries/model/get-configuration-flow.graphql";
 import { Execution, ExecutionSummary, Thread } from "@/classes/mint/mint-types";
 import { getTokenFromAuthorizationHeader, usernameFromToken } from "@/utils/authUtils";
-import { FlowThreadContext, FlowThreadService } from "./flowExecution";
+import { FlowThreadContext, FlowThreadService, readThreadBindings } from "./flowExecution";
 
 const NOT_A_FLOW: FlowThreadContext = {
     is_flow: false,
@@ -110,10 +110,7 @@ const executionsFlowService: FlowThreadService = {
         return {
             is_flow: true,
             caller,
-            thread_bindings:
-                flow.thread_bindings_json && typeof flow.thread_bindings_json === "object"
-                    ? flow.thread_bindings_json
-                    : {},
+            thread_bindings: readThreadBindings(flow.thread_bindings_json),
             inputs: model.input_files.map((input) => ({
                 model_io_id: input.id,
                 name: input.name,

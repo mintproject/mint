@@ -246,7 +246,8 @@ export function buildRows(body: Json, plan: FlowRegistration, pieces: Json, user
   })
 
   const bindings: Json = {}
-  for (const [role, target] of Object.entries(object(body.thread_bindings, 'thread_bindings'))) {
+  const { collections, ...roles } = object(body.thread_bindings, 'thread_bindings')
+  for (const [role, target] of Object.entries(roles)) {
     const to = object(target, `thread_bindings.${role}`)
     if (typeof to.input === 'string' && to.input in inputIds) bindings[role] = { input: inputIds[to.input] }
     else if (typeof to.setting === 'string' && to.setting in parameterIds) bindings[role] = { parameter: parameterIds[to.setting] }
@@ -254,6 +255,23 @@ export function buildRows(body: Json, plan: FlowRegistration, pieces: Json, user
       throw new FlowError(400, 'FLOW_REQUEST_INVALID',
         `thread_bindings.${role} must name a flow input by key or a setting of one of the pieces`)
     }
+  }
+
+  // Inputs that take a collection: every resource bound to one is a single input
+  // of many files, so a thread makes one run instead of one per resource.
+  if (collections !== undefined) {
+    const keys = list(collections, 'thread_bindings.collections', MAX_ITEMS)
+    const ids = keys.map((key) => {
+      if (typeof key !== 'string' || !(key in inputIds)) {
+        throw new FlowError(400, 'FLOW_REQUEST_INVALID',
+          `thread_bindings.collections must name flow inputs by key: ${String(key)} is not one`)
+      }
+      return inputIds[key]
+    })
+    if (new Set(ids).size !== ids.length) {
+      throw new FlowError(400, 'FLOW_REQUEST_INVALID', 'thread_bindings.collections names an input more than once')
+    }
+    bindings.collections = ids
   }
 
   return {

@@ -32,12 +32,52 @@ export interface FlowInputBinding {
     resources: { id: string; name: string; url: string }[];
 }
 
+/** The catalog id of the input or setting a thread value fills in. */
+export interface FlowBinding {
+    input?: string;
+    parameter?: string;
+}
+
+/** What a flow says about how a thread uses it (catalog ids). */
+export interface FlowThreadBindings {
+    /** The input the thread's region fills in. */
+    region?: FlowBinding;
+    /** The setting the thread's dates fill in. */
+    start_date?: FlowBinding;
+    end_date?: FlowBinding;
+    /** The inputs that each take a collection: several resources are one input, and one run. */
+    collections?: string[];
+}
+
+const BINDING_ROLES = ["region", "start_date", "end_date"] as const;
+
+/** The bindings a flow row holds, keeping only what is well formed. */
+export function readThreadBindings(stored: unknown): FlowThreadBindings {
+    const bindings: FlowThreadBindings = {};
+    if (!stored || typeof stored !== "object") return bindings;
+    const row = stored as Record<string, unknown>;
+    for (const role of BINDING_ROLES) {
+        const target = row[role] as Record<string, unknown> | null | undefined;
+        if (!target || typeof target !== "object") continue;
+        bindings[role] = {
+            ...(typeof target.input === "string" ? { input: target.input } : {}),
+            ...(typeof target.parameter === "string" ? { parameter: target.parameter } : {})
+        };
+    }
+    if (Array.isArray(row.collections)) {
+        bindings.collections = row.collections.filter(
+            (id): id is string => typeof id === "string"
+        );
+    }
+    return bindings;
+}
+
 export interface FlowThreadContext {
     is_flow: boolean;
     /** The caller the thread was read as. */
     caller?: string;
-    /** Which input or setting the thread's region and dates fill in (catalog ids). */
-    thread_bindings: Record<string, { input?: string; parameter?: string }>;
+    /** Which inputs and settings the thread's region and dates fill in, and which inputs take a collection. */
+    thread_bindings: FlowThreadBindings;
     inputs: FlowInputBinding[];
     /** The flow's settings as the thread has them: catalog parameter id -> name and value. */
     parameters: { id: string; name: string; value?: string }[];
@@ -180,7 +220,8 @@ function threadValues(context: FlowThreadContext): Record<string, unknown> {
  * Plan a flow for a thread, or return null when the thread's model is not a flow.
  *
  * Each dataset the thread bound to a flow input is registered with the adapter,
- * which then plans the flow's own graph. Nothing is searched for.
+ * which then plans the flow's own graph. Nothing is searched for. An input the flow
+ * marks as taking a collection is sent with all its resources instead, as one input.
  */
 export async function planFlow(
     deps: FlowDeps,
@@ -199,9 +240,24 @@ export async function planFlow(
     }
 
     const inputs: Record<string, string> = {};
+    const collections: Record<
+        string,
+        { label: string; resources: { name: string; url: string }[] }
+    > = {};
+    const takesCollection = new Set(context.thread_bindings.collections || []);
     const regionInput = context.thread_bindings.region?.input;
     let region: { input: string; source: InputSource } | undefined;
     for (const input of context.inputs) {
+        if (takesCollection.has(input.model_io_id) && input.resources.length) {
+            // Every resource is one input made of many files, in the order the
+            // thread holds them. Nothing is registered here: the adapter gathers
+            // the files into one folder when the flow runs.
+            collections[input.model_io_id] = {
+                label: input.name,
+                resources: input.resources.map(({ name, url }) => ({ name, url }))
+            };
+            continue;
+        }
         if (input.resources.length > 1) {
             // One run of the flow per dataset is not built yet.
             throw new UnifiedExecutionError(
@@ -263,7 +319,12 @@ export async function planFlow(
         "/plans/flow",
         {
             method: "POST",
-            body: { flow_id: threadmodel.model_id, inputs, ...(region ? { region } : {}) }
+            body: {
+                flow_id: threadmodel.model_id,
+                inputs,
+                ...(Object.keys(collections).length ? { collections } : {}),
+                ...(region ? { region } : {})
+            }
         },
         authorization
     );

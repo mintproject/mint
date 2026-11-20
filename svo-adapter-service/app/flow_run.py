@@ -85,6 +85,19 @@ def view(plan_json: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | 
     by_number: dict[int, dict[str, Any]] = {}
     reported: dict[int, dict[str, Any]] = {}
     steps = []
+    # A flow input that takes a collection is gathered first, by a task of the
+    # adapter's own. It is shown as a step, ahead of the flow's, named by its id.
+    for collection in flow.get("collections") or []:
+        gather_id = str(collection.get("gather"))
+        task = tasks.get(gather_id) or {}
+        steps.append({
+            "step": gather_id,
+            "name": f"Gather {collection.get('label')}",
+            "task_id": gather_id,
+            "depends_on": [],
+            "status": _STATUS.get(str(task.get("status") or "").lower(), "pending"),
+            "message": task.get("last_message"),
+        })
     for step in plan_json.get("steps") or []:
         number = int(step["step"])
         task = tasks.get(task_id(step)) or {}
@@ -94,7 +107,9 @@ def view(plan_json: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any] | 
             "step": number,
             "name": step.get("name"),
             "task_id": task_id(step),
-            "depends_on": list(step.get("depends_on") or []),
+            # What it waits for: the gather tasks of the collections it reads, then
+            # the steps it follows.
+            "depends_on": [*tapis.gather_ids(step), *(step.get("depends_on") or [])],
             "status": _STATUS.get(str(task.get("status") or "").lower(), "pending"),
             "message": task.get("last_message"),
         })

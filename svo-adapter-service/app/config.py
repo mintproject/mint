@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     # Time limit for a main function step that runs stored source. Without one
     # Tapis Workflows applies its own default of an hour.
     stored_source_max_exec_seconds: int = 600
+    # A flow input that takes a collection: how many resources a plan may name, and
+    # the most bytes the gather task copies for one collection (it stops the moment
+    # the running total passes this; it does not trust a Content-Length).
+    flow_collection_max_resources: int = 500
+    flow_collection_max_bytes: int = 5 * 1024 ** 3
+    # Tapis systems a collection's files may be read from, comma-separated. Empty:
+    # none. A gather task reads with the runner's token, and the list of files
+    # comes from a thread that others may be able to edit, so a tapis:// location
+    # would let them have the runner's own files copied into a run.
+    flow_collection_tapis_systems: str = ""
+    # The longest one file of a collection may take to arrive, in seconds.
+    flow_collection_resource_seconds: int = 1800
 
     # Tapis Workflows. Submission emulates SUBSIDE's manager so adapter-generated
     # pipelines are interchangeable with SUBSIDE's: same pipeline shape, registered

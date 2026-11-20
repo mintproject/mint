@@ -30,6 +30,7 @@ import time
 import json
 import logging
 import re
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
@@ -55,7 +56,7 @@ if not logging.getLogger().handlers:
 
 log = logging.getLogger(__name__)
 
-from . import flow_graph, flow_run, input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis
+from . import flow_graph, flow_run, gather_fetch, input_plan, ntgam, publication, qaqc, run_state, run_tokens, stac, stored_source, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
@@ -2089,9 +2090,62 @@ def _fixed_flow_args(plan_json: dict[str, Any], args: dict[str, Any]) -> list[st
     fixed = accepted_aliases(
         str(parameter["name"]) for parameter in plan_json.get("parameters") or []
         if parameter.get("managed") and parameter.get("name"))
-    fixed.update({"execution_id", "source_uri", "tapis_token"})
+    # The Tapis address is where a step sends the runner's token, so it is the
+    # adapter's own setting, never a value from the request.
+    fixed.update({"execution_id", "source_uri", "tapis_token", "flow_staging_uri", "tapis_base_url"})
     sent = normalize_args(_wrap_args(args or {}))
     return sorted(name for name in sent if name in fixed)
+
+
+def _collection_tapis_systems() -> list[str]:
+    return [name.strip() for name in settings.flow_collection_tapis_systems.split(",") if name.strip()]
+
+
+def _flow_collections(body: FlowPlanIn, flow: dict[str, Any], used: list[str]) -> dict[str, str]:
+    """The flow inputs this plan gathers, each with the id of its gather task
+    (``gather-1``, ``gather-2`` ... in the order the steps first read the inputs).
+
+    A collection may be given only for an input the flow marks as taking one, that
+    a step reads, and that is neither bound to a data object nor the thread's
+    region. Each link must be one a gather task will fetch (the address itself is
+    checked when the task fetches it, where the name is resolved).
+    """
+    marked = (flow.get("thread_bindings") or {}).get("collections")
+    marked = [item for item in marked if isinstance(item, str)] if isinstance(marked, list) else []
+    region_input = body.region.get("input") if isinstance(body.region, dict) else None
+
+    def refuse(code: str, input_id: str, message: str, **extra: Any) -> HTTPException:
+        return HTTPException(422, detail={"code": code, "input": input_id, "message": message, **extra})
+
+    for input_id, collection in body.collections.items():
+        if input_id not in marked:
+            raise refuse("FLOW_COLLECTION_REFUSED", input_id, "the flow does not mark this input as taking a collection")
+        if input_id not in used:
+            raise refuse("FLOW_COLLECTION_REFUSED", input_id, "no step of the flow reads this input")
+        if input_id in body.inputs:
+            raise refuse("FLOW_COLLECTION_REFUSED", input_id,
+                         "the input is bound to a data object as well; give either one data object or a collection")
+        if input_id == region_input:
+            raise refuse("FLOW_COLLECTION_REFUSED", input_id, "the thread's region fills this input, not a collection")
+        limit = settings.flow_collection_max_resources
+        if len(collection.resources) > limit:
+            raise refuse("FLOW_COLLECTION_REFUSED", input_id,
+                         f"a collection holds at most {limit} resources; this one has {len(collection.resources)}",
+                         limit=limit)
+        tapis_systems = _collection_tapis_systems()
+        for index, resource in enumerate(collection.resources):
+            try:
+                place = gather_fetch.check_url(resource.url)
+            except ValueError as error:
+                raise refuse("FLOW_COLLECTION_RESOURCE_REFUSED", input_id,
+                             f"resource {index}: {error}", index=index) from error
+            if place["scheme"] == "tapis" and place["system"] not in tapis_systems:
+                # Read with the runner's token, from a list others may have edited.
+                raise refuse("FLOW_COLLECTION_RESOURCE_REFUSED", input_id,
+                             f"resource {index}: a collection may not read from the Tapis system "
+                             f"{place['system']}", index=index)
+    wanted = [input_id for input_id in used if input_id in body.collections]
+    return {input_id: f"gather-{n}" for n, input_id in enumerate(wanted, start=1)}
 
 
 def _flow_region(region: dict[str, Any] | None, used: list[str], inputs: dict[str, str],
@@ -2125,10 +2179,12 @@ def _flow_region(region: dict[str, Any] | None, used: list[str], inputs: dict[st
     return input_id, json.dumps(geometry, sort_keys=True, separators=(",", ":"))
 
 
-def _region_contract(input_id: str, rows: list[dict[str, Any]],
-                     specs: list[dict[str, Any] | None]) -> DataObjectContract:
-    """What the region is taken to be for the fit check: whatever the first piece
-    input linked to it asks for."""
+def _marked_input_contract(input_id: str, rows: list[dict[str, Any]],
+                           specs: list[dict[str, Any] | None], resource_uri: str) -> DataObjectContract:
+    """What an input with no registered dataset is taken to be for the fit check:
+    whatever the first piece input linked to it asks for. The thread's region and
+    a collection of files are such inputs: each fills the input the flow's author
+    marked for it."""
     for step, spec in zip(rows, specs):
         if not spec:
             continue
@@ -2139,9 +2195,9 @@ def _region_contract(input_id: str, rows: list[dict[str, Any]],
             source, target = wire.get("from") or {}, wire.get("to") or {}
             if source.get("flow_input") == input_id and target.get("input") in inputs:
                 contract = _contract_from_registry(inputs[target["input"]])
-                contract.resource_uri = "inline:thread-region"
+                contract.resource_uri = resource_uri
                 return contract
-    return DataObjectContract(resource_uri="inline:thread-region")
+    return DataObjectContract(resource_uri=resource_uri)
 
 
 async def _require_signed_in(bearer: str | None) -> str | None:
@@ -2257,15 +2313,17 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             if (isinstance(source, dict) and isinstance(source.get("flow_input"), str)
                     and source["flow_input"] not in used):
                 used.append(source["flow_input"])
+    gathers = _flow_collections(body, flow, used)
     region_input, region_text = _flow_region(body.region, used, body.inputs, flow)
-    unbound = [input_id for input_id in used if input_id not in body.inputs and input_id != region_input]
+    unbound = [input_id for input_id in used
+               if input_id not in body.inputs and input_id != region_input and input_id not in gathers]
     if unbound:
         raise HTTPException(422, detail={
             "code": "FLOW_INPUT_NOT_BOUND", "inputs": unbound,
             "message": "the flow needs a data object for each of these inputs"})
     bound: dict[str, dict[str, Any]] = {}
     for input_id in used:
-        if input_id == region_input:
+        if input_id == region_input or input_id in gathers:
             continue
         found = (await h.execute(DATA_OBJECT_CONTRACT_QUERY, {"id": body.inputs[input_id]}))["adapter_data_object"]
         if not found:
@@ -2278,8 +2336,13 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             *({"id": input_id, "contract": _data_object_to_contract(row)} for input_id, row in bound.items()),
             # The thread's region is not a registered dataset. It is taken as fitting
             # the input the flow's author marked for it.
-            *([{"id": region_input, "contract": _region_contract(region_input, rows, specs)}]
+            *([{"id": region_input,
+                "contract": _marked_input_contract(region_input, rows, specs, "inline:thread-region")}]
               if region_input else []),
+            # Files gathered into one input are taken the same way.
+            *({"id": input_id,
+               "contract": _marked_input_contract(input_id, rows, specs, "inline:flow-collection")}
+              for input_id in gathers),
         ],
         "parameters": flow["parameters"],
         "steps": [{
@@ -2312,8 +2375,10 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         step_json["step"] = position
         step_json["depends_on"] = checked.depends_on[position]
         step_json["wires"] = [
-            {"to": wire["to"], "from": ({"arg": args[wire["from"]["flow_input"]]}
-                                        if "flow_input" in wire["from"] else wire["from"])}
+            {"to": wire["to"], "from": (
+                {"gather": gathers[wire["from"]["flow_input"]]} if wire["from"].get("flow_input") in gathers
+                else {"arg": args[wire["from"]["flow_input"]]} if "flow_input" in wire["from"]
+                else wire["from"])}
             for wire in step.get("wires") or []]
         step_json["flow_outputs"] = {
             "outputs": sorted(flow_graph.piece_outputs(view)),
@@ -2349,6 +2414,13 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             by_name[name]["default_source"] = "flow"
     for input_id, arg in args.items():
         definition = by_name.get(arg)
+        if input_id in gathers:
+            # Nothing fills this argument: the step reads the gather task's folder.
+            if definition is not None:
+                definition.update({
+                    "required": False, "managed": True, "managed_source": "gather",
+                    "description": "Not set by anyone: this input is a collection, gathered by the run"})
+            continue
         if definition is None:
             definition = {"name": arg, "type": "string"}
             plan_json["parameters"].append(definition)
@@ -2361,6 +2433,23 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
                             else "A dataset the flow takes as an input"),
         })
 
+    flow_collections = [
+        {"input": input_id, "label": body.collections[input_id].label, "gather": gather_id,
+         "resources": [{"name": r.name, "url": r.url} for r in body.collections[input_id].resources]}
+        for input_id, gather_id in gathers.items()]
+    if flow_collections:
+        # Filled in at submit, never by the caller: the run's own folder in the
+        # runner's storage, where the gather tasks put what they copy.
+        plan_json["parameters"].append({
+            "name": "flow_staging_uri", "type": "string", "required": False, "managed": True,
+            "managed_source": "run_folder",
+            "description": "The folder this run stages gathered inputs in"})
+        output_uri = by_name.get("output_uri")
+        if output_uri and output_uri.get("required") and output_uri.get("default") is None:
+            # A setting the flow needs and nobody gave: the run's own folder, once
+            # there is one (at submit).
+            output_uri.update({"required": False, "default_source": "run_folder"})
+
     opt_in = tuple(body.allow_unapproved_piece_ids)
     problems = stored_source.check_plan(plan_json, registry, caller, opt_in)
     if problems:
@@ -2369,7 +2458,8 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         plan_json["stored_source_opt_in"] = {"username": caller, "piece_ids": sorted(opt_in)}
     try:
         # Prove the plan builds into a pipeline now, not when someone submits it.
-        tapis.generate_tapis_workflow({"id": "check", "plan_json": plan_json})
+        tapis.generate_tapis_workflow({
+            "id": "check", "plan_json": {**plan_json, "flow": {"collections": flow_collections}}})
     except (ValueError, KeyError, TypeError) as error:
         raise HTTPException(422, detail={
             "code": "FLOW_DOES_NOT_BUILD", "flow_id": body.flow_id, "message": str(error)}) from error
@@ -2378,17 +2468,21 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
         "linked_settings": [
             {"step": int(step["position"]), "setting": wire["to"]["setting"], "from": wire["from"]}
             for step in rows for wire in step.get("wires") or [] if "setting" in wire["to"]],
-        "inputs": [{"input_id": input_id, "arg": arg,
+        "inputs": [{"input_id": input_id,
+                    **({} if input_id in gathers else {"arg": arg}),
                     **({"region": True} if input_id == region_input
+                       else {"collection": gathers[input_id]} if input_id in gathers
                        else {"data_object_id": body.inputs[input_id]})}
                    for input_id, arg in args.items()],
+        "collections": flow_collections,
         "outputs": flow["outputs"],
         "thread_bindings": flow["thread_bindings"],
         "pause_after": [int(step["position"]) for step in rows if step.get("pause_after")],
     }
     created = (await h.execute(INSERT_PLAN, {"obj": {
         "source_data_object_id": next(
-            (body.inputs[input_id] for input_id in used if input_id != region_input), None),
+            (body.inputs[input_id] for input_id in used
+             if input_id != region_input and input_id not in gathers), None),
         "target_model_configuration_id": flow["configuration_id"],
         "status": "draft",
         "plan_json": plan_json,
@@ -2969,6 +3063,25 @@ def _input_source_arg(source: dict[str, Any]) -> str:
 INPUT_STEP_TRANSFORM_TYPES = input_plan.INPUT_STEP_TRANSFORM_TYPES
 
 
+async def _scratch_root(token: str | None, system: str) -> str | None:
+    """The caller's scratch root on ``system``, or None when it cannot be found."""
+    username = await run_in_threadpool(tapis.userinfo_username, token) if token else None
+    return (await run_in_threadpool(tapis.resolve_scratch_root, token, username, system)
+            if token and username else None)
+
+
+async def _resolve_flow_staging(token: str | None, run_id: str) -> str:
+    """Where this run of a flow stages what its gather tasks copy:
+    ``tapis://<exec system>/<scratch root>/dynamo-runs/<run id>``, or 422."""
+    system = settings.tapis_exec_system
+    root = await _scratch_root(token, system)
+    if not root or not _EXECUTION_ID_RE.match(run_id):
+        raise HTTPException(422, detail={
+            "code": "FLOW_STAGING_UNRESOLVED",
+            "message": f"could not find your scratch folder on {system}: run any job there once"})
+    return f"tapis://{system}/{root.strip('/')}/dynamo-runs/{run_id}"
+
+
 async def _resolve_input_staging(
     input_steps: list[dict[str, Any]], model_task: dict[str, Any], token: str | None,
     execution_id: str,
@@ -2982,13 +3095,17 @@ async def _resolve_input_staging(
         raise unresolved(f"the model job definition has no execSystemId to stage {inputs} on")
     if not _EXECUTION_ID_RE.match(execution_id):
         raise unresolved("execution_id is not safe to use in a staging path")
-    username = await run_in_threadpool(tapis.userinfo_username, token) if token else None
-    root = (await run_in_threadpool(tapis.resolve_scratch_root, token, username, system)
-            if token and username else None)
+    root = await _scratch_root(token, system)
     if not root:
         raise unresolved(f"could not find your scratch directory on {system}: run any job on "
                          f"{system} once, or bind a dataset to {inputs}")
     return f"{root}/dynamo-runs/{execution_id}/inputs"
+
+
+def _arg_given(args: dict[str, Any], name: str) -> bool:
+    """Whether a submission carries a value for ``name`` (plain or ``{value: ...}``)."""
+    value = normalize_args(_wrap_args(args or {})).get(name, {}).get("value")
+    return value not in (None, "")
 
 
 def _resolve_bound_plan_id(plan_id: str) -> tuple[str, str | None]:
@@ -3420,6 +3537,26 @@ async def submit_workflow(
                     service_args["input_staging_dir"] = await _resolve_input_staging(
                         input_steps, body.model_task, token, body.execution_id)
 
+    # A flow with a collection input stages the files it gathers in a folder named for
+    # this run, so the run's id is chosen here, before the pipeline and its arguments
+    # are made, and the run is recorded under it. A dry run finds no folder.
+    run_id = str(uuid.uuid4())
+    plan_json_now = plan.get("plan_json") or {}
+    if isinstance(plan_json_now.get("flow"), dict):
+        # Every step of a flow sends the runner's token to this address. It is
+        # refused from the request above; here it is set, so that no alias or
+        # default can stand in for it.
+        service_args["tapis_base_url"] = settings.tapis_base_url
+    flow_staging: str | None = None
+    if (plan_json_now.get("flow") or {}).get("collections") and not body.dry_run:
+        flow_staging = await _resolve_flow_staging(token, run_id)
+        service_args["flow_staging_uri"] = flow_staging
+        run_folder_defaults = [
+            str(parameter["name"]) for parameter in plan_json_now.get("parameters") or []
+            if parameter.get("default_source") == "run_folder" and parameter.get("name")]
+        if "output_uri" in run_folder_defaults and not _arg_given(service_args, "output_uri"):
+            service_args["output_uri"] = f"{flow_staging}/outputs"
+
     # The model descriptor is server-generated and intentionally request-local:
     # it is part of this composite run, not mutable plan state.  The adapter
     # generator receives it through the same immutable plan-shaped contract as
@@ -3451,6 +3588,7 @@ async def submit_workflow(
 
     # Record the run before triggering, so a failed submit still leaves a trail.
     run_obj: dict[str, Any] = {
+        "id": run_id,
         "workflow_plan_id": stored_plan_id,
         "tapis_workflow_id": pipeline["id"],
         "status": "submitting",
@@ -3510,6 +3648,12 @@ async def submit_workflow(
         await h.execute(UPDATE_RUN, {"id": run["id"], "set": {"status": "generated"}})
         return {"run_id": run["id"], "status": "generated",
                 "tapis_workflow_definition": pipeline, "args": _public_workflow_args(args),
+                **({"flow_staging": {
+                    "resolved": False,
+                    "message": "a real submission finds your scratch folder on "
+                               f"{settings.tapis_exec_system} and stages gathered inputs under "
+                               "dynamo-runs/<run id>/inputs/"}}
+                   if (plan_json_now.get("flow") or {}).get("collections") else {}),
                 **({"secrets": secret_report} if secret_report is not None else {})}
 
     # Arm run signals for composite runs: the model task reports liveness to
