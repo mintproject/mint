@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft. Not yet reviewed. Phase F of `2026-11-19-flows-as-models.md`, expanded here.
+Approved (2026-11-20). Implementing.
 The parent spec's line "the adapter is put behind DYNAMO's APIs" is recorded there as
 proposed by the assistant and not yet confirmed by the user.
 
@@ -581,6 +581,20 @@ Steps are in "Migration order". Summary:
 - 2026-11-20 (this draft): Callbacks stay on the adapter's public hostname with HMAC; they
   are not fronted. **[PROPOSAL — not confirmed.]**
 
+- 2026-11-20, open questions settled when the design was approved (my choices, recorded for
+  the user to overturn; the design's recommendation where it gave one):
+  1. Assume Tapis Pods cannot restrict callers; build the adapter's own check.
+  2. Keep the piece-registry copy for now.
+  3. Existing data objects are hidden from users.
+  4. The forecast run moves behind an EM route, after its missing sign-in is fixed.
+  5. The routes with no known caller stay on the adapter behind the operator or front-door
+     check.
+  6. Only `/spatial/layers` moves in Step 1; the other public reads stay.
+  7. To be checked by reading the pods' settings (read only).
+  8. The user approves Step 5 on dev and on production.
+  9. Checked by reading the code, not by a write on dev.
+
 ## User feedback / decisions
 
 None yet. Open questions 1 to 9 are for the user's review.
+- 2026-11-20: "Three designs (authoring, pause, adapter behind the APIs) approved".

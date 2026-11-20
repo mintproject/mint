@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft. Written 2026-11-20 as Phase D of `2026-11-19-flows-as-models.md` (Approved 2026-11-19).
+Approved (2026-11-20). Implementing.
 Not yet reviewed by the user.
 
 Parts D1 to D5 each merge and deploy to dev on their own (see Rollout/rollback).
@@ -600,6 +600,25 @@ check. D1 and D2 do not depend on each other. Secret arguments wait on `feat/flo
 - 2026-11-20 (draft): the form is the source of truth and the canvas is read-only. Proposed; open
   question 7.
 
+- 2026-11-20, open questions settled when the design was approved (my choices, recorded for
+  the user to overturn; the design's recommendation where it gave one):
+  1. Approvers are the members of `modelcatalog_admin`. No written review standard yet; the
+     approval page shows exactly what is approved (source, hash, arguments, secrets, data sent
+     outside DYNAMO) and records who approved it.
+  2. A piece may come from any public GitHub repository at a pinned commit. Private
+     repositories are not supported in D.
+  3. Editing a flow makes a new configuration under the same version; the old one stays until
+     its owner deletes it. A thread that picked the old one keeps it.
+  4. The adapter fetches and hashes the source; the catalog row is written with the caller's
+     token, so catalog permissions apply.
+  5. Tapis app pieces stay with the MCP in D.
+  6. The approval hash covers the source, the function called, `env_from_args`, the declared
+     arguments, `secrets` and `sends_data_to` (#439 and `feat/flow-step-secrets`).
+  7. A form, with a read-only graph view.
+  8. Proposal limits: depth 3, 2000 expansions, as proposed.
+  9. D1 ships with `secrets` and `sends_data_to`, built on `feat/flow-step-secrets`.
+
 ## User feedback / decisions
 
 None yet. This draft is for the user's review. Open questions 1 to 9 need answers before D1 is built.
+- 2026-11-20: "Three designs (authoring, pause, adapter behind the APIs) approved".

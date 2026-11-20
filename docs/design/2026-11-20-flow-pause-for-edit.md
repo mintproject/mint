@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft, 2026-11-20. Not yet reviewed. Phase E of `2026-11-19-flows-as-models.md` (approved).
+Approved (2026-11-20). Implementing.
 Phase B (a flow run from a thread) is checked on dev. Phases C and D are not started.
 
 Checked against the `docs-phases` worktree. Paths below are relative to the monorepo root
@@ -543,6 +543,28 @@ Production needs its own go-ahead for each part.
   run's folder; the Ensemble Manager records who edited and when; Formulation is one flow with a
   pause after the draft; a submitted pipeline cannot itself be paused.
 
+- 2026-11-20, open questions settled when the design was approved (my choices, recorded for
+  the user to overturn; the design's recommendation where it gave one):
+  1. Accepted: the adapter builds each segment's pipeline; the Ensemble Manager holds the
+     thread's state.
+  2. Only the submitter may resume.
+  3. A paused run is cancelled after 14 days; its run folder is left to the scratch purge.
+     (No recommendation was given; this is mine.)
+  4. Download and upload only; no in-browser editor.
+  5. **Changed by a later user decision:** the edited file is uploaded as a user upload, and
+     user uploads go through CKAN ("User uploads should route through ckan", 2026-11-20): a
+     private dataset in an organisation the user picks, read by the next segment's gather
+     step as the runner. Neither route a nor route b of this draft.
+  6. A failed continuation returns the run to `awaiting_edit`.
+  7. Lexicon only in the first cut.
+  8. To be checked in code: the library's lexicon loader; refuse a file it cannot load.
+  9. Confirmed: one new configuration, ingest → draft → pause → score → map → report.
+  10. Confirmed: one pause per run, one file per pause.
+  11. **Against this draft:** a flow with secrets may pause. Each segment binds the secrets
+      of its own steps when it is submitted. Without this the Formulation flow, whose draft
+      step needs the model-server credential, could not pause at all.
+
 ## User feedback / decisions
 
 None yet. This is the first Draft.
+- 2026-11-20: "Three designs (authoring, pause, adapter behind the APIs) approved".
