@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DataCatalogResource } from '@/lib/data-catalog';
 import { buildThreadDataInsert, hashResourceId, newDatasliceId } from '@/lib/thread-datasets';
+import { datasliceRegionId } from '@/lib/thread-datasets';
 
 const resources: DataCatalogResource[] = [
   {
@@ -94,5 +95,27 @@ describe('newDatasliceId', () => {
     expect(newDatasliceId()).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
+  });
+});
+
+describe('datasliceRegionId', () => {
+  // Seen on dev: a thread framed for any region could not bind data, because a
+  // dataslice must name an existing region and an empty id was sent.
+  it("uses the thread's own region first, then the task's, then the problem statement's", () => {
+    const ps = { region_id: 'ps-region' };
+    expect(
+      datasliceRegionId({ region_id: 'r1', task: { region_id: 't', problem_statement: ps } }),
+    ).toBe('r1');
+    expect(
+      datasliceRegionId({ region_id: null, task: { region_id: 't', problem_statement: ps } }),
+    ).toBe('t');
+    expect(
+      datasliceRegionId({ region_id: '', task: { region_id: null, problem_statement: ps } }),
+    ).toBe('ps-region');
+  });
+
+  it('is null when nothing has a region, never an empty id', () => {
+    expect(datasliceRegionId({ region_id: '' })).toBeNull();
+    expect(datasliceRegionId({ region_id: null, task: null })).toBeNull();
   });
 });

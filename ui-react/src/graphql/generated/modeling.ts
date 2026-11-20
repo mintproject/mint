@@ -134,7 +134,17 @@ export type Thread = {
    * thread's results is a REST call whose path needs the problem statement and
    * task ids, and `task_id` alone cannot name the problem statement (#110).
    */
-  task?: Maybe<{ __typename?: 'task'; id: string; problem_statement_id: string }>;
+  task?: Maybe<{
+    __typename?: 'task';
+    id: string;
+    problem_statement_id: string;
+    /**
+     * The task's and its problem statement's regions. A dataslice must name a
+     * region, so a thread with none of its own binds data under the nearest.
+     */
+    region_id?: Maybe<string>;
+    problem_statement?: Maybe<{ __typename?: 'problem_statement'; id: string; region_id?: Maybe<string> }>;
+  }>;
   start_date: string;
   end_date: string;
   region_id?: Maybe<string>;
@@ -292,6 +302,11 @@ const THREAD_INFO = gql`
     task {
       id
       problem_statement_id
+      region_id
+      problem_statement {
+        id
+        region_id
+      }
     }
     start_date
     end_date
