@@ -529,3 +529,119 @@ def test_a_tapis_file_outside_the_allowed_systems_is_not_read(monkeypatch):
     with pytest.raises(SystemExit):
         run(monkeypatch, network, [res("tapis://elsewhere/home/u/private.txt", "p")], tapis_systems=[])
     assert not any("/v3/files/content/" in call.path for call in network.calls)
+
+
+# --- the catalog host gets the runner's token ---------------------------------------
+
+CATALOG = "ckan.tacc.utexas.edu"
+FILE = "/dataset/p1/resource/r1/download/a.csv"
+
+
+def auth_of(call):
+    return {k.lower(): v for k, v in call.headers.items()}.get("authorization")
+
+
+def run_catalog(monkeypatch, network, url, **over):
+    return run(monkeypatch, network, [res(url, "a.csv")], catalog_host=CATALOG, **over)
+
+
+def test_the_catalog_host_gets_the_token_as_a_bearer_credential(monkeypatch, capsys):
+    network = Network({(CATALOG, FILE): Reply(body=b"x")})
+    run_catalog(monkeypatch, network, "https://" + CATALOG + FILE)
+    assert [auth_of(c) for c in https_calls(network)] == ["Bearer " + TOKEN]
+    assert TOKEN not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("url", [
+    "https://ckan.tacc.utexas.edu.evil.example/f",
+    "https://evil.example/ckan.tacc.utexas.edu",
+    "https://evil.example/f?h=ckan.tacc.utexas.edu",
+    "https://evilckan.tacc.utexas.edu/f",
+    "https://tacc.utexas.edu/f",
+])
+def test_a_look_alike_host_gets_no_token(monkeypatch, url):
+    host = url.split("/")[2]
+    network = Network({(host, "/" + url.split("/", 3)[3]): Reply(body=b"x")})
+    run_catalog(monkeypatch, network, url)
+    assert [auth_of(c) for c in https_calls(network)] == [None]
+
+
+@pytest.mark.parametrize("url", [
+    "https://user@ckan.tacc.utexas.edu/f",
+    "https://ckan.tacc.utexas.edu:8443/f",
+    "https://ckan.tacc.utexas.edu./f",
+])
+def test_userinfo_another_port_or_a_trailing_dot_never_gets_the_token(monkeypatch, url, capsys):
+    network = Network({(CATALOG + ".", "/f"): Reply(body=b"x")})
+    try:
+        run_catalog(monkeypatch, network, url)
+    except SystemExit:
+        pass
+    assert all(auth_of(c) is None for c in network.calls if c.host != TAPIS)
+    assert TOKEN not in capsys.readouterr().out
+
+
+def test_the_host_is_compared_lower_cased(monkeypatch):
+    network = Network({(CATALOG, "/f"): Reply(body=b"x")})  # the URL parser lower-cases the host
+    run_catalog(monkeypatch, network, "https://CKAN.TACC.UTEXAS.EDU/f")
+    assert [auth_of(c) for c in https_calls(network)] == ["Bearer " + TOKEN]
+
+
+def test_the_header_is_dropped_on_a_redirect_away_and_added_again_on_a_hop_back(monkeypatch):
+    network = Network({
+        (CATALOG, "/a"): Reply(302, headers={"Location": "https://cdn.example/b"}),
+        ("cdn.example", "/b"): Reply(302, headers={"Location": "https://" + CATALOG + "/c"}),
+        (CATALOG, "/c"): Reply(body=b"x"),
+    })
+    run_catalog(monkeypatch, network, "https://" + CATALOG + "/a")
+    assert [(c.host, auth_of(c)) for c in https_calls(network)] == [
+        (CATALOG, "Bearer " + TOKEN), ("cdn.example", None), (CATALOG, "Bearer " + TOKEN)]
+
+
+def test_a_redirect_from_another_host_to_the_catalog_gets_the_token_only_there(monkeypatch):
+    network = Network({
+        ("a.example", "/x"): Reply(302, headers={"Location": "https://" + CATALOG + "/y"}),
+        (CATALOG, "/y"): Reply(body=b"x"),
+    })
+    run_catalog(monkeypatch, network, "https://a.example/x")
+    assert [(c.host, auth_of(c)) for c in https_calls(network)] == [
+        ("a.example", None), (CATALOG, "Bearer " + TOKEN)]
+
+
+def test_with_no_catalog_host_no_https_request_carries_the_token(monkeypatch):
+    network = Network({(CATALOG, FILE): Reply(body=b"x")})
+    run(monkeypatch, network, [res("https://" + CATALOG + FILE, "a.csv")], catalog_host="")
+    assert [auth_of(c) for c in https_calls(network)] == [None]
+
+
+def test_the_catalog_host_still_has_its_address_vetted(monkeypatch, capsys):
+    network = Network(dns={CATALOG: ["10.0.0.5"]})
+    with pytest.raises(SystemExit):
+        run_catalog(monkeypatch, network, "https://" + CATALOG + FILE)
+    assert https_calls(network) == []
+    assert TOKEN not in capsys.readouterr().out
+
+
+def test_the_catalog_host_comes_from_the_plan_setting_into_the_spec(monkeypatch):
+    from app import tapis
+    from app.config import settings
+    monkeypatch.setattr(settings, "flow_collection_catalog_host", " CKAN.Example.org ")
+    code = tapis._gather_task({"gather": "gather-1", "label": "x", "resources": []})["code"]
+    assert '"catalog_host": "ckan.example.org"' in code.replace("\\", "")
+
+
+def test_one_file_for_an_ordinary_input_has_the_file_as_its_result(monkeypatch, capsys):
+    network = Network({("a.example", "/one.csv"): Reply(body=b"1,2")})
+    outputs = run(monkeypatch, network, [res("https://a.example/one.csv", "")], single=True)
+    result = "tapis://ls6/" + FOLDER + "/one.csv"
+    assert outputs == {"result": result}
+    assert last_line(capsys)["svo_flow_outputs"] == {"result": result}
+
+
+def test_the_catalog_header_rule_holds_for_one_file(monkeypatch):
+    network = Network({(CATALOG, FILE): Reply(body=b"x")})
+    run(monkeypatch, network, [res("https://" + CATALOG + FILE, "")], single=True, catalog_host=CATALOG)
+    assert [auth_of(c) for c in https_calls(network)] == ["Bearer " + TOKEN]
+    network = Network({("a.example", "/x"): Reply(body=b"x")})
+    run(monkeypatch, network, [res("https://a.example/x", "")], single=True, catalog_host=CATALOG)
+    assert [auth_of(c) for c in https_calls(network)] == [None]

@@ -958,6 +958,10 @@ def _gather_task(collection: dict[str, Any]) -> dict[str, Any]:
         "tapis_systems": [name.strip() for name in settings.flow_collection_tapis_systems.split(",")
                           if name.strip()],
         "resource_seconds": int(settings.flow_collection_resource_seconds),
+        # The one https host that gets the runner's token (the catalog); empty = none.
+        # One file for an ordinary input: the result is the staged file, not the folder.
+        "single": bool(collection.get("single")),
+        "catalog_host": (settings.flow_collection_catalog_host or "").strip().lower(),
     }
     return {
         "id": spec["gather_id"],

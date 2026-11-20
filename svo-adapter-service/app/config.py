@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     flow_collection_tapis_systems: str = ""
     # The longest one file of a collection may take to arrive, in seconds.
     flow_collection_resource_seconds: int = 1800
+    # The catalog's host name (e.g. ckan.tacc.utexas.edu). A gather task sends the
+    # runner's token, as a bearer credential, to this host and no other, so it can
+    # read private catalog files. Empty disables it.
+    flow_collection_catalog_host: str = ""
 
     # Tapis Workflows. Submission emulates SUBSIDE's manager so adapter-generated
     # pipelines are interchangeable with SUBSIDE's: same pipeline shape, registered

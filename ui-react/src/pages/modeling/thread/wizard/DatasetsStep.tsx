@@ -34,6 +34,8 @@ import { spatialCoverageBoundingBox } from '@/lib/datasets/spatial';
 import { cn } from '@/lib/utils';
 import { StepShell } from './StepShell';
 import { COLLECTION_EXPLANATION, CollectionFiles } from './CollectionFiles';
+import { UploadFiles } from './UploadFiles';
+import type { UploadedDataset } from '@/lib/ckan-upload';
 import { FilteredByBanner } from './FilteredByBanner';
 
 interface RequestedRange {
@@ -941,6 +943,22 @@ export function DatasetsStep({
     });
   }
 
+  /** Bind an input to the catalog dataset just made from the user's files. */
+  function assignUpload(modelId: string, inputId: string, upload: UploadedDataset) {
+    setCollectionPicks(({ [inputCardKey(modelId, inputId)]: _dropped, ...rest }) => rest);
+    setOverrides((prev) => ({
+      ...prev,
+      [modelId]: {
+        ...(prev[modelId] ?? {}),
+        [inputId]: {
+          datasetId: upload.datasetId,
+          datasetName: upload.datasetName,
+          resources: upload.resources,
+        },
+      },
+    }));
+  }
+
   async function handleContinue() {
     if (!allAssigned) return;
     setSaving(true);
@@ -1202,6 +1220,20 @@ export function DatasetsStep({
                           selectedDatasets={selectedDatasetContextsByModel[modelId]}
                           onDatasetMetadata={reportKnownDatasetMetadata}
                           onAssign={(dsId, ds) => assign(modelId, input.id, dsId, ds)}
+                        />
+                        <UploadFiles
+                          flowName={model.name ?? ''}
+                          inputName={input.name}
+                          variables={input.variables ?? []}
+                          format={input.format}
+                          multiple={isCollection}
+                          startDate={thread.start_date}
+                          endDate={thread.end_date}
+                          regionGeometry={regionGeometry}
+                          username={user?.username ?? ''}
+                          disabled={!perm.write || !user?.username}
+                          forcePublic={!model.isFlow}
+                          onUploaded={(upload) => assignUpload(modelId, input.id, upload)}
                         />
                         {isCollection && current && (
                           <CollectionFiles

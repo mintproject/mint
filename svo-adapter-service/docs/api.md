@@ -217,6 +217,26 @@ input take `SOURCE_<k>` from that `result` and wait for the task.
   (never the query, the token or a response body): `GATHER_RESOURCE_NEEDS_LOGIN` (401 or
   403), `GATHER_RESOURCE_FAILED` (with `http_status` where there is one),
   `GATHER_ADDRESS_REFUSED`, `GATHER_TOO_LARGE`, `GATHER_STAGING_FAILED`.
+- **The catalog is the one `https` host that gets the runner's token.** With the setting
+  `flow_collection_catalog_host` (a host name such as `ckan.tacc.utexas.edu`; empty by
+  default, so off), a request to exactly that host carries `Authorization: Bearer <the
+  runner's token>`, so a private catalog file the runner may read can be gathered. The
+  host is compared lower-cased and whole (not a suffix, not a path, not a host with a user
+  name or another port, not `host.evil.example`); the port is always 443. The host is in the
+  task's spec and the task never reads it from an input. Redirects are followed by hand and
+  the header is decided again on every hop: a hop to any other host carries none, and a
+  later hop back to the catalog host carries it again. Address vetting applies to the
+  catalog host as to any other. Nothing printed holds the token.
+- **An ordinary input bound to an `https` file is gathered too.** At `POST /plans/flow`, an
+  input that is not a collection, not the region, and whose bound data object's
+  `resource_uri` is an `https` link the task would fetch gets a gather task of one resource
+  (`plan_json.flow.collections[]` entry with `"single": true`, label the input id). Its steps
+  read the gather output, and no `source_uri...` argument is made for it. For such a task the
+  `result` is the staged **file** (`tapis://<system>/<folder>/<file>`), not the folder; a
+  collection's `result` stays its folder. Gathers are numbered `gather-1`, `gather-2`, ... in
+  the order the steps first read the inputs, collections and single files together. A
+  `tapis://` data object is read in place, with no gather, as before. The catalog-host token
+  rule above applies to the single file as to any resource.
 - A link that needs another login (Earthdata, a PTDataX project) fails; a login for the
   gather task is the secret store's job.
 
