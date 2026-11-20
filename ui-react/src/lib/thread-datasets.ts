@@ -59,6 +59,24 @@ function isoDate(d: Date | null | undefined): string | null {
  * One `thread_data` row: a dataslice of the chosen dataset, narrowed to the
  * resources the caller kept, with the dataset and resources upserted alongside.
  */
+/**
+ * The region a thread's dataslice is filed under. A dataslice must name an
+ * existing region, and a thread may have none of its own (framed for "any
+ * region"); its task's or problem statement's region is used then. Null when
+ * none of them has one.
+ */
+export function datasliceRegionId(thread: {
+  region_id?: string | null;
+  task?: {
+    region_id?: string | null;
+    problem_statement?: { region_id?: string | null } | null;
+  } | null;
+}): string | null {
+  return (
+    thread.region_id || thread.task?.region_id || thread.task?.problem_statement?.region_id || null
+  );
+}
+
 export function buildThreadDataInsert(params: {
   threadId: string;
   threadName?: string | null;
@@ -78,6 +96,8 @@ export function buildThreadDataInsert(params: {
       data: {
         id: params.datasliceId,
         name: `${dataset.name} for thread: ${params.threadName ?? ''}`,
+        // NOT NULL and a foreign key to region: an empty id is refused. The caller
+        // passes the nearest region that exists (see datasliceRegionId).
         region_id: params.regionId ?? '',
         start_date: params.startDate ?? null,
         end_date: params.endDate ?? null,

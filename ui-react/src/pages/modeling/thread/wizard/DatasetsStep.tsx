@@ -23,6 +23,7 @@ import { loadDatasetResources } from '@/lib/data-catalog';
 import {
   buildThreadDataInsert,
   collectionDefaultSelection,
+  datasliceRegionId,
   newDatasliceId,
   type ThreadDataInsert,
 } from '@/lib/thread-datasets';
@@ -1010,12 +1011,22 @@ export function DatasetsStep({
             return;
           }
 
+          if (!datasliceRegionId(thread)) {
+            toast({
+              title: 'This thread has no region',
+              description:
+                'Data is filed under a region. Choose one in the Framing step, then assign the data again.',
+              variant: 'destructive',
+            });
+            setSaving(false);
+            return;
+          }
           const datasliceId = newDatasliceId();
           data.push(
             buildThreadDataInsert({
               threadId: thread.id,
               threadName: thread.name,
-              regionId: thread.region_id,
+              regionId: datasliceRegionId(thread),
               startDate: thread.start_date,
               endDate: thread.end_date,
               datasliceId,
