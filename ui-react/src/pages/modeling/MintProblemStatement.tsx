@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   Folder,
@@ -10,6 +11,7 @@ import {
   Pencil,
   Trash2,
   ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -109,6 +111,15 @@ function fmtDateTime(iso?: string | null): string {
   }
 }
 
+/** Sub-tasks, most recently touched first (same ordering as tasks). */
+function sortThreads(threads: Thread[]): Thread[] {
+  return threads.slice().sort((a, b) => {
+    const ta = getLatestEvent(a.events)?.timestamp ?? '';
+    const tb = getLatestEvent(b.events)?.timestamp ?? '';
+    return ta < tb ? 1 : -1;
+  });
+}
+
 /** A sub-task (thread) has a model when at least one thread_model is selected. */
 function threadHasModel(thread: Pick<Thread, 'thread_models'>): boolean {
   return (thread.thread_models?.length ?? 0) > 0;
@@ -165,6 +176,9 @@ export function MintProblemStatement() {
   // ── local state ───────────────────────────────────────────────────────────
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  // Sub-task lists are open unless the user collapsed them. Only explicit
+  // toggles are stored, so tasks that appear later default to open.
+  const [openOverrides, setOpenOverrides] = useState<Record<string, boolean>>({});
 
   const initialDatasetIds = useMemo(
     () => searchParams.get('datasetIds')?.split(',').filter(Boolean) ?? [],
@@ -182,6 +196,8 @@ export function MintProblemStatement() {
   const [threadForm, setThreadForm] = useState<ThreadForm>(EMPTY_THREAD_FORM);
   const [savingThread, setSavingThread] = useState(false);
   const [deleteThreadTarget, setDeleteThreadTarget] = useState<Thread | null>(null);
+  // The task a new sub-task is being added to (any task, not just the selected one).
+  const [threadDialogTask, setThreadDialogTask] = useState<TaskWithThreads | null>(null);
 
   // ── mutations ─────────────────────────────────────────────────────────────
   const [insertTask] = useInsertTaskMutation();
@@ -202,11 +218,17 @@ export function MintProblemStatement() {
   });
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
-  const threads: Thread[] = (selectedTask?.threads ?? []).slice().sort((a, b) => {
-    const ta = getLatestEvent(a.events)?.timestamp ?? '';
-    const tb = getLatestEvent(b.events)?.timestamp ?? '';
-    return ta < tb ? 1 : -1;
-  });
+  const isTaskOpen = (taskId: string) => openOverrides[taskId] ?? true;
+  const openTaskIds = tasks.filter((t) => isTaskOpen(t.id)).map((t) => t.id);
+
+  function handleOpenTasksChange(nextOpenIds: string[]) {
+    setOpenOverrides(Object.fromEntries(tasks.map((t) => [t.id, nextOpenIds.includes(t.id)])));
+  }
+
+  function selectThread(task: TaskWithThreads, threadId: string) {
+    setSelectedTaskId(task.id);
+    setSelectedThreadId(threadId);
+  }
 
   // Guided setup passes the new thread in the query string so this detail page
   // can open the exact thread that was just created instead of showing the
@@ -218,6 +240,7 @@ export function MintProblemStatement() {
       if (task.threads?.some((thread) => thread.id === requestedThreadId)) {
         setSelectedTaskId(task.id);
         setSelectedThreadId(requestedThreadId);
+        setOpenOverrides((prev) => ({ ...prev, [task.id]: true }));
         return;
       }
     }
@@ -328,18 +351,19 @@ export function MintProblemStatement() {
   }
 
   // ── thread form helpers ───────────────────────────────────────────────────
-  function openAddThreadDialog() {
-    if (!selectedTask) return;
+  function openAddThreadDialog(task: TaskWithThreads) {
+    setThreadDialogTask(task);
     setThreadForm({
       id: '',
       name: '',
-      startDate: fmtDate(selectedTask.start_date),
-      endDate: fmtDate(selectedTask.end_date),
+      startDate: fmtDate(task.start_date),
+      endDate: fmtDate(task.end_date),
     });
     setThreadDialogOpen(true);
   }
 
-  function openEditThreadDialog(thread: Thread) {
+  function openEditThreadDialog(task: TaskWithThreads, thread: Thread) {
+    setThreadDialogTask(task);
     setThreadForm({
       id: thread.id,
       name: thread.name ?? '',
@@ -350,7 +374,8 @@ export function MintProblemStatement() {
   }
 
   async function handleSaveThread() {
-    if (!selectedTask) return;
+    const task = threadDialogTask;
+    if (!task) return;
     if (threadForm.startDate >= threadForm.endDate) {
       toast({ title: 'Start date must be before end date', variant: 'destructive' });
       return;
@@ -368,10 +393,10 @@ export function MintProblemStatement() {
         variables: {
           id: newId,
           name: threadForm.name.trim() || null,
-          taskId: selectedTask.id,
+          taskId: task.id,
           startDate: threadForm.startDate,
           endDate: threadForm.endDate,
-          regionId: selectedTask.region_id ?? null,
+          regionId: task.region_id ?? null,
         },
       });
       // New threads need a CREATE provenance row to be visible to their
@@ -387,7 +412,9 @@ export function MintProblemStatement() {
         });
       }
       toast({ title: 'Sub-task created' });
+      setSelectedTaskId(task.id);
       setSelectedThreadId(newId);
+      setOpenOverrides((prev) => ({ ...prev, [task.id]: true }));
       setThreadDialogOpen(false);
       setThreadForm(EMPTY_THREAD_FORM);
       await refetch();
@@ -477,211 +504,233 @@ export function MintProblemStatement() {
             </p>
 
             {/* Task list */}
-            <ul className="mt-1" role="tree" aria-label="Tasks">
-              {tasks.map((task) => {
-                const isSelected = task.id === selectedTaskId;
-                const taskPerm = getUserPermission(task.permissions, task.events, user?.username);
-                const lastEvent = getLatestEvent(task.events);
+            <AccordionPrimitive.Root
+              asChild
+              type="multiple"
+              value={openTaskIds}
+              onValueChange={handleOpenTasksChange}
+            >
+              <ul className="mt-1" role="tree" aria-label="Tasks">
+                {tasks.map((task) => {
+                  const taskThreads = sortThreads(task.threads ?? []);
+                  const isSelected = task.id === selectedTaskId;
+                  const taskPerm = getUserPermission(task.permissions, task.events, user?.username);
+                  const lastEvent = getLatestEvent(task.events);
 
-                return (
-                  <li
-                    key={task.id}
-                    role="treeitem"
-                    aria-selected={isSelected}
-                    aria-expanded={isSelected}
-                  >
-                    {/* Task row */}
-                    <div
-                      className={cn(
-                        'group flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors',
-                        isSelected
-                          ? 'bg-accent font-semibold text-accent-foreground'
-                          : 'hover:bg-muted/50',
-                      )}
-                      onClick={() => {
-                        if (isSelected) {
-                          setSelectedTaskId(null);
-                          setSelectedThreadId(null);
-                        } else {
-                          setSelectedTaskId(task.id);
-                          setSelectedThreadId(null);
-                        }
-                      }}
-                    >
-                      {/* Folder icon */}
-                      <span className="mt-0.5 shrink-0 text-muted-foreground">
-                        {isSelected ? (
-                          <FolderOpen className="h-4 w-4" />
-                        ) : (
-                          <Folder className="h-4 w-4" />
-                        )}
-                      </span>
-
-                      {/* Task name + meta */}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm leading-snug">{task.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {fmtDate(task.start_date)} – {fmtDate(task.end_date)}
-                        </p>
-                        {lastEvent && (
-                          <p className="text-xs text-muted-foreground/70">
-                            {lastEvent.userid} · {fmtDateTime(lastEvent.timestamp)}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Action icons */}
-                      <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
-                        {taskPerm.write ? (
-                          <button
-                            type="button"
-                            aria-label={`Edit task ${task.name}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditTaskDialog(task);
-                            }}
-                            className="rounded p-0.5 hover:bg-muted hover:text-foreground"
+                  return (
+                    <AccordionPrimitive.Item asChild key={task.id} value={task.id}>
+                      <li
+                        role="treeitem"
+                        aria-selected={isSelected}
+                        aria-expanded={isTaskOpen(task.id)}
+                      >
+                        {/* Task row */}
+                        <div
+                          className={cn(
+                            'group flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors',
+                            isSelected
+                              ? 'bg-accent font-semibold text-accent-foreground'
+                              : 'hover:bg-muted/50',
+                          )}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedTaskId(null);
+                              setSelectedThreadId(null);
+                            } else {
+                              setSelectedTaskId(task.id);
+                              setSelectedThreadId(null);
+                              setOpenOverrides((prev) => ({ ...prev, [task.id]: true }));
+                            }
+                          }}
+                        >
+                          {/* Expand / collapse the sub-task list (does not select the task) */}
+                          <AccordionPrimitive.Trigger
+                            aria-label={`Toggle sub-tasks of ${task.name}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="group/chevron mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                        ) : (
-                          <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                        )}
-                        {taskPerm.owner && (
-                          <button
-                            type="button"
-                            aria-label={`Delete task ${task.name}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteTaskTarget(task);
-                            }}
-                            className="rounded p-0.5 hover:bg-muted hover:text-destructive"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                            <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/chevron:rotate-90 motion-reduce:transition-none" />
+                          </AccordionPrimitive.Trigger>
+                          {/* Folder icon */}
+                          <span className="mt-0.5 shrink-0 text-muted-foreground">
+                            {isSelected ? (
+                              <FolderOpen className="h-4 w-4" />
+                            ) : (
+                              <Folder className="h-4 w-4" />
+                            )}
+                          </span>
 
-                    {/* Sub-task (thread) list — expanded when task is selected */}
-                    {isSelected && (
-                      <ul className="ml-8" role="group">
-                        {threads.map((thread, i) => {
-                          const isThreadSelected = thread.id === selectedThreadId;
-                          const threadPerm = getUserPermission(
-                            thread.permissions,
-                            thread.events,
-                            user?.username,
-                          );
-                          const pname =
-                            thread.name ?? `Default sub-task ${i === 0 ? '' : i + 1}`.trim();
-                          const threadLastEvent = getLatestEvent(thread.events);
+                          {/* Task name + meta */}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm leading-snug">{task.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {fmtDate(task.start_date)} – {fmtDate(task.end_date)}
+                            </p>
+                            {lastEvent && (
+                              <p className="text-xs text-muted-foreground/70">
+                                {lastEvent.userid} · {fmtDateTime(lastEvent.timestamp)}
+                              </p>
+                            )}
+                          </div>
 
-                          return (
-                            <li
-                              key={thread.id}
-                              role="treeitem"
-                              aria-selected={isThreadSelected}
-                              className={cn(
-                                'group flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors',
-                                isThreadSelected
-                                  ? 'bg-accent/60 font-medium text-accent-foreground'
-                                  : 'hover:bg-muted/40',
-                              )}
-                              tabIndex={0}
-                              onClick={() => setSelectedThreadId(thread.id)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  setSelectedThreadId(thread.id);
-                                }
-                              }}
-                            >
-                              <span className="mt-0.5 shrink-0 text-muted-foreground">
-                                {isThreadSelected ? (
-                                  <FileText className="h-3.5 w-3.5" />
-                                ) : (
-                                  <FileText className="h-3.5 w-3.5 opacity-60" />
-                                )}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="flex items-center gap-1.5 truncate text-sm">
-                                  <StatusDot
-                                    active={threadHasModel(thread)}
-                                    title={
-                                      threadHasModel(thread) ? 'Model selected' : 'No model yet'
-                                    }
-                                  />
-                                  {pname}
-                                </p>
-                                {threadLastEvent && (
-                                  <p className="text-xs text-muted-foreground/70">
-                                    {threadLastEvent.userid} ·{' '}
-                                    {fmtDateTime(threadLastEvent.timestamp)}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
-                                {threadPerm.write ? (
-                                  <button
-                                    type="button"
-                                    aria-label={`Edit sub-task ${pname}`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openEditThreadDialog(thread);
-                                    }}
-                                    className="rounded p-0.5 hover:bg-muted"
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </button>
-                                ) : (
-                                  <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                                )}
-                                {threadPerm.owner && (
-                                  <button
-                                    type="button"
-                                    aria-label={`Delete sub-task ${pname}`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeleteThreadTarget(thread);
-                                    }}
-                                    className="rounded p-0.5 hover:bg-muted hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            </li>
-                          );
-                        })}
-
-                        {/* Create new sub-task */}
-                        {selectedTask &&
-                          getUserPermission(
-                            selectedTask.permissions,
-                            selectedTask.events,
-                            user?.username,
-                          ).write && (
-                            <li>
+                          {/* Action icons */}
+                          <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
+                            {taskPerm.write ? (
                               <button
                                 type="button"
+                                aria-label={`Edit task ${task.name}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  openAddThreadDialog();
+                                  openEditTaskDialog(task);
                                 }}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                                className="rounded p-0.5 hover:bg-muted hover:text-foreground"
                               >
-                                <FilePlus className="h-3.5 w-3.5" />
-                                Create new sub-task
+                                <Pencil className="h-3.5 w-3.5" />
                               </button>
-                            </li>
-                          )}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                            ) : (
+                              <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                            {taskPerm.owner && (
+                              <button
+                                type="button"
+                                aria-label={`Delete task ${task.name}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteTaskTarget(task);
+                                }}
+                                className="rounded p-0.5 hover:bg-muted hover:text-destructive"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Sub-task (thread) list — collapsible per task */}
+                        <AccordionPrimitive.Content
+                          asChild
+                          className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down motion-reduce:animate-none"
+                        >
+                          <ul className="ml-8" role="group">
+                            {taskThreads.length === 0 && (
+                              <li className="px-3 py-2 text-xs italic text-muted-foreground">
+                                No sub-tasks yet
+                              </li>
+                            )}
+                            {taskThreads.map((thread, i) => {
+                              const isThreadSelected = thread.id === selectedThreadId;
+                              const threadPerm = getUserPermission(
+                                thread.permissions,
+                                thread.events,
+                                user?.username,
+                              );
+                              const pname =
+                                thread.name ?? `Default sub-task ${i === 0 ? '' : i + 1}`.trim();
+                              const threadLastEvent = getLatestEvent(thread.events);
+
+                              return (
+                                <li
+                                  key={thread.id}
+                                  role="treeitem"
+                                  aria-selected={isThreadSelected}
+                                  className={cn(
+                                    'group flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors',
+                                    isThreadSelected
+                                      ? 'bg-accent/60 font-medium text-accent-foreground'
+                                      : 'hover:bg-muted/40',
+                                  )}
+                                  tabIndex={0}
+                                  onClick={() => selectThread(task, thread.id)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      selectThread(task, thread.id);
+                                    }
+                                  }}
+                                >
+                                  <span className="mt-0.5 shrink-0 text-muted-foreground">
+                                    {isThreadSelected ? (
+                                      <FileText className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <FileText className="h-3.5 w-3.5 opacity-60" />
+                                    )}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="flex items-center gap-1.5 truncate text-sm">
+                                      <StatusDot
+                                        active={threadHasModel(thread)}
+                                        title={
+                                          threadHasModel(thread) ? 'Model selected' : 'No model yet'
+                                        }
+                                      />
+                                      {pname}
+                                    </p>
+                                    {threadLastEvent && (
+                                      <p className="text-xs text-muted-foreground/70">
+                                        {threadLastEvent.userid} ·{' '}
+                                        {fmtDateTime(threadLastEvent.timestamp)}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
+                                    {threadPerm.write ? (
+                                      <button
+                                        type="button"
+                                        aria-label={`Edit sub-task ${pname}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openEditThreadDialog(task, thread);
+                                        }}
+                                        className="rounded p-0.5 hover:bg-muted"
+                                      >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                      </button>
+                                    ) : (
+                                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                                    )}
+                                    {threadPerm.owner && (
+                                      <button
+                                        type="button"
+                                        aria-label={`Delete sub-task ${pname}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeleteThreadTarget(thread);
+                                        }}
+                                        className="rounded p-0.5 hover:bg-muted hover:text-destructive"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </li>
+                              );
+                            })}
+
+                            {/* Create new sub-task */}
+                            {getUserPermission(task.permissions, task.events, user?.username)
+                              .write && (
+                              <li>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openAddThreadDialog(task);
+                                  }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                                >
+                                  <FilePlus className="h-3.5 w-3.5" />
+                                  Create new sub-task
+                                </button>
+                              </li>
+                            )}
+                          </ul>
+                        </AccordionPrimitive.Content>
+                      </li>
+                    </AccordionPrimitive.Item>
+                  );
+                })}
+              </ul>
+            </AccordionPrimitive.Root>
           </div>
 
           {/* Add new task */}
