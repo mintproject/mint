@@ -36,6 +36,7 @@ import {
 } from '@/lib/ensemble-manager';
 import { adapterParametersComplete, type ThreadAdapterPlan } from '@/lib/adapter-execution';
 import { aggregateRunStatus, stageStatusFromLegacyState } from '@/lib/modeling/run-status';
+import { flowErrorMessage, type FlowErrorMessage } from '@/lib/flow-errors';
 import { inputResourceCount } from '@/lib/thread-execution';
 import { secretErrorMessage, userParameters } from '@/lib/secret-parameters';
 import { ExecutionFilesDialog } from './ExecutionFilesDialog';
@@ -185,12 +186,18 @@ function isWorkflowSuccess(status?: string | null): boolean {
   return ['completed', 'success', 'model_succeeded'].includes(String(status ?? '').toLowerCase());
 }
 
-function workflowStageState(status?: string | null): WorkflowStageState {
+function workflowStageState(status?: string | null, isFlow = false): WorkflowStageState {
   const normalized = String(status ?? '').toLowerCase();
   if (isWorkflowFailure(normalized)) return 'failure';
   if (['succeeded', 'completed', 'success', 'model_succeeded'].includes(normalized))
     return 'success';
-  if (['running', 'submitting'].includes(normalized)) return 'running';
+  // A flow's run reads `adapter_running` while its steps work. Other runs keep
+  // their existing reading of it.
+  if (
+    ['running', 'submitting'].includes(normalized) ||
+    (isFlow && normalized === 'adapter_running')
+  )
+    return 'running';
   return 'pending';
 }
 
@@ -408,7 +415,10 @@ function WorkflowGraph({
       const providerState = modelProviderState(run);
       if (providerState) return providerState;
     }
-    return workflowStageState(stages.find((stage) => stage.stage_id === id)?.status ?? fallback);
+    return workflowStageState(
+      stages.find((stage) => stage.stage_id === id)?.status ?? fallback,
+      run.adapter_stage === 'flow',
+    );
   };
   const prePlans = adapterPlans.filter(
     (plan) =>
@@ -1013,6 +1023,8 @@ interface MintRunsProps {
   onContinue: () => void;
   onFetchRuns: (modelId: string, page: number, pageSize: number) => void;
   onSubmitRuns: (modelId: string, maxMinutes: number, publish?: PublishRequest) => Promise<void>;
+  /** Follow a flow run that is already in progress (`FLOW_ALREADY_RUNNING`). */
+  onOpenFlowRun?: (modelId: string, runId: string) => Promise<void>;
   onExecutionSummaryChanged?: (summary: ExecutionSummaryMap) => void;
   /**
    * Publish one execution. Absent means publishing is not available, and the
@@ -1046,6 +1058,7 @@ export function MintRuns({
   onContinue,
   onFetchRuns,
   onSubmitRuns,
+  onOpenFlowRun,
   onPublishExecution,
   onOutputsChanged,
   adapterPlansLoading = false,
@@ -1081,6 +1094,7 @@ export function MintRuns({
   const [waiting, setWaiting] = useState<Record<string, boolean>>({});
   const [maxMinutes, setMaxMinutes] = useState<Record<string, string>>({});
   const [runtimeErrors, setRuntimeErrors] = useState<Record<string, string>>({});
+  const [flowRefusals, setFlowRefusals] = useState<Record<string, FlowErrorMessage>>({});
   const [publishers, setPublishers] = useState<Record<string, PlanPublisher[]>>({});
   const [publishSelections, setPublishSelections] = useState<
     Record<string, PublishSelection | null>
@@ -1137,22 +1151,32 @@ export function MintRuns({
         delete next[mid];
         return next;
       });
+      setFlowRefusals((refusals) => {
+        const next = { ...refusals };
+        delete next[mid];
+        return next;
+      });
       setWaiting((w) => ({ ...w, [mid]: true }));
       try {
         const publish = publishRequestFor(publishers[mid] ?? [], publishSelections[mid]);
         if (publish) await onSubmitRuns(mid, minutes, publish);
         else await onSubmitRuns(mid, minutes);
       } catch (error) {
-        setRuntimeErrors((errors) => ({
-          ...errors,
-          [mid]:
-            secretErrorMessage(error) ?? (error instanceof Error ? error.message : String(error)),
-        }));
+        const refusal = threadData.models[mid]?.isFlow ? flowErrorMessage(error) : null;
+        if (refusal) {
+          setFlowRefusals((refusals) => ({ ...refusals, [mid]: refusal }));
+        } else {
+          setRuntimeErrors((errors) => ({
+            ...errors,
+            [mid]:
+              secretErrorMessage(error) ?? (error instanceof Error ? error.message : String(error)),
+          }));
+        }
       } finally {
         setWaiting((w) => ({ ...w, [mid]: false }));
       }
     },
-    [maxMinutes, onSubmitRuns, publishers, publishSelections],
+    [maxMinutes, onSubmitRuns, publishers, publishSelections, threadData.models],
   );
 
   const handleNextPage = useCallback(
@@ -1372,6 +1396,29 @@ export function MintRuns({
                           setPublishSelections((current) => ({ ...current, [mid]: selection }))
                         }
                       />
+                      {flowRefusals[mid] && (
+                        <div
+                          className="space-y-1 text-xs text-red-700"
+                          data-testid={`flow-refusal-${mid}`}
+                        >
+                          <p className="font-medium">{flowRefusals[mid].title}</p>
+                          <ul className="list-disc pl-4">
+                            {flowRefusals[mid].lines.map((line, index) => (
+                              <li key={index}>{line}</li>
+                            ))}
+                          </ul>
+                          {flowRefusals[mid].runId &&
+                            (onOpenFlowRun ? (
+                              <button
+                                type="button"
+                                className="text-blue-700 underline"
+                                onClick={() => void onOpenFlowRun(mid, flowRefusals[mid]!.runId!)}
+                              >
+                                Open the run in progress
+                              </button>
+                            ) : null)}
+                        </div>
+                      )}
                       {runtimeErrors[mid] && (
                         <p className="text-xs text-red-600">{runtimeErrors[mid]}</p>
                       )}

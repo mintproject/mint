@@ -140,6 +140,25 @@ export interface UnifiedParameterDefinition {
   /** Supplied by the adapter/coordinator, not entered in the Parameters step. */
   managed?: boolean;
   managed_source?: string;
+  /** `'flow'` when the default was set by the flow's author, not the catalog. */
+  default_source?: 'flow' | string;
+}
+
+/** One step of a flow, as the plan lists it. */
+export interface FlowStep {
+  step: string;
+  name?: string;
+  depends_on: string[];
+}
+
+/**
+ * What the flow's author chose, to be used with the caller's account: values
+ * for settings (`defaults`) and settings linked to another step's value
+ * (`links`). The run needs the caller's acceptance when either is present.
+ */
+export interface FlowSettings {
+  defaults?: Record<string, unknown>;
+  links?: unknown[];
 }
 
 export interface UnifiedExecutionPlan {
@@ -149,6 +168,9 @@ export interface UnifiedExecutionPlan {
   status: string;
   parameters: UnifiedParameterDefinition[];
   parameter_values: Record<string, unknown>;
+  /** Present for a flow only. */
+  flow_steps?: FlowStep[];
+  flow_settings?: FlowSettings;
   [key: string]: unknown;
 }
 
@@ -226,10 +248,12 @@ export interface UnifiedRunSnapshot {
     stage_count: number;
   };
   /** Whether the adapter runs before the model or are deferred until its output. */
-  adapter_stage?: 'none' | 'pre_model' | 'post_model' | string;
+  adapter_stage?: 'none' | 'pre_model' | 'post_model' | 'flow' | string;
   workflow_stages?: Array<{
     stage_id: string;
-    type: 'adapter_input' | 'model' | 'output_handoff' | 'adapter_output' | string;
+    type: 'adapter_input' | 'model' | 'output_handoff' | 'adapter_output' | 'flow_step' | string;
+    /** The step's name, on a `flow_step` stage. */
+    name?: string;
     depends_on: string[];
     status: string;
     provider: string;
@@ -243,6 +267,8 @@ export interface UnifiedRunSnapshot {
   model_job_id?: string | null;
   model_result?: {
     status?: string | null;
+    /** What a flow produced, by output name: usually a `tapis://` location. */
+    outputs?: Record<string, unknown>;
     [key: string]: unknown;
   } | null;
   output_handoff?: {
@@ -420,6 +446,8 @@ export function submitExecutionPlan(
     execution_id?: string;
     idempotency_key?: string;
     adapter_parameter_values?: Record<string, Record<string, unknown>>;
+    /** A flow only: the caller accepts the settings its author chose. */
+    accept_flow_settings?: boolean;
   },
 ): Promise<UnifiedRunSnapshot> {
   return unifiedRequest<UnifiedRunSnapshot>(ensembleManagerApi, '/plans/submit', 'POST', body);

@@ -39,6 +39,7 @@ const data: GetModelTreeWithRegionsQuery = {
               __typename: 'modelcatalog_configuration',
               id: 'cfg',
               label: 'PIHM Flood',
+              flow: null,
               regions: [
                 {
                   __typename: 'modelcatalog_configuration_region',

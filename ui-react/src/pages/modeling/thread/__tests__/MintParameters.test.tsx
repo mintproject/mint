@@ -554,4 +554,44 @@ describe('MintParameters', () => {
       expect.objectContaining({ parameter_values: { springflow_layer: 3 } }),
     ]);
   });
+  describe('a value with a comma', () => {
+    const dataWith = (isFlow: boolean): ThreadExecutionData => ({
+      ...mockThreadDataUnconfigured,
+      models: {
+        'model-1': {
+          ...mockThreadDataUnconfigured.models['model-1']!,
+          isFlow,
+          input_parameters: [{ id: 'param-t', name: 'title', type: 'string' }],
+        },
+      },
+    });
+    const saveWith = async (isFlow: boolean) => {
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      renderWithProviders(
+        <MintParameters
+          threadData={dataWith(isFlow)}
+          canWrite
+          canExecute
+          onSave={onSave}
+          onContinue={vi.fn()}
+        />,
+      );
+      fireEvent.change(screen.getByTestId('param-input-param-t'), {
+        target: { value: 'Maps, Charts' },
+      });
+      fireEvent.click(screen.getByTestId('parameters-save-btn'));
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+      return onSave.mock.calls[0]![0] as Record<string, { bindings: Record<string, string[]> }>;
+    };
+
+    it('stays one value for a flow', async () => {
+      const ensembles = await saveWith(true);
+      expect(ensembles['model-1']!.bindings['param-t']).toEqual(['Maps, Charts']);
+    });
+
+    it('still splits into a sweep for a model', async () => {
+      const ensembles = await saveWith(false);
+      expect(ensembles['model-1']!.bindings['param-t']).toEqual(['Maps', 'Charts']);
+    });
+  });
 });
