@@ -216,6 +216,63 @@ function threadValues(context: FlowThreadContext): Record<string, unknown> {
     return values;
 }
 
+/** A secret the flow's pieces need from the runner: names only, never a value. */
+export interface FlowRequiredSecret {
+    name: string;
+    label: string;
+    /** The field names the steps need. */
+    fields: string[];
+    /** The positions of the steps that use it. */
+    steps: number[];
+    /** Whether the runner has stored it with the adapter. */
+    stored: boolean;
+}
+
+/** What a step says it sends, and to whom, for the runner to read before running. */
+export interface FlowSendsData {
+    step: number;
+    piece: string;
+    service: string;
+    what: string;
+}
+
+/**
+ * The secrets a flow plan asks for, as the adapter planned them. The adapter holds
+ * the runner's secrets; this passes on what is needed and whether it is stored.
+ */
+function readSecrets(planJson: any): {
+    required_secrets: FlowRequiredSecret[];
+    secrets_ready: boolean;
+    sends_data_to: FlowSendsData[];
+} {
+    const listed = Array.isArray(planJson?.secrets) ? planJson.secrets : [];
+    const required_secrets: FlowRequiredSecret[] = listed
+        .filter((item: any) => item && typeof item.name === "string")
+        .map((item: any) => ({
+            name: item.name,
+            label: typeof item.label === "string" ? item.label : item.name,
+            fields: Array.isArray(item.fields) ? item.fields.map(String) : [],
+            steps: Array.isArray(item.steps) ? item.steps.map(Number) : [],
+            stored: item.stored === true
+        }));
+    const sends = Array.isArray(planJson?.sends_data_to) ? planJson.sends_data_to : [];
+    return {
+        required_secrets,
+        secrets_ready:
+            typeof planJson?.secrets_ready === "boolean"
+                ? planJson.secrets_ready
+                : required_secrets.every((item) => item.stored),
+        sends_data_to: sends
+            .filter((item: any) => item && typeof item.service === "string")
+            .map((item: any) => ({
+                step: Number(item.step),
+                piece: String(item.piece ?? ""),
+                service: item.service,
+                what: String(item.what ?? "")
+            }))
+    };
+}
+
 /**
  * Plan a flow for a thread, or return null when the thread's model is not a flow.
  *
@@ -350,6 +407,7 @@ export async function planFlow(
             ),
             links: planned.plan_json?.flow?.linked_settings || []
         },
+        ...readSecrets(planned.plan_json),
         steps: (planned.plan_json?.steps || []).map((step: any) => ({
             step: step.step,
             name: step.name,

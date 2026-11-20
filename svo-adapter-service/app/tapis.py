@@ -36,6 +36,7 @@ from typing import Any
 from .config import settings
 from .etl_contract import normalize_env_from_args
 from .run_tokens import run_token_ttl
+from . import step_secrets
 from .stored_source import allowed_args, runnable_code
 
 try:
@@ -824,7 +825,8 @@ def _function_code(step: dict[str, Any], inputs: dict[str, Any]) -> str:
         return task_code.get_code(step.get("transform_type"))
     # Every flow step, whatever it returns, reports its outputs where the adapter
     # can read them. A chain step is wrapped exactly as before.
-    return runnable_code(source, step.get("python_entrypoint"), inputs, flow_output_ids(step))
+    return runnable_code(source, step.get("python_entrypoint"), inputs, flow_output_ids(step),
+                         secret_step=int(step["step"]) if step.get("secrets") else None)
 
 
 def flow_output_ids(step: dict[str, Any]) -> dict[str, dict[str, str]] | None:
@@ -1079,6 +1081,8 @@ def _input_stage_tasks(
         for n, step in enumerate(item["steps"]):
             if step.get("tapis_app_id"):
                 raise ValueError("input steps must be hosted function pieces")
+            if step.get("secrets"):
+                step_secrets.check_supported(step, in_flow=False)
             task_id = f"in{k}-step-{n}-{step.get('transform_type') or 'transform'}"
             env_map = normalize_env_from_args(step.get("env_from_args") or {}) or {}
             if secret := sorted(set(map(str, env_map.values())) & _INPUT_SECRET_PARAMS):
@@ -1251,6 +1255,8 @@ def generate_tapis_workflow(
     for s in steps:
         task_id = f"step-{s['step']}-{(s.get('transform_type') or 'transform')}"
         app_id = s.get("tapis_app_id")
+        if s.get("secrets"):
+            step_secrets.check_supported(s, in_flow=isinstance(plan_json.get("flow"), dict))
         declared_dependencies = [int(dep) for dep in (s.get("depends_on") or [])]
         dependency_ids = [
             *gather_ids(s),
@@ -1313,6 +1319,9 @@ def generate_tapis_workflow(
                 task["execution_profile"] = {
                     "max_retries": 0, "max_exec_time": settings.stored_source_max_exec_seconds}
             env_map = normalize_env_from_args(s.get("env_from_args") or {}) or {}
+            if s.get("secrets"):
+                # Said first, whatever else is wrong with the mapping.
+                step_secrets.step_inputs_check(s, [], env_map)
             if s.get("python_source"):
                 # The piece's author chose this mapping, so stored code may only
                 # be handed the args it is allowed to see.
@@ -1386,6 +1395,11 @@ def generate_tapis_workflow(
                         "task_output": {"task_id": model_task_id, "output_id": "token"}
                     },
                 }
+            if s.get("secrets"):
+                # The destination rule is checked on what the step finally receives.
+                step_secrets.step_inputs_check(s, inputs, env_map)
+                inputs.update(step_secrets.fixed_inputs(int(s["step"])))
+                params.update(step_secrets.fixed_params(int(s["step"])))
             if inputs:
                 task["input"] = inputs
             task["code"] = _function_code(s, inputs)

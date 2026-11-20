@@ -479,6 +479,129 @@ describe("running a flow from a thread", () => {
         });
     });
 
+    describe("a runner's own secrets", () => {
+        const SECRET_PLAN = {
+            ...PLAN_JSON,
+            secrets: [
+                {
+                    name: "model_server",
+                    label: "Model server",
+                    fields: ["api_key", "chat_base_url"],
+                    steps: [1],
+                    stored: false
+                }
+            ],
+            secrets_ready: false,
+            sends_data_to: [
+                {
+                    step: 1,
+                    piece: "ingest",
+                    service: "The model server in your 'model_server' credential",
+                    what: "Passages of your documents, to embed and label them"
+                }
+            ],
+            // Ids and versions the adapter keeps for itself; never passed on.
+            secret_bindings: { model_server: { id: "secret-row-1", version: 3, owner: "alice" } }
+        };
+
+        function planWith(planJson: unknown) {
+            adapter({
+                "/data-objects": () => ({ body: { id: "do-1" } }),
+                "/plans/flow": () => ({ body: { plan_id: "adapter-plan-1", plan_json: planJson } }),
+                "/workflows/submit": () => ({ body: { run_id: "run-1", status: "running" } })
+            });
+        }
+
+        it("passes the adapter's secrets, readiness and data statement through", async () => {
+            planWith(SECRET_PLAN);
+            const plan = await service().createPlan(BODY, AUTH);
+            expect(plan.required_secrets).toEqual(SECRET_PLAN.secrets);
+            expect(plan.secrets_ready).toBe(false);
+            expect(plan.sends_data_to).toEqual(SECRET_PLAN.sends_data_to);
+            expect(plan.status).toBe("flow_ready");
+            expect(JSON.stringify(plan)).not.toContain("secret-row-1");
+        });
+
+        it("is ready once every secret is stored, and when there are none", async () => {
+            planWith({
+                ...SECRET_PLAN,
+                secrets: [{ ...SECRET_PLAN.secrets[0], stored: true }],
+                secrets_ready: true
+            });
+            const stored = await service().createPlan(BODY, AUTH);
+            expect([stored.required_secrets[0].stored, stored.secrets_ready]).toEqual([true, true]);
+
+            planWith(PLAN_JSON);
+            const none = await service().createPlan(BODY, AUTH);
+            expect([none.required_secrets, none.secrets_ready, none.sends_data_to]).toEqual([
+                [],
+                true,
+                []
+            ]);
+        });
+
+        it("keeps only the fields of the declared shape", async () => {
+            planWith({
+                ...SECRET_PLAN,
+                secrets: [{ ...SECRET_PLAN.secrets[0], value: "oops", ciphertext: "x" }]
+            });
+            const plan = await service().createPlan(BODY, AUTH);
+            expect(Object.keys(plan.required_secrets[0]).sort()).toEqual([
+                "fields",
+                "label",
+                "name",
+                "steps",
+                "stored"
+            ]);
+        });
+
+        it.each([
+            [422, { code: "FLOW_SECRET_MISSING", secrets: [{ name: "model_server", fields: ["api_key"] }] }],
+            [409, { code: "FLOW_SECRET_CHANGED", name: "model_server" }],
+            [422, { code: "SECRET_PIECE_UNSUPPORTED", step: 2, reason: "a script-style piece" }],
+            [403, { code: "SECRET_PIECE_NOT_TRUSTED", step: 2 }],
+            [422, { code: "FLOW_SECRET_INPUT_TAKEN", step: 1, input: "MODEL_API_KEY" }],
+            [503, { code: "STEP_SECRETS_NOT_CONFIGURED" }]
+        ])("passes a %s submit refusal through as it is", async (status, detail) => {
+            adapter({
+                "/data-objects": () => ({ body: { id: "do-1" } }),
+                "/plans/flow": () => ({ body: { plan_id: "adapter-plan-1", plan_json: SECRET_PLAN } }),
+                "/workflows/submit": () => ({ status, body: { detail } })
+            });
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            await expect(svc.submit({ plan_id: plan.plan_id }, AUTH)).rejects.toMatchObject({
+                statusCode: status,
+                code: detail.code,
+                details: detail
+            });
+        });
+
+        it("passes a plan refusal through as it is", async () => {
+            adapter({
+                "/data-objects": () => ({ body: { id: "do-1" } }),
+                "/plans/flow": () => ({
+                    status: 409,
+                    body: { detail: { code: "PIECE_REGISTRY_STALE", piece_id: "etl-1" } }
+                })
+            });
+            await expect(service().createPlan(BODY, AUTH)).rejects.toMatchObject({
+                statusCode: 409,
+                code: "PIECE_REGISTRY_STALE",
+                details: { code: "PIECE_REGISTRY_STALE", piece_id: "etl-1" }
+            });
+        });
+
+        it("sends no secret to the adapter at submit", async () => {
+            planWith(SECRET_PLAN);
+            const svc = service();
+            const plan = await svc.createPlan(BODY, AUTH);
+            await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            const sent = JSON.stringify(calls("/workflows/submit")[0].body);
+            expect(sent).not.toMatch(/secret|api_key|token/i);
+        });
+    });
+
     describe("submitting", () => {
         async function submit(extra: Record<string, unknown> = {}) {
             const svc = service();

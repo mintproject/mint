@@ -220,6 +220,10 @@ class TransformSpecIn(BaseModel):
     metadata: dict[str, Any] | None = None
     env_from_args: dict[str, str] | None = None
     file_inputs: list[dict[str, Any]] | None = None
+    # Secrets the piece asks the runner for, and a plain statement of where it sends
+    # data (validated where a plan reads them; see app/step_secrets.py).
+    secrets: list[dict[str, Any]] | None = None
+    sends_data_to: list[dict[str, Any]] | None = None
     contracts: list[TransformContractIn] = Field(default_factory=list)
 
 

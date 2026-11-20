@@ -25,6 +25,7 @@ from .models import (
     ReadinessStatus,
 )
 from .etl_contract import canonical_key, normalize_env_from_args
+from .step_secrets import declared_secrets, declared_sends_data_to
 from .stored_source import annotate_step, stored_entrypoint, stored_source
 
 
@@ -420,6 +421,17 @@ def _carry_stored_source(step: dict[str, Any], spec: dict[str, Any]) -> None:
             step["python_entrypoint"] = entrypoint
 
 
+def _carry_secret_declarations(step: dict[str, Any], spec: dict[str, Any]) -> None:
+    """Copy a piece's declared secrets and its statement of where it sends data onto
+    its plan step. An invalid declaration refuses the plan (fail closed)."""
+    secrets = declared_secrets(spec)
+    if secrets:
+        step["secrets"] = secrets
+    sends = declared_sends_data_to(spec)
+    if sends:
+        step["sends_data_to"] = sends
+
+
 def build_plan_json(path: list[dict[str, Any]]) -> dict[str, Any]:
     """Serialize a transform path into the stored plan_json DAG."""
     steps = []
@@ -453,6 +465,7 @@ def build_plan_json(path: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(schema, dict) and schema.get("properties"):
             step["parameters_schema_json"] = schema
         _carry_stored_source(step, spec)
+        _carry_secret_declarations(step, spec)
         steps.append(step)
     return {
         "steps": steps,
@@ -607,6 +620,7 @@ def _step_from_spec(idx: int, spec: dict[str, Any], depends_on: list[int]) -> di
     if isinstance(schema, dict) and schema.get("properties"):
         step["parameters_schema_json"] = schema
     _carry_stored_source(step, spec)
+    _carry_secret_declarations(step, spec)
     return step
 
 

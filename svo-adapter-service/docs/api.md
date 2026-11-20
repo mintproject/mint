@@ -516,6 +516,119 @@ jq -n --arg key "$MODEL_API_KEY" --arg url "https://models.example.org/v1" \
 unset MODEL_API_KEY
 ```
 
+#### Using your secrets in a flow
+
+A piece asks for the secrets it needs in its catalog row, in `runtime_json`:
+
+```json
+"secrets": [{"name": "model_server", "label": "Model server",
+             "env": {"MODEL_API_KEY": "api_key", "CHAT_BASE_URL": "chat_base_url"}}],
+"sends_data_to": [{"service": "The model server in your 'model_server' credential",
+                   "what": "Passages of your documents, to embed and label them"}]
+```
+
+- `secrets` has 1 to 16 entries. `name` is the name the runner stored the secret under
+  (`[a-z0-9_-]{1,64}`). `env` maps a **task input** (`[A-Z][A-Z0-9_]{0,63}`) to a **field**
+  of the stored secret (`[a-z0-9_]{1,32}`). A piece may declare several secrets, but one
+  task input is filled by one secret.
+- `sends_data_to` is a plain statement shown to the runner before a run: `service` up to
+  200 characters, `what` up to 300.
+- An invalid declaration is refused where a plan reads it (422
+  `SECRET_DECLARATION_INVALID`) and is not synced from the catalog.
+- **Approval covers both.** Adding or changing either on an approved piece withdraws its
+  approval (a piece that declares neither keeps an earlier approval).
+- **The destination rule.** A task input a secret fills may not also be bound to a run
+  argument (`env_from_args`), given a flow setting, linked by a flow wire, or be a
+  `SOURCE_*`, `TAPIS_*` or `SVO_*` input. Names are compared without regard to case, on
+  what the step finally receives, at `POST /flows/check` (a problem), at plan, at submit
+  and at the fetch. Refusal: 422 `FLOW_SECRET_INPUT_TAKEN` (`step`, `input`). The secret
+  carries its own destination (for example the server address), so a flow's author cannot
+  choose where a key is sent.
+- **Only a stored-source function piece with an entrypoint** can be given a secret. A
+  built-in, a script-style piece (no entrypoint function) or a piece that runs as a Tapis
+  app is refused: 422 `SECRET_PIECE_UNSUPPORTED` (`step`, `reason`).
+- **The catalog sync.** The catalog's declarations travel in the piece's copied runtime
+  (`parameters_schema_json.metadata.runtime`); a piece registered straight into the adapter
+  sends top-level `secrets` and `sends_data_to`. If the catalog row declares something
+  different from the adapter's copy, planning refuses: 409 `PIECE_REGISTRY_STALE`
+  (`piece_id`). A piece never runs without the key it declared.
+
+**Plan.** `POST /plans/flow` adds to `plan_json`:
+
+| Field | Meaning |
+|---|---|
+| `secrets` | `[{name, label, fields, steps, stored}]`: each secret the flow needs, the sorted field names the steps need, the step positions, and whether the caller has stored it (with all those fields). |
+| `secrets_ready` | `true` when every one is stored, or there are none. |
+| `sends_data_to` | `[{step, piece, service, what}]`: what each step says it sends, and to whom. |
+| `secret_bindings` | the id and version of each stored row the plan found (for the check at submit). Ids and versions only. |
+
+A flow whose secret is not stored is planned (200) with `secrets_ready: false`. No value is
+in a plan.
+
+**Submit.** `POST /workflows/submit` binds the submitter's secrets to the run (the run's
+`bound_secrets`: per step the secret ids, versions, names and env map, never a value; a
+`bound` event is recorded). Refusals:
+
+| Refusal | Status | `detail.code` |
+|---|---|---|
+| A secret is not stored, or lacks a needed field | 422 | `FLOW_SECRET_MISSING` (`secrets`: `[{name, fields}]`) |
+| The stored secret is not the one the plan found | 409 | `FLOW_SECRET_CHANGED` (`name`); plan again |
+| A secret is declared by a piece that is not an entrypoint function piece | 422 | `SECRET_PIECE_UNSUPPORTED` (`step`, `reason`) |
+| A run that binds a secret has a step whose piece is not built-in, approved as it is, or the runner's own (an opted-in unapproved piece counts) | 403 | `SECRET_PIECE_NOT_TRUSTED` (`step`) |
+| The piece declares different secrets than when the plan was made | 409 | `STEP_SECRET_DECLARATION_CHANGED` (`step`) |
+| No `SVO_ADAPTER_STEP_SECRET_KEY`, `SVO_ADAPTER_PUBLIC_URL` or encryption key | 503 | `STEP_SECRETS_NOT_CONFIGURED` |
+
+Nothing about a secret travels in `args`. `svo_run_id`, `svo_adapter_url` and
+`step_secret_token_<position>` are managed by the adapter: sending any is 422
+`FLOW_ARGUMENT_FIXED`. A dry run binds nothing and returns no credential.
+
+**The per-step fetch credential.** For each bound step the adapter makes
+`<expiry>.<hmac>`, an HMAC-SHA256 (key `SVO_ADAPTER_STEP_SECRET_KEY`) over the run id, the
+step position, the sorted ids and versions of the secrets bound to the step, and the expiry
+(the sum of the pipeline's task time limits, plus an hour). It is a pipeline argument,
+`step_secret_token_<position>`, mapped to the step's task input `SVO_STEP_SECRET_TOKEN`; no
+other step is given it. `SVO_RUN_ID` and `SVO_ADAPTER_URL` (from `SVO_ADAPTER_PUBLIC_URL`)
+are the other adapter-managed task inputs. The credential opens nothing without the
+runner's own token.
+
+**`GET /runs/{run_id}/steps/{step}/secrets`** needs `Authorization: Bearer <runner token>`
+(Tapis says whose it is; it must be the run's submitter) **and** `X-Step-Secret-Token`.
+It answers `{"inputs": {"MODEL_API_KEY": "...", ...}}` with `Cache-Control: no-store` only
+while all of this holds, and refuses otherwise with a code and nothing else:
+
+| Check | Refusal |
+|---|---|
+| configuration present | 503 `STEP_SECRETS_NOT_CONFIGURED` |
+| runner token valid and credential sent | 401 `STEP_SECRET_AUTH_REQUIRED` |
+| run exists and is the caller's (same answer for both) | 403 `STEP_SECRET_REFUSED` |
+| run is `submitting` or `running` | 409 `RUN_NOT_ACTIVE` |
+| step is bound | 404 `STEP_SECRET_NOT_BOUND` |
+| credential is for exactly this run and step, and not expired | 401 `STEP_SECRET_CREDENTIAL_REJECTED` |
+| credential not used before (once, claimed atomically) | 409 `STEP_SECRET_ALREADY_ISSUED` |
+| every piece of the run still passes the trust rule; the piece's declaration and the destination rule still hold | 403 `SECRET_PIECE_NOT_TRUSTED`, 409 `STEP_SECRET_DECLARATION_CHANGED`, 403/422 `FLOW_SECRET_INPUT_TAKEN` |
+| each secret still exists, is the submitter's, at the bound version, with the fields | 409 `SECRET_REMOVED`, `FLOW_SECRET_CHANGED`, `SECRET_FIELDS_INCOMPLETE` |
+| per-run rate limit (shared with the model task's fetch) | 429 `RUN_CREDENTIALS_RATE_LIMITED` |
+
+An `issued` event records the run, step and secret id (no value). This route never reads a
+model owner's secret, and `GET /runs/{id}/credentials` never returns a runner's own.
+
+**For piece authors.** Declare the secret and read its values from the dict your entrypoint
+receives (`inputs["MODEL_API_KEY"]`); do not take a key as a run argument. Before your
+function is called, the wrapper fetches the values with the runner's token and the step's
+credential, and fails the step with one line,
+`{"status": "error", "code": "STEP_SECRET_FETCH_FAILED", "http_status": N}`, when it cannot.
+As a best-effort guard, the wrapper replaces each fetched value found in what you print or
+return with `***`; it cannot find a value you split or transform, so never print or return a
+key. Approval is a person reading your code: send a key only to the address in the same
+secret.
+
+**Limits, plainly.** Any code running with the runner's token can act as the runner (store
+or delete secrets, start runs), which is why a run that binds a secret may hold only
+trusted pieces. Pipeline arguments, including the per-step credential and the runner's
+token, are readable through the Workflows API by whoever Tapis lets read the run; the
+credential alone opens nothing and is spent by the step's one fetch. A task's output is
+readable by the run's submitter.
+
 ### Who can read a run
 
 `GET /runs`, `GET /runs/{run_id}`, `GET /runs/{run_id}/provenance` and
