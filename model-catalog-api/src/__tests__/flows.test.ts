@@ -11,11 +11,13 @@ vi.mock('../hasura/client.js', () => ({
 import {
   custom_flows_post,
   custom_flows_id_availability_get,
+  custom_flows_id_settings_get,
   warnIfAdapterSecretMissing,
   planRegistration,
   buildRows,
   registrationMutation,
   usernameFromBearer,
+  toPgTextArray,
   FlowError,
 } from '../flows.js'
 
@@ -127,6 +129,69 @@ describe('the catalog rows for a flow', () => {
       ['start', 'string', '2024-01-01', 1],
       ['top_n', 'integer', '25', 2],
     ])
+  })
+
+  it('mirrors the pieces description of a setting and the authors fixed value onto the row', () => {
+    const body = {
+      ...BODY(),
+      settings: { top_n: { visibility: 'advanced', fixed: true }, start: { visibility: 'hidden' } },
+    }
+    const pieces = {
+      ...PIECES,
+      'p:score': {
+        ...PIECES['p:score'],
+        setting_details: {
+          top_n: { type: 'integer', default: 10, minimum: 1, maximum: 50, choices: [{ value: 5 }, { value: 'a"b' }] },
+          start: {},
+        },
+      },
+    }
+    const built = buildRows(body, planRegistration(body), pieces, 'alice')
+    const [start, top] = built.configuration.parameters.data.map((p: any) => p.parameter.data)
+    expect([top.has_fixed_value, top.has_default_value]).toEqual(['25', '25'])
+    expect([top.has_minimum_accepted_value, top.has_maximum_accepted_value]).toEqual(['1', '50'])
+    expect(top.has_accepted_values).toBe('{"5","a\\"b"}')
+    expect([start.has_fixed_value, start.has_accepted_values, start.has_minimum_accepted_value]).toEqual([null, null, null])
+    expect(built.flow.settings_json).toEqual(body.settings)
+  })
+
+  it('writes an empty settings object and no fixed value when the author chose nothing', () => {
+    const built = rows()
+    expect(built.flow.settings_json).toEqual({})
+    expect(built.configuration.parameters.data.every((p: any) => p.parameter.data.has_fixed_value === null)).toBe(true)
+  })
+
+  it('sends the authors settings to the adapter check', () => {
+    const body = { ...BODY(), settings: { top_n: { visibility: 'hidden' } } }
+    expect(planRegistration(body).check.settings).toEqual({ top_n: { visibility: 'hidden' } })
+    expect(planRegistration(BODY()).check.settings).toEqual({})
+  })
+
+  it.each([
+    [{ top_n: { visibility: 'secret' } }],
+    [{ top_n: { fixed: 'yes' } }],
+    [{ top_n: { colour: 1 } }],
+    [{ top_n: 'hidden' }],
+  ])('refuses settings that are not a visibility and a fixed flag', (settings) => {
+    expect(() => planRegistration({ ...BODY(), settings } as any)).toThrow(FlowError)
+  })
+
+  it('mirrors the pieces default into the fixed value when the author gave none', () => {
+    const body = { ...BODY(), settings: { start: { fixed: true } } }
+    const built = buildRows(body, planRegistration(body), PIECES, 'alice')
+    const [start] = built.configuration.parameters.data.map((p: any) => p.parameter.data)
+    expect(start.label).toBe('start')
+    expect([start.has_fixed_value, start.has_default_value]).toEqual(['2024-01-01', '2024-01-01'])
+  })
+
+  it('tells the check which settings the thread fills in', () => {
+    expect(planRegistration(BODY()).check.thread_settings).toEqual(['start'])
+    expect(planRegistration({ ...BODY(), thread_bindings: {} }).check.thread_settings).toEqual([])
+  })
+
+  it('writes a Postgres text array literal', () => {
+    expect(toPgTextArray(['a', 'b c'])).toBe('{"a","b c"}')
+    expect(toPgTextArray(['a', '', '  '])).toBe('{"a"}')
   })
 
   it('describes a data output from the piece and passes a value output through', () => {
@@ -439,6 +504,40 @@ describe('GET /flows/{id}/availability', () => {
     reply = makeReply()
     await custom_flows_id_availability_get(makeAvailabilityReq('dictionary'), reply)
     expect([reply._status, reply._body.code]).toEqual([502, 'FLOW_AVAILABILITY_UNAVAILABLE'])
+  })
+})
+
+describe('GET /flows/{id}/settings', () => {
+  const makeSettingsReq = (id: string, authorization: string | undefined = ALICE) =>
+    ({ params: { id }, headers: { authorization }, log: { error: vi.fn() } })
+
+  it('asks the adapter for the flow settings as the caller', async () => {
+    const answer = { flow_id: C, settings: [{ name: 'match_mode', visibility: 'shown' }], thread_bound: [] }
+    const fetchMock = adapterAnswers(answer)
+    const reply = makeReply()
+    await custom_flows_id_settings_get(makeSettingsReq('dictionary'), reply)
+    expect([reply._status, reply._body]).toEqual([200, answer])
+    const [url, request] = fetchMock.mock.calls[0]
+    expect(url).toBe(`https://adapter.example/flows/${encodeURIComponent(C)}/settings`)
+    expect(request.headers.Authorization).toBe(ALICE)
+  })
+
+  it('needs a signed-in caller, passes on a missing flow, and names its own unavailable code', async () => {
+    let fetchMock = adapterAnswers({})
+    let reply = makeReply()
+    await custom_flows_id_settings_get(makeSettingsReq('dictionary', ''), reply)
+    expect(reply._status).toBe(401)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    adapterAnswers({ detail: { code: 'FLOW_NOT_FOUND' } }, 422)
+    reply = makeReply()
+    await custom_flows_id_settings_get(makeSettingsReq('dictionary'), reply)
+    expect([reply._status, reply._body.code]).toEqual([422, 'FLOW_NOT_FOUND'])
+
+    fetchMock = adapterAnswers({}, 500)
+    reply = makeReply()
+    await custom_flows_id_settings_get(makeSettingsReq('dictionary'), reply)
+    expect([reply._status, reply._body.code]).toEqual([502, 'FLOW_SETTINGS_UNAVAILABLE'])
   })
 })
 

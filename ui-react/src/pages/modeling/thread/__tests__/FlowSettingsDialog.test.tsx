@@ -20,6 +20,26 @@ describe('FlowSettingsDialog', () => {
     );
   });
 
+  it('lists every value the author chose, hidden and fixed ones and web addresses too', () => {
+    // The plan lists the author's values whatever the form shows, so the runner reads
+    // each one before accepting. Nothing here is filtered by visibility.
+    open({
+      settings: {
+        defaults: {
+          taxonomy_uri: 'https://elsewhere.example/taxonomy.json',
+          chat_kind: 'openai_compatible',
+          max_files: 5,
+        },
+        links: [],
+      },
+    });
+    const defaults = screen.getByTestId('flow-settings-defaults');
+    expect(defaults).toHaveTextContent('taxonomy uri: https://elsewhere.example/taxonomy.json');
+    expect(defaults).toHaveTextContent('chat kind: openai_compatible');
+    expect(defaults).toHaveTextContent('max files: 5');
+    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeDisabled();
+  });
+
   it('writes a linked setting with the step names, never as JSON', () => {
     open({
       settings: {

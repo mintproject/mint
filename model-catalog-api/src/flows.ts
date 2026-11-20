@@ -135,6 +135,29 @@ export function checkPause(steps: Json[], outputs: Json[]): void {
   }
 }
 
+const VISIBILITIES = ['shown', 'advanced', 'hidden']
+
+/** A Postgres text-array literal: Hasura reads a `text[]` column from one, not from a list. */
+export function toPgTextArray(values: string[]): string {
+  return `{${values.filter((value) => value.trim() !== '').map((value) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`
+}
+
+/** The flow's own choices about each setting, `{name: {visibility, fixed}}`. The
+ *  adapter's check holds the full rule; this keeps what is written well formed. */
+function settingRules(value: unknown): Json {
+  const rules = object(value, 'settings')
+  for (const [name, rule] of Object.entries(rules)) {
+    const { visibility, fixed, ...rest } = object(rule, `settings.${name}`)
+    if (Object.keys(rest).length
+        || (visibility !== undefined && !VISIBILITIES.includes(visibility))
+        || (fixed !== undefined && typeof fixed !== 'boolean')) {
+      throw new FlowError(400, 'FLOW_REQUEST_INVALID',
+        `settings.${name} is a visibility (${VISIBILITIES.join(', ')}) and whether it is fixed`)
+    }
+  }
+  return rules
+}
+
 export interface FlowRegistration {
   softwareId: string
   versionId: string
@@ -211,6 +234,11 @@ export function planRegistration(body: Json): FlowRegistration {
       })),
       steps: checkedSteps,
       outputs: checkedOutputs,
+      settings: settingRules(body.settings),
+      // The settings the thread fills in, so the check can refuse one that is also fixed or hidden.
+      thread_settings: Object.values(object(body.thread_bindings, 'thread_bindings'))
+        .flatMap((target) => (target && typeof target === 'object' && typeof (target as Json).setting === 'string'
+          ? [(target as Json).setting as string] : [])),
     },
   }
 }
@@ -249,7 +277,10 @@ export function buildRows(body: Json, plan: FlowRegistration, pieces: Json, user
   }))
 
   // Settings are shared by name across a flow's steps. Each becomes one parameter:
-  // the flow's default where a step gives one, the piece's own otherwise.
+  // the flow's default where a step gives one, the piece's own otherwise. The piece's
+  // description of the setting (its choices and bounds) is copied onto the row, and a
+  // setting the author fixed also gets its value as the row's fixed value.
+  const rules: Json = plan.check.settings
   const settings = new Map<string, Json>()
   for (const step of plan.check.steps) {
     const piece = pieces[step.etl_process_id] ?? {}
@@ -257,14 +288,23 @@ export function buildRows(body: Json, plan: FlowRegistration, pieces: Json, user
       const details = (piece.setting_details ?? {})[name] ?? {}
       const current = settings.get(name) ?? { type: details.type ?? 'string', description: details.description ?? null }
       if (current.default === undefined && details.default !== undefined) current.default = details.default
+      if (current.choices === undefined && Array.isArray(details.choices)) {
+        current.choices = details.choices.map((choice: Json) => choice.value)
+      }
+      for (const bound of ['minimum', 'maximum']) {
+        if (current[bound] === undefined && details[bound] !== undefined) current[bound] = details[bound]
+      }
       if (name in step.settings) current.default = step.settings[name]
       settings.set(name, current)
     }
   }
+  const asText = (value: unknown): string | null =>
+    value === undefined || value === null ? null : typeof value === 'string' ? value : JSON.stringify(value)
   const parameterIds: Record<string, string> = {}
   const parameters = [...settings.keys()].sort().map((name, index) => {
     const setting = settings.get(name)!
     parameterIds[name] = `${configurationId}_setting_${name}`
+    const choices = (setting.choices ?? []).map((value: unknown) => String(value))
     return {
       parameter: {
         data: {
@@ -272,9 +312,11 @@ export function buildRows(body: Json, plan: FlowRegistration, pieces: Json, user
           label: name,
           description: setting.description,
           has_data_type: String(setting.type),
-          has_default_value: setting.default === undefined || setting.default === null
-            ? null
-            : typeof setting.default === 'string' ? setting.default : JSON.stringify(setting.default),
+          has_default_value: asText(setting.default),
+          has_fixed_value: rules[name]?.fixed === true ? asText(setting.default) : null,
+          has_accepted_values: choices.length ? toPgTextArray(choices) : null,
+          has_minimum_accepted_value: asText(setting.minimum),
+          has_maximum_accepted_value: asText(setting.maximum),
           position: index + 1,
         },
       },
@@ -355,6 +397,7 @@ export function buildRows(body: Json, plan: FlowRegistration, pieces: Json, user
       configuration_id: configurationId,
       outputs_json: outputsJson,
       thread_bindings_json: bindings,
+      settings_json: plan.check.settings,
       steps: {
         data: plan.check.steps.map((step: Json) => ({
           position: step.position,
@@ -534,12 +577,11 @@ export async function custom_flows_post(req: any, reply: any): Promise<void> {
 }
 
 /**
- * GET /flows/{id}/availability: whether the caller could run each step of a stored
- * flow. The adapter answers; this route only carries the caller's token and the
- * service secret to it. The adapter still verifies the token itself and names no
- * piece the caller cannot see, so nothing is decided here.
+ * A read of a stored flow that the adapter answers: this route only carries the
+ * caller's token and the service secret to it. The adapter still verifies the token
+ * itself and names no piece the caller cannot see, so nothing is decided here.
  */
-export async function custom_flows_id_availability_get(req: any, reply: any): Promise<void> {
+async function relayFlowRead(req: any, reply: any, what: 'availability' | 'settings', code: string): Promise<void> {
   try {
     const authorization = req.headers?.authorization as string | undefined
     if (!authorization || !usernameFromBearer(authorization)) {
@@ -550,13 +592,13 @@ export async function custom_flows_id_availability_get(req: any, reply: any): Pr
     const { base, headers } = adapterTarget(authorization)
     let response: Response
     try {
-      response = await globalThis.fetch(`${base}/flows/${encodeURIComponent(id)}/availability`, {
+      response = await globalThis.fetch(`${base}/flows/${encodeURIComponent(id)}/${what}`, {
         method: 'GET',
         headers,
         signal: AbortSignal.timeout(30_000),
       })
     } catch {
-      throw new FlowError(502, 'FLOW_AVAILABILITY_UNAVAILABLE', 'the SVO adapter could not be reached')
+      throw new FlowError(502, code, 'the SVO adapter could not be reached')
     }
     if (response.status === 401) throw new FlowError(401, 'TAPIS_AUTH_REQUIRED', 'a valid Tapis bearer token is required')
     if (response.status === 422) {
@@ -566,7 +608,7 @@ export async function custom_flows_id_availability_get(req: any, reply: any): Pr
       return
     }
     if (!response.ok) {
-      throw new FlowError(502, 'FLOW_AVAILABILITY_UNAVAILABLE', `the SVO adapter answered ${response.status}`)
+      throw new FlowError(502, code, `the SVO adapter answered ${response.status}`)
     }
     reply.code(200).send(await response.json())
   } catch (error: any) {
@@ -574,9 +616,23 @@ export async function custom_flows_id_availability_get(req: any, reply: any): Pr
       reply.code(error.status).send({ error: error.message, code: error.code, ...error.details })
       return
     }
-    req.log?.error({ err: error }, 'Flow availability failed')
-    reply.code(502).send({ error: 'The flow availability could not be read', code: 'FLOW_AVAILABILITY_UNAVAILABLE' })
+    req.log?.error({ err: error }, `Flow ${what} failed`)
+    reply.code(502).send({ error: `The flow ${what} could not be read`, code })
   }
+}
+
+/** GET /flows/{id}/availability: whether the caller could run each step of a stored flow. */
+export async function custom_flows_id_availability_get(req: any, reply: any): Promise<void> {
+  return relayFlowRead(req, reply, 'availability', 'FLOW_AVAILABILITY_UNAVAILABLE')
+}
+
+/**
+ * GET /flows/{id}/settings: a stored flow's settings as a runner meets them (title,
+ * explanation, choices, bounds, the value a run starts from, whether the author fixed
+ * it, and whether it is shown, advanced or hidden).
+ */
+export async function custom_flows_id_settings_get(req: any, reply: any): Promise<void> {
+  return relayFlowRead(req, reply, 'settings', 'FLOW_SETTINGS_UNAVAILABLE')
 }
 
 /**

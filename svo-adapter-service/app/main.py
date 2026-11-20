@@ -57,7 +57,7 @@ if not logging.getLogger().handlers:
 
 log = logging.getLogger(__name__)
 
-from . import flow_graph, flow_propose, flow_run, flow_segments, gather_fetch, input_plan, ntgam, piece_authoring, publication, qaqc, run_state, run_tokens, stac, step_secrets, stored_source, tapis
+from . import flow_graph, flow_propose, flow_run, flow_segments, flow_settings, gather_fetch, input_plan, ntgam, piece_authoring, publication, qaqc, run_state, run_tokens, stac, step_secrets, stored_source, tapis
 from . import secrets as secrets_store
 from .config import settings
 from .hasura import (
@@ -2606,6 +2606,7 @@ async def _load_flow(h: Any, configuration_id: str) -> dict[str, Any] | None:
         "parameters": [{"id": p["parameter"]["id"]} for p in row.get("parameters") or [] if p.get("parameter")],
         "outputs": row["flow"].get("outputs_json") or [],
         "thread_bindings": row["flow"].get("thread_bindings_json") or {},
+        "settings": row["flow"].get("settings_json") or {},
         "steps": [{
             "position": step.get("position"),
             "etl_process_id": step.get("etl_process_id"),
@@ -2652,9 +2653,36 @@ def _fixed_flow_args(plan_json: dict[str, Any], args: dict[str, Any]) -> list[st
     # adapter's own setting, never a value from the request.
     fixed.update({"execution_id", "source_uri", "tapis_token", "flow_staging_uri", "tapis_base_url"})
     sent = normalize_args(_wrap_args(args or {}))
+    # Compared trimmed and without case, so a variant spelling is refused as well. (The
+    # run itself reads arguments by exact name, so a variant would be unknown anyway.)
+    fixed_names = flow_settings.comparable(fixed)
     # What the adapter hands a step bound to a secret: the run, where to fetch, and
     # each step's own fetch credential.
-    return sorted(name for name in sent if name in fixed or step_secrets.is_managed_argument(str(name)))
+    return sorted(name for name in sent
+                  if flow_settings.comparable([name]) & fixed_names or step_secrets.is_managed_argument(str(name)))
+
+
+def _refused_flow_setting_args(plan_json: dict[str, Any], args: dict[str, Any]) -> dict[str, list[str]]:
+    """Settings of a flow run that the runner sent and may not: the ones the author
+    fixed and the ones the author hid. Enforced here, not only by the form, so the
+    API cannot be used to override them. The dates the thread fills in are not the
+    runner's choice and pass, even when the author hid them."""
+    if not isinstance(plan_json.get("flow"), dict):
+        return {}
+    sent = flow_settings.comparable(normalize_args(_wrap_args(args or {})))
+    thread_bound = flow_settings.comparable(
+        flow_settings.thread_bound_names((plan_json["flow"]).get("thread_bindings")))
+    refused: dict[str, list[str]] = {}
+    for reason, applies in (("fixed", lambda p: p.get("fixed") is True),
+                            ("hidden", lambda p: p.get("visibility") == "hidden")):
+        names = sorted(
+            str(parameter["name"]) for parameter in plan_json.get("parameters") or []
+            if parameter.get("name") and applies(parameter)
+            and not flow_settings.comparable([parameter["name"]]) & thread_bound
+            and flow_settings.comparable([parameter["name"]]) & sent)
+        if names:
+            refused[reason] = names
+    return refused
 
 
 def _collection_tapis_systems() -> list[str]:
@@ -2802,10 +2830,7 @@ def _piece_summary(view: dict[str, Any]) -> dict[str, Any]:
         "values": sorted(flow_graph.piece_values(view)),
         "input_contracts": contracts(flow_graph.piece_inputs(view)),
         "output_contracts": contracts(flow_graph.piece_outputs(view)),
-        "setting_details": {
-            name: {key: properties[name].get(key) for key in ("type", "default", "description")
-                   if isinstance(properties.get(name), dict) and properties[name].get(key) is not None}
-            for name in settings},
+        "setting_details": {name: flow_settings.describe(properties.get(name)) for name in settings},
     }
 
 
@@ -2857,6 +2882,8 @@ async def check_flow(body: FlowCheckIn, authorization: str | None = Header(None)
         } for step in body.steps],
         "outputs": body.outputs,
         "thread_bindings": body.thread_bindings,
+        "settings": body.settings,
+        "thread_settings": body.thread_settings,
     }, refused_settings=_refused_flow_settings())
     secret_problems = [
         problem for step in body.steps if step.etl_process_id in pieces
@@ -2986,6 +3013,41 @@ async def flow_availability(configuration_id: str, authorization: str | None = H
             "reason": reason,
         })
     return {"flow_id": configuration_id, "available": all(step["runnable"] for step in steps), "steps": steps}
+
+
+@app.get("/flows/{configuration_id:path}/settings", tags=["Core: Planning"])
+async def flow_settings_for_run(configuration_id: str, authorization: str | None = Header(None)):
+    """The settings of a stored flow as a runner meets them: the pieces' description
+    of each (title, explanation, type, choices, bounds), the value a run starts from,
+    whether the author fixed it, and whether it is shown, advanced or hidden. What a
+    run would refuse (fixed and hidden settings) is the same resolution plan and submit use.
+
+    Pieces are read with the caller's token; a piece the caller cannot see adds nothing.
+    """
+    bearer = _bearer(authorization)
+    await _require_signed_in(bearer)
+    h = get_client(bearer)
+    flow = await _load_flow(h, configuration_id)
+    if flow is None:
+        raise HTTPException(422, detail={
+            "code": "FLOW_NOT_FOUND", "flow_id": configuration_id,
+            "message": "no such flow: the configuration does not exist or is not a flow"})
+    rows = sorted((step for step in flow["steps"] if isinstance(step, dict)),
+                  key=lambda step: step.get("position") if type(step.get("position")) is int else 0)
+    pieces = await _catalog_pieces(h, [step.get("etl_process_id") for step in rows])
+    prefix = f"{configuration_id}{flow_settings.PARAMETER_MARKER}"
+    return {
+        "flow_id": configuration_id,
+        "settings": [
+            {**item, "parameter_id": f"{prefix}{item['name']}"}
+            for item in flow_settings.resolve(
+                flow.get("settings"),
+                [_piece_view(pieces[str(step["etl_process_id"])]) if str(step.get("etl_process_id")) in pieces
+                 else None for step in rows],
+                [step.get("settings") or {} for step in rows],
+                refused=_refused_flow_settings())],
+        "thread_bound": sorted(flow_settings.thread_bound_names(flow.get("thread_bindings"))),
+    }
 
 
 def _check_pause_builds(plan_json: dict[str, Any], flow_id: str) -> None:
@@ -3132,6 +3194,7 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             {key: value for key, value in output.items() if key != "editable"} if isinstance(output, dict)
             else output for output in flow["outputs"]]),
         "thread_bindings": flow["thread_bindings"],
+        "settings": flow.get("settings") or {},
     }, refused_settings=_refused_flow_settings())
     if not checked.ok:
         raise HTTPException(422, detail={
@@ -3201,6 +3264,18 @@ async def create_flow_plan(body: FlowPlanIn, authorization: str | None = Header(
             by_name[name]["default"] = value
             by_name[name]["required"] = False
             by_name[name]["default_source"] = "flow"
+    # What the author decided about each setting: who sees it, and whether it is fixed.
+    # A fixed setting runs on the author's value (or the piece's own default, when the
+    # author gave none); a runner's value for it, or for a hidden one, is refused at submit.
+    for item in flow_settings.resolve(
+            flow.get("settings"), [_piece_view(spec) if spec else None for spec in specs],
+            [step.get("settings") or {} for step in rows], refused=_refused_flow_settings()):
+        definition = by_name.get(item["name"])
+        if definition is None:
+            continue
+        definition["visibility"] = item["visibility"]
+        if item.get("fixed"):
+            definition.update({"fixed": True, "required": False, "default": item.get("default")})
     for input_id, arg in args.items():
         definition = by_name.get(arg)
         if input_id in gathers:
@@ -4406,6 +4481,14 @@ async def submit_workflow(
             "code": "FLOW_ARGUMENT_FIXED", "arguments": fixed,
             "message": "these were set when the flow was planned (its datasets and region) or belong "
                        "to the run itself; plan again to change them"})
+    refused_settings = _refused_flow_setting_args(plan.get("plan_json") or {}, body.args)
+    if refused_settings:
+        raise HTTPException(422, detail={
+            "code": "FLOW_SETTING_REFUSED", "arguments": sorted(
+                {name for names in refused_settings.values() for name in names}),
+            "fixed": refused_settings.get("fixed", []), "hidden": refused_settings.get("hidden", []),
+            "message": "the flow's author fixed or hid these settings, so a run cannot change them; "
+                       "remove them from the run"})
     unaccepted = _unaccepted_flow_settings(plan.get("plan_json") or {}, body.args)
     if (unaccepted["defaults"] or unaccepted["links"]) and not body.accept_flow_settings and not body.dry_run:
         raise HTTPException(422, detail={

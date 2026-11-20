@@ -22,6 +22,7 @@ export const FLOW_ERROR_CODES = [
   'FLOW_ALREADY_RUNNING',
   'FLOW_PLAN_NOT_YOURS',
   'FLOW_ARGUMENT_FIXED',
+  'FLOW_SETTING_REFUSED',
   'STORED_SOURCE_REFUSED',
   'FLOW_DOES_NOT_CHECK_OUT',
   'FLOW_REGION_INVALID',
@@ -302,6 +303,18 @@ export function flowErrorMessage(error: unknown): FlowErrorMessage | null {
         lines: [
           'The flow does not let a run change these settings. Plan again without them.',
           ...args,
+        ],
+      };
+    }
+    case 'FLOW_SETTING_REFUSED': {
+      const fixed = list(field(details, 'fixed')).map(text);
+      const hidden = list(field(details, 'hidden')).map(text);
+      return {
+        title: 'A setting is fixed or hidden by the flow',
+        lines: [
+          "The flow's author fixed or hid these settings, so a run cannot change them. Remove your value and run again.",
+          ...fixed.map((name) => `${name} (fixed)`),
+          ...hidden.map((name) => `${name} (hidden)`),
         ],
       };
     }

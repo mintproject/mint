@@ -155,6 +155,33 @@ approved, and the caller does not own), or `stored_source_disabled` (the deploym
 run stored code). Opting in to an unapproved piece is chosen when planning, so it is not
 counted here. An unknown or non-flow configuration answers 422 `FLOW_NOT_FOUND`.
 
+**`GET /flows/{configuration_id}/settings`** gives the settings of a stored flow as a runner
+meets them. Each entry has the piece's own description (`title`, `description`, `type`,
+`choices` as `[{"value", "title", "description"}]`, `minimum`, `maximum`, `advanced`), the
+value a run starts from (`default`: the author's fixed value, else the author's default, else
+the piece's), `fixed`, `visibility` (`shown`, `advanced` or `hidden`) and the flow parameter's
+`parameter_id`. `thread_bound` names the settings the thread fills in itself (the dates). The
+order of precedence at run time is: the author's fixed value, the runner's value, the author's
+default, the piece's default.
+
+The author's choices are kept on the flow as `settings_json`
+(`{"<setting>": {"visibility": "...", "fixed": true}}`) and sent to `POST /flows/check` as
+`settings`. The check adds `FLOW_SETTING_INVALID` (a malformed choice, or a setting no piece has),
+`FLOW_SETTING_HIDDEN_WITHOUT_VALUE` (hidden, required by the piece, and nothing gives it a
+value), `FLOW_SETTING_FIXED_WITHOUT_VALUE` (fixed to nothing), `FLOW_SETTING_LOOKS_SECRET`,
+`FLOW_THREAD_BINDING_FIXED` and `FLOW_SETTING_CONFLICT`. `setting_details` in the check's
+piece summary carries the same description keys as the settings route.
+
+**Hidden means not shown, not secret.** A hidden setting is left off the run form, but its
+value is stored with the flow and can be read by anyone who can read the flow, and the run
+dialog lists it before the runner accepts. So the check refuses (`FLOW_SETTING_LOOKS_SECRET`)
+any value, default or fixed, for a setting whose name contains `token`, `secret`, `password`,
+`api_key`/`apikey`, `authorization` or `credential` (any letter case): a piece declares a
+stored credential instead. A setting the thread fills in (the dates) cannot also be fixed or
+hidden (`FLOW_THREAD_BINDING_FIXED`; the check body's `thread_settings` names them when the
+flow is not saved yet). Pieces that share a setting name must agree on its type, choices and
+limits (`FLOW_SETTING_CONFLICT`).
+
 **`POST /plans/flow`** plans a stored flow: `{"flow_id": "<configuration id>", "inputs":
 {"<flow input id>": "<data object id>"}}`. The response is a plan like any other, to
 submit with `/workflows/submit`.
@@ -167,7 +194,9 @@ submit with `/workflows/submit`.
   region input has. The piece receives it as GeoJSON text on that input, not as a
   location. 422 `FLOW_REGION_REFUSED` for any other input, or one with a dataset.
 - A step's `settings` become the defaults of the plan's parameters. A value sent at
-  submit still wins. Steps that declare the same setting name share it.
+  submit still wins, unless the author fixed or hid the setting (the plan parameter carries
+  `fixed` or `visibility: "hidden"`; see `FLOW_SETTING_REFUSED` below). Steps that declare the
+  same setting name share it.
 - The plan records the flow under `plan_json.flow`: the configuration, the bound inputs,
   the flow's outputs, its region and date bindings, and the steps to pause after.
 
@@ -343,6 +372,12 @@ used only when the submitter says so.
 - `POST /workflows/submit` refuses a flow plan with 422 `FLOW_ARGUMENT_FIXED` when `args`
   names something the plan fixed: a dataset or region bound when the flow was planned,
   `execution_id`, `source_uri`, `flow_staging_uri` or `tapis_token`. Plan again to change a dataset.
+- `POST /workflows/submit` refuses a flow plan with 422 `FLOW_SETTING_REFUSED` when `args`
+  holds a value for a setting the author fixed or hid (`fixed` and `hidden` list which). The
+  form hides them, and this refusal means the API cannot be used around it. Names are compared
+  trimmed, without case and through the adapter's aliases, so a variant spelling is refused too
+  (the run reads arguments by exact name, so a variant would be an unknown parameter anyway).
+  Settings the thread fills in are not refused; the check keeps those from being fixed or hidden.
 
 **What a flow's author cannot do.**
 

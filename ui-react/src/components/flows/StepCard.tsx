@@ -11,6 +11,7 @@ import { Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SettingInput } from '@/components/common/SettingInput';
 import type { PieceSummary } from '@/lib/flow-authoring-api';
 import {
   EDIT_CHECKS,
@@ -20,6 +21,13 @@ import {
   type DraftStep,
   type FlowProblem,
 } from '@/lib/flow-authoring';
+import {
+  settingText,
+  settingTitle,
+  visibilityOf,
+  type SettingRule,
+  type Visibility,
+} from '@/lib/flow-settings';
 import { describeWire, parseWires, type FlowLabels } from '@/lib/flow-steps';
 
 import { ProposalList, type ProposalListProps } from './ProposalList';
@@ -45,6 +53,9 @@ export interface StepCardProps {
   onSuggestInput: (inputPosition: number) => void;
   onSuggestNext: (outputPosition: number) => void;
   onSetting: (name: string, value: string) => void;
+  /** What the author decided about each setting of the flow, by name. */
+  rules: Record<string, SettingRule>;
+  onRule: (name: string, rule: SettingRule) => void;
   onRemoveWire: (wireIndex: number) => void;
   onPause: (pause: boolean) => void;
   /** The file this step's pause makes editable, and the change of it (`null` clears). */
@@ -202,31 +213,82 @@ export function StepCard(props: StepCardProps) {
       {summary && summary.settings.length > 0 && (
         <fieldset className="mt-2">
           <legend className="text-xs font-medium text-muted-foreground">
-            Settings (the flow&apos;s defaults; a runner can change them, so the model that runs
-            this flow must accept them)
+            Settings. The value is the flow&apos;s default, which a runner can change, unless you
+            fix it. The model that runs this flow must accept a default.
           </legend>
           {summary.settings.map((name) => {
             const details = summary.setting_details[name];
             const wired = settingWired.has(name);
+            const rule = props.rules[name];
+            const fixed = rule?.fixed === true;
+            const shown = visibilityOf(rule, details);
+            const title = settingTitle(name, details);
             return (
-              <div key={name} className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-                <label className="min-w-[8rem] text-xs" htmlFor={`set-${position}-${name}`}>
-                  {name}
-                </label>
-                <Input
-                  id={`set-${position}-${name}`}
-                  className="h-8 max-w-xs"
-                  value={step.settings[name] ?? ''}
-                  disabled={wired}
-                  placeholder={
-                    details?.default !== undefined ? `default ${String(details.default)}` : ''
-                  }
-                  onChange={(event) => props.onSetting(name, event.target.value)}
-                />
-                {wired && (
-                  <span className="text-xs text-muted-foreground">
-                    linked to an earlier step; it cannot also have a default
-                  </span>
+              <div key={name} className="mt-2 text-sm" data-testid={`setting-${position}-${name}`}>
+                <div className="flex flex-wrap items-start gap-2">
+                  <label className="min-w-[8rem] pt-1 text-xs" htmlFor={`set-${position}-${name}`}>
+                    {title}
+                  </label>
+                  <div className="min-w-[10rem] max-w-xs flex-1">
+                    <SettingInput
+                      id={`set-${position}-${name}`}
+                      name={`set-${position}-${name}`}
+                      data-testid={`set-${position}-${name}`}
+                      details={details}
+                      value={step.settings[name] ?? ''}
+                      onChange={(value) => props.onSetting(name, value)}
+                      disabled={wired}
+                      unsetLabel={
+                        details?.default === undefined
+                          ? 'Not set'
+                          : `Piece default: ${settingText(details.default)}`
+                      }
+                      className="h-8"
+                    />
+                  </div>
+                  {wired ? (
+                    <span className="text-xs text-muted-foreground">
+                      linked to an earlier step; it cannot also have a default
+                    </span>
+                  ) : (
+                    <>
+                      <select
+                        className={field}
+                        aria-label={`Is the value of ${title} a default or fixed`}
+                        value={fixed ? 'fixed' : 'default'}
+                        onChange={(event) =>
+                          props.onRule(name, { ...rule, fixed: event.target.value === 'fixed' })
+                        }
+                      >
+                        <option value="default">Default: a runner can change it</option>
+                        <option value="fixed">Fixed: a runner cannot change it</option>
+                      </select>
+                      <select
+                        className={field}
+                        aria-label={`Who sees ${title}`}
+                        value={shown}
+                        onChange={(event) =>
+                          props.onRule(name, {
+                            ...rule,
+                            visibility: event.target.value as Visibility,
+                          })
+                        }
+                      >
+                        <option value="shown">Shown</option>
+                        <option value="advanced">Advanced settings</option>
+                        <option value="hidden">Hidden from runners</option>
+                      </select>
+                      {shown === 'hidden' && (
+                        <span className="text-xs text-muted-foreground">
+                          Hidden means not shown, not secret: anyone who can read this flow can see
+                          the value. Use a stored credential for anything private.
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+                {details?.description && (
+                  <p className="ml-1 mt-0.5 text-xs text-muted-foreground">{details.description}</p>
                 )}
               </div>
             );
