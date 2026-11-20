@@ -47,6 +47,8 @@ const NAV_GROUPS: NavGroup[] = [
           { href: '/models', label: 'Browse Models' },
           { href: '/models/register', label: 'Register Model Configuration' },
           { href: '/etl/register', label: 'Register ETL Process' },
+          { href: '/etl/register-piece', label: 'Register a piece from GitHub' },
+          { href: '/etl/approvals', label: 'Piece approvals' },
           { href: '/etl', label: 'Browse ETL Processes' },
           { href: '/flows/new', label: 'Build a Flow' },
         ],
@@ -190,6 +192,21 @@ function GuideLink({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+/**
+ * The one item in a section that the current address belongs to: an exact match,
+ * else the longest item whose address is a whole-segment prefix of it. So
+ * `/etl/register-piece` lights "Register a piece", not also `/etl` and `/etl/register`.
+ */
+export function activeItemHref(items: { href: string }[], currentPath: string): string | null {
+  let best: string | null = null;
+  for (const { href } of items) {
+    const matches =
+      currentPath === href || currentPath.startsWith(href.endsWith('/') ? href : `${href}/`);
+    if (matches && (best === null || href.length > best.length)) best = href;
+  }
+  return best;
+}
+
 function SectionGroup({
   section,
   collapsed,
@@ -200,7 +217,8 @@ function SectionGroup({
   currentPath: string;
 }) {
   const Icon = section.icon;
-  const isAnyChildActive = section.items?.some((item) => currentPath.startsWith(item.href));
+  const activeHref = activeItemHref(section.items ?? [], currentPath);
+  const isAnyChildActive = activeHref !== null;
 
   const [open, setOpen] = useState(isAnyChildActive ?? false);
 
@@ -250,7 +268,7 @@ function SectionGroup({
               className={cn(
                 'rounded-md px-2 py-1.5 text-sm transition-colors',
                 'hover:bg-accent hover:text-accent-foreground',
-                currentPath.startsWith(item.href)
+                item.href === activeHref
                   ? 'bg-accent/60 font-medium text-accent-foreground'
                   : 'text-muted-foreground',
               )}

@@ -364,40 +364,32 @@ while polling are retried every 15 seconds; the stage fails with
 still end the stage at once. The pipeline task's `max_exec_time` is
 `SVO_ADAPTER_MODEL_TASK_MAX_EXEC_SECONDS` (default 172800).
 
-## Demo UI (zero infra)
+## Running locally (demo mode)
 
-> The bundled console stops working for user routes when `SVO_ADAPTER_REQUIRE_FRONT_DOOR` is on; the DYNAMO UI replaces it.
+The old bundled browser console has been removed; the DYNAMO web app replaces it.
+`GET /` now returns a small JSON pointer (service name, `/docs`, `/health`).
 
-A bundled standalone single-page UI (`static/index.html`) walks the whole flow —
-register the ETL pieces, check readiness, plan, generate, and run a Tapis
-Workflows pipeline. **Demo mode** backs every Hasura call with an in-memory store
-so it runs with no Hasura/Postgres/Tapis:
+**Demo mode** backs every Hasura call with an in-memory store so the API runs with
+no Hasura/Postgres/Tapis:
 
 ```bash
 cd svo-adapter-service
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 SVO_ADAPTER_DEMO_MODE=1 uvicorn app.main:app --reload --port 8090
-# open http://localhost:8090/  -> click "Load SUBSIDE WERC pieces" -> step through 1-6
+# open http://localhost:8090/docs
 ```
 
-Click **Load SUBSIDE WERC pieces** to seed the SUBSIDE pipeline as `transform_spec`s
-(`POST /admin/seed-subside-werc`), then walk steps 1–6. "Submit run" defaults to
-**dry-run** (registers + returns the pipeline definition without triggering Tapis —
-no `workflows` grant needed). Headless equivalent: `python tests/test_demo_api.py`.
-
-Same UI, real backend: drop `SVO_ADAPTER_DEMO_MODE` and point at a live Hasura
-(the readiness/plan target can still be supplied inline via `target_contract`, so
-a populated model catalog is optional).
-
-The UI is live-only: it reads the persistent transform/data-object registry from
-Hasura and submits forecast and DFC workflows to Tapis. Start Hasura and apply the
-schema before opening `http://localhost:8000/ui/`.
+Seed the SUBSIDE pipeline as `transform_spec`s with `POST /admin/seed-subside-werc`.
+"Submit run" defaults to **dry-run** (registers + returns the pipeline definition
+without triggering Tapis; no `workflows` grant needed). Headless equivalent:
+`python tests/test_demo_api.py`. Without `SVO_ADAPTER_DEMO_MODE` the adapter reads
+the registry from a live Hasura.
 
 ## Registering reusable ETL pieces
 
-Open the **ETL Pieces** tab to register a transform through the same
-`POST /transform-specs` registry flow used by the backend. A piece may include
+Register a transform through the
+`POST /transform-specs` registry flow. A piece may include
 Python source and an entrypoint for a lightweight inline Tapis/OWE `function` task,
 or a `tapis_app_id`/version for a heavier `tapis_job`. Generated workflows can mix
 both task types. The adapter stores the definition and materializes function tasks

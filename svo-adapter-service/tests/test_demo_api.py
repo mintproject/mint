@@ -507,28 +507,15 @@ def test_local_fixture_run_poll_refreshes_completed_tapis_run(monkeypatch):
     assert body["tapis_run_id"] == "completed-tapis-run"
 
 
-def test_dfc_ui_uses_adaptive_context_selectors():
-    html = client.get("/").text
-    main_js = (ROOT / "static" / "js" / "main.js").read_text()
-    render_js = (ROOT / "static" / "js" / "components" / "render.js").read_text()
-    state_js = (ROOT / "static" / "js" / "state.js").read_text()
-
-    assert '<select id="dfcAquifer"></select>' in html
-    assert '<select id="dfcTargetYear"></select>' in html
-    assert 'id="dfcMap"' in html
-    assert 'id="dfcBoundaryUri"' in html
-    assert 'id="dfcAreaBoundaryUri"' in html
-    assert 'id="dfcGeoActorId"' in html
-    assert 'id="generateWorkflowBtn"' in html
-    assert "sourceKind: 'geotiff'" in state_js
-    assert "target.sourceKind === 'geotiff'" in main_js
-    assert 'id="submitWorkflowBtn"' in html
-    assert '<script type="module" src="/ui/js/main.js' in html
-    assert "dfcMetricTargetsForCurrentContext" in main_js
-    assert "dfc_area_boundary_uri" in main_js
-    assert 'class="metric-inspect-btn"' in render_js
-    assert 'pill-btn metric-inspect-btn' not in render_js
-    assert 'id="dfcAquifer" value=' not in html
+def test_root_returns_json_pointer_and_ui_console_is_gone():
+    root = client.get("/", follow_redirects=False)
+    assert root.status_code == 200
+    body = root.json()
+    assert body["service"] == "svo-adapter-service"
+    assert "/docs" in body["docs"]
+    assert body["health"] == "/health"
+    assert client.get("/ui/").status_code == 404
+    assert client.get("/ui/index.html").status_code == 404
 
 
 if __name__ == "__main__":

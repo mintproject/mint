@@ -510,8 +510,8 @@ the catalog API:
   each with its own per-run credential), the operator routes (their own secrets),
   the public reference reads (`/health`, `/objectives`, `/objectives/{id}`,
   `/runtime-defaults`, `/spatial/layers`, `/etl/common-variables`, `/dfc-targets`,
-  `/forecast/ntgam/options`), and the adapter console's files. The bundled `/ui/` console
-  stops working for user routes when this is on; the DYNAMO UI replaces it.
+  `/forecast/ntgam/options`), and `GET /`, `/docs` and `/openapi.json`. The old bundled
+  browser console is removed; the DYNAMO web app replaces it.
   A user's call forwarded by the Ensemble Manager (`/v1/adapter/...`, `/v1/etl-pieces/...`)
   carries the secret as `X-Front-Door-Secret`, which opens the door and nothing more: the
   route still verifies the user's token, and only `X-Ensemble-Manager-Secret` grants the

@@ -18,8 +18,8 @@ Endpoints:
   GET  /publishers                catalog_register pieces a model configuration's output can use
   POST /runs/{id}/register-output register a transformed output as a new data object
 
-A bundled standalone UI (static/index.html) is served at / and drives this flow;
-demo mode (SVO_ADAPTER_DEMO_MODE=1) backs it with an in-memory store (see store.py).
+The DYNAMO web app drives this flow; GET / returns a small JSON pointer to /docs.
+Demo mode (SVO_ADAPTER_DEMO_MODE=1) backs it with an in-memory store (see store.py).
 """
 from __future__ import annotations
 
@@ -45,8 +45,7 @@ from starlette.concurrency import run_in_threadpool
 
 from pathlib import Path
 
-from fastapi.responses import JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 # uvicorn configures only its own loggers, so without this the service's INFO
 # messages (sync counts, edge recomputes) are dropped and only warnings show.
@@ -363,7 +362,6 @@ _FRONT_DOOR_OPEN: tuple[tuple[str, str], ...] = (
     ("GET", r"/etl/common-variables"),
     ("GET", r"/dfc-targets"),
     ("GET", r"/forecast/ntgam/options"),
-    ("GET", r"/ui(/.*)?"),
     ("GET", r"/docs"),
     ("GET", r"/openapi\.json"),
 )
@@ -6424,12 +6422,11 @@ async def ntgam_run_tapis_detail(run_uuid: str, pipeline_id: str,
         raise HTTPException(502, f"could not fetch run: {exc}")
 
 
-# --- bundled standalone UI -------------------------------------------------
-# Serve the demo single-page app (static/index.html) and redirect / to it.
-_STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
-if _STATIC_DIR.is_dir():
-    app.mount("/ui", StaticFiles(directory=str(_STATIC_DIR), html=True), name="ui")
-
-    @app.get("/")
-    async def _root() -> RedirectResponse:
-        return RedirectResponse("/ui/")
+# --- service root ------------------------------------------------------------
+@app.get("/", include_in_schema=False)
+async def root() -> dict[str, Any]:
+    return {
+        "service": "svo-adapter-service",
+        "docs": "See /docs for the API reference.",
+        "health": "/health",
+    }

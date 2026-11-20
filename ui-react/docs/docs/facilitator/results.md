@@ -11,6 +11,8 @@ A run that finishes is not the same as an answer you can rely on, so review the 
 
 When an input took a **collection**, several files read together as one input, the run's record for that input shows **N files** rather than a single file name. Select it to list the files that run read. See [Run a flow](run-a-flow.md).
 
+![The Results table for a flow: download buttons for each output, and the Documents input opened to list its 3 files](../assets/images/results-collection-input.png)
+
 ## What a run keeps
 
 Each run's record shows the files it read, the settings it used, and the outputs it produced. Where a run did not save one of these, the record says *Not recorded*. Saved credentials never appear in a run's record.

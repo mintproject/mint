@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
-import { Sidebar } from '../Sidebar';
+import { Sidebar, activeItemHref } from '../Sidebar';
 
 function renderSidebar(collapsed = false, initialRoute = '/') {
   return render(
@@ -79,6 +79,45 @@ describe('Sidebar', () => {
       renderSidebar(true);
       expect(screen.queryByText('Explore')).not.toBeInTheDocument();
       expect(screen.queryByText('Decide')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('active item', () => {
+    const items = [
+      { href: '/etl/register' },
+      { href: '/etl/register-piece' },
+      { href: '/etl/approvals' },
+      { href: '/etl' },
+    ];
+
+    it('picks the one item the address belongs to, the most specific', () => {
+      expect(activeItemHref(items, '/etl/register-piece')).toBe('/etl/register-piece');
+      expect(activeItemHref(items, '/etl/register')).toBe('/etl/register');
+      expect(activeItemHref(items, '/etl/approvals/some-spec')).toBe('/etl/approvals');
+      expect(activeItemHref(items, '/etl')).toBe('/etl');
+      expect(activeItemHref(items, '/etl/some-process')).toBe('/etl');
+    });
+
+    it('matches whole path segments only, and nothing outside the section', () => {
+      expect(activeItemHref([{ href: '/etl' }], '/etlx')).toBeNull();
+      expect(activeItemHref(items, '/datasets')).toBeNull();
+    });
+
+    it('lights only the register-a-piece link on its page', async () => {
+      const user = userEvent.setup();
+      renderSidebar(false, '/etl/register-piece');
+      const models = screen.queryByRole('link', { name: 'Register a piece from GitHub' })
+        ? null
+        : screen.getByRole('button', { name: /models/i });
+      if (models) await user.click(models);
+      const piece = screen.getByRole('link', { name: 'Register a piece from GitHub' });
+      const browse = screen.getByRole('link', { name: 'Browse ETL Processes' });
+      expect(piece.className).toMatch(/font-medium/);
+      expect(browse.className).not.toMatch(/font-medium/);
+      expect(screen.getByRole('link', { name: 'Piece approvals' })).toHaveAttribute(
+        'href',
+        '/etl/approvals',
+      );
     });
   });
 });
