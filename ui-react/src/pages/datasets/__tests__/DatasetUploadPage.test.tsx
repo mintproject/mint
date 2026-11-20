@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setMintConfig } from '@/test/utils/mint-config';
 import { renderWithProviders } from '@/test/utils/render';
 
+import { gql } from '@apollo/client';
+
+import { clearLicenseCache } from '@/lib/ckan-upload';
+
 import { DatasetUploadPage } from '../DatasetUploadPage';
 
 const CKAN = 'https://ckan.example.org';
@@ -24,6 +28,74 @@ vi.mock('@/components/autocomplete/StandardVariableCombobox', () => ({
     </button>
   ),
 }));
+
+// The map is covered by its own use elsewhere; here it draws one fixed box and
+// shows what the page hands it.
+vi.mock('@/components/datasets/DatasetSpatialMap', () => ({
+  DatasetSpatialMap: ({
+    value,
+    outline,
+    onChange,
+  }: {
+    value: { xmin: number; ymin: number; xmax: number; ymax: number } | null;
+    outline?: unknown;
+    onChange: (v: { xmin: number; ymin: number; xmax: number; ymax: number } | null) => void;
+  }) => (
+    <div>
+      <button
+        type="button"
+        onClick={() => onChange({ xmin: -98.5, ymin: 29.25, xmax: -97.5, ymax: 30.5 })}
+      >
+        draw on map
+      </button>
+      <output data-testid="map-value">{JSON.stringify(value)}</output>
+      <output data-testid="map-outline">{JSON.stringify(outline ?? null)}</output>
+    </div>
+  ),
+}));
+
+// The chosen variable's units, read once it is picked.
+const unitsMock = {
+  request: {
+    query: gql`
+      query GetStandardVariableUnits($id: String!) {
+        modelcatalog_standard_variable(where: { id: { _eq: $id } }, limit: 1) {
+          id
+          variable_presentations {
+            id
+            unit {
+              id
+              label
+            }
+          }
+        }
+      }
+    `,
+    variables: { id: 'sv-1' },
+  },
+  maxUsageCount: Infinity,
+  result: {
+    data: {
+      modelcatalog_standard_variable: [
+        {
+          __typename: 'modelcatalog_standard_variable',
+          id: 'sv-1',
+          variable_presentations: [
+            {
+              __typename: 'modelcatalog_variable_presentation',
+              id: 'p1',
+              unit: { __typename: 'modelcatalog_unit', id: 'u1', label: 'mm/day' },
+            },
+          ],
+        },
+      ],
+    },
+  },
+};
+
+function renderPage() {
+  return renderWithProviders(<DatasetUploadPage />, { apolloMocks: [unitsMock] });
+}
 
 const tree = {
   modelcatalog_software: [
@@ -98,8 +170,35 @@ vi.mock('@/graphql/generated/modeling', async (importOriginal) => ({
 }));
 vi.mock('@/graphql/generated/graphql', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/graphql/generated/graphql')>()),
-  useListRegionCategoriesQuery: () => ({ data: { region_category: [] } }),
-  useListRegionsByCategoryQuery: () => ({ data: { region: [] } }),
+  useListRegionCategoriesQuery: () => ({
+    data: { region_category: [{ id: 'c1', name: 'Counties' }] },
+  }),
+  useListRegionsByCategoryQuery: () => ({
+    data: {
+      region: [
+        {
+          id: 'r1',
+          name: 'Travis',
+          geometries: [
+            {
+              geometry: {
+                type: 'Polygon',
+                coordinates: [
+                  [
+                    [-98, 30],
+                    [-97, 30],
+                    [-97, 31],
+                    [-98, 31],
+                    [-98, 30],
+                  ],
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  }),
 }));
 
 interface Sent {
@@ -109,6 +208,7 @@ let sent: Sent[] = [];
 let calls: string[] = [];
 let createStatus = 200;
 let order: string[] = [];
+let licenseCalls = 0;
 
 class FakeXhr {
   upload = { onprogress: null as null | ((e: { loaded: number }) => void) };
@@ -148,6 +248,8 @@ beforeEach(() => {
   sent = [];
   calls = [];
   order = [];
+  licenseCalls = 0;
+  clearLicenseCache();
   createStatus = 200;
   localStorage.setItem('mint.access_token', 'SECRET-USER-TOKEN');
   setMintConfig({ AUTH_PROVIDER: 'tapis', DATA_CATALOG_API: CKAN } as never);
@@ -157,6 +259,17 @@ beforeEach(() => {
     vi.fn(async (url: string, init?: RequestInit) => {
       const u = String(url);
       calls.push(u);
+      if (u.includes('license_list')) {
+        licenseCalls += 1;
+        return json({
+          success: true,
+          result: [
+            { id: 'notspecified', title: 'License not specified' },
+            { id: 'cc-by', title: 'Creative Commons Attribution' },
+            { id: 'odc-by', title: 'Open Data Commons Attribution License' },
+          ],
+        });
+      }
       if (u.includes('organization_list_for_user')) {
         return json({ success: true, result: [{ id: 'org-1', name: 'a', title: 'Org A' }] });
       }
@@ -200,10 +313,14 @@ afterEach(() => {
 });
 
 async function fill(files: File[]) {
-  renderWithProviders(<DatasetUploadPage />);
+  renderPage();
   await screen.findByRole('option', { name: 'Org A' });
   await userEvent.selectOptions(screen.getByLabelText('Organisation'), 'org-1');
   await userEvent.type(screen.getByLabelText('Title'), 'Rain 2020');
+  await userEvent.type(
+    screen.getByLabelText('Description'),
+    'Daily rain, gauge data, gaps in 2020',
+  );
   await userEvent.click(screen.getByText('pick variable'));
   fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2020-01-01' } });
   fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2020-12-31' } });
@@ -214,12 +331,13 @@ const csv = (name: string) => new File(['a,b'], name);
 
 describe('DatasetUploadPage', () => {
   it('validates the required fields and sends nothing', async () => {
-    renderWithProviders(<DatasetUploadPage />);
+    renderPage();
     await screen.findByRole('option', { name: 'Org A' });
     await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Choose at least one file.');
     expect(alert).toHaveTextContent('Enter a title.');
+    expect(alert).toHaveTextContent('Enter a description.');
     expect(alert).toHaveTextContent('Choose a standard variable.');
     expect(alert).toHaveTextContent('Enter a start and an end date.');
     expect(sent).toHaveLength(0);
@@ -227,7 +345,7 @@ describe('DatasetUploadPage', () => {
   });
 
   it('is private by default', async () => {
-    renderWithProviders(<DatasetUploadPage />);
+    renderPage();
     expect(screen.getByLabelText('Make public')).not.toBeChecked();
     expect(screen.getByText(/can only read public files/)).toBeInTheDocument();
   });
@@ -274,7 +392,7 @@ describe('DatasetUploadPage', () => {
   });
 
   it('lists the flows and models that take the variable, with the format fit', async () => {
-    renderWithProviders(<DatasetUploadPage />);
+    renderPage();
     await userEvent.click(screen.getByText('pick variable'));
     const panel = screen.getByTestId('who-can-use');
     expect(panel).toHaveTextContent('Rain flow');
@@ -287,7 +405,7 @@ describe('DatasetUploadPage', () => {
   });
 
   it('warns about mixed extensions', async () => {
-    renderWithProviders(<DatasetUploadPage />);
+    renderPage();
     await userEvent.upload(screen.getByLabelText('Choose files to upload'), [
       csv('a.csv'),
       csv('b.json'),
@@ -306,5 +424,118 @@ describe('DatasetUploadPage', () => {
     );
     expect(screen.queryByTestId('upload-success')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('SECRET-USER-TOKEN');
+  });
+
+  it('loads the license list once, defaults to CC-BY and makes a license required', async () => {
+    renderPage();
+    await screen.findByRole('option', { name: 'Open Data Commons Attribution License' });
+    const select = screen.getByLabelText('License') as HTMLSelectElement;
+    expect(select.value).toBe('cc-by');
+    expect(licenseCalls).toBe(1);
+    await userEvent.selectOptions(select, '');
+    await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a license.');
+  });
+
+  it('requires a description', async () => {
+    await fill([csv('only.csv')]);
+    await userEvent.clear(screen.getByLabelText('Description'));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter a description.');
+    expect(sent).toHaveLength(0);
+  });
+
+  it('a box drawn on the map fills the coordinates, and typing moves the map box', async () => {
+    renderPage();
+    await userEvent.click(screen.getByText('draw on map'));
+    expect(screen.getByLabelText('West')).toHaveValue('-98.5');
+    expect(screen.getByLabelText('North')).toHaveValue('30.5');
+    expect(JSON.parse(screen.getByTestId('map-value').textContent!)).toEqual({
+      xmin: -98.5,
+      ymin: 29.25,
+      xmax: -97.5,
+      ymax: 30.5,
+    });
+    fireEvent.change(screen.getByLabelText('East'), { target: { value: '-96' } });
+    expect(JSON.parse(screen.getByTestId('map-value').textContent!).xmax).toBe(-96);
+  });
+
+  it('outlines a chosen region on the map', async () => {
+    renderPage();
+    await userEvent.selectOptions(screen.getByLabelText('Spatial coverage'), 'region');
+    await userEvent.selectOptions(screen.getByLabelText('Region category'), 'c1');
+    await userEvent.selectOptions(screen.getByLabelText('Region'), 'r1');
+    expect(JSON.parse(screen.getByTestId('map-outline').textContent!)).toEqual({
+      xmin: -98,
+      ymin: 30,
+      xmax: -97,
+      ymax: 31,
+    });
+  });
+
+  it('sends the new fields to package_create and resource_create', async () => {
+    await fill([csv('a.csv'), csv('b.csv')]);
+    await userEvent.click(screen.getByText('draw on map'));
+    await userEvent.type(screen.getByLabelText('Tags'), 'rain,gauge{Enter}');
+    await userEvent.type(screen.getByLabelText(/Source or citation link/), 'https://doi.org/x');
+    await userEvent.type(screen.getByLabelText(/Version/), '2.1');
+    await userEvent.type(screen.getByLabelText(/Contact email/), 'me@example.org');
+    await userEvent.type(screen.getByLabelText(/About a\.csv/), 'Station A');
+    await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    await screen.findByTestId('upload-success');
+    const body = (calls as string[] & { body?: Record<string, unknown> }).body!;
+    expect(body['license_id']).toBe('cc-by');
+    expect(body['tag_string']).toBe('dynamo-upload,rain,gauge');
+    expect(body['url']).toBe('https://doi.org/x');
+    expect(body['version']).toBe('2.1');
+    expect(body['author']).toBe('testuser');
+    expect(body['maintainer_email']).toBe('me@example.org');
+    expect(body['notes']).toBe('Daily rain, gauge data, gaps in 2020');
+    expect(JSON.parse(String(body['spatial']))['type']).toBe('Polygon');
+    expect(sent[0]!.form.get('description')).toBe('Station A');
+    expect(sent[1]!.form.has('description')).toBe(false);
+  });
+
+  it('sends nothing for empty optional fields', async () => {
+    await fill([csv('only.csv')]);
+    await userEvent.clear(screen.getByLabelText('Author'));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    await screen.findByTestId('upload-success');
+    const body = (calls as string[] & { body?: Record<string, unknown> }).body!;
+    for (const key of ['url', 'version', 'author', 'maintainer_email', 'spatial']) {
+      expect(body).not.toHaveProperty(key);
+    }
+    expect(body['tag_string']).toBe('dynamo-upload');
+    expect(sent[0]!.form.has('description')).toBe(false);
+  });
+
+  it('shows the chosen values in the summary card', async () => {
+    await fill([csv('only.csv')]);
+    await userEvent.type(screen.getByLabelText('Tags'), 'rain{Enter}');
+    await userEvent.click(screen.getByLabelText('Make public'));
+    const card = screen.getByTestId('upload-summary');
+    expect(card).toHaveTextContent('Rain 2020');
+    expect(card).toHaveTextContent('Org A');
+    expect(card).toHaveTextContent('Public');
+    expect(card).toHaveTextContent('Creative Commons Attribution');
+    expect(card).toHaveTextContent('Daily rain, gauge data, gaps in 2020');
+    expect(card).toHaveTextContent('2020-01-01 to 2020-12-31');
+    expect(card).toHaveTextContent('only.csv (CSV; precipitation_flux)');
+    expect(card).toHaveTextContent('rain');
+  });
+
+  it('does not show the thread-input format note after an upload', async () => {
+    await fill([csv('only.csv')]);
+    await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    await screen.findByTestId('upload-success');
+    expect(document.body.textContent).not.toContain('does not declare a file format');
+  });
+
+  it('shows the chosen variable with its description and units, read-only', async () => {
+    renderPage();
+    await userEvent.click(screen.getByText('pick variable'));
+    const details = screen.getByTestId('variable-details');
+    expect(details).toHaveTextContent('precipitation_flux');
+    expect(await screen.findByText('mm/day')).toBeInTheDocument();
   });
 });
