@@ -36,7 +36,12 @@ import executionEnginesRouter from "@/api/api-v1/paths/executionEngines/tapis";
 import problemStatementsRouter from "@/api/api-v1/paths/problemStatements";
 import unifiedExecutionRouter from "@/api/api-v1/paths/unifiedExecution";
 import regionsRouter from "@/api/api-v1/paths/regions";
-import { piecesRouter, secretsRouter, spatialRouter } from "@/api/api-v1/paths/adapterFront";
+import {
+    adapterForwardRouter,
+    piecesRouter,
+    secretsRouter,
+    spatialRouter
+} from "@/api/api-v1/paths/adapterFront";
 import { warnIfAdapterSecretMissing } from "@/api/api-v1/services/adapterConfig";
 import { createAdapterFrontService } from "@/api/api-v1/services/adapterFrontService";
 import regionsService from "@/api/api-v1/services/regionsService";
@@ -87,7 +92,9 @@ try {
     const validator = OpenApiValidator.middleware({
         apiSpec: "./swagger.json",
         validateRequests: true, // (default)
-        validateResponses: true // false by default
+        validateResponses: true, // false by default
+        // The allowlisted adapter forward (paths.adapterFront): one catch-all route.
+        ignorePaths: /\/adapter(\/|$)/
     });
     app.use(validator);
 } catch (error) {
@@ -115,6 +122,7 @@ const adapterFrontService = createAdapterFrontService();
 app.use(`/${version}/spatial`, spatialRouter(adapterFrontService));
 app.use(`/${version}/secrets`, secretsRouter(adapterFrontService));
 app.use(`/${version}/etl-pieces`, piecesRouter(adapterFrontService));
+app.use(`/${version}/adapter`, adapterForwardRouter(adapterFrontService));
 const unifiedExecutionStore = createHasuraUnifiedExecutionStore();
 const unifiedExecutionService = createUnifiedExecutionService(
     {

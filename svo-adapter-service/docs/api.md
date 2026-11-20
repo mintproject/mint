@@ -483,7 +483,12 @@ the catalog API:
   each with its own per-run credential), the operator routes (their own secrets),
   the public reference reads (`/health`, `/objectives`, `/objectives/{id}`,
   `/runtime-defaults`, `/spatial/layers`, `/etl/common-variables`, `/dfc-targets`,
-  `/forecast/ntgam/options`), and the adapter console's files.
+  `/forecast/ntgam/options`), and the adapter console's files. The bundled `/ui/` console
+  stops working for user routes when this is on; the DYNAMO UI replaces it.
+  A user's call forwarded by the Ensemble Manager (`/v1/adapter/...`, `/v1/etl-pieces/...`)
+  carries the secret as `X-Front-Door-Secret`, which opens the door and nothing more: the
+  route still verifies the user's token, and only `X-Ensemble-Manager-Secret` grants the
+  Ensemble Manager's own powers (reading every run, owned model outputs, bound plans).
 - `POST /data-objects` needs a signed-in user and records them as the owner
   (`owner_username`). A data object is usable by a user, by id and in the planner's
   lists, when it is shared or they own it: `GET /data-objects`, `GET /data-objects/{id}`,

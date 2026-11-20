@@ -1,9 +1,15 @@
 import express from "express";
 import request from "supertest";
-import { piecesRouter, secretsRouter, spatialRouter } from "@/api/api-v1/paths/adapterFront";
+import {
+    adapterForwardRouter,
+    piecesRouter,
+    secretsRouter,
+    spatialRouter
+} from "@/api/api-v1/paths/adapterFront";
 import { adapterForward, createAdapterFrontService } from "./adapterFrontService";
 import { adapterRequest } from "./unifiedExecutionService";
 import { warnIfAdapterSecretMissing } from "./adapterConfig";
+import { ALLOWED_ADAPTER_ROUTES, isForwardable } from "./adapterAllowlist";
 import { UnifiedExecutionError } from "@/classes/common/errors";
 
 const mockConfig: {
@@ -27,6 +33,7 @@ function app(fake: jest.Mock, forward: jest.Mock = jest.fn()) {
     server.use("/v1/spatial", spatialRouter(service));
     server.use("/v1/secrets", secretsRouter(service));
     server.use("/v1/etl-pieces", piecesRouter(service));
+    server.use("/v1/adapter", adapterForwardRouter(service));
     return server;
 }
 
@@ -251,8 +258,10 @@ describe("adapterForward", () => {
         expect(url).toBe("https://adapter.example/pieces/approvals");
         expect(init.headers).toMatchObject({
             Authorization: BEARER,
-            "X-Ensemble-Manager-Secret": "service-only"
+            "X-Front-Door-Secret": "service-only"
         });
+        // The header that grants the EM's own powers is never sent for a user's call.
+        expect(init.headers).not.toHaveProperty("X-Ensemble-Manager-Secret");
     });
 
     it("answers 503 or 502 in the adapter's shape when it is unset or down", async () => {
@@ -263,5 +272,133 @@ describe("adapterForward", () => {
         const down = await adapterForward("/x", {}, BEARER);
         expect(down.status).toBe(502);
         expect(JSON.parse(down.body).detail.code).toBe("SVO_ADAPTER_UNREACHABLE");
+    });
+});
+
+describe("the allowlisted adapter forward", () => {
+    const answer = (status = 200, body: unknown = { ok: true }, retryAfter?: string) =>
+        jest.fn().mockResolvedValue({ status, body: JSON.stringify(body), retryAfter });
+    const send = (forward: jest.Mock) => request(app(jest.fn(), forward));
+
+    it.each([
+        ["get", "/v1/adapter/standard-variables", "GET", "/standard-variables"],
+        ["get", "/v1/adapter/reachable/do-1", "GET", "/reachable/do-1"],
+        ["post", "/v1/adapter/plans/discover", "POST", "/plans/discover"],
+        ["post", "/v1/adapter/plans/discover-sources", "POST", "/plans/discover-sources"],
+        ["post", "/v1/adapter/datasets/find", "POST", "/datasets/find"],
+        ["get", "/v1/adapter/data-objects", "GET", "/data-objects"],
+        ["get", "/v1/adapter/transform-specs", "GET", "/transform-specs"],
+        ["post", "/v1/adapter/readiness/check", "POST", "/readiness/check"],
+        ["post", "/v1/adapter/plans/model-run", "POST", "/plans/model-run"],
+        ["post", "/v1/adapter/flows/check", "POST", "/flows/check"],
+        ["post", "/v1/adapter/plans/flow", "POST", "/plans/flow"],
+        ["post", "/v1/adapter/data-objects", "POST", "/data-objects"],
+        ["post", "/v1/adapter/transform-specs/a%2Fb/test", "POST", "/transform-specs/a%2Fb/test"],
+        ["get", "/v1/adapter/runs", "GET", "/runs"],
+        ["post", "/v1/adapter/runs/r1/poll", "POST", "/runs/r1/poll"],
+        ["get", "/v1/adapter/runs/r1/provenance", "GET", "/runs/r1/provenance"],
+        ["post", "/v1/adapter/workflows/generate", "POST", "/workflows/generate"]
+    ] as const)(
+        "forwards %s %s with the caller's token",
+        async (verb, url, method, adapterPath) => {
+            const forward = answer();
+            const res = await send(forward)[verb](url).set("Authorization", BEARER).send({});
+            expect(res.status).toBe(200);
+            expect(forward.mock.calls[0][0]).toBe(adapterPath);
+            expect(forward.mock.calls[0][2]).toBe(BEARER);
+            expect(forward.mock.calls[0][1].method ?? "GET").toBe(method);
+        }
+    );
+
+    it("lists exactly the 17 routes the MCP needs", () => {
+        expect(ALLOWED_ADAPTER_ROUTES).toHaveLength(17);
+    });
+
+    it.each([
+        ["GET", "/admin/sync-status"],
+        ["POST", "/admin/reset"],
+        ["PUT", "/admin/secrets"],
+        ["POST", "/transform-specs"],
+        ["POST", "/workflows/submit"],
+        ["POST", "/plans/deferred"],
+        ["POST", "/plans/deferred/p1/bind"],
+        ["POST", "/runs/r1/register-output"],
+        ["POST", "/runs/r1/signal"],
+        ["GET", "/runs/r1/credentials"],
+        ["POST", "/runs/r1/token"],
+        ["GET", "/runs/r1/steps/1/secrets"],
+        ["GET", "/secrets"],
+        ["DELETE", "/data-objects"],
+        ["PUT", "/runs/r1/poll"],
+        ["GET", "/runs/../admin/sync-status"],
+        ["GET", "/reachable/%2e%2e"],
+        ["GET", "/runs//poll"],
+        ["GET", "/health"]
+    ])("refuses %s %s with 404 and never calls the adapter", async (method, path) => {
+        expect(isForwardable(method, path)).toBe(false);
+        const forward = answer();
+        const res = await send(forward)
+            [method.toLowerCase() as "get"](`/v1/adapter${path}`)
+            .set("Authorization", BEARER);
+        expect(res.status).toBe(404);
+        expect(forward).not.toHaveBeenCalled();
+    });
+
+    it("needs a token", async () => {
+        const forward = answer();
+        const res = await send(forward).get("/v1/adapter/runs");
+        expect(res.status).toBe(401);
+        expect(res.body.detail.code).toBe("TAPIS_AUTH_REQUIRED");
+        expect(forward).not.toHaveBeenCalled();
+    });
+
+    it("passes the query string through for GET only", async () => {
+        const forward = answer();
+        await send(forward)
+            .get("/v1/adapter/runs?limit=5&status=running&status=failed&offset=10")
+            .set("Authorization", BEARER);
+        expect(forward.mock.calls[0][0]).toBe(
+            "/runs?limit=5&status=running&status=failed&offset=10"
+        );
+        await send(forward)
+            .post("/v1/adapter/plans/discover?admin=1&x=y")
+            .set("Authorization", BEARER)
+            .send({ a: 1 });
+        expect(forward.mock.calls[1][0]).toBe("/plans/discover");
+    });
+
+    it("caps the request body", async () => {
+        const forward = answer();
+        const res = await send(forward)
+            .post("/v1/adapter/plans/discover")
+            .set("Authorization", BEARER)
+            .send({ blob: "x".repeat(80 * 1024) });
+        expect(res.status).toBe(413);
+        expect(res.body.detail.code).toBe("REQUEST_TOO_LARGE");
+        expect(forward).not.toHaveBeenCalled();
+    });
+
+    it("does not let a user set the server-owned data object fields", async () => {
+        const forward = answer();
+        for (const key of ["owner_execution_id", "owner_model_child_id", "owner_tenant"]) {
+            const res = await send(forward)
+                .post("/v1/adapter/data-objects")
+                .set("Authorization", BEARER)
+                .send({ label: "x", resource_uri: "y", [key]: "ue_1" });
+            expect(res.status).toBe(400);
+            expect(res.body.detail.code).toBe("SERVER_OWNED_FIELD");
+        }
+        expect(forward).not.toHaveBeenCalled();
+    });
+
+    it("passes the adapter's status, error body and Retry-After through", async () => {
+        const refusal = { detail: { code: "TAPIS_AUTH_REQUIRED" } };
+        const res = await send(answer(429, refusal, "9"))
+            .post("/v1/adapter/readiness/check")
+            .set("Authorization", BEARER)
+            .send({});
+        expect(res.status).toBe(429);
+        expect(res.headers["retry-after"]).toBe("9");
+        expect(res.body).toEqual(refusal);
     });
 });

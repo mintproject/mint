@@ -448,3 +448,40 @@ def test_every_route_a_task_calls_is_exempt_and_every_user_route_needs_the_secre
         assert not _front_door_open(method, path), (method, path)
         resp = client.request(method, path, headers=ALICE, json={})
         assert resp.status_code == 403 and resp.json()["detail"]["code"] == "FRONT_DOOR_REQUIRED", path
+
+
+# --- a user's call forwarded by the Ensemble Manager: the door opens, no powers ---
+
+FORWARDED = {"X-Front-Door-Secret": "service-secret"}
+
+
+def _runs():
+    for run_id, owner in (("run-a", "alice"), ("run-b", "bob")):
+        STORE.run[run_id] = {
+            "id": run_id, "status": "completed", "tapis_workflow_id": None, "tapis_run_id": None,
+            "execution_id": None, "workflow_plan_id": None, "started_at": None, "submitted_by": owner}
+
+
+def test_the_forwarded_secret_opens_the_front_door(front_door):
+    assert client.get("/data-objects", headers={**FORWARDED, **ALICE}).status_code == 200
+    assert client.get("/data-objects", headers={"X-Front-Door-Secret": "nope", **ALICE}).status_code == 403
+    assert client.get("/data-objects", headers={**FORWARDED, **ALICE, "Origin": "https://x"}).status_code == 403
+
+
+def test_the_forwarded_secret_does_not_read_every_run(front_door):
+    _runs()
+    mine = client.get("/runs", headers={**FORWARDED, **ALICE}).json()["runs"]
+    assert [run["id"] for run in mine] == ["run-a"]
+    assert client.get("/runs/run-b/provenance", headers={**FORWARDED, **ALICE}).status_code == 404
+    assert client.post("/runs/run-b/poll", headers={**FORWARDED, **ALICE}).status_code == 404
+    # The Ensemble Manager's own header keeps its read-everything scope.
+    every = client.get("/runs", headers={**SERVICE, **ALICE}).json()["runs"]
+    assert sorted(run["id"] for run in every) == ["run-a", "run-b"]
+
+
+def test_the_forwarded_secret_does_not_grant_server_owned_writes(front_door):
+    owned = {**OBJ, "owner_execution_id": "ue_1"}
+    assert client.post("/data-objects", json=owned, headers={**FORWARDED, **ALICE}).status_code == 403
+    assert client.post("/runs/r1/register-output", json={"output_data_object": OBJ},
+                       headers={**FORWARDED, **ALICE}).status_code == 403
+    assert client.post("/plans/deferred/p1/bind", json={}, headers={**FORWARDED, **ALICE}).status_code in (403, 422)

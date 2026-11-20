@@ -612,6 +612,28 @@ Steps are in "Migration order". Summary:
     the adapter without the secret; the MCP is a separate repo and moves in Step 2), and the
     adapter's own console under `/ui/` for every route except the operator and public ones.
 
+- 2026-11-20, moving the dso-dynamo MCP off direct adapter calls:
+  - **One allowlisted forward, not one EM route per call.** `/v1/adapter/{adapter path}`
+    forwards a fixed list of 17 `(method, path pattern)` pairs (the MCP's search, configure,
+    flows, authoring, monitor and run calls) with `adapterForward`: the user's token plus the
+    shared secret, and the adapter's status, body and `Retry-After` passed through. Anything
+    else answers 404. Reasons: 17 routes share one gate (the adapter checks the user's token
+    on each), and a route per call would add about 17 handlers and OpenAPI entries with no
+    rule of their own. This replaces the per-route names in the route table above for
+    these calls; the table's explicit names remain proposals for the browser.
+  - Excluded from the list: every `/admin` and operator route, the service-only routes
+    (`register-output`, the deferred bind, `/workflows/submit`), the task callbacks and the
+    secrets routes. Query strings pass only on GET. Bodies are capped at 64 KB, and the
+    server-owned data-object fields (`owner_execution_id`, `owner_model_child_id`,
+    `owner_tenant`) are refused with 400. Dot segments in an id are refused.
+  - **A forwarded call carries the secret as `X-Front-Door-Secret`, not
+    `X-Ensemble-Manager-Secret`.** The second header also makes the adapter read every
+    run and accept owned writes; through a forward that would let any user read every run.
+    The front-door guard accepts either header; only `X-Ensemble-Manager-Secret` grants
+    powers. The piece routes use the same header.
+  - The adapter's own `/ui/` console is not moved. It stops working for user routes with the
+    front door on, and the DYNAMO UI replaces it (the user's decision).
+
 ## User feedback / decisions
 
 None yet. Open questions 1 to 9 are for the user's review.
