@@ -113,7 +113,12 @@ const mockCatalogSetupWithFixed = {
     parameters: [
         { parameter: { id: "https://w3id.org/okn/i/mint/parameter1", has_fixed_value: null } },
         { parameter: { id: "https://w3id.org/okn/i/mint/parameter2", has_fixed_value: null } },
-        { parameter: { id: "https://w3id.org/okn/i/mint/parameter3", has_fixed_value: "fixed-value" } }
+        {
+            parameter: {
+                id: "https://w3id.org/okn/i/mint/parameter3",
+                has_fixed_value: "fixed-value"
+            }
+        }
     ]
 };
 
@@ -127,7 +132,12 @@ describe("useModelParameterService", () => {
         (convertApiUrlToW3Id as jest.Mock).mockReturnValue(modelW3Id);
         (GraphQL.instance as jest.Mock).mockReturnValue(mockApolloClient);
         (GraphQL.instanceUsingAccessToken as jest.Mock).mockReturnValue(mockApolloClient);
-        (KeycloakAdapter.getUser as jest.Mock).mockReturnValue({ email: "test@test.com", uid: "1", region: "", graph: "" });
+        (KeycloakAdapter.getUser as jest.Mock).mockReturnValue({
+            email: "test@test.com",
+            uid: "1",
+            region: "",
+            graph: ""
+        });
     });
 
     it("should check if parameter has fixed value", () => {
@@ -135,7 +145,9 @@ describe("useModelParameterService", () => {
         const parameterWithoutFixed = { id: "test", has_fixed_value: null };
 
         expect(useModelParameterService.hasParameterHasFixedValue(parameterWithFixed)).toBe(true);
-        expect(useModelParameterService.hasParameterHasFixedValue(parameterWithoutFixed)).toBe(false);
+        expect(useModelParameterService.hasParameterHasFixedValue(parameterWithoutFixed)).toBe(
+            false
+        );
     });
 
     it("should get model parameters excluding fixed values", async () => {
@@ -158,8 +170,9 @@ describe("useModelParameterService", () => {
     });
 
     it("should get model parameters by model id", async () => {
-        mockApolloClient.query
-            .mockResolvedValueOnce({ data: { modelcatalog_configuration_by_pk: mockCatalogSetup } });
+        mockApolloClient.query.mockResolvedValueOnce({
+            data: { modelcatalog_configuration_by_pk: mockCatalogSetup }
+        });
 
         const parameters = await useModelParameterService.getModelParametersByModelId(
             bindingRequest.model_id
@@ -172,8 +185,9 @@ describe("useModelParameterService", () => {
     });
 
     it("should throw NotFoundError when model is not found", async () => {
-        mockApolloClient.query
-            .mockResolvedValueOnce({ data: { modelcatalog_configuration_by_pk: null } });
+        mockApolloClient.query.mockResolvedValueOnce({
+            data: { modelcatalog_configuration_by_pk: null }
+        });
 
         await expect(
             useModelParameterService.getModelParametersByModelId("invalid-id")
@@ -190,7 +204,11 @@ describe("useModelParameterService", () => {
         };
 
         const subtaskCopy = JSON.parse(JSON.stringify(subtask));
-        await useModelParameterService.matchParameters(modelWithParams, bindingRequest, subtaskCopy);
+        await useModelParameterService.matchParameters(
+            modelWithParams,
+            bindingRequest,
+            subtaskCopy
+        );
 
         expect(
             subtaskCopy.model_ensembles[modelW3Id].bindings[
@@ -225,8 +243,9 @@ describe("useModelParameterService", () => {
     });
 
     it("should set parameter bindings successfully", async () => {
-        mockApolloClient.query
-            .mockResolvedValueOnce({ data: { modelcatalog_configuration_by_pk: mockCatalogSetup } });
+        mockApolloClient.query.mockResolvedValueOnce({
+            data: { modelcatalog_configuration_by_pk: mockCatalogSetup }
+        });
 
         const subtaskCopy = JSON.parse(JSON.stringify(subtask));
         await useModelParameterService.setParameterBindings(bindingRequest, subtaskCopy);

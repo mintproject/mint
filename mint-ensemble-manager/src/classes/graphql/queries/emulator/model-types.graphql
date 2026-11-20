@@ -1,22 +1,17 @@
 query model_types($regionId: String!) {
-  execution(where:{
-    thread_model_executions: {
-      thread_model: {
-        thread: {
-          task: {
-            problem_statement: {
-              region_id: { _eq: $regionId}
+    execution(
+        where: {
+            thread_model_executions: {
+                thread_model: {
+                    thread: { task: { problem_statement: { region_id: { _eq: $regionId } } } }
+                }
             }
-          }
         }
-      }
+        distinct_on: modelcatalog_configuration_id
+    ) {
+        modelcatalog_configuration {
+            id
+            label
+        }
     }
-  }
-    distinct_on: modelcatalog_configuration_id
-  ) {
-		modelcatalog_configuration {
-      id
-      label
-    }
-  }
 }

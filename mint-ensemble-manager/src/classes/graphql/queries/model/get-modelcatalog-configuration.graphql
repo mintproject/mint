@@ -1,50 +1,50 @@
 query get_modelcatalog_configuration($id: String!) {
-  modelcatalog_configuration_by_pk(id: $id) {
-    id
-    label
-    description
-    has_component_location
-    has_software_image
-    model_configuration_id
-    parameters {
-      parameter {
+    modelcatalog_configuration_by_pk(id: $id) {
         id
         label
         description
-        has_default_value
-        has_fixed_value
-        has_minimum_accepted_value
-        has_maximum_accepted_value
-        parameter_type
-        position
-        has_accepted_values
-        has_data_type
-      }
-    }
-    inputs {
-      is_optional
-      input {
-        id
-        label
-        has_format
-        position
-        description
-        presentations {
-          presentation {
-            id
-            has_standard_variable
-          }
+        has_component_location
+        has_software_image
+        model_configuration_id
+        parameters {
+            parameter {
+                id
+                label
+                description
+                has_default_value
+                has_fixed_value
+                has_minimum_accepted_value
+                has_maximum_accepted_value
+                parameter_type
+                position
+                has_accepted_values
+                has_data_type
+            }
         }
-      }
+        inputs {
+            is_optional
+            input {
+                id
+                label
+                has_format
+                position
+                description
+                presentations {
+                    presentation {
+                        id
+                        has_standard_variable
+                    }
+                }
+            }
+        }
+        outputs {
+            output {
+                id
+                label
+                has_format
+                position
+                description
+            }
+        }
     }
-    outputs {
-      output {
-        id
-        label
-        has_format
-        position
-        description
-      }
-    }
-  }
 }

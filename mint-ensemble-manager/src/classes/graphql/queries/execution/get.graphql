@@ -1,6 +1,6 @@
 #import "../fragments/execution-info.graphql"
 query query_execution($id: uuid!) {
-    execution_by_pk(id:$id) {
+    execution_by_pk(id: $id) {
         ...execution_info
     }
 }

@@ -1,18 +1,18 @@
-mutation delete_executions ($ids: [uuid!]!) {
+mutation delete_executions($ids: [uuid!]!) {
     # Delete existing executions with the same ids
-    delete_execution_result(where: {execution_id: {_in: $ids}}) {
+    delete_execution_result(where: { execution_id: { _in: $ids } }) {
         affected_rows
     }
-    delete_execution_data_binding(where: {execution_id: {_in: $ids}}) {
+    delete_execution_data_binding(where: { execution_id: { _in: $ids } }) {
         affected_rows
     }
-    delete_execution_parameter_binding(where: {execution_id: {_in: $ids}}) {
+    delete_execution_parameter_binding(where: { execution_id: { _in: $ids } }) {
         affected_rows
     }
-    delete_thread_model_execution(where: {execution_id: {_in: $ids}}) {
+    delete_thread_model_execution(where: { execution_id: { _in: $ids } }) {
         affected_rows
     }
-    delete_execution(where: {id: {_in: $ids}}) {
+    delete_execution(where: { id: { _in: $ids } }) {
         affected_rows
     }
 }

@@ -89,9 +89,8 @@ export class ExecutionCreation {
     }
 
     public async prepareModelExecutions(modelid: string): Promise<boolean> {
-        const { modelEnsembleId, configs, inputIds } = await this.resolveModelConfigurations(
-            modelid
-        );
+        const { modelEnsembleId, configs, inputIds } =
+            await this.resolveModelConfigurations(modelid);
         if (configs !== null) {
             await this.createThreadModelExecutionSummary(configs, modelEnsembleId);
             await deleteThreadModelExecutionIds(modelEnsembleId);

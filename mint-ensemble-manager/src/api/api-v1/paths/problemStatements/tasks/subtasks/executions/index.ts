@@ -125,10 +125,7 @@ export const executionsRouter = (): Router => {
                                 // Add parameter bindings
                                 if (threadModel.parameter_bindings) {
                                     for (const binding of threadModel.parameter_bindings) {
-                                        if (
-                                            binding.model_parameter_id &&
-                                            binding.parameter_value
-                                        ) {
+                                        if (binding.model_parameter_id && binding.parameter_value) {
                                             bindings[binding.model_parameter_id] =
                                                 binding.parameter_value;
                                         }
@@ -138,7 +135,9 @@ export const executionsRouter = (): Router => {
                                 const execution: Execution = {
                                     id: graphqlExecution.id,
                                     modelid:
-                                        threadModel.modelcatalog_configuration?.id || graphqlExecution.modelcatalog_configuration_id || "",
+                                        threadModel.modelcatalog_configuration?.id ||
+                                        graphqlExecution.modelcatalog_configuration_id ||
+                                        "",
                                     bindings: bindings,
                                     runid: graphqlExecution.run_id || graphqlExecution.id,
                                     start_time: graphqlExecution.start_time
@@ -148,15 +147,9 @@ export const executionsRouter = (): Router => {
                                         ? new Date(graphqlExecution.end_time)
                                         : undefined,
                                     execution_engine: graphqlExecution.execution_engine as
-                                        | "wings"
-                                        | "localex"
-                                        | "tapis"
-                                        | undefined,
+                                        "wings" | "localex" | "tapis" | undefined,
                                     status: (graphqlExecution.status || "WAITING") as
-                                        | "FAILURE"
-                                        | "SUCCESS"
-                                        | "RUNNING"
-                                        | "WAITING",
+                                        "FAILURE" | "SUCCESS" | "RUNNING" | "WAITING",
                                     run_progress: Number(graphqlExecution.run_progress) || 0,
                                     results: graphqlExecution.results || [],
                                     selected: false

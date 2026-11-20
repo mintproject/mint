@@ -28,13 +28,15 @@ describe("TACC_CKAN_DataCatalog temporal coverage", () => {
             id: "dataset-id",
             name: "dataset",
             title: "Dataset",
-            extras: [{
-                key: "temporal_coverage",
-                value: JSON.stringify({
-                    start_time: "1980-01-01T00:00:00",
-                    end_time: "2012-12-31T00:00:00"
-                })
-            }],
+            extras: [
+                {
+                    key: "temporal_coverage",
+                    value: JSON.stringify({
+                        start_time: "1980-01-01T00:00:00",
+                        end_time: "2012-12-31T00:00:00"
+                    })
+                }
+            ],
             resources: []
         });
 
@@ -46,7 +48,14 @@ describe("TACC_CKAN_DataCatalog temporal coverage", () => {
         const catalog = new TACC_CKAN_DataCatalog(preferences) as any;
         const spatial = JSON.stringify({
             type: "Polygon",
-            coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]]
+            coordinates: [
+                [
+                    [0, 0],
+                    [1, 0],
+                    [1, 1],
+                    [0, 0]
+                ]
+            ]
         });
         const dataset = catalog.transformCKANPackage({
             id: "dataset-id",

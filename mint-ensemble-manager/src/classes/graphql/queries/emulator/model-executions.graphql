@@ -1,81 +1,73 @@
 query model_executions($modelTypes: [String!], $regionId: String!) {
-  execution(
-    where: {
-      thread_model_executions: {
-        thread_model: {
-          thread: {
-            task: {
-              problem_statement: {
-                region_id: { _eq: $regionId }
-              }
-            }
-          }
-        }
-      }
-      modelcatalog_configuration: {
-        label: { _in: $modelTypes }
-      }
-    }
-    distinct_on: modelcatalog_configuration_id
-  ) {
-    modelcatalog_configuration {
-      id
-      label
-      description
-      has_software_image
-      has_component_location
-    }
-    thread_model_executions {
-      thread_model {
-        thread {
-          id
-          name
-          start_date
-          end_date
-          task {
-            id
-            name
-            region {
-              name
-            }
-            problem_statement {
-              id
-              name
-              region {
-                name
-              }
-            }
-          }
-        }
-        executions_aggregate {
-          aggregate {
-            count
-          }
-        }
-        parameter_bindings_aggregate {
-          nodes {
-            modelcatalog_parameter {
-              label
-            }
-            parameter_value
-          }
-        }
-        data_bindings_aggregate {
-          nodes {
-            dataslice {
-              resources(where: { selected: { _eq: true } }) {
-                resource {
-                  name
-                  url
+    execution(
+        where: {
+            thread_model_executions: {
+                thread_model: {
+                    thread: { task: { problem_statement: { region_id: { _eq: $regionId } } } }
                 }
-              }
             }
-            model_io: modelcatalog_dataset_specification {
-              name: label
-            }
-          }
+            modelcatalog_configuration: { label: { _in: $modelTypes } }
         }
-      }
+        distinct_on: modelcatalog_configuration_id
+    ) {
+        modelcatalog_configuration {
+            id
+            label
+            description
+            has_software_image
+            has_component_location
+        }
+        thread_model_executions {
+            thread_model {
+                thread {
+                    id
+                    name
+                    start_date
+                    end_date
+                    task {
+                        id
+                        name
+                        region {
+                            name
+                        }
+                        problem_statement {
+                            id
+                            name
+                            region {
+                                name
+                            }
+                        }
+                    }
+                }
+                executions_aggregate {
+                    aggregate {
+                        count
+                    }
+                }
+                parameter_bindings_aggregate {
+                    nodes {
+                        modelcatalog_parameter {
+                            label
+                        }
+                        parameter_value
+                    }
+                }
+                data_bindings_aggregate {
+                    nodes {
+                        dataslice {
+                            resources(where: { selected: { _eq: true } }) {
+                                resource {
+                                    name
+                                    url
+                                }
+                            }
+                        }
+                        model_io: modelcatalog_dataset_specification {
+                            name: label
+                        }
+                    }
+                }
+            }
+        }
     }
-  }
 }

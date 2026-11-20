@@ -233,7 +233,9 @@ export class TACC_CKAN_DataCatalog implements IDataCatalog {
         // supported for older datasets during the catalog migration.
         if (pkg.temporal_coverage_start || pkg.temporal_coverage_end) {
             return {
-                start_date: pkg.temporal_coverage_start ? new Date(pkg.temporal_coverage_start) : null,
+                start_date: pkg.temporal_coverage_start
+                    ? new Date(pkg.temporal_coverage_start)
+                    : null,
                 end_date: pkg.temporal_coverage_end ? new Date(pkg.temporal_coverage_end) : null
             };
         }

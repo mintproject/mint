@@ -1,11 +1,11 @@
-mutation update_execution_summary($threadModelId:uuid!, 
-  $summary:thread_model_execution_summary_set_input!) {
+mutation update_execution_summary(
+    $threadModelId: uuid!
+    $summary: thread_model_execution_summary_set_input!
+) {
     update_thread_model_execution_summary_by_pk(
-      pk_columns:{
-        thread_model_id:$threadModelId
-      },
-      _set:$summary
+        pk_columns: { thread_model_id: $threadModelId }
+        _set: $summary
     ) {
-      thread_model_id
+        thread_model_id
     }
 }

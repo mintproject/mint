@@ -1,7 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 import { WriteStream } from "fs";
-import * as stream from 'stream';
-
+import * as stream from "stream";
 
 const kc = new k8s.KubeConfig();
 
@@ -15,29 +14,27 @@ const k8sLogApi = new k8s.Log(kc);
 async function get_ensemble_manager_node_name(namespace) {
     try {
         let em_podname = null;
-        if(process.env.POD_NAME) {
-            em_podname = process.env.POD_NAME
-        }
-        else {
-            let pods = await k8sApi.listNamespacedPod(namespace)
-            for(let i in pods.body.items) {
-                let pod = pods.body.items[i]
-                let podname = pod.metadata.name
-                if(podname.match("ensemble-manager")) {
-                    em_podname = podname
+        if (process.env.POD_NAME) {
+            em_podname = process.env.POD_NAME;
+        } else {
+            let pods = await k8sApi.listNamespacedPod(namespace);
+            for (let i in pods.body.items) {
+                let pod = pods.body.items[i];
+                let podname = pod.metadata.name;
+                if (podname.match("ensemble-manager")) {
+                    em_podname = podname;
                 }
             }
         }
-        if(em_podname != null) {
+        if (em_podname != null) {
             const res = await k8sApi.readNamespacedPod(em_podname, namespace);
             return res.body.spec.nodeName;
-        }
-        else {
-            console.error('Cannot get ensemble manager pod');
+        } else {
+            console.error("Cannot get ensemble manager pod");
             return null;
         }
     } catch (err) {
-        console.error('Error fetching pod info:', err);
+        console.error("Error fetching pod info:", err);
         return null;
     }
 }
@@ -49,62 +46,68 @@ function add_node_affinity(jobSpec, node_name) {
 
     jobSpec.spec.template.spec.affinity.nodeAffinity = {
         requiredDuringSchedulingIgnoredDuringExecution: {
-            nodeSelectorTerms: [{
-                matchExpressions: [{
-                    key: 'kubernetes.io/hostname',
-                    operator: 'In',
-                    values: [node_name]
-                }]
-            }]
+            nodeSelectorTerms: [
+                {
+                    matchExpressions: [
+                        {
+                            key: "kubernetes.io/hostname",
+                            operator: "In",
+                            values: [node_name]
+                        }
+                    ]
+                }
+            ]
         }
     };
     return jobSpec;
 }
 
-async function get_volumes_and_mounts(namespace, jobname, mountPath=null): Promise<[Array<k8s.V1Volume>, Array<k8s.V1VolumeMount>]> {
-    let volumes = []
-    let mounts = []
-    
-    let ensemble_manager_pvc_name = "mint-ensemble-manager"
-    let ensemble_manager_pvc_mount = "/home/node/app/data"
-    if(mountPath) {
-        ensemble_manager_pvc_mount = mountPath
-    }
-    else if(process.env.ENSEMBLE_MANAGER_PVC_MOUNT) {
-        ensemble_manager_pvc_mount = process.env.ENSEMBLE_MANAGER_PVC_MOUNT
+async function get_volumes_and_mounts(
+    namespace,
+    jobname,
+    mountPath = null
+): Promise<[Array<k8s.V1Volume>, Array<k8s.V1VolumeMount>]> {
+    let volumes = [];
+    let mounts = [];
+
+    let ensemble_manager_pvc_name = "mint-ensemble-manager";
+    let ensemble_manager_pvc_mount = "/home/node/app/data";
+    if (mountPath) {
+        ensemble_manager_pvc_mount = mountPath;
+    } else if (process.env.ENSEMBLE_MANAGER_PVC_MOUNT) {
+        ensemble_manager_pvc_mount = process.env.ENSEMBLE_MANAGER_PVC_MOUNT;
     }
 
-    if(process.env.ENSEMBLE_MANAGER_PVC) {
-        ensemble_manager_pvc_name = process.env.ENSEMBLE_MANAGER_PVC
-    }
-    else {
-        let pvcs = await k8sApi.listNamespacedPersistentVolumeClaim(namespace)
-        for(let i in pvcs.body.items) {
-            let pvc = pvcs.body.items[i]
-            let pvcname = pvc.metadata.name
-            if(pvcname.match("ensemble-manager")) {
-                ensemble_manager_pvc_name = pvcname
+    if (process.env.ENSEMBLE_MANAGER_PVC) {
+        ensemble_manager_pvc_name = process.env.ENSEMBLE_MANAGER_PVC;
+    } else {
+        let pvcs = await k8sApi.listNamespacedPersistentVolumeClaim(namespace);
+        for (let i in pvcs.body.items) {
+            let pvc = pvcs.body.items[i];
+            let pvcname = pvc.metadata.name;
+            if (pvcname.match("ensemble-manager")) {
+                ensemble_manager_pvc_name = pvcname;
             }
         }
     }
 
-    let volume_name = jobname + "-volume"
+    let volume_name = jobname + "-volume";
     volumes.push({
         name: volume_name,
         persistentVolumeClaim: {
             claimName: ensemble_manager_pvc_name
         }
-    })        
+    });
     mounts.push({
         name: volume_name,
         mountPath: ensemble_manager_pvc_mount
-    })
-    return [volumes, mounts]   
+    });
+    return [volumes, mounts];
 }
 
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const runKubernetesPod = async(
+export const runKubernetesPod = async (
     namespace: string,
     jobname: string,
     cmd: string[],
@@ -112,16 +115,16 @@ export const runKubernetesPod = async(
     logstream: WriteStream,
     workingDirectory: string,
     use_node_affinity: boolean = false,
-    cpu_limit:string = "200m",
-    memory_limit:string = "2048Mi"
+    cpu_limit: string = "200m",
+    memory_limit: string = "2048Mi"
 ) => {
     let container_name = jobname + "-container";
-    let [volumes, mounts] = await get_volumes_and_mounts(namespace, jobname)
+    let [volumes, mounts] = await get_volumes_and_mounts(namespace, jobname);
 
     // Create the Job
     let jobManifest = {
-        apiVersion: 'batch/v1',
-        kind: 'Job',
+        apiVersion: "batch/v1",
+        kind: "Job",
         metadata: {
             name: jobname
         },
@@ -153,96 +156,100 @@ export const runKubernetesPod = async(
             },
             backoffLimit: 0
         }
-    }
+    };
 
-    if(use_node_affinity) {
-        let em_node_name = await get_ensemble_manager_node_name(namespace)
-        if(em_node_name) {
-            jobManifest = add_node_affinity(jobManifest, em_node_name)
+    if (use_node_affinity) {
+        let em_node_name = await get_ensemble_manager_node_name(namespace);
+        if (em_node_name) {
+            jobManifest = add_node_affinity(jobManifest, em_node_name);
         }
     }
-    
-    let statusCode = 0
 
-    try {        
+    let statusCode = 0;
+
+    try {
         // Create Job
         await batchV1Api.createNamespacedJob(namespace, jobManifest);
-        
+
         // Wait for a second, and check Pods for the Job
-        await delay(1000)
-        let jobpods = await k8sApi.listNamespacedPod(namespace, undefined, false, undefined, undefined, "job-name="+jobname)
+        await delay(1000);
+        let jobpods = await k8sApi.listNamespacedPod(
+            namespace,
+            undefined,
+            false,
+            undefined,
+            undefined,
+            "job-name=" + jobname
+        );
 
         // Get Pod Name
         let podname = null;
-        for(let i in jobpods.body.items) {
-            let pod = jobpods.body.items[i]
-            podname = pod.metadata.name
-            break
+        for (let i in jobpods.body.items) {
+            let pod = jobpods.body.items[i];
+            podname = pod.metadata.name;
+            break;
         }
 
-        if(podname != null) {
+        if (podname != null) {
             // Create logstream to write pod log
             const pod_log_stream = new stream.PassThrough();
-            pod_log_stream.on('data', (chunk) => {
+            pod_log_stream.on("data", (chunk) => {
                 logstream.write(chunk);
             });
-            let started_log = false
+            let started_log = false;
 
-            let wait_for = 1000
+            let wait_for = 1000;
             try {
                 await delay(wait_for);
 
                 // Wait until the Pod is finished (Failed or Succeeded)
-                while(true) {
+                while (true) {
                     await delay(wait_for);
 
                     // Check the status of Pod
-                    let res = await k8sApi.readNamespacedPodStatus(podname, namespace)
-                    let status = res.body.status.phase
+                    let res = await k8sApi.readNamespacedPodStatus(podname, namespace);
+                    let status = res.body.status.phase;
 
-                    if(status != "Pending" && !started_log) {
+                    if (status != "Pending" && !started_log) {
                         // Start logging
-                        await k8sLogApi.log(namespace, podname, container_name, pod_log_stream, {follow: true});
-                        started_log = true
+                        await k8sLogApi.log(namespace, podname, container_name, pod_log_stream, {
+                            follow: true
+                        });
+                        started_log = true;
                     }
-                    
-                    if(status == "Running") {
+
+                    if (status == "Running") {
                         // If it is still running, then we wait again (for a bit longer time time)
-                        wait_for = wait_for * 2
-                        if(wait_for > 60000) {
-                            wait_for = 60000
+                        wait_for = wait_for * 2;
+                        if (wait_for > 60000) {
+                            wait_for = 60000;
                         }
-                    }
-                    else if(status == "Failed") {
-                        statusCode = 1
-                        break
-                    }
-                    else if(status == "Succeeded") {
-                        statusCode = 0
-                        break
+                    } else if (status == "Failed") {
+                        statusCode = 1;
+                        break;
+                    } else if (status == "Succeeded") {
+                        statusCode = 0;
+                        break;
                     }
                 }
 
                 // Pod is finished. Delete Pod
-                await k8sApi.deleteNamespacedPod(podname, namespace)
+                await k8sApi.deleteNamespacedPod(podname, namespace);
+            } catch (err2) {
+                logstream.write("StatusCode 2: Error: " + err2);
+                statusCode = 2;
             }
-            catch (err2) {
-                logstream.write("StatusCode 2: Error: " + err2)
-                statusCode = 2
-            }
+        } else {
+            logstream.write("StatusCode 4: Error: Could not find Pod for Job");
+            statusCode = 4;
         }
-        else {
-            logstream.write("StatusCode 4: Error: Could not find Pod for Job")
-            statusCode = 4
-        }
-        
-        // Job is finished, delete Job
-        await batchV1Api.deleteNamespacedJob(jobname, namespace)
 
+        // Job is finished, delete Job
+        await batchV1Api.deleteNamespacedJob(jobname, namespace);
     } catch (err) {
-        logstream.write("StatusCode 3: Error: Could not create Job "+err)
-        statusCode = 3
+        logstream.write("StatusCode 3: Error: Could not create Job " + err);
+        statusCode = 3;
     }
     // Return status code
-    return statusCode
-}
+    return statusCode;
+};

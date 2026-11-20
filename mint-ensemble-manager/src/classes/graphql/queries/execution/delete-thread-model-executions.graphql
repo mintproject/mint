@@ -1,5 +1,5 @@
 mutation delete_thread_model_executions($threadModelId: uuid!) {
-  delete_thread_model_execution(where: {thread_model_id: {_eq: $threadModelId}}) {
-    affected_rows
-  }
+    delete_thread_model_execution(where: { thread_model_id: { _eq: $threadModelId } }) {
+        affected_rows
+    }
 }

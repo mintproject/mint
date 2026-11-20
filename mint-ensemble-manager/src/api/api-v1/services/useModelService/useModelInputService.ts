@@ -96,10 +96,7 @@ const hasInputHasFixedResource = (input: { hasFixedResource?: any[] }) => {
     return input.hasFixedResource && input.hasFixedResource.length > 0;
 };
 
-const findDataSpecificationByRequest = (
-    input: { id: string },
-    data: AddDataRequest
-) => {
+const findDataSpecificationByRequest = (input: { id: string }, data: AddDataRequest) => {
     const dataInput = data.data.find((d) => d.id === input.id);
     if (!dataInput) {
         throw new BadRequestError(`Data input ${input.id} has not been provided`);
@@ -132,9 +129,9 @@ const validateThatAllInputsAreBound = (
     }
 };
 
-const getDataBindings = async (
-    model: { hasInput: ModelInput[] }
-): Promise<CatalogDatasetSpec[]> => {
+const getDataBindings = async (model: {
+    hasInput: ModelInput[];
+}): Promise<CatalogDatasetSpec[]> => {
     const inputs: CatalogDatasetSpec[] = [];
     const modelInputs = model.hasInput;
     for (const input of modelInputs) {

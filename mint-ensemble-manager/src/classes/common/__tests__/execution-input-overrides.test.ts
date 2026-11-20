@@ -46,7 +46,11 @@ describe("applyExecutionInputOverrides", () => {
 
         expect(() =>
             applyExecutionInputOverrides(thread, "model-1", [
-                { model_io_id: "output-1", resource_id: "resource-1", url: "https://example.test/out" }
+                {
+                    model_io_id: "output-1",
+                    resource_id: "resource-1",
+                    url: "https://example.test/out"
+                }
             ])
         ).toThrow("is not an input");
     });

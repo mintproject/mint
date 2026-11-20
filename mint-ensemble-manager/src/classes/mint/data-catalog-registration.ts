@@ -1,5 +1,5 @@
-import axios, { AxiosResponse } from 'axios';
-import { Dataset, MintPreferences } from './mint-types';
+import axios, { AxiosResponse } from "axios";
+import { Dataset, MintPreferences } from "./mint-types";
 
 const REGISTER_DATA: string = "/datasets/register_datasets";
 const FIND_STDVARS: string = "/knowledge_graph/find_standard_variables";
@@ -10,14 +10,17 @@ const RESOURCE_CHUNK_SIZE: number = 500;
 const SYNC_DSMETA: string = "/datasets/sync_dataset_metadata";
 const PROVENANCE_URL: string = "/provenance/register_provenance";
 
-export const registerInternalDataset = async(dataset: Dataset, prefs: MintPreferences): Promise<boolean> => {
+export const registerInternalDataset = async (
+    dataset: Dataset,
+    prefs: MintPreferences
+): Promise<boolean> => {
     //console.log(dataset);
 
     let provid = prefs.data_catalog_extra.owner_provenance_id;
     await createProvenanceId(provid, prefs);
 
     let dsid: string | null = null;
-    if(dataset.id) {
+    if (dataset.id) {
         dsid = dataset.id;
     } else {
         //console.log('Registering dataset');
@@ -31,23 +34,23 @@ export const registerInternalDataset = async(dataset: Dataset, prefs: MintPrefer
     }
 
     //console.log('Registering Resources');
-    const resources = dataset.resources
+    const resources = dataset.resources;
     if (resources && resources.length > 0) {
         await createResources(dsid, dataset, resources, prefs);
     }
     syncDatasetMetadata(dsid, prefs);
 
     return true;
-}
+};
 
-function convertSpatialCoverage(cover:any) {
+function convertSpatialCoverage(cover: any) {
     let covertype: string = cover.type.toLowerCase();
     if (covertype === "point") {
         return {
             type: "Point",
             value: {
                 x: parseFloat(cover.value?.x || cover.coordinates[0] || 0),
-                y: parseFloat(cover.value?.y || cover.coordinates[1] || 0),
+                y: parseFloat(cover.value?.y || cover.coordinates[1] || 0)
             }
         };
     } else if (covertype === "boundingbox") {
@@ -65,32 +68,35 @@ function convertSpatialCoverage(cover:any) {
     }
 }
 
-async function createDataset(dataset: Dataset, prefs:MintPreferences): Promise<string | null> {
+async function createDataset(dataset: Dataset, prefs: MintPreferences): Promise<string | null> {
     let dcat = prefs.data_catalog_api;
     let provid = prefs.data_catalog_extra.owner_provenance_id;
     const payload = {
-        datasets: [{
-            provenance_id: provid,
-            name: dataset.name,
-            description: dataset.description || dataset.name,
-            metadata:  {
-                spatial_coverage: convertSpatialCoverage(JSON.parse(dataset.spatial_coverage || "{}")),
-                temporal_coverage: {
-                    start_time: (dataset.time_period?.start_date || "0000-01-01") + "T00:00:00",
-                    end_time: (dataset.time_period?.end_date || "9999-01-01") + "T00:00:00"
+        datasets: [
+            {
+                provenance_id: provid,
+                name: dataset.name,
+                description: dataset.description || dataset.name,
+                metadata: {
+                    spatial_coverage: convertSpatialCoverage(
+                        JSON.parse(dataset.spatial_coverage || "{}")
+                    ),
+                    temporal_coverage: {
+                        start_time: (dataset.time_period?.start_date || "0000-01-01") + "T00:00:00",
+                        end_time: (dataset.time_period?.end_date || "9999-01-01") + "T00:00:00"
+                    }
                 }
-            },
-        }]
+            }
+        ]
     };
     const result = await submitRequest(dcat + REGISTER_DATA, payload);
-    if (result && result['datasets'].length > 0) {
-        return result['datasets'][0]['record_id'];
+    if (result && result["datasets"].length > 0) {
+        return result["datasets"][0]["record_id"];
     }
     return null;
 }
 
-
-async function createStandardVariables(variables: any, prefs:MintPreferences): Promise<any> {
+async function createStandardVariables(variables: any, prefs: MintPreferences): Promise<any> {
     let dcat = prefs.data_catalog_api;
     let provid = prefs.data_catalog_extra.owner_provenance_id;
 
@@ -98,47 +104,47 @@ async function createStandardVariables(variables: any, prefs:MintPreferences): P
         return {};
     }
 
-    const stdvars = variables.map((dsvar: string) => { 
+    const stdvars = variables.map((dsvar: string) => {
         return {
             name: dsvar,
             ontology: "mint",
-            uri: "http://mint.isi.edu/ontology/"+dsvar
-        } 
+            uri: "http://mint.isi.edu/ontology/" + dsvar
+        };
     }); //variablesDetails.flatMap((dsvar: any) => dsvar['standard_variables']);
     const names = variables; //stdvars.map((v: any) => v['name']);
 
     const findExistingJson = {
-        "name__in": names
+        name__in: names
     };
     const findResult = await submitRequest(dcat + FIND_STDVARS, findExistingJson);
 
     let curStdVars: { [key: string]: any } = {};
     if (findResult && findResult["standard_variables"].length > 0) {
         findResult["standard_variables"].forEach((stdvar: any) => {
-            curStdVars[stdvar['name']] = stdvar;
+            curStdVars[stdvar["name"]] = stdvar;
         });
     }
 
-    const newStdVars = stdvars.filter((stdvar: any) => !(stdvar['name'] in curStdVars));
+    const newStdVars = stdvars.filter((stdvar: any) => !(stdvar["name"] in curStdVars));
     if (newStdVars.length > 0) {
-        const registerJson = { 
-            "standard_variables": newStdVars,
-            "provenance_id": provid
+        const registerJson = {
+            standard_variables: newStdVars,
+            provenance_id: provid
         };
         const registerResult = await submitRequest(dcat + REGISTER_STDVARS, registerJson);
         if (registerResult && registerResult["standard_variables"].length > 0) {
             registerResult["standard_variables"].forEach((stdvar: any) => {
-                stdvar['id'] = stdvar['record_id'];
-                curStdVars[stdvar['name']] = stdvar;
+                stdvar["id"] = stdvar["record_id"];
+                curStdVars[stdvar["name"]] = stdvar;
             });
         }
     }
 
     const newDsVars = variables.map((dsvar: any) => {
         const newDsVar = {
-            "name": "ds_" + dsvar,
-            "metadata": {},
-            "standard_variable_ids": [ curStdVars[dsvar]?.['id'] ]
+            name: "ds_" + dsvar,
+            metadata: {},
+            standard_variable_ids: [curStdVars[dsvar]?.["id"]]
         };
         return newDsVar;
     });
@@ -146,32 +152,36 @@ async function createStandardVariables(variables: any, prefs:MintPreferences): P
     return newDsVars;
 }
 
-
-async function createDatasetVariables(datasetId: string, datasetVariables: any, prefs:MintPreferences): Promise<any> {
+async function createDatasetVariables(
+    datasetId: string,
+    datasetVariables: any,
+    prefs: MintPreferences
+): Promise<any> {
     let dcat = prefs.data_catalog_api;
 
     if (datasetId && datasetVariables && datasetVariables.length > 0) {
         datasetVariables.forEach((dsvar: any) => {
-            dsvar['dataset_id'] = datasetId;
+            dsvar["dataset_id"] = datasetId;
         });
-        const response = await submitRequest(dcat + REGISTER_DSVARS, { variables: datasetVariables });
-        return response ? response['variables'] : {};
+        const response = await submitRequest(dcat + REGISTER_DSVARS, {
+            variables: datasetVariables
+        });
+        return response ? response["variables"] : {};
     }
     return {};
 }
 
-
-async function createProvenanceId(provenanceId: string, prefs:MintPreferences): Promise<void> {
+async function createProvenanceId(provenanceId: string, prefs: MintPreferences): Promise<void> {
     let dcat = prefs.data_catalog_api;
-    
+
     const provenanceDefinition = {
-        "provenance": {
-            "provenance_type": "user",
-            "record_id": provenanceId,
-            "name": "test_api_outside",
-            "metadata": {
-                "contact_information": {
-                    "email": "email@example.com"
+        provenance: {
+            provenance_type: "user",
+            record_id: provenanceId,
+            name: "test_api_outside",
+            metadata: {
+                contact_information: {
+                    email: "email@example.com"
                 }
             }
         }
@@ -183,17 +193,21 @@ async function createProvenanceId(provenanceId: string, prefs:MintPreferences): 
     } catch (error: any) {
         if (error.response) {
             // The server responded with a status code outside the 2xx range
-            console.error('Error data:', error.response.data);
+            console.error("Error data:", error.response.data);
         } else {
             // An error occurred in setting up the request
-            console.error('Error:', error.message);
+            console.error("Error:", error.message);
         }
         throw error; // Re-throwing the error for the caller to handle
     }
 }
 
-
-async function createResources(datasetId: string, dataset: Dataset, resources: any, prefs: MintPreferences): Promise<void> {
+async function createResources(
+    datasetId: string,
+    dataset: Dataset,
+    resources: any,
+    prefs: MintPreferences
+): Promise<void> {
     let dcat = prefs.data_catalog_api;
     let provid = prefs.data_catalog_extra.owner_provenance_id;
 
@@ -205,21 +219,24 @@ async function createResources(datasetId: string, dataset: Dataset, resources: a
             chunkId++;
             const chunkList = chunk.map((res) => {
                 return {
-                    "provenance_id": provid,
-                    "dataset_id": datasetId,
-                    "resource_type": "file",
-                    "data_url": res['url'],
-                    "name": res['name'],
-                    "metadata": {
-                        spatial_coverage: convertSpatialCoverage(JSON.parse(dataset.spatial_coverage || "{}")),
+                    provenance_id: provid,
+                    dataset_id: datasetId,
+                    resource_type: "file",
+                    data_url: res["url"],
+                    name: res["name"],
+                    metadata: {
+                        spatial_coverage: convertSpatialCoverage(
+                            JSON.parse(dataset.spatial_coverage || "{}")
+                        ),
                         temporal_coverage: {
-                            start_time: (dataset.time_period?.start_date || "1970-01-01") + "T00:00:00",
+                            start_time:
+                                (dataset.time_period?.start_date || "1970-01-01") + "T00:00:00",
                             end_time: (dataset.time_period?.end_date || "2100-01-01") + "T00:00:00"
                         }
                     }
                 };
-            })
-            await submitRequest(dcat + REGISTER_RESOURCES, { 
+            });
+            await submitRequest(dcat + REGISTER_RESOURCES, {
                 resources: chunkList
             });
         }
@@ -229,10 +246,10 @@ async function createResources(datasetId: string, dataset: Dataset, resources: a
 async function syncDatasetMetadata(dsid: string, prefs: MintPreferences): Promise<void> {
     let dcat = prefs.data_catalog_api;
     let payload = {
-        "dataset_id": dsid,
-        "provenance_id": prefs.data_catalog_extra.owner_provenance_id
-    }
-    await submitRequest(dcat + SYNC_DSMETA, payload, true)
+        dataset_id: dsid,
+        provenance_id: prefs.data_catalog_extra.owner_provenance_id
+    };
+    await submitRequest(dcat + SYNC_DSMETA, payload, true);
 }
 
 function* divideChunks<T>(array: T[], chunkSize: number): Generator<T[]> {
@@ -248,7 +265,7 @@ async function submitRequest(url: string, payload: any, skipReturn: boolean = fa
 
         if (response.status === 200 && !skipReturn) {
             const result = response.data;
-            if (result['result'] === 'success') {
+            if (result["result"] === "success") {
                 //console.log(result);
                 return result;
             } else {
@@ -258,9 +275,8 @@ async function submitRequest(url: string, payload: any, skipReturn: boolean = fa
     } catch (error: any) {
         // Logging the error message
         console.error(error);
-        throw error; 
+        throw error;
     }
 
     return null;
 }
-
