@@ -994,6 +994,38 @@ def test_a_secret_run_is_refused_while_another_run_holds_an_untrusted_step(monke
     assert "run-b" in STORE.run and len(STORE.run) == 1 and not captured["submits"]
 
 
+def _stale_untrusted_run(monkeypatch, status, unreachable=False):
+    """A secret run is submitted while alice's other run, stored as running, holds an untrusted step."""
+    piece_id = untrusted_piece()
+    one_step_flow(monkeypatch)
+    put_secret()
+    other_active_run(untrusted_plan_json(piece_id))
+    STORE.run["run-b"].update(tapis_workflow_id="pipe", tapis_run_id="uuid")
+    monkeypatch.setattr("app.poller.tapis_mod.get_run_status",
+                        lambda *_a, **_k: None if unreachable else status)
+    monkeypatch.setattr("app.poller.tapis_mod.get_run_detail",
+                        lambda *_a, **_k: {"tasks": [{"task_id": "model", "status": "COMPLETED"}]})
+    return submit(plan().json()["plan_id"])
+
+
+def test_a_stale_run_tapis_finished_no_longer_blocks_a_submit(monkeypatch, captured):
+    response = _stale_untrusted_run(monkeypatch, "COMPLETED")
+    assert response.status_code == 200, response.text
+    assert STORE.run["run-b"]["status"] == "completed"
+
+
+def test_a_run_tapis_still_runs_still_blocks_a_submit(monkeypatch, captured):
+    refused = _stale_untrusted_run(monkeypatch, "ACTIVE")
+    assert refused.status_code == 409 and refused.json()["detail"]["code"] == "SECRET_RUN_CONFLICT"
+    assert STORE.run["run-b"]["status"] == "running" and not captured["submits"]
+
+
+def test_an_unreachable_tapis_still_blocks_a_submit(monkeypatch, captured):
+    refused = _stale_untrusted_run(monkeypatch, None, unreachable=True)
+    assert refused.status_code == 409 and refused.json()["detail"]["code"] == "SECRET_RUN_CONFLICT"
+    assert STORE.run["run-b"]["status"] == "running" and not captured["submits"]
+
+
 def test_an_app_step_is_trusted_only_as_any_other_piece_is():
     step_ = {"step": 2, "tapis_app_id": "some-app"}
     seeded = {"id": "a", "tapis_app_id": "some-app"}
