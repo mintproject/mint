@@ -473,3 +473,216 @@ describe('FlowAuthoringForm', () => {
     });
   });
 });
+
+describe('FlowAuthoringForm semantic recommendations', () => {
+  type Reply = { status: number; json: unknown };
+  let semantic: (url: string, body: Call['body']) => Reply;
+  let proposeFor: (uri: string | undefined) => unknown;
+
+  const PIECE_HIT = {
+    id: 'piece-a',
+    label: 'Ingest',
+    description: 'Reads a corpus and cleans it',
+    score: 0.9,
+    ranking_source: 'semantic',
+    visibility: 'public',
+    owner_username: 'someone',
+    inputs: [{ position: 1, standard_variable_uri: 'https://x.org/corpus', label: 'Corpus' }],
+    outputs: [{ position: 1, standard_variable_uri: 'https://x.org/clean', label: 'Clean text' }],
+  };
+
+  const emptyProposal = {
+    direct: [],
+    chains: [],
+    next: [],
+    produces: [],
+    cut: false,
+    warnings: [],
+  };
+
+  beforeEach(() => {
+    semantic = () => ({ status: 200, json: { results: [] } });
+    proposeFor = () => emptyProposal;
+    const adapter = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        const reply = (r: Reply) =>
+          ({ ok: r.status < 400, status: r.status, json: async () => r.json }) as Response;
+        if (url.includes('/search?') || url.includes('/similar?')) {
+          return reply(semantic(url, undefined));
+        }
+        if (url.endsWith('/flows/propose')) {
+          const body = JSON.parse(String(init.body));
+          calls.push({ url, body });
+          return reply({
+            status: 200,
+            json: proposeFor(body.purpose?.contract?.standard_variable_uri),
+          });
+        }
+        return adapter(url, init);
+      }),
+    );
+  });
+
+  const pickWanted = (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole('button', { name: 'Pick a variable' }));
+  const find = (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole('button', { name: 'Find pieces that make it' }));
+
+  it('searches pieces by description, lists their variables, and adds one as a step', async () => {
+    semantic = (url) =>
+      url.includes('target=etl_piece') && url.includes('lexicon')
+        ? { status: 200, json: { results: [PIECE_HIT] } }
+        : { status: 200, json: { results: [] } };
+    const user = userEvent.setup();
+    render();
+    await user.type(
+      screen.getByLabelText('Describe what this step should do'),
+      'count lexicon terms',
+    );
+    const hit = await screen.findByText('Reads a corpus and cleans it');
+    const item = hit.closest('li')!;
+    expect(item).toHaveTextContent('Takes: Corpus');
+    expect(item).toHaveTextContent('Returns: Clean text');
+    await user.click(within(item).getByRole('button', { name: 'Add Ingest as a step' }));
+    expect(await screen.findByTestId('flow-form-step-1')).toBeInTheDocument();
+  });
+
+  it('also finds the user private pieces the service does not list', async () => {
+    const user = userEvent.setup();
+    render({
+      pieces: [
+        ...PIECES,
+        { id: 'mine', label: 'Lexicon counter', visibility: 'private', description: 'my own' },
+      ],
+    });
+    await user.type(
+      screen.getByLabelText('Describe what this step should do'),
+      'count lexicon terms',
+    );
+    const list = await screen.findByRole('list', { name: 'Pieces that match the description' });
+    expect(within(list).getByText('Lexicon counter')).toBeInTheDocument();
+    expect(list).toHaveTextContent('private, yours');
+  });
+
+  it('shows close variables, marked not exact, when nothing makes the wanted one', async () => {
+    semantic = (url) =>
+      url.includes('/similar?')
+        ? {
+            status: 200,
+            json: {
+              target: 'svo',
+              id: 'sv:corpus',
+              results: [
+                { id: 'sv:corpus', label: 'Corpus' },
+                { id: 'sv:near', label: 'Near corpus' },
+              ],
+            },
+          }
+        : { status: 200, json: { results: [] } };
+    proposeFor = (uri) =>
+      uri === 'sv:near'
+        ? {
+            ...emptyProposal,
+            produces: [
+              {
+                piece: 'piece-b',
+                label: 'Score',
+                output: 1,
+                complete: true,
+                approval: 'builtin',
+                inputs: [],
+              },
+            ],
+          }
+        : emptyProposal;
+    const user = userEvent.setup();
+    render();
+    await pickWanted(user);
+    await find(user);
+    const box = await screen.findByTestId('close-variables');
+    expect(box).toHaveTextContent('No piece makes Corpus exactly. These make close variables:');
+    expect(box).toHaveTextContent('Near corpus');
+    expect(box).toHaveTextContent('close, not an exact match');
+    // At most three extra propose calls, and none for the wanted variable twice.
+    const close = calls.filter(
+      (c) =>
+        c.url.endsWith('/flows/propose') &&
+        c.body.purpose.contract.standard_variable_uri !== 'sv:corpus',
+    );
+    expect(close.length).toBeLessThanOrEqual(3);
+    await user.click(within(box).getByRole('button', { name: 'Add Score for Near corpus' }));
+    expect(await screen.findByTestId('flow-form-step-1')).toBeInTheDocument();
+  });
+
+  it('shows models and datasets that could supply an unmet input, and adds a dataset as a flow input', async () => {
+    proposeFor = () => ({
+      ...emptyProposal,
+      produces: [
+        {
+          piece: 'piece-a',
+          label: 'Ingest',
+          output: 1,
+          complete: false,
+          approval: 'builtin',
+          inputs: [
+            {
+              input: 1,
+              met: false,
+              direct: [],
+              chains: [],
+              providers: {
+                models: [
+                  {
+                    configuration_id: 'https://w3id.org/okn/i/mint/model-9',
+                    label: 'Crawler',
+                    output: 'pages',
+                    format: 'csv',
+                  },
+                ],
+                datasets: [{ data_object_id: 'ds-1', label: 'Hearings corpus', format: 'csv' }],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render();
+    await addStepOf(user, 'Ingest'); // loads the piece's contracts
+    await screen.findByLabelText('Source of input 1 of step 1');
+    await pickWanted(user);
+    await find(user);
+    const advice = await screen.findByTestId('need-providers');
+    expect(advice).toHaveTextContent('Run model Crawler first (its output pages fits)');
+    expect(within(advice).getByRole('link', { name: 'Crawler' })).toHaveAttribute(
+      'href',
+      '/modelconfigurations/model-9',
+    );
+    await user.click(
+      within(advice).getByRole('button', { name: 'Use dataset Hearings corpus as a flow input' }),
+    );
+    expect(screen.getByTestId('flow-form-input-0')).toBeInTheDocument();
+    expect(screen.getByLabelText('Input 1 label')).toHaveValue('Hearings corpus');
+  });
+
+  it('hides the suggestions quietly when the semantic service is down', async () => {
+    semantic = () => ({ status: 503, json: { error: 'down' } });
+    const user = userEvent.setup();
+    render();
+    await user.type(
+      screen.getByLabelText('Describe what this step should do'),
+      'count lexicon terms',
+    );
+    expect(await screen.findByText(/unavailable right now/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Pieces that match the description')).toBeNull();
+    await pickWanted(user);
+    await find(user);
+    await screen.findByText('Nothing in the catalog fits.');
+    expect(screen.queryByTestId('close-variables')).toBeNull();
+    // The step picker still works.
+    await addStepOf(user, 'Ingest');
+    expect(await screen.findByTestId('flow-form-step-1')).toBeInTheDocument();
+  });
+});

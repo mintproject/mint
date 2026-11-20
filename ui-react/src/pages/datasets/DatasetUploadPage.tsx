@@ -33,10 +33,16 @@ import {
   type UploadProgress,
   type UploadedDataset,
 } from '@/lib/ckan-upload';
-import { consumersOfVariable } from '@/lib/datasets/upload-preview';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useSemanticSearch, useSimilarVariables } from '@/hooks/useSemanticSearch';
+import { closeConsumers, consumersOfVariable } from '@/lib/datasets/upload-preview';
 import { unionBoundingBox, type BoundingBox } from '@/lib/geo/bbox';
 import { standardVariableName } from '@/lib/standard-variable-display';
 import { useAuth } from '@/lib/auth/useAuth';
+
+/** Wait after typing before the title and description are searched. */
+const SUGGEST_DELAY_MS = 500;
+const SUGGEST_SHOWN = 5;
 
 export const UPLOAD_PUBLIC_EXPLANATION =
   'A model run reads its input files directly and can only read public files. A flow can read private files, because it runs with your access.';
@@ -166,6 +172,28 @@ export function DatasetUploadPage() {
   const consumers = useMemo(
     () => (variable ? consumersOfVariable(tree, variable, files) : []),
     [tree, variable, files],
+  );
+
+  // Standard variables suggested from what the user wrote. Never chosen for them.
+  const aboutText = useDebouncedValue(`${title}\n${description}`.trim(), SUGGEST_DELAY_MS);
+  const suggested = useSemanticSearch(aboutText, { target: 'svo', limit: 20, minLength: 4 });
+  const suggestions = useMemo(
+    () => (suggested.results ?? []).filter((r) => r.label?.trim()),
+    [suggested.results],
+  );
+  const suggestionIds = useMemo(() => suggestions.map((r) => r.id), [suggestions]);
+  const shownSuggestions = suggestions.filter((r) => r.id !== variable?.id).slice(0, SUGGEST_SHOWN);
+
+  const similar = useSimilarVariables(variable?.id, { limit: 5 });
+  const closeMatches = useMemo(
+    () =>
+      closeConsumers(
+        tree,
+        (similar.results ?? []).filter((item) => item.id !== variable?.id),
+        consumers,
+        files,
+      ),
+    [tree, similar.results, variable?.id, consumers, files],
   );
 
   const author = authorEdit ?? user?.username ?? '';
@@ -493,7 +521,46 @@ export function DatasetUploadPage() {
             disabled={busy}
             requireLabel
             allowCreate
+            preferredIds={suggestionIds}
           />
+          {suggested.error && (
+            <p className="text-xs text-muted-foreground">
+              Suggestions are unavailable right now. You can still search the list.
+            </p>
+          )}
+          {shownSuggestions.length > 0 && (
+            <div data-testid="suggested-variables" className="rounded-md border p-2 text-sm">
+              <p className="font-medium">Suggested standard variables</p>
+              <ul className="mt-1 space-y-1">
+                {shownSuggestions.map((s) => (
+                  <li key={s.id} className="flex flex-wrap items-start justify-between gap-2">
+                    <span>
+                      <span className="font-medium">{s.label}</span>
+                      {s.description && (
+                        <span className="block text-xs text-muted-foreground">{s.description}</span>
+                      )}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      aria-label={`Use ${s.label} as the standard variable`}
+                      onClick={() =>
+                        setVariable({
+                          id: s.id,
+                          label: s.label ?? '',
+                          description: s.description ?? null,
+                        })
+                      }
+                    >
+                      Use this
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {variable && <StandardVariableDetails variable={variable} />}
           <p className="text-sm text-muted-foreground">
             One variable applies to every file in the collection.
@@ -636,6 +703,24 @@ export function DatasetUploadPage() {
               </li>
             ))}
           </ul>
+        )}
+        {variable && closeMatches.length > 0 && (
+          <div data-testid="close-matches" className="pt-2">
+            <h4 className="text-sm font-medium">Close matches (not an exact fit)</h4>
+            <p className="text-xs text-muted-foreground">
+              These take a different standard variable that is close in meaning. Check that your
+              data suits them before relying on one.
+            </p>
+            <ul className="mt-1 space-y-1 text-sm">
+              {closeMatches.map((c) => (
+                <li key={c.id}>
+                  <span className="font-medium">{c.name}</span> ({c.kind}, input {c.inputName}):
+                  matched on <em>{c.via}</em>
+                  {c.formatFits === false && `; the format does not fit. ${c.formatProblem ?? ''}`}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </section>
 

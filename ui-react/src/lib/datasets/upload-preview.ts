@@ -75,3 +75,31 @@ export function consumersOfVariable(
     (a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name),
   );
 }
+
+export interface CloseConsumer extends UploadConsumer {
+  /** The close variable whose input this matched on. */
+  via: string;
+}
+
+/**
+ * Flows and models whose inputs take a variable CLOSE to the chosen one, for the
+ * "not an exact fit" list. A config already in the exact list is left out.
+ */
+export function closeConsumers(
+  tree: GetModelTreeWithRegionsQuery | undefined,
+  similar: Array<{ id: string; label?: string | null }>,
+  exact: UploadConsumer[],
+  files: Array<{ name: string }>,
+): CloseConsumer[] {
+  const seen = new Set(exact.map((consumer) => consumer.id));
+  const found: CloseConsumer[] = [];
+  for (const item of similar) {
+    const variable = { id: item.id, label: item.label?.trim() || item.id };
+    for (const consumer of consumersOfVariable(tree, variable, files)) {
+      if (seen.has(consumer.id)) continue;
+      seen.add(consumer.id);
+      found.push({ ...consumer, via: variable.label });
+    }
+  }
+  return found;
+}
