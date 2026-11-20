@@ -1,5 +1,8 @@
 mutation increment_successful_runs($threadModelId: uuid!, $inc: Int!) {
-  update_thread_model_execution_summary_by_pk(pk_columns: {thread_model_id: $threadModelId}, _inc: {successful_runs: $inc}) {
-    thread_model_id
-  }
+    update_thread_model_execution_summary_by_pk(
+        pk_columns: { thread_model_id: $threadModelId }
+        _inc: { successful_runs: $inc }
+    ) {
+        thread_model_id
+    }
 }

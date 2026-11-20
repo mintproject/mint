@@ -1,4 +1,4 @@
-import { MintPreferences } from "../../mint-types";
+import { Dataset, MintPreferences } from "../../mint-types";
 import { TACC_CKAN_DataCatalog } from "../TACC_CKAN_Datacatalog";
 
 const preferences = {
@@ -6,9 +6,14 @@ const preferences = {
     data_catalog_key: ""
 } as MintPreferences;
 
+/** The private transform of the catalog that the tests call. */
+interface CatalogInternals {
+    transformCKANPackage(pkg: unknown): Dataset;
+}
+
 describe("TACC_CKAN_DataCatalog temporal coverage", () => {
     it("reads dataset-level temporal start and end fields", () => {
-        const catalog = new TACC_CKAN_DataCatalog(preferences) as any;
+        const catalog = new TACC_CKAN_DataCatalog(preferences) as unknown as CatalogInternals;
         const dataset = catalog.transformCKANPackage({
             id: "dataset-id",
             name: "dataset",
@@ -23,18 +28,20 @@ describe("TACC_CKAN_DataCatalog temporal coverage", () => {
     });
 
     it("keeps reading the legacy temporal coverage extra", () => {
-        const catalog = new TACC_CKAN_DataCatalog(preferences) as any;
+        const catalog = new TACC_CKAN_DataCatalog(preferences) as unknown as CatalogInternals;
         const dataset = catalog.transformCKANPackage({
             id: "dataset-id",
             name: "dataset",
             title: "Dataset",
-            extras: [{
-                key: "temporal_coverage",
-                value: JSON.stringify({
-                    start_time: "1980-01-01T00:00:00",
-                    end_time: "2012-12-31T00:00:00"
-                })
-            }],
+            extras: [
+                {
+                    key: "temporal_coverage",
+                    value: JSON.stringify({
+                        start_time: "1980-01-01T00:00:00",
+                        end_time: "2012-12-31T00:00:00"
+                    })
+                }
+            ],
             resources: []
         });
 
@@ -43,10 +50,17 @@ describe("TACC_CKAN_DataCatalog temporal coverage", () => {
     });
 
     it("reads canonical dataset spatial coverage before the legacy extra", () => {
-        const catalog = new TACC_CKAN_DataCatalog(preferences) as any;
+        const catalog = new TACC_CKAN_DataCatalog(preferences) as unknown as CatalogInternals;
         const spatial = JSON.stringify({
             type: "Polygon",
-            coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]]
+            coordinates: [
+                [
+                    [0, 0],
+                    [1, 0],
+                    [1, 1],
+                    [0, 0]
+                ]
+            ]
         });
         const dataset = catalog.transformCKANPackage({
             id: "dataset-id",

@@ -173,18 +173,14 @@ export class KeycloakAdapter {
     }
 
     public static loadFromLocalStorage(): Promise<boolean> {
-        return new Promise<boolean>((resolve, reject) => {
+        return new Promise<boolean>((resolve) => {
             const accessToken: string = localStorage.getItem("access-token");
             const refreshToken: string = localStorage.getItem("refresh-token");
             if (accessToken && refreshToken) {
-                //Check if access token is still valid, if not, try to refresh.
-                if (false) {
-                    //KeycloakAdapter.checkToken()) {
-                } else {
-                    const ref: Promise<boolean> = KeycloakAdapter.refresh(refreshToken);
-                    ref.catch(() => resolve(false));
-                    ref.then((b: boolean) => resolve(b));
-                }
+                // The token is not checked for validity first: refresh it.
+                const ref: Promise<boolean> = KeycloakAdapter.refresh(refreshToken);
+                ref.catch(() => resolve(false));
+                ref.then((b: boolean) => resolve(b));
             } else {
                 resolve(false);
             }
@@ -219,19 +215,7 @@ export class KeycloakAdapter {
         }
     }
 
-    public static updateProfile(u: User): void {
-        const uri: string =
-            KeycloakAdapter.server +
-            "admin/realms/" +
-            KeycloakAdapter.realm +
-            "/users/" +
-            KeycloakAdapter.userid;
-        const data = {
-            attributes: {
-                region: u.region,
-                graph: u.graph
-            }
-        };
+    public static updateProfile(): void {
         //FIXME: editing profile requires user role
     }
 
@@ -242,7 +226,7 @@ export class KeycloakAdapter {
             KeycloakAdapter.realm +
             "/protocol/openid-connect/userinfo";
 
-        const req = fetch(uri, {
+        fetch(uri, {
             method: "GET",
             credentials: "include",
             headers: KeycloakAdapter.getAccessTokenHeader()

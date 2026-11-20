@@ -11,4 +11,3 @@ export const convertApiUrlToW3Id = (url: string): string => {
     const id = urlParts.pop();
     return W3_ID_URI_PREFIX + id;
 };
-

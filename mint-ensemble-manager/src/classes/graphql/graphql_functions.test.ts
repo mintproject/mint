@@ -53,9 +53,7 @@ describe("mapHasuraOutputsToModelOutputs", () => {
     });
 
     it("handles missing label and has_format", () => {
-        const result = mapHasuraOutputsToModelOutputs([
-            { output: { id: "id-1" } }
-        ]);
+        const result = mapHasuraOutputsToModelOutputs([{ output: { id: "id-1" } }]);
 
         expect(result[0].model_io.name).toBe("");
         expect(result[0].model_io.format).toBeUndefined();

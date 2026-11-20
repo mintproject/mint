@@ -1,24 +1,32 @@
 mutation delete_thread_model_by_config($id: String!) {
-  # Delete thread model execution summaries
-  delete_thread_model_execution_summary(where: {thread_model: {modelcatalog_configuration_id: {_eq: $id}}}) {
-    affected_rows
-  }
-  delete_thread_model_execution(where: {thread_model: {modelcatalog_configuration_id: {_eq: $id}}}) {
-    affected_rows
-  }
+    # Delete thread model execution summaries
+    delete_thread_model_execution_summary(
+        where: { thread_model: { modelcatalog_configuration_id: { _eq: $id } } }
+    ) {
+        affected_rows
+    }
+    delete_thread_model_execution(
+        where: { thread_model: { modelcatalog_configuration_id: { _eq: $id } } }
+    ) {
+        affected_rows
+    }
 
-  # Delete thread model data binding
-  delete_thread_model_io(where: {thread_model: {modelcatalog_configuration_id: {_eq: $id}}}) {
-    affected_rows
-  }
+    # Delete thread model data binding
+    delete_thread_model_io(
+        where: { thread_model: { modelcatalog_configuration_id: { _eq: $id } } }
+    ) {
+        affected_rows
+    }
 
-  # Delete thread model parameter binding
-  delete_thread_model_parameter(where: {thread_model: {modelcatalog_configuration_id: {_eq: $id}}}) {
-    affected_rows
-  }
+    # Delete thread model parameter binding
+    delete_thread_model_parameter(
+        where: { thread_model: { modelcatalog_configuration_id: { _eq: $id } } }
+    ) {
+        affected_rows
+    }
 
-  # Delete thread models
-  delete_thread_model(where: {modelcatalog_configuration_id: {_eq: $id}}) {
-    affected_rows
-  }
+    # Delete thread models
+    delete_thread_model(where: { modelcatalog_configuration_id: { _eq: $id } }) {
+        affected_rows
+    }
 }

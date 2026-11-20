@@ -1,7 +1,12 @@
 import jwt, { Algorithm } from "jsonwebtoken";
 import { getConfiguration } from "@/classes/mint/mint-functions";
 import { UnauthorizedError } from "@/classes/common/errors";
-export const getTokenFromRequest = (req: any) => {
+/** The part of a request the token readers look at. */
+interface TokenRequest {
+    headers: { authorization?: string };
+}
+
+export const getTokenFromRequest = (req: TokenRequest) => {
     const authHeader = req.headers.authorization;
     return getTokenFromAuthorizationHeader(authHeader);
 };
@@ -36,7 +41,7 @@ const tenantPublicKey = async (tenant: string): Promise<string | null> => {
     try {
         const response = await fetch(`${base}/v3/tenants/${tenant}`);
         if (!response.ok) return null;
-        const body: any = await response.json();
+        const body = (await response.json()) as { result?: { public_key?: unknown } };
         const key = body?.result?.public_key;
         if (typeof key !== "string" || !key.trim()) return null;
         tenantKeys.set(tenant, { key, at: Date.now() });
@@ -93,7 +98,7 @@ export const usernameFromToken = async (token: string): Promise<string> => {
 };
 
 export const securityHandlers = {
-    BearerAuth: async (req, scopes) => {
+    BearerAuth: async (req: TokenRequest) => {
         // Get the token from the Authorization header
         const token = getTokenFromRequest(req);
         if (!token) {
@@ -106,7 +111,7 @@ export const securityHandlers = {
             return false;
         }
     },
-    oauth2: async (req, scopes) => {
+    oauth2: async (req: TokenRequest) => {
         // Get the token from the Authorization header
         const token = getTokenFromRequest(req);
         if (!token) {

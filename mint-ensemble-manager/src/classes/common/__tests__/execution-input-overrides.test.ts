@@ -1,8 +1,9 @@
+import { Thread } from "@/classes/mint/mint-types";
 import { applyExecutionInputOverrides } from "@/classes/common/execution-input-overrides";
 
 describe("applyExecutionInputOverrides", () => {
     it("replaces one model input with adapter-produced resources", () => {
-        const thread: any = {
+        const thread = {
             id: "thread-1",
             data: {},
             models: {
@@ -13,7 +14,7 @@ describe("applyExecutionInputOverrides", () => {
             model_ensembles: {
                 "model-1": { id: "thread-model-1", bindings: { "springflow-input": ["old-slice"] } }
             }
-        };
+        } as unknown as Thread;
 
         applyExecutionInputOverrides(thread, "model-1", [
             {
@@ -37,16 +38,20 @@ describe("applyExecutionInputOverrides", () => {
     });
 
     it("rejects an output targeted at a non-input model I/O", () => {
-        const thread: any = {
+        const thread = {
             id: "thread-1",
             data: {},
             models: { "model-1": { input_files: [{ id: "input-1" }] } },
             model_ensembles: { "model-1": { id: "thread-model-1", bindings: {} } }
-        };
+        } as unknown as Thread;
 
         expect(() =>
             applyExecutionInputOverrides(thread, "model-1", [
-                { model_io_id: "output-1", resource_id: "resource-1", url: "https://example.test/out" }
+                {
+                    model_io_id: "output-1",
+                    resource_id: "resource-1",
+                    url: "https://example.test/out"
+                }
             ])
         ).toThrow("is not an input");
     });

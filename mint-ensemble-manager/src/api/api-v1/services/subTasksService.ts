@@ -26,10 +26,9 @@ import {
     SetupModelConfigurationAndBindingsRequest
 } from "../paths/problemStatements/tasks/subtasks";
 import useModelsService from "./useModelsService";
-import { IExecutionService, SubmissionResult } from "@/interfaces/IExecutionService";
+import { SubmissionResult } from "@/interfaces/IExecutionService";
 import { TapisExecutionService } from "@/classes/tapis/adapters/TapisExecutionService";
 import { getConfiguration } from "@/classes/mint/mint-functions";
-import { MockExecutionService } from "@/classes/common/__tests__/mocks/MockExecutionService";
 import { ExecutionCreation } from "@/classes/common/ExecutionCreation";
 import { GraphQL } from "@/config/graphql";
 import getModelcatalogConfigurationGQL from "@/classes/graphql/queries/model/get-modelcatalog-configuration.graphql";
@@ -38,31 +37,6 @@ import {
     checkVariableExistsById as checkVariableExistsByIdV2,
     checkRegionExistsById as checkRegionExistsByIdV2
 } from "@/classes/graphql/graphql_functions_v2";
-
-function getExecutionEngineService(
-    executionEngine: string,
-    authorizationHeader: string
-): IExecutionService {
-    const config = getConfiguration();
-    const token = getTokenFromAuthorizationHeader(authorizationHeader);
-    if (!token) {
-        throw new UnauthorizedError("Invalid authorization header");
-    }
-
-    switch (executionEngine.toLowerCase()) {
-        case "tapis":
-            return new TapisExecutionService(token, config.tapis.basePath);
-        case "localex":
-            // For local execution, we can use a mock service for now
-            // TODO: Implement proper local execution service
-            return new MockExecutionService();
-        case "wings":
-            // TODO: Implement Wings execution service
-            throw new Error("Wings execution engine not implemented yet");
-        default:
-            throw new Error(`Unsupported execution engine: ${executionEngine}`);
-    }
-}
 
 export interface SubTasksService {
     getModelParameters(model_id: string, authorizationHeader: string): unknown;
@@ -101,7 +75,10 @@ export interface SubTasksService {
         request: SetupModelConfigurationAndBindingsRequest,
         authorizationHeader: string
     ): Promise<Thread>;
-    getModelDataBindings(model_id: string, authorizationHeader: string): Promise<any[]>;
+    getModelDataBindings(
+        model_id: string,
+        authorizationHeader: string
+    ): ReturnType<typeof useModelsService.getDataBindingsByModelId>;
     getBlueprint(
         subtaskId: string,
         authorizationHeader: string,

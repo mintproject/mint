@@ -1,39 +1,39 @@
 query thread_executions($threadId: uuid!) {
-  thread(where: {id: {_eq: $threadId}}) {
-    id
-    thread_models {
-      modelcatalog_configuration {
+    thread(where: { id: { _eq: $threadId } }) {
         id
-        label
-      }
-      executions {
-        execution {
-          parameter_bindings {
-            modelcatalog_parameter {
-              label
+        thread_models {
+            modelcatalog_configuration {
+                id
+                label
             }
-            parameter_value
-          }
-          data_bindings {
-            model_io: modelcatalog_dataset_specification {
-              name: label
+            executions {
+                execution {
+                    parameter_bindings {
+                        modelcatalog_parameter {
+                            label
+                        }
+                        parameter_value
+                    }
+                    data_bindings {
+                        model_io: modelcatalog_dataset_specification {
+                            name: label
+                        }
+                        resource {
+                            name
+                            url
+                        }
+                    }
+                    results {
+                        model_output {
+                            name
+                        }
+                        resource {
+                            name
+                            url
+                        }
+                    }
+                }
             }
-            resource {
-              name
-              url
-            }
-          }
-          results {
-            model_output {
-              name
-            }
-            resource {
-              name
-              url
-            }
-          }
         }
-      }
     }
-  }
 }

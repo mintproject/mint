@@ -160,7 +160,9 @@ const modelConfigSetup = {
 // GraphQL response shape for catalog: inputs = [{input: {id, label, ...}}]
 const mockCatalogSetup = {
     id: data.model_id,
-    inputs: inputSpecs.map((s) => ({ input: { id: s.id, label: s.id, has_format: null, position: null, description: null } }))
+    inputs: inputSpecs.map((s) => ({
+        input: { id: s.id, label: s.id, has_format: null, position: null, description: null }
+    }))
 };
 
 const mockApolloClient = {
@@ -173,7 +175,12 @@ describe("useModelInputService", () => {
         (convertApiUrlToW3Id as jest.Mock).mockReturnValue(modelW3Id);
         (GraphQL.instance as jest.Mock).mockReturnValue(mockApolloClient);
         (GraphQL.instanceUsingAccessToken as jest.Mock).mockReturnValue(mockApolloClient);
-        (KeycloakAdapter.getUser as jest.Mock).mockReturnValue({ email: "test@test.com", uid: "1", region: "", graph: "" });
+        (KeycloakAdapter.getUser as jest.Mock).mockReturnValue({
+            email: "test@test.com",
+            uid: "1",
+            region: "",
+            graph: ""
+        });
         let uuidCount = 0;
         (uuidv4 as jest.Mock).mockImplementation(() => `uuid-mock-${++uuidCount}`);
     });
@@ -263,16 +270,18 @@ describe("useModelInputService", () => {
     });
 
     it("should get data bindings by model id", async () => {
-        mockApolloClient.query
-            .mockResolvedValueOnce({ data: { modelcatalog_configuration_by_pk: mockCatalogSetup } });
+        mockApolloClient.query.mockResolvedValueOnce({
+            data: { modelcatalog_configuration_by_pk: mockCatalogSetup }
+        });
 
         const bindings = await useModelInputService.getDataBindingsByModelId(data.model_id);
         expect(bindings).toHaveLength(4);
     });
 
     it("should throw NotFoundError when model is not found", async () => {
-        mockApolloClient.query
-            .mockResolvedValueOnce({ data: { modelcatalog_configuration_by_pk: null } });
+        mockApolloClient.query.mockResolvedValueOnce({
+            data: { modelcatalog_configuration_by_pk: null }
+        });
 
         await expect(useModelInputService.getDataBindingsByModelId("invalid-id")).rejects.toThrow(
             NotFoundError

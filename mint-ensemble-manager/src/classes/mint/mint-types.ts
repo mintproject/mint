@@ -1,4 +1,4 @@
-import { env } from "process";
+import type { ComponentArgument } from "@/classes/localex/local-execution-types";
 
 export type Scalars = {
     ID: { input: string; output: string };
@@ -6,16 +6,16 @@ export type Scalars = {
     Boolean: { input: boolean; output: boolean };
     Int: { input: number; output: number };
     Float: { input: number; output: number };
-    date: { input: any; output: any };
-    float8: { input: any; output: any };
-    geography: { input: any; output: any };
-    geometry: { input: any; output: any };
-    problem_statement_events: { input: any; output: any };
-    task_events: { input: any; output: any };
-    thread_events: { input: any; output: any };
-    timestamp: { input: any; output: any };
-    timestamptz: { input: any; output: any };
-    uuid: { input: any; output: any };
+    date: { input: string; output: string };
+    float8: { input: number; output: number };
+    geography: { input: unknown; output: unknown };
+    geometry: { input: unknown; output: unknown };
+    problem_statement_events: { input: unknown; output: unknown };
+    task_events: { input: unknown; output: unknown };
+    thread_events: { input: unknown; output: unknown };
+    timestamp: { input: string; output: string };
+    timestamptz: { input: string; output: string };
+    uuid: { input: string; output: string };
 };
 
 export interface IdMap<T> {
@@ -181,7 +181,7 @@ export interface Region extends IdNameObject {
     bounding_box?: BoundingBox;
     model_catalog_uri?: string;
     category_id: string;
-    geometries: any[];
+    geometries: unknown[];
 }
 
 export interface RegionsState {
@@ -220,12 +220,12 @@ export interface Dataset extends IdNameObject {
     source: Source;
     categories?: string[];
     is_cached?: boolean;
-    resource_repr?: any;
-    dataset_repr?: any;
+    resource_repr?: unknown;
+    dataset_repr?: unknown;
     resources?: DataResource[];
     resources_loaded?: boolean;
     resource_count?: number;
-    spatial_coverage?: any;
+    spatial_coverage?: string;
 }
 
 export interface Dataslice extends IdNameObject {
@@ -235,13 +235,13 @@ export interface Dataslice extends IdNameObject {
     resources: DataResource[];
     resources_loaded?: boolean;
     time_period?: DateRange;
-    spatial_coverage?: any;
+    spatial_coverage?: string;
 }
 
 export interface DataResource extends IdNameObject {
     url: string;
     time_period?: DateRange;
-    spatial_coverage?: any;
+    spatial_coverage?: string;
     selected?: boolean;
     type?: string;
 }
@@ -319,7 +319,7 @@ export interface Model extends IdNameObject {
     output_time_interval?: string;
     usage_notes?: string;
     indicators?: string;
-    hasRegion?: any;
+    hasRegion?: unknown;
 }
 
 const getLastPart = (s: string) => {
@@ -463,7 +463,7 @@ export interface ThreadEvent extends MintEvent {
 export interface ProblemStatementList {
     problem_statement_ids: string[];
     problem_statements: IdMap<ProblemStatementInfo>;
-    unsubscribe?: Function;
+    unsubscribe?: () => void;
 }
 
 export interface ProblemStatementInfo extends IdNameObject {
@@ -482,7 +482,7 @@ export interface DateRange {
 export interface ProblemStatement extends ProblemStatementInfo {
     tasks: Task[];
     changed?: boolean;
-    unsubscribe?: Function;
+    unsubscribe?: () => void;
 }
 
 export interface ThreadInfo extends IdNameObject {
@@ -499,7 +499,7 @@ export interface ThreadInfo extends IdNameObject {
 export interface ThreadList {
     thread_ids: string[];
     threads: IdMap<ThreadInfo>;
-    unsubscribe?: Function;
+    unsubscribe?: () => void;
 }
 
 export interface Thread extends ThreadInfo {
@@ -513,7 +513,7 @@ export interface Thread extends ThreadInfo {
     events: ThreadEvent[];
     changed?: boolean;
     refresh?: boolean;
-    unsubscribe?: Function;
+    unsubscribe?: () => void;
 }
 
 export interface Visualization {
@@ -523,7 +523,7 @@ export interface Visualization {
 
 export interface ComparisonFeature {
     name: string;
-    fn: Function;
+    fn: (...args: unknown[]) => unknown;
 }
 
 export type ModelMap = IdMap<Model>;
@@ -533,7 +533,7 @@ export type DataMap = IdMap<Dataslice>;
 export interface TaskList {
     task_ids: string[];
     tasks: IdMap<Task>;
-    unsubscribe?: Function;
+    unsubscribe?: () => void;
 }
 
 export interface Task extends IdNameObject {
@@ -545,7 +545,7 @@ export interface Task extends IdNameObject {
     threads?: IdMap<ThreadInfo>;
     events?: TaskEvent[];
     permissions?: MintPermission[];
-    unsubscribe?: Function;
+    unsubscribe?: () => void;
 }
 
 // Mapping of model id to data ensembles
@@ -566,7 +566,7 @@ export interface ModelIOBindings {
 export interface ExecutionSummary {
     workflow_name?: string;
     changed?: boolean;
-    unsubscribe?: Function;
+    unsubscribe?: () => void;
 
     submitted_for_execution: boolean;
     submission_time: Date;
@@ -596,7 +596,7 @@ export interface Execution {
     execution_engine?: "wings" | "localex" | "tapis";
     status: "FAILURE" | "SUCCESS" | "RUNNING" | "WAITING";
     run_progress?: number; // 0 to 100 (percentage done)
-    results: any[]; // Chosen results after completed run
+    results: unknown[] | Record<string, unknown>; // Chosen results after completed run
     selected: boolean;
 }
 
@@ -630,7 +630,7 @@ export interface VariablesState {
 }
 
 export interface Wcm {
-    wings: any;
+    wings: { inputs: ComponentArgument[]; outputs: ComponentArgument[] };
 }
 
 export interface WingsWcm {

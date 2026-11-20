@@ -14,6 +14,38 @@ import {
     standingProblemStatementId
 } from "./scenarioService";
 import { UnifiedExecutionRecord } from "./unifiedExecutionStore";
+import type { UnifiedRequestBody } from "./unifiedExecutionService";
+
+/** A task as the fake problem statements keep it. */
+interface FakeTask {
+    id: string;
+    regionid?: string;
+    threads: Record<string, { id?: string; events?: unknown[]; [key: string]: unknown }>;
+}
+
+/** A problem statement as the fake service keeps it. */
+interface FakeProblemStatement {
+    id: string;
+    permissions?: unknown;
+    tasks: Record<string, FakeTask>;
+}
+
+/** The fields of a thrown step error that the tests read. */
+interface StepError {
+    statusCode?: number;
+    code?: string;
+    message?: unknown;
+    details?: { step?: string; [key: string]: unknown };
+}
+
+/** The options a fake create call receives. */
+interface CreateOptions {
+    id?: string;
+    permissions?: unknown;
+    createdBy?: string;
+}
+
+type RouterScenario = Parameters<typeof unifiedExecutionRouter>[1];
 
 jest.mock("@/classes/mint/mint-functions", () => ({
     getConfiguration: jest.fn().mockReturnValue({
@@ -47,14 +79,14 @@ const SQUARE = {
 
 function build(overrides: Partial<ScenarioDeps> = {}) {
     const calls: string[] = [];
-    const problemStatements = new Map<string, any>();
+    const problemStatements = new Map<string, FakeProblemStatement>();
     const records: UnifiedExecutionRecord[] = [];
     let threadCounter = 0;
     let planCounter = 0;
 
     const deps: ScenarioDeps = {
         unified: {
-            createPlan: jest.fn(async (body: any) => {
+            createPlan: jest.fn(async (body: UnifiedRequestBody) => {
                 calls.push("plan");
                 planCounter += 1;
                 return {
@@ -64,13 +96,13 @@ function build(overrides: Partial<ScenarioDeps> = {}) {
                     body
                 };
             }),
-            submit: jest.fn(async (body: any) => {
+            submit: jest.fn(async (body: UnifiedRequestBody) => {
                 calls.push("submit");
                 const record = {
                     id: `exec-${records.length + 1}`,
                     plan_id: body.plan_id,
                     thread_id: [...problemStatements.values()]
-                        .flatMap((ps) => Object.values<any>(ps.tasks))
+                        .flatMap((ps) => Object.values(ps.tasks))
                         .flatMap((task) => Object.keys(task.threads))
                         .pop(),
                     model_id: MODEL,
@@ -91,41 +123,57 @@ function build(overrides: Partial<ScenarioDeps> = {}) {
             listByThreads: jest.fn(async (ids: string[]) =>
                 records.filter((record) => ids.includes(record.thread_id))
             )
-        } as any,
+        } as unknown as ScenarioDeps["store"],
         problemStatements: {
-            createProblemStatement: jest.fn(async (ps: any, _auth: string, options: any = {}) => {
-                calls.push("problem_statement");
-                if (!problemStatements.has(options.id)) {
-                    problemStatements.set(options.id, {
-                        id: options.id,
-                        permissions: options.permissions,
-                        tasks: {}
-                    });
+            createProblemStatement: jest.fn(
+                async (_ps: unknown, _auth: string, options: CreateOptions = {}) => {
+                    calls.push("problem_statement");
+                    if (!problemStatements.has(options.id)) {
+                        problemStatements.set(options.id, {
+                            id: options.id,
+                            permissions: options.permissions,
+                            tasks: {}
+                        });
+                    }
+                    return options.id;
                 }
-                return options.id;
-            }),
+            ),
             getProblemStatementById: jest.fn(async (id: string) => {
                 const ps = problemStatements.get(id);
                 if (!ps) throw new NotFoundError("Problem statement not found");
                 return ps;
             })
-        } as any,
+        } as unknown as ScenarioDeps["problemStatements"],
         tasks: {
-            createTask: jest.fn(async (psId: string, task: any, _auth: string, options: any) => {
-                calls.push("task");
-                const ps = problemStatements.get(psId);
-                ps.tasks[options.id] ||= { id: options.id, regionid: task.regionid, threads: {} };
-                return options.id;
-            })
-        } as any,
+            createTask: jest.fn(
+                async (
+                    psId: string,
+                    task: { regionid?: string },
+                    _auth: string,
+                    options: CreateOptions
+                ) => {
+                    calls.push("task");
+                    const ps = problemStatements.get(psId);
+                    ps.tasks[options.id] ||= {
+                        id: options.id,
+                        regionid: task.regionid,
+                        threads: {}
+                    };
+                    return options.id;
+                }
+            )
+        } as unknown as ScenarioDeps["tasks"],
         subTasks: {
             createSubtask: jest.fn(
                 async (
                     psId: string,
                     taskId: string,
-                    thread: any,
+                    thread: {
+                        name: string;
+                        dates: { start_date: string; end_date: string };
+                    },
                     _auth: string,
-                    options: any = {}
+                    options: CreateOptions = {}
                 ) => {
                     calls.push("thread");
                     threadCounter += 1;
@@ -147,7 +195,7 @@ function build(overrides: Partial<ScenarioDeps> = {}) {
             setupModelConfigurationAndBindings: jest.fn(async () => {
                 calls.push("bindings");
             })
-        } as any,
+        } as unknown as ScenarioDeps["subTasks"],
         regions: {
             createRegion: jest.fn(async () => {
                 calls.push("region");
@@ -344,7 +392,7 @@ describe("scenarioService.createScenario", () => {
                 statusCode: 500
             })
         );
-        const error: any = await service.createScenario(body(), alice).catch((e) => e);
+        const error: StepError = await service.createScenario(body(), alice).catch((e) => e);
         expect(error.statusCode).toBe(500);
         expect(JSON.stringify(error.message) + JSON.stringify(error.details)).not.toMatch(
             /constraint/
@@ -568,7 +616,7 @@ describe("scenarioService.listRuns", () => {
         const { service, problemStatements } = build();
         const created = await service.createScenario(body(), alice);
         const ps = problemStatements.get(created.problem_statement_id);
-        const task: any = Object.values(ps.tasks)[0];
+        const task = Object.values(ps.tasks)[0];
         // Everyone can read every thread (shared permissions); ownership is the CREATE event.
         task.threads["thread-foreign"] = {
             id: "thread-foreign",
@@ -607,7 +655,9 @@ describe("scenarioService.listRuns", () => {
         (deps.store.listByThreads as jest.Mock).mockRejectedValueOnce(
             new Error("hasura: secret detail")
         );
-        const error: any = await service.listRuns({ app_label: "SUBSIDE" }, alice).catch((e) => e);
+        const error: StepError = await service
+            .listRuns({ app_label: "SUBSIDE" }, alice)
+            .catch((e) => e);
         expect(error).toMatchObject({ statusCode: 500, code: "RUNS_LIST_FAILED" });
         expect(error.message).not.toMatch(/secret detail/);
     });
@@ -666,7 +716,7 @@ describe("route order", () => {
         };
         const app = express()
             .use(express.json())
-            .use("/plans", unifiedExecutionRouter(unified, scenario as any));
+            .use("/plans", unifiedExecutionRouter(unified, scenario as unknown as RouterScenario));
 
         const created = await request(app).post("/plans/scenario").send({ idempotency_key: "k" });
         const listed = await request(app).get("/plans/runs?app_label=SUBSIDE&limit=5");
@@ -694,7 +744,7 @@ describe("route order", () => {
         };
         const app = express()
             .use(express.json())
-            .use("/plans", unifiedExecutionRouter({}, scenario as any));
+            .use("/plans", unifiedExecutionRouter({}, scenario as unknown as RouterScenario));
         const response = await request(app).post("/plans/scenario").send({});
         expect(response.status).toBe(422);
         expect(response.body).toEqual({

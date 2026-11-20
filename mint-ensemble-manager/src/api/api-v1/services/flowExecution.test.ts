@@ -1,9 +1,14 @@
-import { createUnifiedExecutionService, UnifiedExecutionError } from "./unifiedExecutionService";
+import {
+    createUnifiedExecutionService,
+    ParentRunResponse,
+    UnifiedExecutionError
+} from "./unifiedExecutionService";
 import {
     UnifiedExecutionRecord,
     UnifiedExecutionStep,
     UnifiedExecutionStore
 } from "./unifiedExecutionStore";
+import { Region } from "@/classes/mint/mint-types";
 import { FlowThreadContext, readThreadBindings } from "./flowExecution";
 
 jest.mock("@/classes/graphql/graphql_functions_v2", () => ({
@@ -19,6 +24,11 @@ jest.mock("@/classes/mint/mint-functions", () => ({
 }));
 
 const AUTH = "Bearer user-token";
+
+type LegacyServices = Parameters<typeof createUnifiedExecutionService>[0];
+
+/** A run the Ensemble Manager answers for itself, as the routes return it. */
+const asParent = (response: unknown) => response as ParentRunResponse;
 const BODY = { executor: "ensemble_manager", thread_id: "thread-1", model_id: "cfg-flow" };
 
 function context(over: Partial<FlowThreadContext> = {}): FlowThreadContext {
@@ -127,8 +137,10 @@ describe("running a flow from a thread", () => {
     }
 
     /** Answer the adapter's routes in the order the service calls them. */
-    function adapter(routes: Record<string, (body: any) => { status?: number; body: any }>) {
-        fetchMock.mockImplementation(async (url: string, init: any) => {
+    function adapter(
+        routes: Record<string, (body: unknown) => { status?: number; body: unknown }>
+    ) {
+        fetchMock.mockImplementation(async (url: string, init?: { body?: string }) => {
             const path = url.replace("http://adapter.local", "");
             const key = Object.keys(routes).find((route) => path.startsWith(route));
             if (!key) throw new Error("unexpected adapter call " + path);
@@ -148,13 +160,16 @@ describe("running a flow from a thread", () => {
     }
 
     const service = () =>
-        createUnifiedExecutionService(legacy as any, { store: fakeStore(), flows });
+        createUnifiedExecutionService(legacy as unknown as LegacyServices, {
+            store: fakeStore(),
+            flows
+        });
 
     beforeEach(() => {
         jest.clearAllMocks();
         records = new Map();
         fetchMock = jest.fn();
-        global.fetch = fetchMock as any;
+        global.fetch = fetchMock as unknown as typeof fetch;
         flows.flowContext.mockResolvedValue(context());
         flows.startFlowExecution.mockResolvedValue("exec-1");
         flows.finishFlowExecution.mockResolvedValue(undefined);
@@ -380,7 +395,7 @@ describe("running a flow from a thread", () => {
                                     ]
                                 }
                             ]
-                        } as any
+                        } as Region
                     })
                 );
                 await service().createPlan(BODY, AUTH);
@@ -422,7 +437,7 @@ describe("running a flow from a thread", () => {
             const withRegion = (over: Partial<FlowThreadContext> = {}) => {
                 const base = context({
                     thread_bindings: { region: { input: "in-aoi" } },
-                    region: { id: "region-1", geometries: [SQUARE] } as any,
+                    region: { id: "region-1", geometries: [SQUARE] } as Region,
                     ...over
                 });
                 base.inputs.push({
@@ -467,7 +482,7 @@ describe("running a flow from a thread", () => {
 
             it("says so when the thread's region has no boundary to send", async () => {
                 flows.flowContext.mockResolvedValue(
-                    withRegion({ region: { id: "region-1", geometries: [] } as any })
+                    withRegion({ region: { id: "region-1", geometries: [] } as Region })
                 );
                 await expect(service().createPlan(BODY, AUTH)).rejects.toMatchObject({
                     statusCode: 422,
@@ -631,7 +646,11 @@ describe("running a flow from a thread", () => {
         async function submit(extra: Record<string, unknown> = {}) {
             const svc = service();
             const plan = await svc.createPlan(BODY, AUTH);
-            return { svc, plan, run: await svc.submit({ plan_id: plan.plan_id, ...extra }, AUTH) };
+            return {
+                svc,
+                plan,
+                run: asParent(await svc.submit({ plan_id: plan.plan_id, ...extra }, AUTH))
+            };
         }
 
         it("records the run for the thread and starts one pipeline, with no Tapis job", async () => {
@@ -706,7 +725,7 @@ describe("running a flow from a thread", () => {
 
         it("starts a plan once: a second submit returns the same run", async () => {
             const { svc, plan } = await submit();
-            const again = await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            const again = asParent(await svc.submit({ plan_id: plan.plan_id }, AUTH));
             expect(again.run_id).toBe("ue_parent-1");
             expect(calls("/workflows/submit")).toHaveLength(1);
             expect(flows.startFlowExecution).toHaveBeenCalledTimes(1);
@@ -764,7 +783,7 @@ describe("running a flow from a thread", () => {
                 created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString()
             } as unknown as UnifiedExecutionRecord);
 
-            const run = await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            const run = asParent(await svc.submit({ plan_id: plan.plan_id }, AUTH));
             expect(run.status).toBe("adapter_running");
             expect(run.model_child_id).toBe("exec-earlier");
             // The record it already wrote for the thread is reused, with the first values.
@@ -787,7 +806,7 @@ describe("running a flow from a thread", () => {
                 adapter_run_ids: [],
                 created_at: new Date().toISOString()
             } as unknown as UnifiedExecutionRecord);
-            const run = await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            const run = asParent(await svc.submit({ plan_id: plan.plan_id }, AUTH));
             expect(run.status).toBe("adapter_dispatching");
             expect(calls("/workflows/submit")).toHaveLength(0);
         });
@@ -812,7 +831,7 @@ describe("running a flow from a thread", () => {
             adapter({
                 "/workflows/submit": () => ({ body: { run_id: "run-2", status: "running" } })
             });
-            const run = await svc.submit({ plan_id: second.plan_id }, AUTH);
+            const run = asParent(await svc.submit({ plan_id: second.plan_id }, AUTH));
             expect(run.run_id).toBe("ue_parent-2");
         });
 
@@ -858,22 +877,16 @@ describe("running a flow from a thread", () => {
             return svc;
         }
 
-        function poll(body: any) {
+        function poll(body: unknown) {
             adapter({ "/runs/run-1/poll": () => ({ body }) });
         }
 
         it("shows one stage per step, in order, and no model stage", async () => {
             const svc = await started();
             poll({ status: "running", flow: FLOW_VIEW });
-            const run = await svc.getRun("ue_parent-1", AUTH);
+            const run = asParent(await svc.getRun("ue_parent-1", AUTH));
             expect(
-                run.workflow_stages.map((s: any) => [
-                    s.stage_id,
-                    s.type,
-                    s.name,
-                    s.status,
-                    s.depends_on
-                ])
+                run.workflow_stages.map((s) => [s.stage_id, s.type, s.name, s.status, s.depends_on])
             ).toEqual([
                 ["step-1", "flow_step", "ingest", "completed", []],
                 ["step-2", "flow_step", "score", "running", ["step-1"]]
@@ -913,9 +926,9 @@ describe("running a flow from a thread", () => {
                     outputs: []
                 }
             });
-            const run = await svc.getRun("ue_parent-1", AUTH);
+            const run = asParent(await svc.getRun("ue_parent-1", AUTH));
             expect(
-                run.workflow_stages.map((s: any) => [s.stage_id, s.name, s.status, s.depends_on])
+                run.workflow_stages.map((s) => [s.stage_id, s.name, s.status, s.depends_on])
             ).toEqual([
                 ["step-gather-1", "Gather Documents", "completed", []],
                 ["step-1", "ingest", "running", ["step-gather-1"]],
@@ -927,8 +940,8 @@ describe("running a flow from a thread", () => {
         it("shows the run as one stage before its steps are known", async () => {
             const svc = await started();
             poll({ status: "running" });
-            const run = await svc.getRun("ue_parent-1", AUTH);
-            expect(run.workflow_stages.map((s: any) => [s.stage_id, s.status])).toEqual([
+            const run = asParent(await svc.getRun("ue_parent-1", AUTH));
+            expect(run.workflow_stages.map((s) => [s.stage_id, s.status])).toEqual([
                 ["flow", "running"]
             ]);
         });
@@ -1003,7 +1016,7 @@ describe("running a flow from a thread", () => {
                     body: { status: "cancelled", error_message: "Cancelled by alice" }
                 })
             });
-            const run = await svc.cancelRun("ue_parent-1", AUTH);
+            const run = asParent(await svc.cancelRun("ue_parent-1", AUTH));
             expect([run.status, run.failure_code]).toEqual(["failed", "CANCELLED_BY_USER"]);
             expect(calls("/runs/run-1/cancel")).toHaveLength(1);
             expect(flows.finishFlowExecution).toHaveBeenCalledWith(
@@ -1304,7 +1317,7 @@ describe("running a flow from a thread", () => {
             });
             const svc = service();
             const plan = await svc.createPlan(BODY, AUTH);
-            const submitted = await svc.submit({ plan_id: plan.plan_id }, AUTH);
+            const submitted = asParent(await svc.submit({ plan_id: plan.plan_id }, AUTH));
             expect(submitted.status).toBe("adapter_running");
             expect(flows.startFlowExecution.mock.calls[0][4].inputs[0].resources).toHaveLength(3);
         });
@@ -1438,7 +1451,7 @@ describe("running a flow from a thread", () => {
             adapter({
                 "/runs/run-1/poll": () => ({ body: { status: "completed", flow: PAUSED_VIEW } })
             });
-            const run = await svc.getRun("ue_parent-1", AUTH);
+            const run = asParent(await svc.getRun("ue_parent-1", AUTH));
             return { svc, run };
         }
 
@@ -1484,12 +1497,10 @@ describe("running a flow from a thread", () => {
                 error: null
             });
             // Steps before the pause are done; the rest are waiting.
-            expect(run.workflow_stages.map((stage: any) => [stage.stage_id, stage.status])).toEqual(
-                [
-                    ["step-1", "completed"],
-                    ["step-2", "waiting"]
-                ]
-            );
+            expect(run.workflow_stages.map((stage) => [stage.stage_id, stage.status])).toEqual([
+                ["step-1", "completed"],
+                ["step-2", "waiting"]
+            ]);
             adapter({
                 "/data-objects": () => ({ body: { id: "do-1" } }),
                 "/plans/flow": () => ({ body: { plan_id: "adapter-plan-2", plan_json: PLAN_JSON } })
@@ -1518,14 +1529,14 @@ describe("running a flow from a thread", () => {
             adapter({
                 "/runs/run-1/poll": () => ({ body: { status: "completed", flow: unsafe } })
             });
-            const run = await svc.getRun("ue_parent-1", AUTH);
+            const run = asParent(await svc.getRun("ue_parent-1", AUTH));
             expect(run.pause.file_location).toBeNull();
         });
 
         it("resumes through the adapter as the caller and follows the run after the edit", async () => {
             const { svc } = await paused();
             adapterResumes();
-            const run = await svc.resumeRun("ue_parent-1", resumeBody(), AUTH);
+            const run = asParent(await svc.resumeRun("ue_parent-1", resumeBody(), AUTH));
             expect(calls("/runs/run-1/resume")[0].body).toEqual(resumeBody());
             expect(calls("/runs/run-1/resume")[0].headers.Authorization).toBe(AUTH);
             expect(run.status).toBe("adapter_running");
@@ -1565,7 +1576,7 @@ describe("running a flow from a thread", () => {
                     }
                 })
             });
-            const run = await svc.getRun("ue_parent-1", AUTH);
+            const run = asParent(await svc.getRun("ue_parent-1", AUTH));
             expect(run.status).toBe("completed");
             expect(flows.finishFlowExecution).toHaveBeenCalledTimes(1);
             expect(flows.finishFlowExecution.mock.calls[0][4]).toEqual([
@@ -1575,12 +1586,13 @@ describe("running a flow from a thread", () => {
                     url: "tapis://ls6/out/counts.csv"
                 }
             ]);
-            expect(run.model_result.replacement).toMatchObject({
+            const modelResult = run.model_result as { replacement?: unknown };
+            expect(modelResult.replacement).toMatchObject({
                 replaced_by: "alice",
                 resource_id: "res-9",
                 original: LEXICON
             });
-            expect(run.replacement).toEqual(run.model_result.replacement);
+            expect(run.replacement).toEqual(modelResult.replacement);
             // Only the declared fields, and a hash only if it is one.
             expect(run.replacement).not.toHaveProperty("extra");
             expect(run.replacement).not.toHaveProperty("sha256");
@@ -1595,7 +1607,7 @@ describe("running a flow from a thread", () => {
                     body: { status: "running", flow: { ...FLOW_AFTER, replacement: REPLACEMENT } }
                 })
             });
-            const run = await svc.getRun("ue_parent-1", AUTH);
+            const run = asParent(await svc.getRun("ue_parent-1", AUTH));
             expect(run.replacement.sha256).toBe("b".repeat(64));
             expect(run.replacement.replaced_by).toBe("alice");
         });
@@ -1613,7 +1625,7 @@ describe("running a flow from a thread", () => {
                     }
                 })
             });
-            const back = await svc.getRun("ue_parent-1", AUTH);
+            const back = asParent(await svc.getRun("ue_parent-1", AUTH));
             expect(back.status).toBe("awaiting_edit");
             expect(back.pause.error).toBe("lexicon.json cannot be used: no groups were found");
             expect(back.pause.file_location).toBe(LEXICON);
@@ -1738,7 +1750,7 @@ describe("running a flow from a thread", () => {
                     body: { status: "cancelled", error_message: "Cancelled by alice" }
                 })
             });
-            const run = await svc.cancelRun("ue_parent-1", AUTH);
+            const run = asParent(await svc.cancelRun("ue_parent-1", AUTH));
             expect([run.status, run.failure_code]).toEqual(["failed", "CANCELLED_BY_USER"]);
             expect(flows.finishFlowExecution).toHaveBeenCalledTimes(1);
             expect(flows.finishFlowExecution).toHaveBeenCalledWith(
@@ -1783,25 +1795,29 @@ describe("running a flow from a thread", () => {
             // The record keeps saying it waits: the update after the resume was lost.
             const original = store.status;
             // Resume with the store refusing the write that records it.
-            const failingService = createUnifiedExecutionService(legacy as any, {
-                store: {
-                    ...(await (async () => {
-                        const base: any = {};
-                        base.getById = async (id: string) => records.get(id) || null;
-                        base.getByPlanId = async (planId: string) =>
-                            [...records.values()].find((r) => r.plan_id === planId) || null;
-                        base.listByThread = async () => [...records.values()];
-                        base.upsertStep = async (input: any) => ({ id: "s", ...input });
-                        base.insert = async () => null;
-                        base.compareAndSet = async () => null;
-                        base.update = async () => {
-                            throw new Error("store down");
-                        };
-                        return base;
-                    })())
-                } as any,
-                flows
-            });
+            const failingService = createUnifiedExecutionService(
+                legacy as unknown as LegacyServices,
+                {
+                    store: {
+                        ...(await (async () => {
+                            const base: Partial<UnifiedExecutionStore> = {};
+                            base.getById = async (id: string) => records.get(id) || null;
+                            base.getByPlanId = async (planId: string) =>
+                                [...records.values()].find((r) => r.plan_id === planId) || null;
+                            base.listByThread = async () => [...records.values()];
+                            base.upsertStep = async (input) =>
+                                ({ id: "s", ...input }) as UnifiedExecutionStep;
+                            base.insert = async () => null;
+                            base.compareAndSet = async () => null;
+                            base.update = async () => {
+                                throw new Error("store down");
+                            };
+                            return base;
+                        })())
+                    } as UnifiedExecutionStore,
+                    flows
+                }
+            );
             const answered = await failingService.resumeRun("ue_parent-1", resumeBody(), AUTH);
             expect(answered.status).toBe("adapter_running");
             expect(records.get("parent-1")!.status).toBe(original);

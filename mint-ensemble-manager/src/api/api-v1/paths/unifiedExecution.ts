@@ -1,5 +1,8 @@
-import { Router } from "express";
-import { UnifiedExecutionError } from "@/api/api-v1/services/unifiedExecutionService";
+import { Response, Router } from "express";
+import {
+    UnifiedExecutionError,
+    UnifiedExecutionService
+} from "@/api/api-v1/services/unifiedExecutionService";
 import { HttpError } from "@/classes/common/errors";
 import type { createScenarioService } from "@/api/api-v1/services/scenarioService";
 
@@ -422,7 +425,7 @@ type ScenarioService = ReturnType<typeof createScenarioService>;
  *               $ref: '#/components/schemas/UnifiedExecutionError'
  */
 
-function sendError(res: any, error: unknown) {
+function sendError(res: Response, error: unknown) {
     if (error instanceof UnifiedExecutionError) {
         return res.status(error.statusCode).json({
             message: error.message,
@@ -441,7 +444,14 @@ function sendError(res: any, error: unknown) {
  * Public plan/submit boundary for both ordinary Ensemble Manager runs and
  * SVO-adapter-backed runs. The adapter URL and credentials stay server-side.
  */
-export default function (service: any, scenario?: ScenarioService) {
+/** The service methods the routes call. Their answers are sent as JSON, so any shape will do. */
+type UnifiedExecutionRoutes = {
+    [Method in keyof UnifiedExecutionService]?: (
+        ...args: Parameters<UnifiedExecutionService[Method]>
+    ) => Promise<unknown>;
+};
+
+export default function (service: UnifiedExecutionRoutes, scenario?: ScenarioService) {
     const router = Router();
 
     router.post("/", async (req, res) => {

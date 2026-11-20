@@ -19,7 +19,7 @@ const square = (x: number, y: number) => ({
     ]
 });
 
-const region = (geometries: any[]): Region =>
+const region = (geometries: unknown[]): Region =>
     ({ id: "region-1", name: "r", category_id: "c", geometries }) as Region;
 
 describe("inputStepDerivation", () => {

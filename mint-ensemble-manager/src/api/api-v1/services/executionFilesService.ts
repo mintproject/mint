@@ -4,6 +4,7 @@ import { TapisExecutionService } from "@/classes/tapis/adapters/TapisExecutionSe
 import { BadRequestError, HttpError, NotFoundError } from "@/classes/common/errors";
 import type { Readable } from "stream";
 import { createHasuraUnifiedExecutionStore } from "./unifiedExecutionStore";
+import type { FlowPause } from "./flowExecution";
 import { getTokenFromAuthorizationHeader } from "@/utils/authUtils";
 
 /**
@@ -102,9 +103,21 @@ interface ExecutionResultUrl {
     location: TapisLocation;
 }
 
-const executionResultUrls = (execution: any): ExecutionResultUrl[] => {
+/** One result of an execution: its resource, or a bare URL. */
+interface ExecutionResultEntry {
+    resource?: { url?: string; name?: string };
+    url?: string;
+}
+
+/** What of an execution the file service reads. `results` is a list or keyed by output. */
+interface ExecutionView {
+    runid?: string;
+    results?: ExecutionResultEntry[] | Record<string, ExecutionResultEntry>;
+}
+
+const executionResultUrls = (execution: ExecutionView): ExecutionResultUrl[] => {
     const found = new Map<string, ExecutionResultUrl>();
-    Object.entries(execution.results ?? {}).forEach(([key, result]: [string, any]) => {
+    Object.entries(execution.results ?? {}).forEach(([key, result]) => {
         for (const url of [result?.resource?.url, result?.url]) {
             const location = locationFromUri(url);
             if (location && !found.has(url)) {
@@ -148,7 +161,7 @@ const safeFilename = (path: string) => {
  * exact file, only while the run waits; Tapis still decides, with the user's token,
  * whether they may read it.
  */
-const pausedFile = async (execution: any): Promise<TapisLocation | null> => {
+const pausedFile = async (execution: ExecutionView): Promise<TapisLocation | null> => {
     const runId = execution?.runid;
     if (typeof runId !== "string" || !runId.startsWith("ue_")) {
         return null;
@@ -159,7 +172,7 @@ const pausedFile = async (execution: any): Promise<TapisLocation | null> => {
     if (!record || record.status !== "awaiting_edit") {
         return null;
     }
-    const child = ((record.adapter_run_ids || []) as Array<Record<string, any>>)[0];
+    const child = ((record.adapter_run_ids || []) as Array<{ pause?: FlowPause | null }>)[0];
     return locationFromUri(child?.pause?.file_location);
 };
 
@@ -332,7 +345,7 @@ const resultKind = async (
     }
 };
 
-const resultKinds = async (execution: any, tapis: TapisExecutionService) =>
+const resultKinds = async (execution: ExecutionView, tapis: TapisExecutionService) =>
     Promise.all(
         executionResultUrls(execution).map(async (entry) => ({
             ...entry,

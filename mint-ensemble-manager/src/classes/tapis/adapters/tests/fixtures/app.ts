@@ -204,7 +204,8 @@ export const appWithUnknownRequiredInput: Apps.TapisApp = {
         fileInputs: [
             {
                 name: "unknown_file",
-                description: "A required input file whose name is not registered in model.input_files",
+                description:
+                    "A required input file whose name is not registered in model.input_files",
                 inputMode: "REQUIRED",
                 autoMountLocal: true,
                 sourceUrl: null,

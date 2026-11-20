@@ -1,4 +1,11 @@
-import { Thread, MintPreferences, ExecutionSummary, Execution, ThreadModelMap } from "./mint-types";
+import {
+    Thread,
+    MintPreferences,
+    ExecutionSummary,
+    Execution,
+    InputBindings,
+    ThreadModelMap
+} from "./mint-types";
 import {
     setupModelWorkflow,
     fetchWingsTemplate,
@@ -114,7 +121,6 @@ export const saveAndRunExecutionsForModel = async (
 
         // Work in batches
         const batchSize = 100; // Deal with executions from firebase in this batch size
-        let batchid = 0; // Use to create batchids in firebase for storing execution ids
 
         const executionBatchSize = 10; // Run workflows in Wings in batches
 
@@ -127,7 +133,7 @@ export const saveAndRunExecutionsForModel = async (
 
             // Create executions for this batch
             bindings.map((binding) => {
-                const inputBindings: any = {};
+                const inputBindings: InputBindings = {};
                 for (let j = 0; j < inputIds.length; j++) {
                     inputBindings[inputIds[j]] = binding[j];
                 }
@@ -149,7 +155,7 @@ export const saveAndRunExecutionsForModel = async (
 
             // Check if any current executions already exist
             // - Note: execution ids are uniquely defined by the model id and inputs
-            const all_execution_ids: any[] = await listSuccessfulExecutionIds(executionids);
+            const all_execution_ids = await listSuccessfulExecutionIds(executionids);
             const current_execution_ids = all_execution_ids.filter((eid) => eid); // Filter for null/undefined execution ids
 
             // Run executions in smaller batches
@@ -179,7 +185,6 @@ export const saveAndRunExecutionsForModel = async (
 
             // Save thread execution ids (to be used for later retrieval of executions)
             setThreadModelExecutionIds(thread_model_id, executionids);
-            batchid++;
         }
     }
     console.log("Finished submitting all executions for model: " + modelid);
@@ -237,14 +242,13 @@ export const checkStatusAllExecutionsForModel = async (
     thread: Thread,
     prefs: MintPreferences
 ) => {
-    const model = thread.models[modelid];
     const thread_model_id = thread.model_ensembles[modelid].id;
     const summary = thread.execution_summary[modelid];
 
     // await loginToWings(prefs); // Login to Wings handled at the top now
 
     // FIXME: Some problem with the submission times
-    const runtimeInfos: any = await fetchWingsRunsStatuses(
+    const runtimeInfos = await fetchWingsRunsStatuses(
         summary.workflow_name,
         Math.floor(summary.submission_time.getTime()),
         summary.total_runs,
@@ -259,7 +263,7 @@ export const checkStatusAllExecutionsForModel = async (
 
     const threadModelExecutionIds = await getThreadModelExecutionIds(thread_model_id);
 
-    while (true) {
+    for (;;) {
         const executionids = threadModelExecutionIds.slice(start, start + pageSize);
         const executions = await getExecutions(executionids);
         start += pageSize;

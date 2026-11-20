@@ -46,12 +46,12 @@ if (prefs.execution_engine === "localex") {
 });*/
 
 const _downloadS3File = (url: string, filepath: string, prefs: MintPreferences): Promise<void> => {
-    var bucket = prefs.data_server_extra["bucket"];
-    var access_key = prefs.data_server_extra["access_key"];
-    var secret_key = prefs.data_server_extra["secret_access_key"];
-    var region = prefs.data_server_extra["region"];
+    const bucket = prefs.data_server_extra["bucket"];
+    const access_key = prefs.data_server_extra["access_key"];
+    const secret_key = prefs.data_server_extra["secret_access_key"];
+    const region = prefs.data_server_extra["region"];
 
-    var fileKey = url.substring(5 + bucket.length + 1);
+    const fileKey = url.substring(5 + bucket.length + 1);
 
     const client = new S3Client({
         region: region,
@@ -65,6 +65,7 @@ const _downloadS3File = (url: string, filepath: string, prefs: MintPreferences):
         Key: fileKey
     });
 
+    // eslint-disable-next-line no-async-promise-executor -- a failed send leaves this pending (kept as is)
     return new Promise<void>(async (resolve, reject) => {
         const data = await client.send(cmd);
         if (data.Body instanceof Readable) {
@@ -77,7 +78,7 @@ const _downloadS3File = (url: string, filepath: string, prefs: MintPreferences):
 
 const _downloadFile = (url: string, filepath: string): Promise<void> => {
     const file = fs.createWriteStream(filepath);
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve) => {
         if (url.toLowerCase().startsWith("http")) {
             request.get(url).on("response", (res) => {
                 res.pipe(file);
@@ -149,7 +150,7 @@ const _unzipFile = (zipfilename: string, dirname: string): Promise<string> => {
     });
 };
 
-const _downloadAndUnzipToDirectory = (url: string, modeldir: string, compname: string) => {
+const _downloadAndUnzipToDirectory = (url: string, modeldir: string) => {
     const zipfile = modeldir + ".zip";
     console.log("Downloading .." + zipfile);
     return new Promise<void>((resolve, reject) => {
@@ -203,7 +204,7 @@ const _downloadWCM = async (url: string, prefs: MintPreferences) => {
     const modeldir = codedir + "/" + compname;
     const src_dir = modeldir + "/" + "src";
     if (!fs.existsSync(src_dir)) {
-        if (extension == ".zip") await _downloadAndUnzipToDirectory(url, modeldir, compname);
+        if (extension == ".zip") await _downloadAndUnzipToDirectory(url, modeldir);
         else if (extension == ".cwl") {
             if (!fs.existsSync(modeldir)) fs.mkdirsSync(modeldir);
             fs.mkdirsSync(src_dir);
@@ -215,13 +216,8 @@ const _downloadWCM = async (url: string, prefs: MintPreferences) => {
 
 const _getModelDetailsFromYAML = (modeldir: string) => {
     const wcmYamlFileName = modeldir + "/wings-component.yml";
-    const wcmYamlFileNameAlternative = modeldir + "/wings-component.yaml";
 
-    if (fs.existsSync(wcmYamlFileName)) {
-        const wcmYamlFile = wcmYamlFileName;
-    } else if (fs.existsSync(wcmYamlFileName)) {
-        const wcmYamlFile = wcmYamlFileNameAlternative;
-    } else {
+    if (!fs.existsSync(wcmYamlFileName)) {
         throw new Error("The component is not a valid WINGS component.");
     }
 
@@ -232,10 +228,10 @@ const _getModelDetailsFromYAML = (modeldir: string) => {
     };
     const yml = yaml.safeLoad(fs.readFileSync(wcmYamlFileName, "utf8")) as Wcm;
     const wings = yml["wings"];
-    wings.inputs.map((input: any) => {
+    wings.inputs.map((input) => {
         comp.inputs.push(input);
     });
-    wings.outputs.map((output: any) => {
+    wings.outputs.map((output) => {
         comp.outputs.push(output);
     });
     return comp;
@@ -276,20 +272,16 @@ const _getModelDetails = (model: Model, modeldir: string) => {
         inputs: [],
         outputs: []
     };
-    let okinput = true;
-    let okparam = true;
     let okoutput = true;
     model.input_files.map((input) => {
         const details = _getModelIODetails(input, "input");
         if (!details) {
-            okinput = false;
             console.error("Input file missing position: " + input.id);
         } else comp.inputs.push(details);
     });
     model.input_parameters.map((param) => {
         const details = _getModelParamDetails(param);
         if (!details) {
-            okparam = false;
             console.error("Input parameter missing position: " + param.id);
         } else comp.inputs.push(details);
     });
@@ -349,9 +341,9 @@ export const queueModelExecutionsLocally = async (
     region: Region,
     executions: Execution[],
     prefs: MintPreferences
-): Promise<Queue.Job<any>[]> => {
+): Promise<Queue.Job[]> => {
     const seeds: ComponentSeed[] = [];
-    const registered_resources: any = {};
+    const registered_resources: Record<string, string[]> = {};
     const downloadInputPromises = [];
 
     const model = thread.models[modelid];
@@ -367,18 +359,16 @@ export const queueModelExecutionsLocally = async (
         // Get input datasets
         model.input_files.map((io: ModelIO) => {
             let resources: DataResource[] = [];
-            let dsid = null;
             if (bindings[io.id]) {
                 // We have a dataset binding from the user for it
                 resources = [bindings[io.id] as DataResource];
             } else if (io.value) {
                 // There is a hardcoded value in the model itself
-                dsid = io.value.id;
                 resources = io.value.resources;
             }
             if (resources.length > 0) {
                 const type = io.type.replace(/^.*#/, "");
-                const newresources: any = {};
+                const newresources: Record<string, DataResource> = {};
                 resources.map((res) => {
                     let resid = res.id;
                     let resname = res.name;
@@ -427,10 +417,10 @@ export const queueModelExecutionsLocally = async (
     });
 
     // Add Download Job to Queue (if it doesn't already exist)
-    for (let resid in registered_resources) {
-        let args = registered_resources[resid];
-        let inputpath = prefs.localex.datadir + "/" + args[0];
-        let inputurl = args[2];
+    for (const resid in registered_resources) {
+        const args = registered_resources[resid];
+        const inputpath = prefs.localex.datadir + "/" + args[0];
+        const inputurl = args[2];
         if (!fs.existsSync(inputpath)) {
             console.log("Downloading " + inputpath + " ...");
             if (inputurl.toLowerCase().startsWith("http")) {

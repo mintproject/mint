@@ -1,47 +1,47 @@
 query list_execution_history($threadModelId: uuid!, $limit: Int!) {
-  thread_model_by_pk(id: $threadModelId) {
-    id
-    modelcatalog_configuration_id
-    modelcatalog_configuration {
-      id
-      label
-      model_configuration_id
-    }
-    executions(
-      limit: $limit
-      order_by: [{execution: {start_time: desc}}, {execution: {id: desc}}]
-    ) {
-      execution {
+    thread_model_by_pk(id: $threadModelId) {
         id
-        status
-        run_progress
-        run_id
-        start_time
-        end_time
-        execution_engine
         modelcatalog_configuration_id
-        parameter_bindings {
-          execution_id
-          model_parameter_id
-          parameter_value
-        }
-        data_bindings {
-          execution_id
-          model_io_id
-          resource {
+        modelcatalog_configuration {
             id
-            name
-          }
+            label
+            model_configuration_id
         }
-        results {
-          execution_id
-          model_io_id
-          resource {
-            id
-            name
-          }
+        executions(
+            limit: $limit
+            order_by: [{ execution: { start_time: desc } }, { execution: { id: desc } }]
+        ) {
+            execution {
+                id
+                status
+                run_progress
+                run_id
+                start_time
+                end_time
+                execution_engine
+                modelcatalog_configuration_id
+                parameter_bindings {
+                    execution_id
+                    model_parameter_id
+                    parameter_value
+                }
+                data_bindings {
+                    execution_id
+                    model_io_id
+                    resource {
+                        id
+                        name
+                    }
+                }
+                results {
+                    execution_id
+                    model_io_id
+                    resource {
+                        id
+                        name
+                    }
+                }
+            }
         }
-      }
     }
-  }
 }

@@ -56,6 +56,11 @@ import { Status } from "@/interfaces/IExecutionService";
 import { getConfiguration } from "@/classes/mint/mint-functions";
 import { TACC_CKAN_DataCatalog } from "@/classes/mint/data-catalog/TACC_CKAN_Datacatalog";
 
+/** `Readable.fromWeb`, which the installed Node typings do not declare. */
+interface ReadableWithFromWeb {
+    fromWeb(stream: unknown): Readable;
+}
+
 // Value rules for a model output's archived file (design 2026-11-07-output-file-binding):
 // a base name or glob in the archive root, never a path and never a Tapis job service file.
 const OUTPUT_FILE_PATTERN = /^[A-Za-z0-9._\-*?[\]{}:]{1,255}$/;
@@ -490,8 +495,7 @@ export class TapisExecutionService implements IExecutionService {
                     stack: error instanceof Error ? error.stack : undefined,
                     name: error instanceof Error ? error.name : "Error",
                     code: (error as Error & { code?: string })?.code,
-                    ...(error instanceof Error &&
-                        (error as any).cause && { cause: (error as any).cause })
+                    ...(error instanceof Error && error.cause && { cause: error.cause })
                 };
 
                 failedExecutions.push({ execution: seed.execution, error: serializableError });
@@ -976,7 +980,7 @@ export class TapisExecutionService implements IExecutionService {
             );
         }
         return {
-            stream: (Readable as any).fromWeb(response.body) as Readable,
+            stream: (Readable as unknown as ReadableWithFromWeb).fromWeb(response.body),
             contentType: response.headers.get("content-type")
         };
     }
@@ -1128,7 +1132,7 @@ export class TapisExecutionService implements IExecutionService {
 
     private async updateExecutionResultsFromJob(execution: Execution): Promise<Execution_Result[]> {
         await updateExecutionStatusAndResultsv2(execution);
-        return execution.results;
+        return execution.results as Execution_Result[];
     }
 
     getJobOutputList = async (

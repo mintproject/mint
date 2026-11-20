@@ -2,3 +2,9 @@ node_modules
 public
 build
 dist
+# codegen output (npm run codegen); never hand-formatted
+src/classes/graphql/graphql.ts
+src/classes/graphql/gql.ts
+src/classes/graphql/fragment-masking.ts
+src/classes/graphql/index.ts
+src/classes/graphql/types.ts

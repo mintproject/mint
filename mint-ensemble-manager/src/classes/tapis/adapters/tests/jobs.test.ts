@@ -735,10 +735,10 @@ describe("secret env keys", () => {
     });
 
     test("models without required_secrets behave exactly as before", () => {
-        const { required_secrets, ...legacyModel } = secretModel as any;
+        const { required_secrets, ...legacyModel } = secretModel;
         expect(required_secrets).toHaveLength(1);
         const keys = newJobService()
-            .getEnvVariables(seed, secretApp, legacyModel as Model)
+            .getEnvVariables(seed, secretApp, legacyModel as unknown as Model)
             .map((e) => e.key);
         expect(keys).toEqual(["START_DATE", "EARTHDATA_USERNAME"]);
     });

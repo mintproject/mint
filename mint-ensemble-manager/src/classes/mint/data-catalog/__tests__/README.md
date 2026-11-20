@@ -36,57 +36,57 @@ The integration tests cover the following functionality:
 
 ### 1. Connection Testing
 
--   ✅ Test connection to CKAN server
--   ✅ Verify correct catalog type identification
+- ✅ Test connection to CKAN server
+- ✅ Verify correct catalog type identification
 
 ### 2. Dataset Registration
 
--   ✅ Register new datasets with organization
+- ✅ Register new datasets with organization
 
 ### 3. Dataset Search
 
--   ✅ Search by dataset IDs
+- ✅ Search by dataset IDs
 
 ### 4. Dataset Retrieval
 
--   ✅ Retrieve specific dataset by ID
--   ✅ Handle non-existent datasets gracefully
+- ✅ Retrieve specific dataset by ID
+- ✅ Handle non-existent datasets gracefully
 
 ### 5. Data Transformation
 
--   ✅ Transform CKAN package data to MINT Dataset format
--   ✅ Extract temporal coverage from extras
--   ✅ Extract spatial coverage from extras
--   ✅ Map resources and tags correctly
+- ✅ Transform CKAN package data to MINT Dataset format
+- ✅ Extract temporal coverage from extras
+- ✅ Extract spatial coverage from extras
+- ✅ Map resources and tags correctly
 
 ### 6. Error Handling
 
--   ✅ Handle network errors gracefully
--   ✅ Handle invalid API keys
--   ✅ Proper error propagation
+- ✅ Handle network errors gracefully
+- ✅ Handle invalid API keys
+- ✅ Proper error propagation
 
 ## Test Data
 
 The tests create the following test datasets:
 
--   `test-dataset-integration`: Main test dataset with temperature and precipitation variables
--   `test-dataset-no-org`: Test dataset without organization
+- `test-dataset-integration`: Main test dataset with temperature and precipitation variables
+- `test-dataset-no-org`: Test dataset without organization
 
 ## Configuration
 
 The tests use the following configuration:
 
--   **API URL**: `http://ckan.tacc.cloud:5000`
--   **API Key**: Configured in the test file
--   **Timeout**: 60 seconds for network operations
--   **Test Organization**: `test-org`
+- **API URL**: `http://ckan.tacc.cloud:5000`
+- **API Key**: Configured in the test file
+- **Timeout**: 60 seconds for network operations
+- **Test Organization**: `test-org`
 
 ## Notes
 
--   These are **integration tests** that require a live connection to the TACC CKAN server
--   Tests may take longer to run due to network latency
--   Test datasets are created during the test run - consider cleanup if needed
--   The tests use real API calls, so ensure you have proper permissions
+- These are **integration tests** that require a live connection to the TACC CKAN server
+- Tests may take longer to run due to network latency
+- Test datasets are created during the test run - consider cleanup if needed
+- The tests use real API calls, so ensure you have proper permissions
 
 ## Troubleshooting
 

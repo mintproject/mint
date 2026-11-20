@@ -128,7 +128,7 @@ describe("TACC_CKAN_DataCatalog Integration Tests", () => {
 
         it("should register multiple resources to a dataset successfully", async () => {
             // Register resources to the existing dataset
-            const resourceIds = await dataCatalog.registerResources(datasetId, testResources);
+            await dataCatalog.registerResources(datasetId, testResources);
 
             // Verify resources were registered by retrieving the dataset
             const updatedDataset = await dataCatalog.getDataset(datasetId);

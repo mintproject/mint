@@ -150,9 +150,18 @@ const closeRing = (ring: Ring): Ring => [...ring, ring[0]];
  * Polygon or MultiPolygon geometry. Features that are not polygons are
  * ignored; no polygon at all is invalid. Parts are collected, not merged.
  */
+/** A GeoJSON node as far as the polygon collector looks at it. */
+interface GeoJsonNode {
+    type?: string;
+    features?: unknown[];
+    geometry?: unknown;
+    coordinates?: unknown[];
+}
+
 const polygonGeometryOf = (geojson: unknown): unknown => {
     const parts: unknown[] = [];
-    const collect = (node: any, depth = 0) => {
+    const collect = (input: unknown, depth = 0) => {
+        const node = input as GeoJsonNode | null | undefined;
         if (!node || typeof node !== "object" || depth > 4) return;
         if (node.type === "FeatureCollection" && Array.isArray(node.features)) {
             node.features.forEach((feature: unknown) => collect(feature, depth + 1));
@@ -237,9 +246,10 @@ export const canonicalizeGeometry = (geojson: unknown): CanonicalRegion => {
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
 
-const validateName = (body: any): string => {
+const validateName = (body: unknown): string => {
+    const given = body as { name?: unknown } | null | undefined;
     const name =
-        typeof body?.name === "string" ? body.name.replace(CONTROL_CHARACTERS, "").trim() : "";
+        typeof given?.name === "string" ? given.name.replace(CONTROL_CHARACTERS, "").trim() : "";
     if (!name || name.length > MAX_NAME_LENGTH) {
         throw invalid(`name is required (at most ${MAX_NAME_LENGTH} characters)`);
     }

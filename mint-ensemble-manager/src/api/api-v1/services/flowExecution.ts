@@ -22,6 +22,13 @@ import {
     settingsFromPlan
 } from "./flowProvenance";
 import { UnifiedExecutionRecord, UnifiedExecutionStore } from "./unifiedExecutionStore";
+import type {
+    AdapterFlowOutput,
+    AdapterFlowView,
+    AdapterPlanJson,
+    AdapterResponse
+} from "./adapterTypes";
+import type { UnifiedParameterDefinition } from "./unifiedExecutionService";
 
 /** What the plan id carries for a flow. Small: the plan id is an indexed column. */
 export interface FlowPlan {
@@ -133,13 +140,22 @@ export interface FlowThreadService {
     ): Promise<void>;
 }
 
+/** The client's request to submit or resume a flow run. Unvalidated: each field is checked where it is read. */
+export interface FlowRequestBody {
+    [key: string]: unknown;
+    parameter_values?: Record<string, unknown>;
+    idempotency_key?: string;
+    accept_flow_settings?: boolean;
+    replacements?: unknown;
+}
+
 export interface FlowDeps {
     store: UnifiedExecutionStore;
     adapterRequest(
         path: string,
         init: { method?: string; body?: unknown; idempotencyKey?: string; asUser?: boolean },
         authorization?: string
-    ): Promise<any>;
+    ): Promise<AdapterResponse>;
     parentRunId(id: string): string;
     flows: FlowThreadService;
 }
@@ -192,6 +208,17 @@ export interface FlowReplacement {
     bytes?: number;
 }
 
+/** A step of a run, as the adapter reports it. */
+interface FlowStepView {
+    [key: string]: unknown;
+    step?: number;
+    name?: unknown;
+    depends_on?: unknown;
+    status?: unknown;
+    task_id?: unknown;
+    message?: string;
+}
+
 interface FlowChild {
     adapter_plan_id: string;
     model_io_id: string;
@@ -208,7 +235,7 @@ interface FlowChild {
     tapis_workflow_id?: string | null;
     tapis_run_id?: string | null;
     error_message?: string | null;
-    steps?: Array<Record<string, any>>;
+    steps?: FlowStepView[];
     /** The flow's outputs as its submitter saw them, to file each as a result. */
     outputs?: { model_io_id: string; name: string }[];
     /** Every setting the run used, never a credential; a link is a reference, not a value. */
@@ -230,6 +257,7 @@ const RUN_STATUS: Record<string, string> = {
     cancelled: "cancelled"
 };
 
+// eslint-disable-next-line no-control-regex -- control characters are rejected on purpose
 const TAPIS_LOCATION = /^tapis:\/\/[A-Za-z0-9][A-Za-z0-9._-]*\/[^\s\u0000-\u001f]*$/;
 
 /**
@@ -248,7 +276,7 @@ function isResultLocation(value: unknown): value is string {
 }
 
 /** Where the adapter says an output is; an adapter from before it said so gives only the value. */
-function whereItIs(output: any): unknown {
+function whereItIs(output: AdapterFlowOutput | null | undefined): unknown {
     return typeof output?.location === "string" ? output.location : output?.value;
 }
 
@@ -257,9 +285,10 @@ function plainText(value: unknown, max = 500): string | undefined {
 }
 
 /** The pause the adapter reports: the editable output and where its file is. Only what is well formed. */
-function readPause(flow: any): FlowPause | null {
+function readPause(flow: AdapterFlowView | null | undefined): FlowPause | null {
     const editable = (Array.isArray(flow?.outputs) ? flow.outputs : []).find(
-        (output: any) => output && typeof output.editable === "object" && output.editable
+        (output: AdapterFlowOutput | null) =>
+            output && typeof output.editable === "object" && output.editable
     );
     if (!editable || typeof editable.key !== "string") return null;
     return {
@@ -275,7 +304,8 @@ function readPause(flow: any): FlowPause | null {
 }
 
 /** The adapter's record of the edit, keeping only the fields of the declared shape. */
-function readReplacement(value: any): FlowReplacement | null {
+function readReplacement(input: unknown): FlowReplacement | null {
+    const value = input as Record<string, unknown> | null | undefined;
     if (!value || typeof value !== "object" || typeof value.output !== "string") return null;
     const digest = plainText(value.sha256, 64);
     return {
@@ -340,19 +370,36 @@ export interface FlowSendsData {
     what: string;
 }
 
+/** One entry of a plan's `secrets`, as the adapter lists it. */
+interface PlanSecretJson {
+    name: string;
+    label?: unknown;
+    fields?: unknown;
+    steps?: unknown;
+    stored?: unknown;
+}
+
+/** One entry of a plan's `sends_data_to`, as the adapter lists it. */
+interface PlanSendsJson {
+    step?: unknown;
+    piece?: unknown;
+    service: string;
+    what?: unknown;
+}
+
 /**
  * The secrets a flow plan asks for, as the adapter planned them. The adapter holds
  * the runner's secrets; this passes on what is needed and whether it is stored.
  */
-function readSecrets(planJson: any): {
+function readSecrets(planJson: AdapterPlanJson | null | undefined): {
     required_secrets: FlowRequiredSecret[];
     secrets_ready: boolean;
     sends_data_to: FlowSendsData[];
 } {
     const listed = Array.isArray(planJson?.secrets) ? planJson.secrets : [];
     const required_secrets: FlowRequiredSecret[] = listed
-        .filter((item: any) => item && typeof item.name === "string")
-        .map((item: any) => ({
+        .filter((item: PlanSecretJson | null) => item && typeof item.name === "string")
+        .map((item: PlanSecretJson) => ({
             name: item.name,
             label: typeof item.label === "string" ? item.label : item.name,
             fields: Array.isArray(item.fields) ? item.fields.map(String) : [],
@@ -367,8 +414,8 @@ function readSecrets(planJson: any): {
                 ? planJson.secrets_ready
                 : required_secrets.every((item) => item.stored),
         sends_data_to: sends
-            .filter((item: any) => item && typeof item.service === "string")
-            .map((item: any) => ({
+            .filter((item: PlanSendsJson | null) => item && typeof item.service === "string")
+            .map((item: PlanSendsJson) => ({
                 step: Number(item.step),
                 piece: String(item.piece ?? ""),
                 service: item.service,
@@ -498,7 +545,7 @@ export async function planFlow(
             "FLOW_PLAN_INVALID"
         );
     }
-    const parameters: Array<Record<string, any>> = planned.plan_json?.parameters || [];
+    const parameters: UnifiedParameterDefinition[] = planned.plan_json?.parameters || [];
     return {
         flow: { adapter_plan_id: planned.plan_id, planned_by: context.caller } as FlowPlan,
         parameters,
@@ -514,7 +561,7 @@ export async function planFlow(
             links: planned.plan_json?.flow?.linked_settings || []
         },
         ...readSecrets(planned.plan_json),
-        steps: (planned.plan_json?.steps || []).map((step: any) => ({
+        steps: (planned.plan_json?.steps || []).map((step) => ({
             step: step.step,
             name: step.name,
             depends_on: step.depends_on || []
@@ -536,7 +583,7 @@ async function provenanceFor(
     authorization: string
 ): Promise<FlowProvenance | undefined> {
     try {
-        let planJson: any = null;
+        let planJson: AdapterPlanJson | null = null;
         try {
             const stored = await deps.adapterRequest(
                 `/plans/${encodeURIComponent(adapterPlanId)}`,
@@ -581,7 +628,7 @@ export async function submitFlow(
     plan: { thread_id: string; model_id: string; execution_engine: string; flow: FlowPlan },
     planId: string,
     planHash: string,
-    body: any,
+    body: FlowRequestBody,
     authorization: string | undefined
 ): Promise<UnifiedExecutionRecord> {
     if (!authorization) {
@@ -732,7 +779,7 @@ export async function reconcileFlow(
     const child = ((record.adapter_run_ids || []) as FlowChild[])[0];
     if (!child?.run_id) return record;
 
-    let polled: any;
+    let polled: AdapterResponse;
     try {
         polled = await deps.adapterRequest(
             `/runs/${encodeURIComponent(child.run_id)}/poll`,
@@ -827,14 +874,14 @@ export async function reconcileFlow(
         // Only an output the flow registered, and whose step reported where it is.
         const outputs = (Array.isArray(polled?.flow?.outputs) ? polled.flow.outputs : [])
             .filter(
-                (output: any) =>
+                (output: AdapterFlowOutput) =>
                     typeof output?.output_id === "string" &&
                     names.has(output.output_id) &&
                     isResultLocation(whereItIs(output))
             )
-            .map((output: any) => ({
+            .map((output: AdapterFlowOutput) => ({
                 model_io_id: output.output_id as string,
-                name: names.get(output.output_id) as string,
+                name: names.get(output.output_id as string) as string,
                 url: whereItIs(output) as string
             }));
         if (names.size && !outputs.length) {
@@ -937,7 +984,7 @@ export async function resumeFlow(
     deps: FlowDeps,
     plan: { thread_id: string; model_id: string; flow: FlowPlan },
     record: UnifiedExecutionRecord,
-    body: any,
+    body: FlowRequestBody,
     authorization: string | undefined
 ): Promise<UnifiedExecutionRecord> {
     if (!authorization) {
@@ -990,7 +1037,7 @@ export async function resumeFlow(
             { editable: [child.pause.output_key] }
         );
     }
-    let result: any;
+    let result: AdapterResponse;
     try {
         result = await deps.adapterRequest(
             `/runs/${encodeURIComponent(child.run_id)}/resume`,

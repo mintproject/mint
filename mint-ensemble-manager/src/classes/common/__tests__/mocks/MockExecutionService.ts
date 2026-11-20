@@ -14,9 +14,7 @@ export class MockExecutionService implements IExecutionService {
         executions: Execution[],
         model: Model,
         region: Region,
-        component: TapisComponent,
-        _threadId: string,
-        _threadModelId: string
+        component: TapisComponent
     ): Promise<SubmissionResult> {
         this.mockComponent = component;
         const submittedExecutions = executions.map((execution, index) => ({

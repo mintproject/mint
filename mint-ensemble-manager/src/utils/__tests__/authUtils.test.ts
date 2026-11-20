@@ -58,7 +58,7 @@ describe("verifyToken without a configured key", () => {
         unconfigured();
         resetTenantKeyCache();
         fetchMock.mockReset();
-        (global as any).fetch = fetchMock;
+        global.fetch = fetchMock as unknown as typeof fetch;
     });
 
     it("fetches the token's tenant key from the configured Tapis and verifies against it", async () => {

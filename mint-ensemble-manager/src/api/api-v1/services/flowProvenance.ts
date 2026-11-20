@@ -24,6 +24,8 @@
  *   secret store and are named by the plan's `secrets`; a setting is also withheld
  *   when its name reads as a credential or its value looks like a token.
  */
+import type { AdapterPlanJson } from "./adapterTypes";
+import type { UnifiedParameterDefinition } from "./unifiedExecutionService";
 
 /** A file a flow input read, as the plan names it. */
 export interface ProvenanceFile {
@@ -59,8 +61,14 @@ const SECRET_NAME = /(secret|password|passwd|token|credential|api[_-]?key|privat
 /** A value that is itself a credential: a JWT or an authorization header. */
 const SECRET_VALUE = /^(bearer\s+\S+|eyJ[\w-]+\.[\w-]+\.[\w-]*)$/i;
 
+/** A file of a collection input, as the adapter lists it. */
+interface CollectionResource {
+    url: string;
+    name?: unknown;
+}
+
 /** Names the plan says are the runner's credentials, and the fields they carry. */
-export function secretNamesOf(planJson: any): Set<string> {
+export function secretNamesOf(planJson: AdapterPlanJson | null | undefined): Set<string> {
     const names = new Set<string>();
     for (const secret of Array.isArray(planJson?.secrets) ? planJson.secrets : []) {
         if (typeof secret?.name === "string") names.add(secret.name);
@@ -107,14 +115,14 @@ function isUrl(value: unknown): value is string {
  * every other bound input (the adapter keeps its location as the input's default).
  * The thread's region fills an input with no file, so it is not listed.
  */
-export function inputsFromPlan(planJson: any): ProvenanceInput[] {
+export function inputsFromPlan(planJson: AdapterPlanJson | null | undefined): ProvenanceInput[] {
     const found = new Map<string, ProvenanceFile[]>();
     const flow = planJson?.flow || {};
     for (const collection of Array.isArray(flow.collections) ? flow.collections : []) {
         if (typeof collection?.input !== "string") continue;
         const files = (Array.isArray(collection.resources) ? collection.resources : [])
-            .filter((resource: any) => isUrl(resource?.url))
-            .map((resource: any) => ({
+            .filter((resource: CollectionResource | null) => isUrl(resource?.url))
+            .map((resource: CollectionResource) => ({
                 url: resource.url as string,
                 ...(typeof resource.name === "string" && resource.name
                     ? { name: resource.name as string }
@@ -122,11 +130,8 @@ export function inputsFromPlan(planJson: any): ProvenanceInput[] {
             }));
         if (files.length) found.set(collection.input, files);
     }
-    const parameters = new Map<string, any>(
-        (Array.isArray(planJson?.parameters) ? planJson.parameters : []).map((p: any) => [
-            p?.name,
-            p
-        ])
+    const parameters = new Map<string, UnifiedParameterDefinition>(
+        (planJson?.parameters || []).map((p): [string, UnifiedParameterDefinition] => [p?.name, p])
     );
     for (const input of Array.isArray(flow.inputs) ? flow.inputs : []) {
         if (typeof input?.input_id !== "string" || found.has(input.input_id)) continue;
@@ -146,12 +151,12 @@ export function inputsFromPlan(planJson: any): ProvenanceInput[] {
  * setting, as it does when the pipeline runs.
  */
 export function settingsFromPlan(
-    planJson: any,
+    planJson: AdapterPlanJson | null | undefined,
     values: Record<string, unknown>
 ): ProvenanceSetting[] {
     const secretNames = secretNamesOf(planJson);
     const used = new Map<string, ProvenanceSetting>();
-    const parameters: any[] = Array.isArray(planJson?.parameters) ? planJson.parameters : [];
+    const parameters: UnifiedParameterDefinition[] = planJson?.parameters || [];
     // Settings the run fills in itself (datasets, region, staging folder) are inputs
     // or plumbing, not settings anyone chose.
     const managed = new Set(parameters.filter((p) => p?.managed).map((p) => String(p.name)));

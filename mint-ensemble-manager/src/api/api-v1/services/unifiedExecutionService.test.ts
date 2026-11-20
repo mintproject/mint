@@ -1,8 +1,12 @@
-import { createHash } from "crypto";
+import { createHash, createHmac } from "crypto";
 import express from "express";
 import request from "supertest";
 import unifiedExecutionRouter from "@/api/api-v1/paths/unifiedExecution";
-import { createUnifiedExecutionService, UnifiedExecutionError } from "./unifiedExecutionService";
+import {
+    createUnifiedExecutionService,
+    ParentRunResponse,
+    UnifiedExecutionError
+} from "./unifiedExecutionService";
 import {
     UnifiedExecutionRecord,
     UnifiedExecutionStep,
@@ -20,6 +24,19 @@ jest.mock("@/classes/mint/mint-functions", () => ({
         unified_plan_secret: "test-secret"
     })
 }));
+
+/** A run the Ensemble Manager answers for itself, as the routes return it. */
+const asParent = (response: unknown) => response as ParentRunResponse;
+
+/** A plan as the routes return it; the tests read the fields they check. */
+interface PlanView {
+    [key: string]: unknown;
+    plan_id: string;
+    input_warnings?: string[];
+    parameters?: Array<{ name?: string; allowed_values?: unknown }>;
+    post_model_adapter?: { target_contract?: unknown };
+}
+const asPlan = (response: unknown) => response as PlanView;
 
 describe("unifiedExecutionService", () => {
     const legacy = {
@@ -492,12 +509,14 @@ describe("unifiedExecutionService", () => {
             ]
         });
 
-        const submitted = await service.submit(
-            {
-                plan_id: plan.plan_id,
-                adapter_parameter_values: { "adapter-plan-1": { start_date: "2024-01-01" } }
-            },
-            "Bearer user-token"
+        const submitted = asParent(
+            await service.submit(
+                {
+                    plan_id: plan.plan_id,
+                    adapter_parameter_values: { "adapter-plan-1": { start_date: "2024-01-01" } }
+                },
+                "Bearer user-token"
+            )
         );
         expect(submitted).toMatchObject({
             status: "adapter_running",
@@ -593,7 +612,7 @@ describe("unifiedExecutionService", () => {
                 })
             });
 
-        const recovered = await service.getRun("ue_parent-1", "Bearer refreshed-token");
+        const recovered = asParent(await service.getRun("ue_parent-1", "Bearer refreshed-token"));
 
         expect(recovered).toMatchObject({
             status: "adapter_running",
@@ -652,16 +671,16 @@ describe("unifiedExecutionService", () => {
             })
             .mockResolvedValueOnce({ ok: true, json: async () => stalledRun });
 
-        const stalled = await service.getRun("ue_parent-1", "Bearer user-token");
+        const stalled = asParent(await service.getRun("ue_parent-1", "Bearer user-token"));
 
         expect(stalled).toMatchObject({
             status: "adapter_running",
             failure_code: "COMPOSITE_WORKFLOW_STALLED",
             error_message: expect.stringContaining("no signal has been received")
         });
-        expect((stalled.adapter_runs as any[])[0]).toMatchObject({ health: "stalled" });
+        expect(stalled.adapter_runs[0]).toMatchObject({ health: "stalled" });
         expect(
-            (stalled.workflow_stages as any[]).find((stage) => stage.type === "adapter_input")
+            stalled.workflow_stages.find((stage) => stage.type === "adapter_input")
         ).toMatchObject({ status: "running", health: "stalled" });
 
         (global.fetch as jest.Mock)
@@ -680,14 +699,14 @@ describe("unifiedExecutionService", () => {
                 })
             });
 
-        const recovered = await service.getRun("ue_parent-1", "Bearer user-token");
+        const recovered = asParent(await service.getRun("ue_parent-1", "Bearer user-token"));
 
         expect(recovered).toMatchObject({
             status: "adapter_running",
             failure_code: null,
             error_message: null
         });
-        expect((recovered.adapter_runs as any[])[0]).toMatchObject({
+        expect(recovered.adapter_runs[0]).toMatchObject({
             health: "ok",
             model_job_id: "job-1",
             started_at: "2026-11-02T13:05:20Z"
@@ -739,7 +758,7 @@ describe("unifiedExecutionService", () => {
                 })
             });
 
-        const cancelled = await service.cancelRun("ue_parent-1", "Bearer user-token");
+        const cancelled = asParent(await service.cancelRun("ue_parent-1", "Bearer user-token"));
 
         expect(cancelled).toMatchObject({
             status: "failed",
@@ -752,7 +771,7 @@ describe("unifiedExecutionService", () => {
             method: "POST",
             headers: expect.objectContaining({ Authorization: "Bearer user-token" })
         });
-        expect((cancelled.adapter_runs as any[])[0]).toMatchObject({ status: "cancelled" });
+        expect(cancelled.adapter_runs[0]).toMatchObject({ status: "cancelled" });
 
         await expect(service.cancelRun("ue_parent-1", "Bearer user-token")).rejects.toMatchObject({
             statusCode: 409,
@@ -886,19 +905,21 @@ describe("unifiedExecutionService", () => {
             })
         });
 
-        const submitted = await service.submit(
-            {
-                plan_id: plan.plan_id,
-                adapter_parameter_values: {
-                    "deferred-plan-1": {
-                        threshold: 0.5,
-                        start_date: "2001-01-01",
-                        end_date: "2010-12-31",
-                        aoi_geojson_uri: "https://example.test/gma/4"
+        const submitted = asParent(
+            await service.submit(
+                {
+                    plan_id: plan.plan_id,
+                    adapter_parameter_values: {
+                        "deferred-plan-1": {
+                            threshold: 0.5,
+                            start_date: "2001-01-01",
+                            end_date: "2010-12-31",
+                            aoi_geojson_uri: "https://example.test/gma/4"
+                        }
                     }
-                }
-            },
-            "Bearer user-token"
+                },
+                "Bearer user-token"
+            )
         );
         expect(submitted).toMatchObject({
             status: "model_running",
@@ -911,17 +932,15 @@ describe("unifiedExecutionService", () => {
             "ue_parent-1",
             "Bearer user-token"
         );
+        expect(submitted.workflow_stages.find((stage) => stage.stage_id === "model")).toMatchObject(
+            {
+                type: "model",
+                status: "running",
+                provider_ids: { model_child_id: "model-child-1" }
+            }
+        );
         expect(
-            (submitted.workflow_stages as any[]).find((stage) => stage.stage_id === "model")
-        ).toMatchObject({
-            type: "model",
-            status: "running",
-            provider_ids: { model_child_id: "model-child-1" }
-        });
-        expect(
-            (submitted.workflow_stages as any[]).find(
-                (stage) => stage.stage_id === "output-handoff"
-            )
+            submitted.workflow_stages.find((stage) => stage.stage_id === "output-handoff")
         ).toMatchObject({ type: "output_handoff", status: "planned" });
         await expect(store.listSteps?.("parent-1")).resolves.toEqual(
             expect.arrayContaining([
@@ -1009,7 +1028,7 @@ describe("unifiedExecutionService", () => {
                 })
             });
 
-        const completed = await service.getRun("ue_parent-1", "Bearer user-token");
+        const completed = asParent(await service.getRun("ue_parent-1", "Bearer user-token"));
         expect(completed).toMatchObject({
             status: "completed",
             output_handoff: { result: { value: 49.7, unit: "cfs" } }
@@ -1026,9 +1045,7 @@ describe("unifiedExecutionService", () => {
             undefined
         );
         expect(
-            (completed.workflow_stages as any[]).find(
-                (stage) => stage.stage_id === "output-handoff"
-            )
+            completed.workflow_stages.find((stage) => stage.stage_id === "output-handoff")
         ).toMatchObject({ status: "succeeded" });
         expect(legacy.tapis.updateCompositeWorkflowExecution).toHaveBeenCalledTimes(1);
         expect(legacy.tapis.submitExecution).not.toHaveBeenCalled();
@@ -1094,7 +1111,7 @@ describe("unifiedExecutionService", () => {
                 json: async () => ({ id: "post-model-run-1", status: "running" })
             });
 
-        const recovered = await service.getRun("ue_parent-1", "Bearer refreshed-token");
+        const recovered = asParent(await service.getRun("ue_parent-1", "Bearer refreshed-token"));
 
         expect(recovered).toMatchObject({
             status: "model_running",
@@ -1310,7 +1327,9 @@ describe("unifiedExecutionService", () => {
         // when the bridge hashes the steps it builds.
         function stubAdapter(
             deferredSteps: unknown[] = [],
-            modelInputs: (body: any) => { status?: number; json: any } = (body) => ({
+            modelInputs: (body: { sources?: unknown }) => { status?: number; json: unknown } = (
+                body
+            ) => ({
                 json: {
                     input_steps: [plannedStep],
                     considered: [
@@ -1327,30 +1346,32 @@ describe("unifiedExecutionService", () => {
                 }
             })
         ) {
-            (global.fetch as jest.Mock).mockImplementation(async (url: string, init: any) => {
-                const path = String(url).replace("http://adapter.local", "");
-                if (path === "/plans/model-inputs") {
-                    const result = modelInputs(JSON.parse(init.body));
-                    const status = result.status ?? 200;
-                    return { ok: status < 400, status, json: async () => result.json };
+            (global.fetch as jest.Mock).mockImplementation(
+                async (url: string, init: { body: string }) => {
+                    const path = String(url).replace("http://adapter.local", "");
+                    if (path === "/plans/model-inputs") {
+                        const result = modelInputs(JSON.parse(init.body));
+                        const status = result.status ?? 200;
+                        return { ok: status < 400, status, json: async () => result.json };
+                    }
+                    if (path === "/plans/deferred") {
+                        return {
+                            ok: true,
+                            json: async () => ({
+                                status: "deferred",
+                                plan_id: "deferred-plan-1",
+                                plan_hash: "deferred-hash-1",
+                                plan_json: { parameters: [], steps: deferredSteps }
+                            })
+                        };
+                    }
+                    return { ok: true, json: async () => ({ run_id: "run-1", status: "queued" }) };
                 }
-                if (path === "/plans/deferred") {
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            status: "deferred",
-                            plan_id: "deferred-plan-1",
-                            plan_hash: "deferred-hash-1",
-                            plan_json: { parameters: [], steps: deferredSteps }
-                        })
-                    };
-                }
-                return { ok: true, json: async () => ({ run_id: "run-1", status: "queued" }) };
-            });
+            );
         }
         const adapterCalls = (path: string) =>
             (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).endsWith(path));
-        const context = (geometries: any[], extra: Record<string, unknown> = {}) => ({
+        const context = (geometries: unknown[], extra: Record<string, unknown> = {}) => ({
             configuration_id: "config/subside",
             region: { id: "region-waco", name: "Waco", category_id: "c", geometries },
             has_bound_inputs: true,
@@ -1364,10 +1385,12 @@ describe("unifiedExecutionService", () => {
             stubAdapter();
             legacy.tapis.compositeModelContext.mockResolvedValue(context([square(0), square(3)]));
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, post_model_adapter: postModel },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan(
+                    { ...baseRequest, post_model_adapter: postModel },
+                    "Bearer user-token"
+                )
+            );
 
             expect(legacy.tapis.compositeModelContext).toHaveBeenCalledWith(
                 { thread_id: "thread-1", model_id: "model-1" },
@@ -1394,7 +1417,7 @@ describe("unifiedExecutionService", () => {
             expect(plan.input_warnings).toBeUndefined();
             // The signed plan keeps only the references: plan_id is a uniquely
             // indexed column, so geometry and steps must not be encoded into it.
-            const stored = (await service.getPlan(plan.plan_id)) as any;
+            const stored = asPlan(await service.getPlan(plan.plan_id));
             expect(stored.input_region_id).toBe("region-waco");
             expect(stored.steps_digest).toBe(plan.steps_digest);
             expect(stored.input_steps).toBeUndefined();
@@ -1413,10 +1436,12 @@ describe("unifiedExecutionService", () => {
                 context([{ type: "Polygon", coordinates: [ring] }])
             );
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, post_model_adapter: postModel },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan(
+                    { ...baseRequest, post_model_adapter: postModel },
+                    "Bearer user-token"
+                )
+            );
             expect(plan.input_steps).toHaveLength(1);
             expect(plan.plan_id.length).toBeLessThan(2400);
         });
@@ -1432,10 +1457,12 @@ describe("unifiedExecutionService", () => {
                 context([{ type: "Polygon", coordinates: [ring] }])
             );
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, post_model_adapter: postModel },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan(
+                    { ...baseRequest, post_model_adapter: postModel },
+                    "Bearer user-token"
+                )
+            );
             const request = JSON.parse(adapterCalls("/plans/model-inputs")[0][1].body);
             expect(request.sources[0]).toMatchObject({
                 kind: "bbox",
@@ -1477,10 +1504,12 @@ describe("unifiedExecutionService", () => {
                 context([], { has_bound_inputs: false, region: null })
             );
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, post_model_adapter: postModel },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan(
+                    { ...baseRequest, post_model_adapter: postModel },
+                    "Bearer user-token"
+                )
+            );
             expect(plan.input_steps).toBeUndefined();
             expect(adapterCalls("/plans/model-inputs")).toHaveLength(0);
             // Not silent: the plan says why nothing was planned.
@@ -1574,10 +1603,9 @@ describe("unifiedExecutionService", () => {
                     context([square(0)], { unmatched_optional_inputs: ["extra-input"] })
                 );
                 const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-                const plan = (await service.createPlan(
-                    { ...baseRequest },
-                    "Bearer user-token"
-                )) as any;
+                const plan = asPlan(
+                    await service.createPlan({ ...baseRequest }, "Bearer user-token")
+                );
                 expect(plan.input_warnings).toHaveLength(4);
                 expect(plan.input_warnings.join("\n")).toEqual(
                     expect.stringContaining("sync-from-mint")
@@ -1593,7 +1621,7 @@ describe("unifiedExecutionService", () => {
                 expect(plan.input_steps).toBeUndefined();
                 expect(plan.status).toBe("ready");
                 // Warnings are advisory and travel with the response, not the plan.
-                expect((await service.getPlan(plan.plan_id)) as any).not.toHaveProperty(
+                expect(asPlan(await service.getPlan(plan.plan_id))).not.toHaveProperty(
                     "input_warnings"
                 );
             });
@@ -1611,10 +1639,12 @@ describe("unifiedExecutionService", () => {
                 stubAdapter();
                 legacy.tapis.compositeModelContext.mockResolvedValue(context([square(0)]));
                 const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-                const plan = (await service.createPlan(
-                    { ...baseRequest, strict_inputs: true },
-                    "Bearer user-token"
-                )) as any;
+                const plan = asPlan(
+                    await service.createPlan(
+                        { ...baseRequest, strict_inputs: true },
+                        "Bearer user-token"
+                    )
+                );
                 expect(plan.input_warnings).toBeUndefined();
                 expect(plan.input_steps).toHaveLength(1);
             });
@@ -1624,7 +1654,7 @@ describe("unifiedExecutionService", () => {
             stubAdapter([]);
             legacy.tapis.compositeModelContext.mockResolvedValue(context([square(0)]));
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan({ ...baseRequest }, "Bearer user-token")) as any;
+            const plan = asPlan(await service.createPlan({ ...baseRequest }, "Bearer user-token"));
             expect(plan.status).toBe("post_model_ready");
             expect(plan.input_steps).toHaveLength(1);
             expect(plan.post_model_adapter).toMatchObject({ adapter_plan_id: "deferred-plan-1" });
@@ -1634,10 +1664,9 @@ describe("unifiedExecutionService", () => {
             stubAdapter([]);
             legacy.tapis.compositeModelContext.mockResolvedValue(context([square(0)]));
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, input_etl: false },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan({ ...baseRequest, input_etl: false }, "Bearer user-token")
+            );
             expect(legacy.tapis.compositeModelContext).not.toHaveBeenCalled();
             expect(adapterCalls("/plans/model-inputs")).toHaveLength(0);
             expect(plan.input_steps).toBeUndefined();
@@ -1650,7 +1679,7 @@ describe("unifiedExecutionService", () => {
                 context([square(0)], { has_bound_inputs: false })
             );
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan({ ...baseRequest }, "Bearer user-token")) as any;
+            const plan = asPlan(await service.createPlan({ ...baseRequest }, "Bearer user-token"));
             expect(plan.status).toBe("ready");
             expect(plan.input_steps).toBeUndefined();
             expect(plan.post_model_adapter).toBeNull();
@@ -1661,10 +1690,9 @@ describe("unifiedExecutionService", () => {
             stubAdapter([]);
             legacy.tapis.compositeModelContext.mockResolvedValue(context([square(0)]));
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, input_etl: true },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan({ ...baseRequest, input_etl: true }, "Bearer user-token")
+            );
             expect(plan.status).toBe("post_model_ready");
             expect(plan.input_steps).toHaveLength(1);
             const deferred = JSON.parse(adapterCalls("/plans/deferred")[0][1].body);
@@ -1684,10 +1712,9 @@ describe("unifiedExecutionService", () => {
             }));
             legacy.tapis.compositeModelContext.mockResolvedValue(context([square(0)]));
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, input_etl: true },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan({ ...baseRequest, input_etl: true }, "Bearer user-token")
+            );
             expect(plan.status).toBe("ready");
             expect(plan.post_model_adapter).toBeNull();
             expect(adapterCalls("/plans/deferred")).toHaveLength(0);
@@ -1733,16 +1760,18 @@ describe("unifiedExecutionService", () => {
                 job_definition: { appId: "model-app", appVersion: "0.0.1", fileInputs }
             });
 
-            async function planAndSubmit(geometries: any[]) {
+            async function planAndSubmit(geometries: unknown[]) {
                 stubAdapter();
                 legacy.tapis.compositeModelContext.mockResolvedValue(context(geometries));
                 legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue(modelTaskResult());
                 const store = fakeStore();
                 const service = createUnifiedExecutionService(legacy, { store });
-                const plan = (await service.createPlan(
-                    { ...baseRequest, post_model_adapter: postModel },
-                    "Bearer user-token"
-                )) as any;
+                const plan = asPlan(
+                    await service.createPlan(
+                        { ...baseRequest, post_model_adapter: postModel },
+                        "Bearer user-token"
+                    )
+                );
                 (global.fetch as jest.Mock).mockClear();
                 await service
                     .submit({ plan_id: plan.plan_id }, "Bearer user-token")
@@ -1788,10 +1817,12 @@ describe("unifiedExecutionService", () => {
                 legacy.tapis.compositeModelContext.mockResolvedValue(context([square(0)]));
                 legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue(modelTaskResult());
                 const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-                const plan = (await service.createPlan(
-                    { ...baseRequest, post_model_adapter: postModel },
-                    "Bearer user-token"
-                )) as any;
+                const plan = asPlan(
+                    await service.createPlan(
+                        { ...baseRequest, post_model_adapter: postModel },
+                        "Bearer user-token"
+                    )
+                );
                 legacy.tapis.compositeModelContext.mockResolvedValue(
                     context([square(0)], {
                         region: {
@@ -1825,10 +1856,12 @@ describe("unifiedExecutionService", () => {
                 );
                 legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue(modelTaskResult());
                 const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-                const plan = (await service.createPlan(
-                    { ...baseRequest, post_model_adapter: postModel },
-                    "Bearer user-token"
-                )) as any;
+                const plan = asPlan(
+                    await service.createPlan(
+                        { ...baseRequest, post_model_adapter: postModel },
+                        "Bearer user-token"
+                    )
+                );
                 (global.fetch as jest.Mock).mockClear();
                 await service.submit({ plan_id: plan.plan_id }, "Bearer user-token");
                 const body = JSON.parse(adapterCalls("/workflows/submit")[0][1].body);
@@ -1945,7 +1978,7 @@ describe("unifiedExecutionService", () => {
             offered: unknown = publishers,
             planParameters: unknown[] = publishers.publishers[0].parameters
         ) {
-            (global.fetch as jest.Mock).mockImplementation(async (url: string, init: any) => {
+            (global.fetch as jest.Mock).mockImplementation(async (url: string) => {
                 const path = String(url).replace("http://adapter.local", "");
                 const ok = (json: unknown) => ({ ok: true, status: 200, json: async () => json });
                 if (path.startsWith("/publishers")) return ok(offered);
@@ -1990,10 +2023,12 @@ describe("unifiedExecutionService", () => {
         it("sets the target catalog from publish and lists the publisher parameters", async () => {
             stubAdapter();
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, publish: ["ckan", "stac"] },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan(
+                    { ...baseRequest, publish: ["ckan", "stac"] },
+                    "Bearer user-token"
+                )
+            );
 
             const deferred = JSON.parse(calls("/plans/deferred")[0][1].body);
             expect(deferred.source_contract).toEqual({ format: "geotiff" });
@@ -2003,12 +2038,9 @@ describe("unifiedExecutionService", () => {
                 Authorization: "Bearer user-token"
             });
             expect(plan.status).toBe("post_model_ready");
-            expect(plan.parameters.map((p: any) => p.name)).toEqual(["stac_collection", "public"]);
+            expect(plan.parameters.map((p) => p.name)).toEqual(["stac_collection", "public"]);
             expect(plan.parameters[0].allowed_values).toEqual(["subsidence-rates-dev"]);
-            expect(((await service.getPlan(plan.plan_id)) as any).publish).toEqual([
-                "ckan",
-                "stac"
-            ]);
+            expect(asPlan(await service.getPlan(plan.plan_id)).publish).toEqual(["ckan", "stac"]);
         });
 
         it("merges the catalog into an explicit post_model_adapter target contract", async () => {
@@ -2106,15 +2138,14 @@ describe("unifiedExecutionService", () => {
         it("does not consult the adapter publishers when publish is empty or absent", async () => {
             stubAdapter([]);
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, publish: [] },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan({ ...baseRequest, publish: [] }, "Bearer user-token")
+            );
             expect(calls("/publishers?configuration_id=model-1")).toHaveLength(0);
             expect(JSON.parse(calls("/plans/deferred")[0][1].body).target_contract).toEqual({
                 format: "geotiff"
             });
-            expect(((await service.getPlan(plan.plan_id)) as any).publish).toBeUndefined();
+            expect(asPlan(await service.getPlan(plan.plan_id)).publish).toBeUndefined();
         });
 
         it("builds the publish plan for a model that derives no input steps and dispatches it as usual", async () => {
@@ -2135,10 +2166,12 @@ describe("unifiedExecutionService", () => {
             });
             const store = fakeStore();
             const service = createUnifiedExecutionService(legacy, { store });
-            const plan = (await service.createPlan(
-                { ...baseRequest, publish: ["ckan", "stac"] },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan(
+                    { ...baseRequest, publish: ["ckan", "stac"] },
+                    "Bearer user-token"
+                )
+            );
             expect(plan.status).toBe("post_model_ready");
             expect(plan.input_steps).toBeUndefined();
             expect(plan.post_model_adapter.target_contract).toEqual({
@@ -2292,15 +2325,17 @@ describe("unifiedExecutionService", () => {
                 outputs: [{ id: "o".repeat(120), name: "displacement", format: "geotiff" }]
             });
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                {
-                    ...baseRequest,
-                    thread_id: "t".repeat(60),
-                    model_id: "m".repeat(120),
-                    publish: ["ckan", "stac"]
-                },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan(
+                    {
+                        ...baseRequest,
+                        thread_id: "t".repeat(60),
+                        model_id: "m".repeat(120),
+                        publish: ["ckan", "stac"]
+                    },
+                    "Bearer user-token"
+                )
+            );
             expect(plan.plan_id.length).toBeLessThan(2400);
             expect(plan.parameters).toHaveLength(2);
         });
@@ -2336,7 +2371,7 @@ describe("unifiedExecutionService", () => {
             // The response still carries the adapter's full definitions.
             expect(plan.parameters).toHaveLength(12);
             expect(JSON.stringify(plan.parameters).length).toBeGreaterThan(3000);
-            const read = (await service.getPlan(plan.plan_id)) as {
+            const read = (await service.getPlan(plan.plan_id)) as unknown as {
                 parameters: Array<Record<string, unknown>>;
             };
             expect(read.parameters.map((p) => p.name)).toEqual([
@@ -2370,10 +2405,7 @@ describe("unifiedExecutionService", () => {
                 .replace(/\+/g, "-")
                 .replace(/\//g, "_")
                 .replace(/=+$/, "");
-            const signature = require("crypto")
-                .createHmac("sha256", "test-secret")
-                .update(encoded)
-                .digest("hex");
+            const signature = createHmac("sha256", "test-secret").update(encoded).digest("hex");
             return `em_${encoded}.${signature}`;
         };
         const wacoPlan = (extra: Record<string, unknown> = {}) => ({
@@ -2415,7 +2447,7 @@ describe("unifiedExecutionService", () => {
                 model_result: { output_uri: "tapis://ls6/out/model" },
                 output_handoff: { data_object_id: "do-1", resource_uri: "tapis://ls6/out/model" },
                 ...set
-            } as any);
+            } as UnifiedExecutionRecord);
         const postModelChild = (extra: Record<string, unknown> = {}) => ({
             adapter_plan_id: "deferred-plan-1",
             model_io_id: "out-io",
@@ -2425,7 +2457,7 @@ describe("unifiedExecutionService", () => {
             execution_kind: "workflow",
             ...extra
         });
-        function stubRun(run: Record<string, unknown>, overrides: Record<string, any> = {}) {
+        function stubRun(run: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
             (global.fetch as jest.Mock).mockImplementation(async (url: string) => {
                 const path = String(url).replace("http://adapter.local", "");
                 const respond = (status: number, json: unknown) => ({
@@ -2458,7 +2490,7 @@ describe("unifiedExecutionService", () => {
             await seed(store, { adapter_run_ids: [postModelChild()] });
             const service = createUnifiedExecutionService(legacy, { store });
 
-            const first = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+            const first = asParent(await service.getRun("ue_parent-1", "Bearer user-token"));
             expect(first.status).toBe("completed");
             expect(first.output_handoff).toMatchObject({
                 data_object_id: "do-1",
@@ -2473,7 +2505,7 @@ describe("unifiedExecutionService", () => {
                 expect.objectContaining({ url: "tapis://ls6/out/model" })
             );
 
-            const second = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+            const second = asParent(await service.getRun("ue_parent-1", "Bearer user-token"));
             expect(second.status).toBe("completed");
             expect(second.output_handoff.publication.status).toBe("failed");
             expect(calls("/workflows/submit")).toHaveLength(0);
@@ -2501,7 +2533,7 @@ describe("unifiedExecutionService", () => {
             await seed(store, { adapter_run_ids: [postModelChild()] });
             const service = createUnifiedExecutionService(legacy, { store });
 
-            const done = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+            const done = asParent(await service.getRun("ue_parent-1", "Bearer user-token"));
             expect(done.status).toBe("completed");
             expect(done.output_handoff.publication).toEqual({
                 status: "published",
@@ -2525,7 +2557,7 @@ describe("unifiedExecutionService", () => {
                 await seed(store, { adapter_run_ids: [postModelChild()] });
                 const service = createUnifiedExecutionService(legacy, { store });
 
-                const done = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+                const done = asParent(await service.getRun("ue_parent-1", "Bearer user-token"));
                 expect(done.status).toBe("completed");
                 expect(done.output_handoff).toMatchObject({
                     data_object_id: "do-1",
@@ -2539,7 +2571,7 @@ describe("unifiedExecutionService", () => {
                     expect(call[4]?.url).toBe("tapis://ls6/out/model");
                 }
                 // A later poll neither resubmits nor waits on the child.
-                const again = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+                const again = asParent(await service.getRun("ue_parent-1", "Bearer user-token"));
                 expect(again.status).toBe("completed");
                 expect(calls("/workflows/submit")).toHaveLength(0);
             }
@@ -2557,7 +2589,7 @@ describe("unifiedExecutionService", () => {
             const store = fakeStore();
             await seed(store, { adapter_run_ids: [postModelChild()] });
             const service = createUnifiedExecutionService(legacy, { store });
-            const done = (await service.getRun("ue_parent-1", "Bearer user-token")) as any;
+            const done = asParent(await service.getRun("ue_parent-1", "Bearer user-token"));
             expect(done.output_handoff.publication.status).toBe("published");
         });
 
@@ -2596,7 +2628,7 @@ describe("unifiedExecutionService", () => {
             const store = fakeStore();
             await seed(store, { status: "model_succeeded" });
             const service = createUnifiedExecutionService(legacy, { store });
-            const run = (await service.getRun("ue_parent-1", "Bearer other")) as any;
+            const run = asParent(await service.getRun("ue_parent-1", "Bearer other"));
             expect(run.status).toBe("failed");
             expect(run.output_handoff?.publication).toBeUndefined();
         });
@@ -2604,10 +2636,12 @@ describe("unifiedExecutionService", () => {
         it("rejects a submitted value outside allowed_values and merges top-level with per-plan values", async () => {
             stubAdapter();
             const service = createUnifiedExecutionService(legacy, { store: fakeStore() });
-            const plan = (await service.createPlan(
-                { ...baseRequest, publish: ["ckan", "stac"] },
-                "Bearer user-token"
-            )) as any;
+            const plan = asPlan(
+                await service.createPlan(
+                    { ...baseRequest, publish: ["ckan", "stac"] },
+                    "Bearer user-token"
+                )
+            );
             legacy.tapis.buildCompositeWorkflowModelTask.mockResolvedValue({
                 execution_id: "model-child-1",
                 output_uri: "tapis://ls6/o",
@@ -2667,14 +2701,14 @@ describe("unifiedExecutionService", () => {
             await seed(store, { status: "model_succeeded" }, { publish: ["ckan", "stac"] });
             const service = createUnifiedExecutionService(legacy, { store });
 
-            const awaiting = (await service.getRun("ue_parent-1", "Bearer other-user")) as any;
+            const awaiting = asParent(await service.getRun("ue_parent-1", "Bearer other-user"));
             expect(awaiting.status).toBe("model_succeeded");
             expect(awaiting.status).not.toBe("failed");
             expect(awaiting.output_handoff.publication).toEqual({ status: "awaiting_owner" });
             expect(awaiting.failure_code ?? null).toBeNull();
 
             stubRun({});
-            const dispatched = (await service.getRun("ue_parent-1", "Bearer owner")) as any;
+            const dispatched = asParent(await service.getRun("ue_parent-1", "Bearer owner"));
             expect(dispatched.status).toBe("adapter_running");
             const submits = calls("/workflows/submit");
             expect(submits).toHaveLength(2);
@@ -2698,9 +2732,9 @@ describe("unifiedExecutionService", () => {
             await seed(store, { status: "model_succeeded" });
             const service = createUnifiedExecutionService(legacy, { store });
             const planId = secretSign(wacoPlan());
-            expect(((await service.getPlan(planId)) as any).publish).toBeUndefined();
+            expect(asPlan(await service.getPlan(planId)).publish).toBeUndefined();
 
-            const run = (await service.getRun("ue_parent-1", "Bearer owner")) as any;
+            const run = asParent(await service.getRun("ue_parent-1", "Bearer owner"));
             expect(run.status).toBe("adapter_running");
             expect(calls("/workflows/submit")).toHaveLength(1);
             expect(calls("/publishers?configuration_id=model-1")).toHaveLength(0);

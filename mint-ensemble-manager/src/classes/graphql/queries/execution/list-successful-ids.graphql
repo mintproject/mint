@@ -1,5 +1,5 @@
 query list_execution_ids($ids: [uuid!]!) {
-    execution(where: {id: {_in: $ids}, status: {_eq: "SUCCESS"}}) {
+    execution(where: { id: { _in: $ids }, status: { _eq: "SUCCESS" } }) {
         id
     }
 }

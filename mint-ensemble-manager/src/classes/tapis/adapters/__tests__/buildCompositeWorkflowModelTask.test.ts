@@ -37,8 +37,8 @@ const appWithEnv = (envVariables: unknown[]) =>
 
 const buildTask = async (
     tapisApp: Apps.TapisApp,
-    secrets: any[],
-    extra: { outputs?: any[]; parameters?: any[]; bindings?: Record<string, unknown> } = {}
+    secrets: unknown[],
+    extra: { outputs?: unknown[]; parameters?: unknown[]; bindings?: Record<string, unknown> } = {}
 ) => {
     const service = new TapisExecutionService("token", "http://tapis");
     jest.spyOn(service, "loadTapisApp").mockResolvedValue(tapisApp);
@@ -113,7 +113,7 @@ describe("buildCompositeWorkflowModelTask output_file", () => {
     ];
     const build = (
         archived_file: string | undefined,
-        extra: { parameters?: any[]; bindings?: Record<string, unknown> } = {}
+        extra: { parameters?: unknown[]; bindings?: Record<string, unknown> } = {}
     ) => buildTask(appWithEnv([]), [], { outputs: outputWith(archived_file), ...extra });
 
     test("omits output_file for an unbound output", async () => {

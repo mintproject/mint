@@ -4,15 +4,16 @@ import {
     getRegionDetails,
     incrementThreadModelSubmittedRuns,
     incrementThreadModelSuccessfulRuns,
-    listSuccessfulExecutionIds,
     insertThreadModelExecutionSummary,
     setExecutions,
     setThreadModelExecutionIds
 } from "@/classes/graphql/graphql_functions";
 import { getConfiguration } from "@/classes/mint/mint-functions";
 import {
+    DataResource,
     Execution,
     ExecutionSummary,
+    InputBindings,
     Model,
     ModelIO,
     ModelIOBindings,
@@ -25,6 +26,9 @@ import { TapisComponent } from "@/classes/tapis/typing";
 import { IExecutionService } from "@/interfaces/IExecutionService";
 import { HttpError } from "./errors";
 import { uuidv4 } from "../graphql/graphql_adapter";
+
+/** A value bound to a model input: a data id, a parameter value, or a resolved resource. */
+type BoundValue = string | DataResource;
 
 const MAX_CONFIGURATIONS = 1000000;
 // Add interface for IO/Parameter details
@@ -89,9 +93,8 @@ export class ExecutionCreation {
     }
 
     public async prepareModelExecutions(modelid: string): Promise<boolean> {
-        const { modelEnsembleId, configs, inputIds } = await this.resolveModelConfigurations(
-            modelid
-        );
+        const { modelEnsembleId, configs, inputIds } =
+            await this.resolveModelConfigurations(modelid);
         if (configs !== null) {
             await this.createThreadModelExecutionSummary(configs, modelEnsembleId);
             await deleteThreadModelExecutionIds(modelEnsembleId);
@@ -138,7 +141,7 @@ export class ExecutionCreation {
     }
 
     private async createExecutions(
-        configs: Array<Array<string | number>>,
+        configs: BoundValue[][],
         thread_model_id: string,
         inputIds: string[],
         modelid: string
@@ -189,7 +192,7 @@ export class ExecutionCreation {
     }
 
     private async createThreadModelExecutionSummary(
-        configs: any[][],
+        configs: BoundValue[][],
         thread_model_id: string
     ): Promise<void> {
         const summary: ExecutionSummary = {
@@ -216,12 +219,12 @@ export class ExecutionCreation {
     }
 
     private createExecutionsBatch(
-        bindings: any[][],
+        bindings: BoundValue[][],
         inputIds: string[],
         modelid: string
     ): Execution[] {
         return bindings.map((binding) => {
-            const inputBindings: any = {};
+            const inputBindings: InputBindings = {};
             for (let j = 0; j < inputIds.length; j++) {
                 inputBindings[inputIds[j]] = binding[j];
             }
@@ -231,7 +234,7 @@ export class ExecutionCreation {
 
     private createExecutionMetadata(
         modelid: string,
-        inputBindings: any,
+        inputBindings: InputBindings,
         reuseExistingExecutions = false
     ): Execution {
         const execution: Execution = {
@@ -382,7 +385,7 @@ export class ExecutionCreation {
                 // Expand a dataset to its constituent "selected" resources
                 // FIXME: Create a collection if the model input has dimensionality of 1
                 if (threadModel.bindings[io.id]) {
-                    let nexecution: any[] = [];
+                    let nexecution: DataResource[] = [];
                     threadModel.bindings[io.id].map((dsid) => {
                         const ds = thread.data[dsid];
                         let selected_resources = ds.resources.filter((res) => res.selected);
@@ -390,10 +393,10 @@ export class ExecutionCreation {
                         if (selected_resources.length == 0) selected_resources = ds.resources;
                         nexecution = nexecution.concat(selected_resources);
                     });
-                    threadModel.bindings[io.id] = nexecution;
+                    threadModel.bindings[io.id] = nexecution as unknown as string[];
                 }
             } else {
-                threadModel.bindings[io.id] = io.value.resources as any[];
+                threadModel.bindings[io.id] = io.value.resources as unknown as string[];
             }
         });
         return inputIds;
@@ -476,8 +479,8 @@ export class ExecutionCreation {
     public static getInputBindingsAndTotalProducts(
         dataBindings: ModelIOBindings,
         inputIds: string[]
-    ): { inputBindings: any[]; totalproducts: number } {
-        const inputBindings: any[] = [];
+    ): { inputBindings: BoundValue[][]; totalproducts: number } {
+        const inputBindings: BoundValue[][] = [];
         let totalproducts = 1;
 
         // For each input, get its possible values and calculate total combinations
@@ -489,16 +492,16 @@ export class ExecutionCreation {
         return { inputBindings, totalproducts };
     }
 
-    private static cartProd = (lists: any[]) => {
-        let ps: any[] = [],
-            acc: any[][] = [[]],
+    private static cartProd = (lists: BoundValue[][]): BoundValue[][] => {
+        let ps: BoundValue[][] = [],
+            acc: BoundValue[][] = [[]],
             i = lists.length;
         while (i--) {
-            let subList = lists[i],
-                j = subList.length;
+            const subList = lists[i];
+            let j = subList.length;
             while (j--) {
-                let x = subList[j],
-                    k = acc.length;
+                const x = subList[j];
+                let k = acc.length;
                 while (k--) ps.push([x].concat(acc[k]));
             }
             acc = ps;

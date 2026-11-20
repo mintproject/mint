@@ -1,6 +1,5 @@
 import yaml from "js-yaml";
-import fetch from "node-fetch";
-import { basename } from "path";
+import type { Job } from "bull";
 import fs from "fs-extra";
 import { Md5 } from "ts-md5";
 import child_process from "child_process";
@@ -28,15 +27,55 @@ import { KeycloakAdapter } from "@/config/keycloak-adapter";
 import { fetchMintConfig } from "@/classes/mint/mint-functions";
 import { uuidv4 } from "@/classes/graphql/graphql_adapter";
 
+/** An output file of a component run. */
+interface SeedResult extends DataResource {
+    role?: string;
+}
+
+/** An output file of a CWL run: what to name it, and where the run left it. */
+interface CwlOutput {
+    basename: string;
+    path: string;
+}
+
+/** A file given to a CWL run by name. */
+interface CwlValueFile {
+    class: string;
+    location: string;
+}
+
+/** The part of a CWL document that the Kubernetes run reads. */
+interface CwlDocument {
+    hints: { DockerRequirement: { dockerImageId: string } };
+    baseCommand: string | string[];
+    inputs: Record<string, { inputBinding: { prefix: string } }>;
+    outputs: Record<string, { outputBinding: { glob: string } }>;
+}
+
+/** A CWL run as the Kubernetes pod needs it: image, command and its inputs and outputs. */
+interface CwlDetails {
+    image: string;
+    command: string | string[];
+    inputs: Record<string, { prefix: string; value: string | number | boolean | CwlValueFile }>;
+    outputs: Record<string, { glob: string; value: CwlValueFile }>;
+}
+
+/** What a seed job carries: the seed, the local execution settings and the thread model. */
+interface SeedJobData {
+    seed: ComponentSeed;
+    prefs: LocalExecutionPreferences;
+    thread_model_id: string;
+}
+
 const _uploadS3File = (
     filepath: string,
     filekey: string,
     prefs: MintPreferences
 ): Promise<void> => {
-    var bucket = prefs.data_server_extra["bucket"];
-    var access_key = prefs.data_server_extra["access_key"];
-    var secret_key = prefs.data_server_extra["secret_access_key"];
-    var region = prefs.data_server_extra["region"];
+    const bucket = prefs.data_server_extra["bucket"];
+    const access_key = prefs.data_server_extra["access_key"];
+    const secret_key = prefs.data_server_extra["secret_access_key"];
+    const region = prefs.data_server_extra["region"];
 
     const client = new S3Client({
         region: region,
@@ -51,14 +90,15 @@ const _uploadS3File = (
         Body: fs.createReadStream(filepath)
     });
 
-    return new Promise<void>(async (resolve, reject) => {
+    // eslint-disable-next-line no-async-promise-executor -- a failed send leaves this pending (kept as is)
+    return new Promise<void>(async (resolve) => {
         const data = await client.send(cmd);
         console.log(data);
         resolve();
     });
 };
 
-module.exports = async (job: any) => {
+module.exports = async (job: Job<SeedJobData>) => {
     // Run the model seed (model config + bindings)
 
     // Clone the job data object
@@ -114,7 +154,7 @@ module.exports = async (job: any) => {
 
         // Set the Input file/parameter arguments for the command
         let time_period: DateRange = null;
-        let spatial_coverage: any = null;
+        let spatial_coverage: string = null;
         comp.inputs.map((input: ComponentArgument) => {
             args.push(input.prefix);
             plainargs.push(input.prefix);
@@ -147,7 +187,7 @@ module.exports = async (job: any) => {
         // Set the output file arguments for the command
         // Create the output file suffix based on a hash of inputs
         const opsuffix = "-" + Md5.hashAsciiStr(seed.execution.modelid + plainargs.join());
-        const results: any = {};
+        const results: Record<string, SeedResult> = {};
         comp.outputs.map((output: ComponentArgument) => {
             args.push(output.prefix);
             const opid = output.id + opsuffix;
@@ -175,13 +215,13 @@ module.exports = async (job: any) => {
         let statusCode = 0;
 
         const cwl_file = comp.rundir + "/run.cwl";
-        let cwl_outputs: any = {};
+        let cwl_outputs: Record<string, CwlOutput> = {};
         let is_cwl = false;
         let relative_outputdir = null;
 
         if (!fs.existsSync(tempdir)) fs.mkdirsSync(tempdir);
 
-        let logstream = fs.createWriteStream(logstdout);
+        const logstream = fs.createWriteStream(logstdout);
         logstream.write("Logging... [" + tempdir + "]\n");
         logstream.close();
 
@@ -198,24 +238,24 @@ module.exports = async (job: any) => {
                 fs.mkdirsSync(outputdir);
             }
 
-            let use_kubernetes = prefs.kubernetes?.use || true;
+            const use_kubernetes = prefs.kubernetes?.use || true;
             if (use_kubernetes) {
                 // If Running as a Kubernetes Pod, then extract I/O from CWL file and run that way
                 console.log("Running as a Kubernetes Job:");
-                let logstream = fs.createWriteStream(logstdout, { flags: "a" });
+                const logstream = fs.createWriteStream(logstdout, { flags: "a" });
 
                 // Run command in docker image
-                let details = get_details_from_cwl(comp, seed, results, cwl_file);
+                const details = get_details_from_cwl(comp, seed, results, cwl_file);
 
-                let image = details["image"];
-                let cmd_args = get_commandline_for_cwl_details(details);
+                const image = details["image"];
+                const cmd_args = get_commandline_for_cwl_details(details);
                 cwl_outputs = get_cwl_outputs(details, tempdir);
 
-                let jobname = "execution-" + uuidv4();
-                let namespace = prefs.kubernetes?.namespace || "default";
-                let use_node_affinity = prefs.kubernetes?.node_affinity || false;
-                let cpu_limit = prefs.kubernetes?.cpu_limit || null;
-                let memory_limit = prefs.kubernetes?.memory_limit || null;
+                const jobname = "execution-" + uuidv4();
+                const namespace = prefs.kubernetes?.namespace || "default";
+                const use_node_affinity = prefs.kubernetes?.node_affinity || false;
+                const cpu_limit = prefs.kubernetes?.cpu_limit || null;
+                const memory_limit = prefs.kubernetes?.memory_limit || null;
 
                 statusCode = await runKubernetesPod(
                     namespace,
@@ -248,14 +288,14 @@ module.exports = async (job: any) => {
 
                 console.log(cwl_command + " " + cwl_args.join(" ") + "\n");
 
-                let logstream = fs.createWriteStream(logstdout, { flags: "a" });
-                let spawnResult = child_process.spawn(cwl_command, cwl_args, {
+                const logstream = fs.createWriteStream(logstdout, { flags: "a" });
+                const spawnResult = child_process.spawn(cwl_command, cwl_args, {
                     cwd: tempdir,
                     shell: true
                 });
 
                 let stdout = "";
-                let promise = new Promise<void>(async (resolve, reject) => {
+                const promise = new Promise<void>((resolve) => {
                     spawnResult.on("close", (code) => {
                         statusCode = code;
                         resolve();
@@ -279,16 +319,16 @@ module.exports = async (job: any) => {
         // If there is only a docker image, run the container
         // --------------------------------------------------
         else if (softwareImage != null) {
-            let use_kubernetes = prefs.kubernetes?.use || true;
+            const use_kubernetes = prefs.kubernetes?.use || true;
             if (use_kubernetes) {
                 console.log("Running as a Kubernetes Job:");
-                let logstream = fs.createWriteStream(logstdout, { flags: "a" });
+                const logstream = fs.createWriteStream(logstdout, { flags: "a" });
 
-                let jobname = "execution-" + uuidv4();
-                let namespace = prefs.kubernetes?.namespace || "default";
-                let cpu_limit = prefs.kubernetes?.cpu_limit || null;
-                let memory_limit = prefs.kubernetes?.memory_limit || null;
-                let use_node_affinity = prefs.kubernetes?.node_affinity || false;
+                const jobname = "execution-" + uuidv4();
+                const namespace = prefs.kubernetes?.namespace || "default";
+                const cpu_limit = prefs.kubernetes?.cpu_limit || null;
+                const memory_limit = prefs.kubernetes?.memory_limit || null;
+                const use_node_affinity = prefs.kubernetes?.node_affinity || false;
 
                 statusCode = await runKubernetesPod(
                     namespace,
@@ -306,7 +346,7 @@ module.exports = async (job: any) => {
                 logstream.close();
             } else {
                 console.log("Running as a Docker Image:");
-                let logstream = fs.createWriteStream(logstdout, { flags: "a" });
+                const logstream = fs.createWriteStream(logstdout, { flags: "a" });
 
                 // Run command in docker image
                 const folderBindings = [
@@ -355,7 +395,7 @@ module.exports = async (job: any) => {
             });
 
             // Write log file
-            let logstream = fs.createWriteStream(logstdout, { flags: "a" });
+            const logstream = fs.createWriteStream(logstdout, { flags: "a" });
             logstream.write("\n------- STDOUT ---------\n");
             logstream.write(spawnResult.stdout);
             if (spawnResult.error) logstream.write(spawnResult.error.message);
@@ -373,9 +413,9 @@ module.exports = async (job: any) => {
             error = "Execution returned with non-zero status code";
         } else {
             // Process Results
-            let uploadOutputPromises = [];
+            const uploadOutputPromises = [];
 
-            Object.values(results).map((result: any) => {
+            Object.values(results).map((result) => {
                 // Rename temporary output files to desired output name
                 let desired_output_file = null;
                 let tmp_output_file = null;
@@ -383,7 +423,7 @@ module.exports = async (job: any) => {
                 if (is_cwl) {
                     result.name = result.role;
                     if (result.role !== undefined && result.role in cwl_outputs) {
-                        let cwl_output = cwl_outputs[result.role];
+                        const cwl_output = cwl_outputs[result.role];
                         desired_output_file = outputdir + "/" + cwl_output["basename"];
                         relative_output_file =
                             (relative_outputdir ? relative_outputdir + "/" : "") +
@@ -453,33 +493,38 @@ module.exports = async (job: any) => {
     }
 };
 
-const get_details_from_cwl = (comp: Component, seed: any, results: any, cwl_file: string) => {
+const get_details_from_cwl = (
+    comp: Component,
+    seed: ComponentSeed,
+    results: Record<string, SeedResult>,
+    cwl_file: string
+): CwlDetails => {
     const file = fs.readFileSync(cwl_file, "utf8");
-    let cwl = yaml.load(file);
-    let image = cwl["hints"]["DockerRequirement"]["dockerImageId"];
-    let command = cwl["baseCommand"];
+    const cwl = yaml.load(file) as CwlDocument;
+    const image = cwl["hints"]["DockerRequirement"]["dockerImageId"];
+    const command = cwl["baseCommand"];
 
-    let input_values = get_input_values(comp, seed);
-    let output_values = {};
-    Object.values(results).map((result: any) => {
+    const input_values = get_input_values(comp, seed);
+    const output_values: Record<string, CwlValueFile> = {};
+    Object.values(results).map((result) => {
         output_values[result.role] = { class: "File", location: result.name };
     });
 
-    let inputs = {};
-    let outputs = {};
-    for (let input_id in cwl["inputs"]) {
-        let input_cwl = cwl["inputs"][input_id];
-        let input_value = input_values[input_id];
-        let prefix = input_cwl["inputBinding"]["prefix"];
+    const inputs: CwlDetails["inputs"] = {};
+    const outputs: CwlDetails["outputs"] = {};
+    for (const input_id in cwl["inputs"]) {
+        const input_cwl = cwl["inputs"][input_id];
+        const input_value = input_values[input_id];
+        const prefix = input_cwl["inputBinding"]["prefix"];
         inputs[input_id] = {
             prefix: prefix,
             value: input_value
         };
     }
-    for (let output_id in cwl["outputs"]) {
-        let output_cwl = cwl["outputs"][output_id];
-        let output_value = output_values[output_id];
-        let output_glob = output_cwl["outputBinding"]["glob"];
+    for (const output_id in cwl["outputs"]) {
+        const output_cwl = cwl["outputs"][output_id];
+        const output_value = output_values[output_id];
+        const output_glob = output_cwl["outputBinding"]["glob"];
         outputs[output_id] = {
             glob: output_glob,
             value: output_value
@@ -493,26 +538,22 @@ const get_details_from_cwl = (comp: Component, seed: any, results: any, cwl_file
     };
 };
 
-const get_input_values = (comp: Component, seed: any) => {
-    interface CwlValueFile {
-        class: string;
-        location: string;
-    }
-    const data: Record<string, string | CwlValueFile> = {};
-    comp.inputs.map((input: any) => {
+const get_input_values = (comp: Component, seed: ComponentSeed) => {
+    const data: Record<string, string | number | boolean | CwlValueFile> = {};
+    comp.inputs.map((input) => {
         if (input.isParam) {
             const paramtype = seed.paramtypes[input.id];
-            let paramvalue = seed.parameters[input.id];
+            let paramvalue: string | number | boolean = seed.parameters[input.id];
             if (!paramvalue) paramvalue = input.paramDefaultValue;
-            if (paramtype == "int") paramvalue = parseInt(paramvalue);
-            else if (paramtype == "float") paramvalue = parseFloat(paramvalue);
+            if (paramtype == "int") paramvalue = parseInt(paramvalue as string);
+            else if (paramtype == "float") paramvalue = parseFloat(paramvalue as string);
             else if (paramtype == "boolean")
                 paramvalue = paramvalue.toString().toLowerCase() == "true";
             else paramvalue = paramvalue.toString();
             data[input.role] = paramvalue;
         } else {
             const datasets = seed.datasets[input.id] || [];
-            datasets.map((ds: string) => {
+            datasets.map((ds) => {
                 // Copy input files to tempdir
                 data[input.role] = { class: "File", location: ds["name"] };
             });
@@ -522,14 +563,15 @@ const get_input_values = (comp: Component, seed: any) => {
     return data;
 };
 
-const write_cwl_values = (comp: Component, seed: any, results: any, tempdir: string) => {
-    interface CwlValueFile {
-        class: string;
-        location: string;
-    }
-    const data: Record<string, string | CwlValueFile> = get_input_values(comp, seed);
+const write_cwl_values = (
+    comp: Component,
+    seed: ComponentSeed,
+    results: Record<string, SeedResult>,
+    tempdir: string
+) => {
+    const data = get_input_values(comp, seed);
     // Set output file names
-    Object.values(results).map((result: any) => {
+    Object.values(results).map((result) => {
         data[result.role] = { class: "File", location: result.name };
     });
 
@@ -540,16 +582,16 @@ const write_cwl_values = (comp: Component, seed: any, results: any, tempdir: str
     return valuesFile;
 };
 
-const get_commandline_for_cwl_details = (details: any) => {
-    let cmd = [];
+const get_commandline_for_cwl_details = (details: CwlDetails) => {
+    const cmd = [];
     cmd.push(details["command"]);
-    for (let input_id in details["inputs"]) {
-        let input = details["inputs"][input_id];
-        let input_value = input["value"];
-        let input_prefix = input["prefix"];
+    for (const input_id in details["inputs"]) {
+        const input = details["inputs"][input_id];
+        const input_value = input["value"];
+        const input_prefix = input["prefix"];
         cmd.push(input_prefix);
         if (typeof input_value == "object") {
-            let input_type = input_value["class"];
+            const input_type = input_value["class"];
             if (input_type == "File") {
                 cmd.push(input_value["location"]);
             }
@@ -560,16 +602,16 @@ const get_commandline_for_cwl_details = (details: any) => {
     return cmd;
 };
 
-const get_cwl_outputs = (details: any, tempdir: string) => {
-    let cwl_outputs = {};
-    for (let output_id in details["outputs"]) {
-        let output = details["outputs"][output_id];
-        let output_value = output["value"];
-        let output_temp_file = output["glob"];
+const get_cwl_outputs = (details: CwlDetails, tempdir: string) => {
+    const cwl_outputs: Record<string, CwlOutput> = {};
+    for (const output_id in details["outputs"]) {
+        const output = details["outputs"][output_id];
+        const output_value = output["value"];
+        const output_temp_file = output["glob"];
         if (typeof output_value == "object") {
-            let output_type = output_value["class"];
+            const output_type = output_value["class"];
             if (output_type == "File") {
-                let output_file = output_value["location"];
+                const output_file = output_value["location"];
                 cwl_outputs[output_id] = {
                     basename: output_file,
                     path: tempdir + "/" + output_temp_file

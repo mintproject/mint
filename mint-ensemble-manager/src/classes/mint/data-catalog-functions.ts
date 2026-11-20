@@ -1,10 +1,57 @@
-import { register } from "tsconfig-paths";
-import { DateRange, Region, MintPreferences, DatasetQueryParameters, Dataset } from "./mint-types";
+import {
+    DataResource,
+    DateRange,
+    Region,
+    MintPreferences,
+    DatasetQueryParameters,
+    Dataset
+} from "./mint-types";
 import * as rp from "request-promise-native";
 import { registerInternalDataset } from "./data-catalog-registration";
 
-const getDatasetsFromDCResponse = (obj: any, queryParameters: DatasetQueryParameters) => {
-    const datasets = obj.datasets.map((ds: any) => {
+/** The metadata of a dataset, as the internal data catalog returns it. */
+interface DCDatasetMetadata {
+    temporal_coverage?: { start_time?: string; end_time?: string };
+    dataset_description?: string;
+    version?: string;
+    limitations?: string;
+    source?: string;
+    source_url?: string;
+    source_type?: string;
+    is_cached?: boolean;
+    resource_count?: number;
+    datatype?: string;
+    data_type?: string;
+    category_tags?: string[];
+}
+
+/** The datasets answer of the internal data catalog. */
+interface DCDatasetsResponse {
+    datasets: Array<{
+        dataset_id: string;
+        dataset_name?: string;
+        dataset_metadata: DCDatasetMetadata;
+    }>;
+}
+
+/** The dataset resources answer of the internal data catalog. */
+interface DCResourcesResponse {
+    resources: Array<{
+        resource_id: string;
+        resource_name: string;
+        resource_data_url: string;
+        resource_metadata: {
+            temporal_coverage?: { start_time: string; end_time: string };
+            spatial_coverage?: string;
+        };
+    }>;
+}
+
+const getDatasetsFromDCResponse = (
+    obj: DCDatasetsResponse,
+    queryParameters: DatasetQueryParameters
+) => {
+    const datasets = obj.datasets.map((ds) => {
         const dmeta = ds["dataset_metadata"];
         return {
             id: ds["dataset_id"],
@@ -33,15 +80,15 @@ const getDatasetsFromDCResponse = (obj: any, queryParameters: DatasetQueryParame
             resource_count: dmeta["resource_count"] || 0,
             datatype: dmeta["datatype"] || dmeta["data_type"] || "",
             categories: dmeta["category_tags"] || [],
-            resources: [] as any[]
+            resources: [] as DataResource[]
         };
     });
     return datasets;
 };
 
-const getDatasetResourceListFromDCResponse = (obj: any) => {
-    const resources: any[] = [];
-    obj.resources.map((row: any) => {
+const getDatasetResourceListFromDCResponse = (obj: DCResourcesResponse) => {
+    const resources: DataResource[] = [];
+    obj.resources.map((row) => {
         const rmeta = row["resource_metadata"];
         const tcover = rmeta["temporal_coverage"];
         const scover = rmeta["spatial_coverage"];
@@ -73,7 +120,7 @@ export const queryDatasetDetails = async (
     region: Region,
     prefs: MintPreferences
 ): Promise<Dataset> => {
-    return new Promise<any>((resolve, reject) => {
+    return new Promise<Dataset>((resolve, reject) => {
         const dsQueryData = {
             standard_variable_names__in: driving_variables,
             spatial_coverage__intersects: region.geometries[0],
@@ -83,7 +130,7 @@ export const queryDatasetDetails = async (
             limit: 100
         };
 
-        const resQueryData: any = {
+        const resQueryData = {
             dataset_id: dsid,
             filter: {
                 spatial_coverage__intersects: region.geometries[0],
@@ -171,7 +218,7 @@ export const registerCKANDataset = async (
             body: ckan_dataset,
             json: true
         })
-            .then((obj) => {
+            .then(() => {
                 resolve(true);
             })
             .catch((err) => {

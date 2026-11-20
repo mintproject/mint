@@ -96,17 +96,23 @@ export const getThread = async (thread_id: string, access_token?: string): Promi
  * thread's existing row-level authorization is applied before provenance is
  * assembled.
  */
+/** A thread model's executions, as the history query returns them. */
+export interface ExecutionHistoryRow {
+    executions?: Array<{ execution?: object | null }>;
+}
+
 export const getExecutionHistory = async (
     threadModelId: string,
     access_token: string,
     limit: number
-): Promise<any> => {
+): Promise<ExecutionHistoryRow | null> => {
     const APOLLO_CLIENT = GraphQL.instanceUsingAccessToken(access_token);
-    const result: ApolloQueryResult<any> = await APOLLO_CLIENT.query({
-        query: listExecutionHistoryGQL,
-        variables: { threadModelId, limit },
-        fetchPolicy: "no-cache"
-    });
+    const result: ApolloQueryResult<{ thread_model_by_pk: ExecutionHistoryRow | null }> =
+        await APOLLO_CLIENT.query({
+            query: listExecutionHistoryGQL,
+            variables: { threadModelId, limit },
+            fetchPolicy: "no-cache"
+        });
     if (!result || (result.errors && result.errors.length > 0)) {
         throw new InternalServerError(
             "Error getting execution history " + (result?.errors?.[0]?.message || "unknown error")

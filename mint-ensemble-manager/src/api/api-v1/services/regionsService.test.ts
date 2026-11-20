@@ -232,7 +232,7 @@ describe("regionsService.createRegion and POST /regions", () => {
     beforeEach(() => insert.mockReset());
 
     it("stores one row for the same shape twice and reports created only the first time", async () => {
-        const rows = new Map<string, any>();
+        const rows = new Map<string, unknown>();
         insert.mockImplementation(async (object) => {
             if (rows.has(object.id)) return false;
             rows.set(object.id, object);

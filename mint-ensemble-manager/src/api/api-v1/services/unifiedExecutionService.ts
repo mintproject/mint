@@ -1,5 +1,9 @@
 import crypto from "crypto";
 import { UnifiedExecutionError } from "@/classes/common/errors";
+import { ModelThread } from "@/classes/api";
+import { ExecutionJob, SubmissionResult } from "@/interfaces/IExecutionService";
+import { GenericResponse } from "./util";
+import { AdapterPlanJson, AdapterPublication, AdapterResponse } from "./adapterTypes";
 import { ModelSecretDeclaration, Region } from "@/classes/mint/mint-types";
 import { getConfiguration } from "@/classes/mint/mint-functions";
 import { getThread } from "@/classes/graphql/graphql_functions_v2";
@@ -12,7 +16,9 @@ import {
 } from "./unifiedExecutionStore";
 import {
     FlowDeps,
+    FlowPause,
     FlowPlan,
+    FlowReplacement,
     FlowThreadService,
     flowStages,
     planFlow,
@@ -22,6 +28,44 @@ import {
 } from "./flowExecution";
 
 export type UnifiedExecutor = "ensemble_manager" | "svo_adapter";
+
+/**
+ * A client request body for the plan, submit and resume routes. It is
+ * unvalidated JSON: the types state what each field should be, and the
+ * service checks the ones it relies on where they are read.
+ */
+/** A pre-model adapter step as a client sends it. */
+interface AdapterStepRequest {
+    adapter_plan_id?: unknown;
+    model_io_id?: unknown;
+    source_resource_id?: unknown;
+}
+
+export interface UnifiedRequestBody {
+    [key: string]: unknown;
+    executor?: string;
+    plan_id?: string;
+    thread_id?: string;
+    model_id?: string;
+    execution_engine?: string;
+    execution_id?: string;
+    idempotency_key?: string;
+    run_name?: string;
+    recreate?: boolean;
+    dry_run?: boolean;
+    max_minutes?: unknown;
+    queue?: unknown;
+    publish?: unknown;
+    strict_inputs?: boolean;
+    input_etl?: boolean;
+    model_output_key?: unknown;
+    parameter_values?: Record<string, unknown>;
+    adapter_parameter_values?: Record<string, Record<string, unknown> | undefined>;
+    adapter_request?: unknown;
+    adapter?: unknown;
+    adapter_steps?: Array<AdapterStepRequest | null | undefined>;
+    post_model_adapter?: PostModelAdapterRequest;
+}
 
 export interface UnifiedParameterDefinition {
     name: string;
@@ -36,6 +80,7 @@ export interface UnifiedParameterDefinition {
     transform_spec_id?: string;
     managed?: boolean;
     managed_source?: string;
+    default_source?: string;
 }
 
 export { UnifiedExecutionError };
@@ -100,6 +145,12 @@ interface PostModelAdapter {
     parameters: UnifiedParameterDefinition[];
 }
 
+/** The post-model adapter as a client sends it, before planning adds its id, hash and parameters. */
+type PostModelAdapterRequest = Pick<
+    PostModelAdapter,
+    "model_io_id" | "model_output_key" | "source_contract" | "target_contract"
+> & { target_dataset_specification_id?: string };
+
 interface AdapterChildRun {
     adapter_plan_id: string;
     model_io_id: string;
@@ -115,6 +166,11 @@ interface AdapterChildRun {
     health?: string | null;
     model_job_id?: string | null;
     started_at?: string | null;
+    stage?: string;
+    publication?: ReturnType<typeof publicationOf>;
+    // What a run stopped for an edit shows, and the edit it continued on.
+    pause?: FlowPause | null;
+    replacement?: FlowReplacement | null;
 }
 
 interface UnifiedWorkflowStage {
@@ -170,11 +226,7 @@ interface TapisWorkflowTracking {
 interface AdapterPlanResponse {
     status?: string;
     plan_id?: string;
-    plan_json?: {
-        parameters?: UnifiedParameterDefinition[];
-        steps?: unknown[];
-        [key: string]: unknown;
-    };
+    plan_json?: AdapterPlanJson;
     plan_hash?: string;
     message?: string;
 }
@@ -283,7 +335,7 @@ export async function adapterRequest(
     path: string,
     init: { method?: string; body?: unknown; idempotencyKey?: string; asUser?: boolean },
     authorization?: string
-): Promise<any> {
+): Promise<AdapterResponse> {
     const base = adapterBaseUrl();
     if (!base) {
         throw new UnifiedExecutionError(
@@ -371,10 +423,17 @@ function adapterPlanId(planId: string): string {
     return planId.startsWith("svo_") ? planId.slice(4) : planId;
 }
 
+/** The record's output_handoff JSON. Only the fields read here are named. */
+interface OutputHandoff {
+    [key: string]: unknown;
+    publication?: AdapterPublication;
+    resource_uri?: string;
+}
+
 // What the adapter reports about a run's output publication, reduced to the
 // fields the unified execution keeps in output_handoff.publication.
-function publicationOf(run: Record<string, any> | null | undefined) {
-    const publication = run?.publication;
+function publicationOf(run: { publication?: unknown } | null | undefined) {
+    const publication = run?.publication as AdapterPublication | undefined;
     if (!publication || typeof publication !== "object") return undefined;
     if (publication.status === "published") {
         return {
@@ -442,7 +501,7 @@ function compactParameters(
 
 function adapterParameterValues(
     plan: LegacyPlan,
-    body: any
+    body: UnifiedRequestBody
 ): { values: Record<string, unknown>; hash: string } {
     const adapter = plan.post_model_adapter;
     const values: Record<string, unknown> = adapter
@@ -586,7 +645,7 @@ function workflowStages(record: UnifiedExecutionRecord, plan: LegacyPlan): Unifi
     // A flow is its steps: one stage each, and no model stage.
     if (plan.flow) return flowStages(record);
     const stages: UnifiedWorkflowStage[] = [];
-    const adapterChildren = (record.adapter_run_ids || []) as Array<Record<string, any>>;
+    const adapterChildren = (record.adapter_run_ids || []) as AdapterChildRun[];
     const adapterStageType = plan.post_model_adapter ? "adapter_output" : "adapter_input";
 
     adapterChildren.forEach((child, index) => {
@@ -626,6 +685,7 @@ function workflowStages(record: UnifiedExecutionRecord, plan: LegacyPlan): Unifi
         });
     }
 
+    const modelFields = record.model_result as ModelResultFields | undefined;
     const modelStage: UnifiedWorkflowStage = {
         stage_id: "model",
         type: "model",
@@ -642,11 +702,18 @@ function workflowStages(record: UnifiedExecutionRecord, plan: LegacyPlan): Unifi
                   ...(modelProviderJobId(record.model_result)
                       ? { tapis_job_id: modelProviderJobId(record.model_result)! }
                       : {}),
-                  ...(typeof (record.model_result as any)?.tapis_workflow_id === "string"
-                      ? { tapis_workflow_id: (record.model_result as any).tapis_workflow_id }
+                  ...(typeof modelFields?.tapis_workflow_id === "string"
+                      ? {
+                            tapis_workflow_id: (
+                                record.model_result as ModelResultFields | undefined
+                            ).tapis_workflow_id
+                        }
                       : {}),
-                  ...(typeof (record.model_result as any)?.tapis_run_id === "string"
-                      ? { tapis_run_id: (record.model_result as any).tapis_run_id }
+                  ...(typeof modelFields?.tapis_run_id === "string"
+                      ? {
+                            tapis_run_id: (record.model_result as ModelResultFields | undefined)
+                                .tapis_run_id
+                        }
                       : {})
               }
             : {}
@@ -687,7 +754,7 @@ function workflowStages(record: UnifiedExecutionRecord, plan: LegacyPlan): Unifi
 }
 
 function tapisWorkflowTracking(record: UnifiedExecutionRecord): TapisWorkflowTracking {
-    const workflows = ((record.adapter_run_ids || []) as Array<Record<string, unknown>>)
+    const workflows = ((record.adapter_run_ids || []) as AdapterChildRun[])
         .map((child) => ({
             workflow_id:
                 typeof child.tapis_workflow_id === "string" ? child.tapis_workflow_id : null,
@@ -706,6 +773,8 @@ function tapisWorkflowTracking(record: UnifiedExecutionRecord): TapisWorkflowTra
         stage_count: workflows.length
     };
 }
+
+export type ParentRunResponse = ReturnType<typeof parentResponse>;
 
 function parentResponse(record: UnifiedExecutionRecord) {
     const plan = decodePlan(record.plan_id);
@@ -734,7 +803,7 @@ function parentResponse(record: UnifiedExecutionRecord) {
         model_child_id: record.model_child_id || null,
         model_job_id: modelJobId,
         model_output_id: record.model_output_id || null,
-        output_handoff: record.output_handoff || null,
+        output_handoff: (record.output_handoff as OutputHandoff | undefined) || null,
         failure_code: record.failure_code || null,
         model_result: record.model_result || null,
         error_message: record.error_message || null,
@@ -747,47 +816,116 @@ function parentResponse(record: UnifiedExecutionRecord) {
  * to download and where to send the replacement, and later who replaced it, when,
  * and the hash of what the run fetched. Both are null when there is none.
  */
+/** The fields of a stored model result that the parent response reads. */
+interface ModelResultFields {
+    tapis_workflow_id?: string;
+    tapis_run_id?: string;
+    replacement?: FlowReplacement;
+}
+
 function flowPauseFields(record: UnifiedExecutionRecord) {
-    const child = ((record.adapter_run_ids || []) as Array<Record<string, any>>)[0];
+    const child = ((record.adapter_run_ids || []) as AdapterChildRun[])[0];
     return {
         pause: record.status === "awaiting_edit" ? child?.pause || null : null,
-        replacement: child?.replacement || (record.model_result as any)?.replacement || null
+        replacement:
+            child?.replacement ||
+            (record.model_result as ModelResultFields | undefined)?.replacement ||
+            null
     };
 }
 
-function legacyModelExecutionId(result: any): string | null {
-    const submitted = Array.isArray(result?.submittedExecutions) ? result.submittedExecutions : [];
-    const first = submitted[0];
+/** What a legacy engine's submit returns that the unified service reads. */
+interface SubmitResultFields {
+    provider_job_id?: unknown;
+    submittedExecutions?: unknown;
+}
+
+/** One entry of submittedExecutions: an execution ID, or an object carrying one. */
+interface SubmittedEntry {
+    [key: string]: unknown;
+    execution?: { id?: unknown; runid?: unknown };
+}
+
+function firstSubmitted(result: SubmitResultFields | null | undefined): unknown {
+    const submitted: unknown[] = Array.isArray(result?.submittedExecutions)
+        ? result.submittedExecutions
+        : [];
+    return submitted[0];
+}
+
+function legacyModelExecutionId(result: unknown): string | null {
+    const first = firstSubmitted(result as SubmitResultFields | null | undefined);
     if (typeof first === "string") return first;
     if (!first || typeof first !== "object") return null;
-    const execution = first.execution;
+    const entry = first as SubmittedEntry;
+    const execution = entry.execution;
     if (typeof execution?.id === "string") return execution.id;
     for (const key of ["id", "executionId", "jobId", "job_id"]) {
-        if (typeof first[key] === "string") return first[key];
+        const value = entry[key];
+        if (typeof value === "string") return value;
     }
     return null;
 }
 
-function modelProviderJobId(result: any): string | null {
-    if (typeof result?.provider_job_id === "string") return result.provider_job_id;
-    const submitted = Array.isArray(result?.submittedExecutions) ? result.submittedExecutions : [];
-    const first = submitted[0];
+function modelProviderJobId(result: unknown): string | null {
+    const fields = result as SubmitResultFields | null | undefined;
+    if (typeof fields?.provider_job_id === "string") return fields.provider_job_id;
+    const first = firstSubmitted(fields);
     if (!first || typeof first !== "object") return null;
+    const entry = first as SubmittedEntry;
     for (const key of ["jobId", "job_id", "tapisJobId", "tapis_job_id"]) {
-        if (typeof first[key] === "string") return first[key];
+        const value = entry[key];
+        if (typeof value === "string") return value;
     }
-    if (typeof first.execution?.runid === "string") return first.execution.runid;
+    if (typeof entry.execution?.runid === "string") return entry.execution.runid;
     return null;
 }
+
+/** What the unified service asks a legacy engine to submit. */
+export type LegacySubmitRequest = ModelThread & {
+    max_minutes?: number;
+    queue?: string;
+    output_name?: string;
+    adapter_resource_overrides?: unknown[];
+};
+
+/** A resource a model run produced. */
+interface ModelRunResource {
+    url?: string;
+    name?: string;
+}
+
+/** One result of a model run, keyed by the model I/O it fills. */
+interface ModelRunResult {
+    model_io?: { id?: string } | null;
+    model_io_id?: string;
+    resource?: ModelRunResource;
+}
+
+/** A model execution as the legacy status lookup reports it. */
+interface LegacyModelRun {
+    status?: string;
+    runid?: string;
+    error?: unknown;
+    output_uri?: string;
+    provider_job_id?: string;
+    // A list of results, or a map of resource by model I/O id.
+    results?: ModelRunResult[] | Record<string, ModelRunResource>;
+}
+
+export type UnifiedExecutionService = ReturnType<typeof createUnifiedExecutionService>;
 
 export function createUnifiedExecutionService(
     legacyServices: {
-        local: { submitExecution(body: any): Promise<any> };
-        wings: { submitExecution(body: any): Promise<any> };
+        local: { submitExecution(body: LegacySubmitRequest): Promise<GenericResponse> };
+        wings: { submitExecution(body: LegacySubmitRequest): Promise<GenericResponse> };
         tapis: {
-            submitExecution(body: any, authorization: string): Promise<any>;
+            submitExecution(
+                body: LegacySubmitRequest,
+                authorization: string
+            ): Promise<SubmissionResult>;
             buildCompositeWorkflowModelTask?(
-                body: any,
+                body: LegacySubmitRequest,
                 workflowPath: string,
                 authorization: string
             ): Promise<{
@@ -817,8 +955,8 @@ export function createUnifiedExecutionService(
                 outputName: string,
                 authorization: string
             ) => Promise<string | null>;
-            getExecution?: (executionId: string, authorization: string) => Promise<any>;
-            getJobStatus?: (jobId: string, authorization: string) => Promise<any>;
+            getExecution?: (executionId: string, authorization: string) => Promise<LegacyModelRun>;
+            getJobStatus?: (jobId: string, authorization: string) => Promise<ExecutionJob>;
             updateCompositeWorkflowExecution?: (
                 threadId: string,
                 modelId: string,
@@ -952,17 +1090,17 @@ export function createUnifiedExecutionService(
             record.status === "unknown" &&
             record.failure_code === "COMPOSITE_WORKFLOW_STATUS_UNKNOWN";
         const retryableAdapterAuthFailure = isRetryableAdapterAuthFailure(record);
-        const modelResult = (record.model_result || {}) as Record<string, any>;
+        const modelResult = (record.model_result || {}) as Record<string, unknown>;
         const compositeWorkflowRunId =
             modelResult.composite_workflow_run_id || modelResult.tapis_run_id;
-        const existingHandoff = (record.output_handoff || {}) as Record<string, any>;
+        const existingHandoff = (record.output_handoff || {}) as OutputHandoff;
         const finalUriLooksLikeModelUri =
             typeof existingHandoff.final_resource_uri === "string" &&
             typeof existingHandoff.resource_uri === "string" &&
             (existingHandoff.final_resource_uri === existingHandoff.resource_uri ||
                 existingHandoff.resource_uri.startsWith(existingHandoff.final_resource_uri) ||
                 existingHandoff.final_resource_uri.startsWith(existingHandoff.resource_uri));
-        const existingChildren = (record.adapter_run_ids || []) as Array<Record<string, any>>;
+        const existingChildren = (record.adapter_run_ids || []) as AdapterChildRun[];
         const stalePostModelChild = existingChildren.find(
             (child) =>
                 child.execution_kind === "workflow" &&
@@ -1023,7 +1161,7 @@ export function createUnifiedExecutionService(
             if (!hasPendingPostModelHandoff) return parentResponse(record);
         }
         if (!adapter) return parentResponse(record);
-        let adapterChildren = (record.adapter_run_ids || []) as Array<Record<string, any>>;
+        let adapterChildren = (record.adapter_run_ids || []) as AdapterChildRun[];
         const postModelAttemptSuffix =
             stalePostModelChild?.status === "failed" ? `:retry-${stalePostModelChild.run_id}` : "";
         if (stalePostModelChild) {
@@ -1031,12 +1169,10 @@ export function createUnifiedExecutionService(
             // for the deferred stage. Treat that child as the completed model
             // stage and submit a fresh output workflow below.
             adapterChildren = adapterChildren.filter((child) => child !== stalePostModelChild);
-            const previousHandoff = (record.output_handoff || {}) as Record<string, any>;
-            const {
-                final_output_data_object_id: _discardedOutputId,
-                final_resource_uri: _discardedResourceUri,
-                ...modelHandoff
-            } = previousHandoff;
+            const previousHandoff = (record.output_handoff || {}) as OutputHandoff;
+            const modelHandoff = { ...previousHandoff };
+            delete modelHandoff.final_output_data_object_id;
+            delete modelHandoff.final_resource_uri;
             const updated = await store.update(record.id, {
                 status: "model_succeeded",
                 adapter_run_ids: adapterChildren,
@@ -1068,7 +1204,7 @@ export function createUnifiedExecutionService(
                     {},
                     authorization
                 );
-                const run = { ...(polled || {}), ...(persisted || {}) } as Record<string, any>;
+                const run: AdapterResponse = { ...(polled || {}), ...(persisted || {}) };
                 if (!run.output_uri && polled?.output_uri) run.output_uri = polled.output_uri;
                 compositeChild.status = run.status;
                 compositeChild.tapis_workflow_id =
@@ -1138,7 +1274,7 @@ export function createUnifiedExecutionService(
                         adapter_run_ids: adapterChildren,
                         model_result: nextModelResult,
                         output_handoff: {
-                            ...((record.output_handoff as Record<string, unknown> | null) || {}),
+                            ...((record.output_handoff as OutputHandoff | null) || {}),
                             final_output_data_object_id: compositeChild.output_data_object_id,
                             final_resource_uri: run.output_uri,
                             ...(run.result && typeof run.result === "object"
@@ -1200,7 +1336,7 @@ export function createUnifiedExecutionService(
                     {},
                     authorization
                 );
-                const run = { ...(polled || {}), ...(persisted || {}) } as Record<string, any>;
+                const run: AdapterResponse = { ...(polled || {}), ...(persisted || {}) };
                 if (!run.output_uri && polled?.output_uri) run.output_uri = polled.output_uri;
                 // A null persisted publication must not hide the polled one.
                 if (!run.publication && polled?.publication) run.publication = polled.publication;
@@ -1218,10 +1354,10 @@ export function createUnifiedExecutionService(
                     // registered or mirrored, and nothing waits on it. The child
                     // is never resubmitted (see the stale-child predicate).
                     const outcomeHandoff = {
-                        ...((record.output_handoff as Record<string, unknown> | null) || {}),
+                        ...((record.output_handoff as OutputHandoff | null) || {}),
                         publication
                     };
-                    const modelOutputUri = (outcomeHandoff as Record<string, any>).resource_uri;
+                    const modelOutputUri = (outcomeHandoff as OutputHandoff).resource_uri;
                     if (
                         legacyServices.tapis.updateCompositeWorkflowExecution &&
                         record.model_child_id
@@ -1338,7 +1474,7 @@ export function createUnifiedExecutionService(
                     output_handoff:
                         nextStatus === "completed"
                             ? {
-                                  ...((record.output_handoff as Record<string, unknown>) || {}),
+                                  ...((record.output_handoff as OutputHandoff) || {}),
                                   final_output_data_object_id: child.output_data_object_id,
                                   final_resource_uri: run.output_uri || null,
                                   ...(run.result && typeof run.result === "object"
@@ -1372,7 +1508,7 @@ export function createUnifiedExecutionService(
             return parentResponse(updated || { ...record, status: "unknown" });
         }
 
-        let model: any;
+        let model: LegacyModelRun;
         if (!getExecution && typeof knownCompositeOutput === "string") {
             // Composite model tasks already carry their output URI. Do not
             // require a legacy execution lookup just to start the deferred
@@ -1451,14 +1587,14 @@ export function createUnifiedExecutionService(
             failure_code: null
         });
 
-        const modelResults = Array.isArray(model.results)
+        const modelResults: ModelRunResult[] = Array.isArray(model.results)
             ? model.results
             : Object.entries(model.results || {}).map(([model_io_id, resource]) => ({
                   model_io_id,
                   resource
               }));
         const result = modelResults.find(
-            (candidate: any) =>
+            (candidate: ModelRunResult) =>
                 candidate?.model_io?.id === adapter.model_io_id ||
                 candidate?.model_io_id === adapter.model_io_id
         );
@@ -1472,7 +1608,7 @@ export function createUnifiedExecutionService(
             return parentResponse(updated || { ...record, status: "output_registering" });
         }
 
-        let handoff = (record.output_handoff || {}) as Record<string, any>;
+        let handoff = (record.output_handoff || {}) as OutputHandoff;
         if (!handoff.data_object_id) {
             await store.update(record.id, { status: "output_registering", model_result: model });
             try {
@@ -1821,7 +1957,7 @@ export function createUnifiedExecutionService(
             }
             throw error;
         }
-        let planned: any;
+        let planned: AdapterResponse;
         try {
             planned = await adapterRequest(
                 "/plans/model-inputs",
@@ -2047,7 +2183,7 @@ export function createUnifiedExecutionService(
             );
         },
 
-        async createPlan(body: any, authorization?: string) {
+        async createPlan(body: UnifiedRequestBody, authorization?: string) {
             const executor = body?.executor as UnifiedExecutor;
             let inputPlan: InputPlanResult | undefined;
             if (executor === "svo_adapter") {
@@ -2376,7 +2512,7 @@ export function createUnifiedExecutionService(
                 if (!Array.isArray(body.adapter_steps)) {
                     throw new UnifiedExecutionError(400, "adapter_steps must be an array");
                 }
-                plan.adapter_steps = body.adapter_steps.map((step: any) => {
+                plan.adapter_steps = body.adapter_steps.map((step) => {
                     if (
                         typeof step?.adapter_plan_id !== "string" ||
                         typeof step?.model_io_id !== "string" ||
@@ -2564,7 +2700,7 @@ export function createUnifiedExecutionService(
             return parentResponse(latest);
         },
 
-        async resumeRun(runId: string, body: any, authorization?: string) {
+        async resumeRun(runId: string, body: UnifiedRequestBody, authorization?: string) {
             const deps = flowDeps();
             const record = runId.startsWith("ue_") ? await store.getById(runId.slice(3)) : null;
             if (!record) {
@@ -2590,7 +2726,7 @@ export function createUnifiedExecutionService(
             return parentResponse(resumed);
         },
 
-        async submit(body: any, authorization: string | undefined) {
+        async submit(body: UnifiedRequestBody, authorization: string | undefined) {
             if (typeof body?.plan_id !== "string") {
                 throw new UnifiedExecutionError(400, "plan_id is required", "PLAN_ID_REQUIRED");
             }

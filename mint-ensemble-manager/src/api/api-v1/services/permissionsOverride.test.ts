@@ -27,6 +27,10 @@ jest.mock("@/classes/graphql/graphql_functions_v2", () => ({
     checkRegionExistsById: jest.fn().mockResolvedValue(true)
 }));
 
+type ProblemStatementInput = Parameters<typeof problemStatementsService.createProblemStatement>[0];
+type TaskInput = Parameters<typeof tasksService.createTask>[1];
+type ThreadInput = Parameters<typeof subTasksService.createSubtask>[2];
+
 const AUTH = "Bearer some-token";
 const SHARED = [{ read: true, write: true, execute: true, owner: false, userid: "*" }];
 const CALLER = [{ read: true, write: true, execute: true, owner: true, userid: "alice" }];
@@ -37,7 +41,7 @@ describe("permissions on problem statements, tasks and threads", () => {
 
     it("keeps userid * for a problem statement created without an override", async () => {
         await problemStatementsService.createProblemStatement(
-            { name: "ps", regionid: "region-1", dates } as any,
+            { name: "ps", regionid: "region-1", dates } as ProblemStatementInput,
             AUTH
         );
         expect((addProblemStatement as jest.Mock).mock.calls[0][0].permissions).toEqual(SHARED);
@@ -45,7 +49,7 @@ describe("permissions on problem statements, tasks and threads", () => {
 
     it("uses the supplied permissions, id and ifAbsent for a problem statement", async () => {
         await problemStatementsService.createProblemStatement(
-            { name: "ps", regionid: "region-1", dates } as any,
+            { name: "ps", regionid: "region-1", dates } as ProblemStatementInput,
             AUTH,
             { permissions: CALLER, id: "ps-x", ifAbsent: true }
         );
@@ -57,7 +61,7 @@ describe("permissions on problem statements, tasks and threads", () => {
     it("keeps userid * for a task created without an override", async () => {
         await tasksService.createTask(
             "ps-1",
-            { name: "t", response_variables: [], driving_variables: [], dates } as any,
+            { name: "t", response_variables: [], driving_variables: [], dates } as TaskInput,
             AUTH
         );
         expect((addTask as jest.Mock).mock.calls[0][1].permissions).toEqual(SHARED);
@@ -66,7 +70,7 @@ describe("permissions on problem statements, tasks and threads", () => {
     it("uses the supplied permissions for a task", async () => {
         await tasksService.createTask(
             "ps-1",
-            { name: "t", response_variables: [], driving_variables: [], dates } as any,
+            { name: "t", response_variables: [], driving_variables: [], dates } as TaskInput,
             AUTH,
             { permissions: CALLER, id: "task-x", ifAbsent: true }
         );
@@ -83,7 +87,7 @@ describe("permissions on problem statements, tasks and threads", () => {
                 driving_variables: [],
                 response_variables: [],
                 dates
-            }) as any;
+            }) as ThreadInput;
         await subTasksService.createSubtask("ps-1", "task-1", thread(), AUTH);
         expect((addThread as jest.Mock).mock.calls[0][1].permissions).toEqual(SHARED);
         await subTasksService.createSubtask("ps-1", "task-1", thread(), AUTH, {
@@ -94,7 +98,7 @@ describe("permissions on problem statements, tasks and threads", () => {
 
     it("names the caller in the CREATE event when createdBy is given, else system", async () => {
         await problemStatementsService.createProblemStatement(
-            { name: "ps", regionid: "region-1", dates } as any,
+            { name: "ps", regionid: "region-1", dates } as ProblemStatementInput,
             AUTH
         );
         expect((addProblemStatement as jest.Mock).mock.calls[0][0].events[0]).toMatchObject({
@@ -102,7 +106,7 @@ describe("permissions on problem statements, tasks and threads", () => {
             userid: "system"
         });
         await problemStatementsService.createProblemStatement(
-            { name: "ps", regionid: "region-1", dates } as any,
+            { name: "ps", regionid: "region-1", dates } as ProblemStatementInput,
             AUTH,
             { permissions: CALLER, createdBy: "alice" }
         );
@@ -118,7 +122,7 @@ describe("permissions on problem statements, tasks and threads", () => {
                 dates,
                 driving_variables: [],
                 response_variables: []
-            } as any,
+            } as TaskInput,
             AUTH,
             { permissions: CALLER, createdBy: "alice" }
         );
@@ -134,7 +138,7 @@ describe("permissions on problem statements, tasks and threads", () => {
                 driving_variables: [],
                 response_variables: [],
                 dates
-            } as any,
+            } as ThreadInput,
             AUTH,
             { permissions: CALLER, createdBy: "alice" }
         );

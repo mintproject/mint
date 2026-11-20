@@ -1,7 +1,7 @@
 query execution_ids_for_thread_model($threadModelId: uuid!) {
-  thread_model_by_pk(id: $threadModelId) {
-    executions {
-      execution_id
+    thread_model_by_pk(id: $threadModelId) {
+        executions {
+            execution_id
+        }
     }
-  }
 }

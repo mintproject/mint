@@ -22,7 +22,7 @@ describe("getInputsParameters", () => {
     const paramId = "https://w3id.org/okn/i/mint/4103a17f-9927-4c76-824d-753daecd0698";
 
     const buildModel = (params: unknown[]): Model =>
-        ({ input_parameters: params } as unknown as Model);
+        ({ input_parameters: params }) as unknown as Model;
 
     test("does not throw when binding value is empty string and parameter has no default", () => {
         const m = buildModel([{ id: paramId, type: "string" }]);
