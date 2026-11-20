@@ -155,7 +155,7 @@ export function FramingStep({
                 geometries={(thread.region?.geometries ?? [])
                   .map((geometry) => geometry.geometry)
                   .filter(Boolean)}
-                label={spatialSelection?.feature?.label ?? thread.region?.name ?? regionId}
+                label={spatialSelection?.feature?.label ?? thread.region?.name}
                 scopeId={spatialSelection?.feature?.filterValue ?? regionId}
                 sourceUri={spatialSelection?.layer?.source_uri ?? spatialSelection?.layer?.uri}
                 filterField={spatialSelection?.feature?.filterField}
