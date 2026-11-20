@@ -46,6 +46,7 @@ import {
   type InferenceTransformKind,
   type VariableTransform,
 } from '@/lib/modeling/outcome-driver-inference';
+import { UNNAMED_STANDARD_VARIABLE } from '@/lib/standard-variable-display';
 import { slugFromUri } from '@/lib/uri';
 
 export type StandardVariableScope = 'all' | 'indicator' | 'driver';
@@ -65,7 +66,7 @@ interface StandardVariableFields {
 export function toStandardVariableOption(sv: StandardVariableFields): StandardVariableOption {
   return {
     id: sv.id,
-    label: sv.label?.trim() || 'Unnamed standard variable',
+    label: sv.label?.trim() || UNNAMED_STANDARD_VARIABLE,
     description: sv.description?.trim() || (sv.label ? null : `Catalog ID: ${sv.id}`),
   };
 }

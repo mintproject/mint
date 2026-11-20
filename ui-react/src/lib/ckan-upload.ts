@@ -156,6 +156,8 @@ export function checkUploadAgainstInput(params: {
   inputName: string;
   /** A file that is no input's data (an edit) needs no standard variable. */
   variableOptional?: boolean;
+  /** No format is expected (a standalone upload), so a missing one needs no note. */
+  formatOptional?: boolean;
 }): { error: string | null; notes: string[] } {
   const { files, inputName } = params;
   const refuse = (error: string) => ({ error, notes: [] });
@@ -170,6 +172,7 @@ export function checkUploadAgainstInput(params: {
   const format = (params.format ?? '').trim();
   const lower = format.toLowerCase();
   if (!format) {
+    if (params.formatOptional) return { error: null, notes: [] };
     return {
       error: null,
       notes: [
@@ -293,16 +296,123 @@ export async function listUploadOrganizations(): Promise<UploadOrganization[]> {
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
-async function createPackage(params: {
-  organizationId: string;
-  isPublic: boolean;
+export interface UploadLicense {
+  id: string;
   title: string;
-  notes: string;
-  now: Date;
-  startDate: string;
-  endDate: string;
-  spatial: string | null;
-}): Promise<{ id: string; name: string; title: string }> {
+}
+
+/** The portal's licenses, fetched once per session (a failed fetch is tried again next time). */
+const licenseCache = new Map<string, Promise<UploadLicense[]>>();
+
+export function clearLicenseCache(): void {
+  licenseCache.clear();
+}
+
+async function fetchLicenses(): Promise<UploadLicense[]> {
+  let resp: Response;
+  try {
+    resp = await fetch(actionUrl('license_list'), { headers: { Accept: 'application/json' } });
+  } catch {
+    throw new UploadError(UPLOAD_UNREACHABLE_MESSAGE, true);
+  }
+  if (!resp.ok) {
+    throw new UploadError(`The catalog would not list its licenses (HTTP ${resp.status}).`);
+  }
+  const body = (await resp.json()) as { result?: Array<Record<string, unknown>> };
+  return (body.result ?? [])
+    .map((row) => ({
+      id: String(row['id'] ?? ''),
+      title: String(row['title'] || row['id'] || ''),
+    }))
+    .filter((license) => license.id);
+}
+
+/** The licenses the catalog offers, from its `license_list` action. Cached for the session. */
+export function listLicenses(): Promise<UploadLicense[]> {
+  const key = actionUrl('license_list');
+  let pending = licenseCache.get(key);
+  if (!pending) {
+    pending = fetchLicenses();
+    licenseCache.set(key, pending);
+    pending.catch(() => licenseCache.delete(key));
+  }
+  return pending;
+}
+
+/** The license a new dataset starts with: CC-BY-4.0 if offered, else plain CC-BY, else none. */
+export function defaultLicenseId(licenses: UploadLicense[]): string {
+  const ids = licenses.map((license) => license.id);
+  return (
+    ids.find((id) => id.toLowerCase() === 'cc-by-4.0') ?? ids.find((id) => id === 'cc-by') ?? ''
+  );
+}
+
+/** The tag every upload from DYNAMO carries. */
+export const UPLOAD_TAG = 'dynamo-upload';
+
+/**
+ * Tags as CKAN's `tag_string`: comma-separated names. CKAN allows letters, digits,
+ * spaces and `-_.` in a tag, so anything else is dropped; repeats (any case) go.
+ * The DYNAMO tag is always first.
+ */
+export function tagString(tags: string[] = []): string {
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const tag of [UPLOAD_TAG, ...tags]) {
+    const clean = tag
+      .replace(/[^A-Za-z0-9 _.-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 100);
+    if (clean && !seen.has(clean.toLowerCase())) {
+      seen.add(clean.toLowerCase());
+      kept.push(clean);
+    }
+  }
+  return kept.join(',');
+}
+
+/** Optional descriptive fields of a dataset; an empty one is left out of the request. */
+export interface UploadMetadata {
+  /** A CKAN license id, from listLicenses. */
+  license?: string;
+  tags?: string[];
+  /** A source or citation link (the dataset's `url`). */
+  sourceUrl?: string;
+  version?: string;
+  author?: string;
+  /** Written to `maintainer_email`. */
+  contactEmail?: string;
+}
+
+/** The non-empty metadata as the CKAN `package_create` fields they map to. */
+function metadataFields(meta: UploadMetadata): Record<string, string> {
+  const fields: Record<string, string | undefined> = {
+    license_id: meta.license,
+    url: meta.sourceUrl,
+    version: meta.version,
+    author: meta.author,
+    maintainer_email: meta.contactEmail,
+  };
+  return Object.fromEntries(
+    Object.entries(fields)
+      .map(([key, value]) => [key, (value ?? '').trim()] as const)
+      .filter(([, value]) => value),
+  );
+}
+
+async function createPackage(
+  params: UploadMetadata & {
+    organizationId: string;
+    isPublic: boolean;
+    title: string;
+    notes: string;
+    now: Date;
+    startDate: string;
+    endDate: string;
+    spatial: string | null;
+  },
+): Promise<{ id: string; name: string; title: string }> {
   const day = params.now.toISOString().slice(0, 10);
   const random = Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) =>
     b.toString(16).padStart(2, '0'),
@@ -327,7 +437,8 @@ async function createPackage(params: {
         temporal_coverage_start: params.startDate,
         temporal_coverage_end: params.endDate,
         ...(params.spatial ? { spatial: params.spatial } : {}),
-        tag_string: 'dynamo-upload',
+        tag_string: tagString(params.tags),
+        ...metadataFields(params),
       }),
     });
   } catch {
@@ -408,6 +519,12 @@ export async function uploadFilesToCatalog(params: {
   spatial?: string | null;
   /** The dataset's title. Defaults to "Uploaded files, <day>, <username>". */
   title?: string;
+  /** License, tags, source link, version, author and contact: all optional. */
+  metadata?: UploadMetadata;
+  /** One line per file, in file order, for each resource's `description`. */
+  fileDescriptions?: string[];
+  /** A standalone upload expects no format, so a missing one needs no note. */
+  formatOptional?: boolean;
   username: string;
   now?: Date;
   onProgress?: (progress: UploadProgress) => void;
@@ -422,6 +539,7 @@ export async function uploadFilesToCatalog(params: {
     multiple: params.multiple,
     inputName: params.inputName,
     variableOptional: params.variableOptional,
+    formatOptional: params.formatOptional,
   });
   if (fit.error) throw new UploadError(fit.error);
   if (!params.organizationId) throw new UploadError('Choose an organisation.');
@@ -440,6 +558,7 @@ export async function uploadFilesToCatalog(params: {
     title: params.title?.trim() || `Uploaded files, ${day}, ${params.username}`,
     notes: params.notes ?? `Uploaded through DYNAMO for ${params.flowName} / ${params.inputName}.`,
     now,
+    ...params.metadata,
     startDate: threadDates ? start : day,
     endDate: threadDates ? end : day,
     spatial: params.spatial !== undefined ? params.spatial : regionToSpatial(params.regionGeometry),
@@ -468,6 +587,9 @@ export async function uploadFilesToCatalog(params: {
           package_id: pkg.id,
           name,
           format: formatFromName(name),
+          ...((params.fileDescriptions?.[index] ?? '').trim()
+            ? { description: params.fileDescriptions![index]!.trim() }
+            : {}),
           ...(variable ? { mint_standard_variables: variable } : {}),
         },
         file,

@@ -9,6 +9,16 @@ import type { BoundingBox } from '@/lib/geo/bbox';
 interface DatasetSpatialMapProps {
   value: BoundingBox | null;
   onChange: (value: BoundingBox | null) => void;
+  /** Heading. Defaults to "Spatial coverage". */
+  title?: string;
+  /** Line under the heading. Defaults to the dataset-search wording. */
+  description?: string;
+  /** Hint shown on the empty map. Defaults to the dataset-search wording. */
+  emptyHint?: string;
+  /** A second, dashed box that is shown but not drawn by the user (a region's extent). */
+  outline?: BoundingBox | null;
+  /** Zoom to the drawn box when it changes (off by default: a search keeps the user's view). */
+  fitToBox?: boolean;
 }
 
 type LatLngTuple = [number, number];
@@ -33,10 +43,13 @@ function toBoundingBox(bounds: L.LatLngBounds): BoundingBox {
 function BoxDrawer({
   active,
   value,
+  fit,
   onChange,
 }: {
   active: boolean;
   value: BoundingBox | null;
+  /** A box to zoom to whenever it changes, or null to leave the view alone. */
+  fit: BoundingBox | null;
   onChange: (value: BoundingBox | null) => void;
 }) {
   const [draft, setDraft] = useState<BoundingBox | null>(value);
@@ -72,6 +85,13 @@ function BoxDrawer({
     setDraft(value);
   }, [value]);
 
+  const { xmin, ymin, xmax, ymax } = fit ?? { xmin: NaN, ymin: NaN, xmax: NaN, ymax: NaN };
+  useEffect(() => {
+    if ([xmin, ymin, xmax, ymax].every(Number.isFinite)) {
+      map.fitBounds(toLeafletBounds({ xmin, ymin, xmax, ymax }), { padding: [24, 24] });
+    }
+  }, [map, xmin, ymin, xmax, ymax]);
+
   useEffect(() => {
     if (!active) {
       start.current = null;
@@ -94,24 +114,30 @@ function BoxDrawer({
   ) : null;
 }
 
-export function DatasetSpatialMap({ value, onChange }: DatasetSpatialMapProps) {
+export function DatasetSpatialMap({
+  value,
+  onChange,
+  title = 'Spatial coverage',
+  description = 'Draw a box to find datasets that overlap an area.',
+  emptyHint = 'Use Draw box to filter by location.',
+  outline = null,
+  fitToBox = false,
+}: DatasetSpatialMapProps) {
   const [drawing, setDrawing] = useState(false);
 
   return (
     <div className="flex h-full min-h-[390px] flex-col rounded-lg border bg-card">
       <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
         <div>
-          <h3 className="text-sm font-semibold">Spatial coverage</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Draw a box to find datasets that overlap an area.
-          </p>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Button size="sm" variant="outline" onClick={() => setDrawing(true)}>
+          <Button type="button" size="sm" variant="outline" onClick={() => setDrawing(true)}>
             {value ? 'Redraw box' : 'Draw box'}
           </Button>
           {value && (
-            <Button size="sm" variant="ghost" onClick={() => onChange(null)}>
+            <Button type="button" size="sm" variant="ghost" onClick={() => onChange(null)}>
               Clear
             </Button>
           )}
@@ -128,9 +154,16 @@ export function DatasetSpatialMap({ value, onChange }: DatasetSpatialMapProps) {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+          {outline && (
+            <Rectangle
+              bounds={toLeafletBounds(outline)}
+              pathOptions={{ color: '#b45309', fill: false, weight: 2, dashArray: '6 4' }}
+            />
+          )}
           <BoxDrawer
             active={drawing}
             value={value}
+            fit={outline ?? (fitToBox ? value : null)}
             onChange={(box) => {
               onChange(box);
               setDrawing(false);
@@ -144,7 +177,7 @@ export function DatasetSpatialMap({ value, onChange }: DatasetSpatialMapProps) {
         )}
         {!drawing && !value && (
           <div className="pointer-events-none absolute bottom-3 left-3 z-[1000] rounded-md bg-background/95 px-3 py-2 text-xs text-muted-foreground shadow">
-            Use Draw box to filter by location.
+            {emptyHint}
           </div>
         )}
       </div>

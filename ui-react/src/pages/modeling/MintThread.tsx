@@ -82,7 +82,7 @@ import type { PublishRequest } from '@/lib/publish-outputs';
 import type { SpatialSelection } from './thread/SpatialScopeMap';
 import { MintRuns } from './thread/MintRuns';
 import { MintResults } from './thread/MintResults';
-import { WizardRail } from './thread/wizard/WizardRail';
+import { WizardRail, type ThreadStepNav } from './thread/wizard/WizardRail';
 import { deriveStepStates } from './thread/wizard/deriveStepStates';
 import { WIZARD_STEPS, type WizardStepId } from './thread/wizard/types';
 import { FramingStep } from './thread/wizard/FramingStep';
@@ -112,6 +112,34 @@ interface MintThreadProps {
   initialDatasetIds?: string[];
   /** Compatibility fallback for threads created before region propagation was fixed. */
   fallbackSpatialScopeId?: string | null;
+  /**
+   * When provided, the step rail is not rendered. The embedding page gets the
+   * step state (derived here, once) through this callback and renders the steps
+   * itself, e.g. nested in its task tree. Called with null on unmount.
+   */
+  onStepNavChange?: (nav: ThreadStepNav | null) => void;
+}
+
+/**
+ * Publishes the step navigation to the embedding page. Lives in its own
+ * component so the effect sits outside MintThread's early returns, and keys on
+ * the serialised states so a fresh object per render cannot loop the parent.
+ */
+function StepNavPublisher({
+  nav,
+  onChange,
+}: {
+  nav: ThreadStepNav;
+  onChange: (nav: ThreadStepNav | null) => void;
+}) {
+  const key = `${nav.currentStep}|${JSON.stringify(nav.states)}`;
+  const latest = useRef(nav);
+  latest.current = nav;
+  useEffect(() => {
+    onChange(latest.current);
+  }, [key, onChange]);
+  useEffect(() => () => onChange(null), [onChange]);
+  return null;
 }
 
 export function MintThread({
@@ -119,6 +147,7 @@ export function MintThread({
   taskName,
   initialDatasetIds = [],
   fallbackSpatialScopeId,
+  onStepNavChange,
 }: MintThreadProps = {}) {
   const { id: routeThreadId } = useParams<{ id: string }>();
   const threadId = threadIdProp ?? routeThreadId;
@@ -1300,12 +1329,19 @@ export function MintThread({
         </button>
       </div>
       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
-        <aside
-          className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 pr-3"
-          aria-label="Sub-task step navigation"
-        >
-          {stepNavigation}
-        </aside>
+        {onStepNavChange ? (
+          <StepNavPublisher
+            nav={{ states: stepStates, currentStep: currentSection, onSelect: setCurrentSection }}
+            onChange={onStepNavChange}
+          />
+        ) : (
+          <aside
+            className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 pr-3"
+            aria-label="Sub-task step navigation"
+          >
+            {stepNavigation}
+          </aside>
+        )}
         <main className="min-w-0 flex-1 overflow-y-auto pr-1">{renderStep()}</main>
       </div>
       <FlowSettingsDialog

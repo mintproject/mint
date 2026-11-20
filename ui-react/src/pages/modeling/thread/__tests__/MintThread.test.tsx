@@ -325,6 +325,10 @@ describe('MintThread', () => {
     expect(screen.getByTestId('rail-step-models')).toBeInTheDocument();
     expect(screen.getByTestId('rail-step-datasets')).toBeInTheDocument();
     expect(screen.getByTestId('rail-step-summary')).toBeInTheDocument();
+    // The stand-alone page keeps the rail column.
+    expect(
+      screen.getByRole('complementary', { name: 'Sub-task step navigation' }),
+    ).toBeInTheDocument();
   });
 
   it('renders the Framing step by default', async () => {

@@ -17,6 +17,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MintThread } from './MintThread';
+import { SubTaskStepsTree } from './thread/wizard/SubTaskStepsTree';
+import type { ThreadStepNav } from './thread/wizard/WizardRail';
 import {
   Dialog,
   DialogContent,
@@ -178,6 +180,9 @@ export function MintProblemStatement() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   // Sub-task lists are open unless the user collapsed them. Only explicit
   // toggles are stored, so tasks that appear later default to open.
+  // Step state of the open sub-task, published by MintThread (which derives
+  // it) so the steps can render in the tree instead of a separate column.
+  const [stepNav, setStepNav] = useState<ThreadStepNav | null>(null);
   const [openOverrides, setOpenOverrides] = useState<Record<string, boolean>>({});
 
   const initialDatasetIds = useMemo(
@@ -633,75 +638,85 @@ export function MintProblemStatement() {
                                   key={thread.id}
                                   role="treeitem"
                                   aria-selected={isThreadSelected}
-                                  className={cn(
-                                    'group flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors',
-                                    isThreadSelected
-                                      ? 'bg-accent/60 font-medium text-accent-foreground'
-                                      : 'hover:bg-muted/40',
-                                  )}
-                                  tabIndex={0}
-                                  onClick={() => selectThread(task, thread.id)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
-                                      selectThread(task, thread.id);
-                                    }
-                                  }}
                                 >
-                                  <span className="mt-0.5 shrink-0 text-muted-foreground">
-                                    {isThreadSelected ? (
-                                      <FileText className="h-3.5 w-3.5" />
-                                    ) : (
-                                      <FileText className="h-3.5 w-3.5 opacity-60" />
+                                  <div
+                                    className={cn(
+                                      'group flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors',
+                                      isThreadSelected
+                                        ? 'bg-accent/60 font-medium text-accent-foreground'
+                                        : 'hover:bg-muted/40',
                                     )}
-                                  </span>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="flex items-center gap-1.5 truncate text-sm">
-                                      <StatusDot
-                                        active={threadHasModel(thread)}
-                                        title={
-                                          threadHasModel(thread) ? 'Model selected' : 'No model yet'
-                                        }
-                                      />
-                                      {pname}
-                                    </p>
-                                    {threadLastEvent && (
-                                      <p className="text-xs text-muted-foreground/70">
-                                        {threadLastEvent.userid} ·{' '}
-                                        {fmtDateTime(threadLastEvent.timestamp)}
+                                    tabIndex={0}
+                                    onClick={() => selectThread(task, thread.id)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        selectThread(task, thread.id);
+                                      }
+                                    }}
+                                  >
+                                    <span className="mt-0.5 shrink-0 text-muted-foreground">
+                                      {isThreadSelected ? (
+                                        <FileText className="h-3.5 w-3.5" />
+                                      ) : (
+                                        <FileText className="h-3.5 w-3.5 opacity-60" />
+                                      )}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="flex items-center gap-1.5 truncate text-sm">
+                                        <StatusDot
+                                          active={threadHasModel(thread)}
+                                          title={
+                                            threadHasModel(thread)
+                                              ? 'Model selected'
+                                              : 'No model yet'
+                                          }
+                                        />
+                                        {pname}
                                       </p>
-                                    )}
+                                      {threadLastEvent && (
+                                        <p className="text-xs text-muted-foreground/70">
+                                          {threadLastEvent.userid} ·{' '}
+                                          {fmtDateTime(threadLastEvent.timestamp)}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
+                                      {threadPerm.write ? (
+                                        <button
+                                          type="button"
+                                          aria-label={`Edit sub-task ${pname}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openEditThreadDialog(task, thread);
+                                          }}
+                                          className="rounded p-0.5 hover:bg-muted"
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                      ) : (
+                                        <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                                      )}
+                                      {threadPerm.owner && (
+                                        <button
+                                          type="button"
+                                          aria-label={`Delete sub-task ${pname}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setDeleteThreadTarget(thread);
+                                          }}
+                                          className="rounded p-0.5 hover:bg-muted hover:text-destructive"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
-                                    {threadPerm.write ? (
-                                      <button
-                                        type="button"
-                                        aria-label={`Edit sub-task ${pname}`}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          openEditThreadDialog(task, thread);
-                                        }}
-                                        className="rounded p-0.5 hover:bg-muted"
-                                      >
-                                        <Pencil className="h-3.5 w-3.5" />
-                                      </button>
-                                    ) : (
-                                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                                    )}
-                                    {threadPerm.owner && (
-                                      <button
-                                        type="button"
-                                        aria-label={`Delete sub-task ${pname}`}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setDeleteThreadTarget(thread);
-                                        }}
-                                        className="rounded p-0.5 hover:bg-muted hover:text-destructive"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    )}
-                                  </div>
+                                  {isThreadSelected && stepNav && (
+                                    <div className="ml-5">
+                                      <SubTaskStepsTree {...stepNav} />
+                                    </div>
+                                  )}
                                 </li>
                               );
                             })}
@@ -759,6 +774,7 @@ export function MintProblemStatement() {
                 taskName={selectedTask?.name}
                 fallbackSpatialScopeId={selectedTask?.region_id ?? ps?.region_id ?? null}
                 initialDatasetIds={initialDatasetIds}
+                onStepNavChange={setStepNav}
               />
             </div>
           ) : (

@@ -17,6 +17,11 @@ import { Check, ChevronsUpDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { humanizeStandardVariable } from '@/lib/standard-variable-grammar';
+import {
+  isUnlabeledStandardVariable,
+  standardVariableDescription,
+  standardVariableName,
+} from '@/lib/standard-variable-display';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 import { Button } from '@/components/ui/button';
 import {
@@ -75,6 +80,11 @@ export interface StandardVariableComboboxProps {
   driverConfigurationIds?: ReadonlyArray<string>;
   /** IDs to place first before the alphabetical catalog order. */
   preferredIds?: ReadonlyArray<string>;
+  /**
+   * Leave out variables that have no label. For callers that record the label
+   * as the variable's name, where an unlabeled row could not be matched later.
+   */
+  requireLabel?: boolean;
 }
 
 export function StandardVariableCombobox({
@@ -90,6 +100,7 @@ export function StandardVariableCombobox({
   driverOutcomeLabel,
   driverConfigurationIds = [],
   preferredIds = [],
+  requireLabel = false,
 }: StandardVariableComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -141,7 +152,8 @@ export function StandardVariableCombobox({
    * a control that reads as empty.
    */
   const visibleOptions = React.useMemo(() => {
-    const base = rankedOptions ?? options;
+    const listed = rankedOptions ?? options;
+    const base = requireLabel ? listed.filter((o) => !isUnlabeledStandardVariable(o)) : listed;
     // Semantic search results already have a query-specific ranking. Apply the
     // task/goal ranking only to the unfiltered catalog list.
     const ordered =
@@ -157,7 +169,7 @@ export function StandardVariableCombobox({
         : base;
     if (!value || ordered.some((o) => o.id === value.id)) return ordered;
     return [value, ...ordered];
-  }, [rankedOptions, options, preferredIds, value]);
+  }, [rankedOptions, options, preferredIds, value, requireLabel]);
 
   const handleSelect = React.useCallback(
     (selectedId: string) => {
@@ -176,15 +188,15 @@ export function StandardVariableCombobox({
     [value, visibleOptions, all, onChange],
   );
 
-  const triggerLabel =
-    value?.description && !value.description.startsWith('Catalog ID:')
-      ? value.description
-      : value
-        ? (() => {
+  const triggerLabel = !value
+    ? placeholder
+    : (standardVariableDescription(value) ??
+      (isUnlabeledStandardVariable(value)
+        ? standardVariableName(value)
+        : (() => {
             const { phenomenon, property } = humanizeStandardVariable(value.label);
             return phenomenon ? `${phenomenon} — ${property}` : property;
-          })()
-        : placeholder;
+          })()));
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -231,10 +243,21 @@ export function StandardVariableCombobox({
                     )}
                   />
                   <div className="flex min-w-0 flex-col">
-                    {sv.description && (
-                      <span className="line-clamp-1 font-medium">{sv.description}</span>
+                    {standardVariableDescription(sv) && (
+                      <span className="line-clamp-1 font-medium">
+                        {standardVariableDescription(sv)}
+                      </span>
                     )}
-                    <span className="line-clamp-1 text-xs text-muted-foreground">{sv.label}</span>
+                    <span
+                      className={cn(
+                        'line-clamp-1',
+                        standardVariableDescription(sv) || !isUnlabeledStandardVariable(sv)
+                          ? 'text-xs text-muted-foreground'
+                          : 'font-medium',
+                      )}
+                    >
+                      {standardVariableName(sv)}
+                    </span>
                     {!!sv.models?.length && (
                       <span className="line-clamp-1 text-[11px] text-muted-foreground/80">
                         {sv.models
