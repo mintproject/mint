@@ -45,4 +45,52 @@ describe('MarkdownLite', () => {
     const { container } = render(<MarkdownLite source={'```\n# not a heading\n```'} />);
     expect(container.querySelector('pre')).toHaveTextContent('# not a heading');
   });
+
+  describe('hostile input', () => {
+    it('renders a 200 KB line of "[" quickly, and says part was left out', () => {
+      const started = Date.now();
+      render(<MarkdownLite source={'['.repeat(200_000)} />);
+      expect(Date.now() - started).toBeLessThan(2000);
+      expect(screen.getByTestId('markdown-truncated')).toBeInTheDocument();
+    });
+
+    it('renders 200 KB of "[a](" quickly', () => {
+      const started = Date.now();
+      render(<MarkdownLite source={'[a]('.repeat(50_000)} />);
+      expect(Date.now() - started).toBeLessThan(2000);
+    });
+
+    it('renders a long line of "**a" and of "*" quickly', () => {
+      const started = Date.now();
+      render(<MarkdownLite source={`${'**a'.repeat(60_000)}\n\n${'* '.repeat(60_000)}`} />);
+      expect(Date.now() - started).toBeLessThan(3000);
+    });
+
+    it('stops after the line limit and says so', () => {
+      const source = Array.from({ length: 6000 }, (_, i) => `- item ${i}`).join('\n');
+      render(<MarkdownLite source={source} />);
+      expect(screen.getAllByRole('listitem').length).toBeLessThanOrEqual(3000);
+      expect(screen.getByTestId('markdown-truncated')).toBeInTheDocument();
+    });
+
+    it('does not say anything was left out for an ordinary report', () => {
+      render(<MarkdownLite source={'# A\n\nshort'} />);
+      expect(screen.queryByTestId('markdown-truncated')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('links', () => {
+    it('shows the host beside a link whose words differ from its address', () => {
+      render(<MarkdownLite source="[your bank](https://evil.example/login)" />);
+      const link = screen.getByRole('link', { name: 'your bank' });
+      expect(link.parentElement).toHaveTextContent('your bank (evil.example)');
+    });
+
+    it('adds no host for a link whose words are its address', () => {
+      const { container } = render(
+        <MarkdownLite source="[https://example.com/a](https://example.com/a)" />,
+      );
+      expect(container).not.toHaveTextContent('(example.com)');
+    });
+  });
 });

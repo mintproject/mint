@@ -91,13 +91,14 @@ When a run finishes, the card says *The flow run is complete. Continue to review
 
 ### When a run fails
 
-A failed run shows a red box with the reason: the failure message, and a line for each step that failed. It also shows a **Restart** button. **Restart** sends the same model again with the same data and settings, and only that model, as a new run.
+A failed run shows a red box with the reason: the failure message, and a line for each step that failed. Below it is a **Restart** button. **Restart** sends the same model again with the same data and settings, and only that model, as a new run.
 
-- The button is disabled while the new run is being sent, so it is never started twice.
-- It is shown only once the run has ended (failed or cancelled), and only to someone who can send runs on the thread. A run that is still going has **Cancel run** instead.
-- If the run cannot be sent, the reason is shown under the button. For example, a flow that is already running in the thread is refused with *This flow is already running*.
-- A run is sent with the default maximum run time of 60 minutes for a model; a flow has no maximum.
-- In a table of runs, each failed row has a **Restart** button. It sends the model's runs again, not only that row: DYNAMO starts a model's runs together.
+- **Only when every run is over.** If a model ran several times and one run failed while others are still going, the card says so and offers no Restart until the others have finished.
+- **What is carried over.** For a model, the box shows **Maximum run time (minutes)**: the earlier run's time when it was kept, otherwise the default of 60, which you can change. If the earlier run published its outputs to a catalog, **Publish outputs** is already ticked with the same catalogs; check its settings before you restart. A flow has no maximum time and does not publish this way.
+- **Several runs.** The button then reads **Restart all N runs**. It asks you to confirm, and says that runs which succeeded are sent again too: DYNAMO starts a model's runs together, so a single run cannot be restarted alone.
+- **Never twice.** The button is disabled while the new run is being sent, in the Runs step and in the Results step alike.
+- **Who.** Only someone who can send runs on the thread sees it. A run that is still going has **Cancel run** instead.
+- **If it is refused**, the reason is shown under the button. For example, a flow already running in the thread is refused with *This flow is already running*.
 
 ## When a flow pauses for your edit
 

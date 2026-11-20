@@ -125,11 +125,8 @@ export interface FlowRunPanelProps {
   username?: string;
   /** Sends the user's edited file on and continues the run. */
   onResume?: (edit: PausedEdit) => Promise<void>;
-  /** Sends the flow again after it failed or was cancelled. */
-  onRestart?: () => void;
-  restarting?: boolean;
-  /** Why the last send was refused, shown beside Restart. */
-  restartProblem?: ReactNode;
+  /** The control that sends the flow again, once it failed or was cancelled. */
+  restartControl?: ReactNode;
 }
 
 export function FlowRunPanel({
@@ -142,9 +139,7 @@ export function FlowRunPanel({
   ensembleManagerApi = '',
   username = '',
   onResume,
-  onRestart,
-  restarting = false,
-  restartProblem,
+  restartControl,
 }: FlowRunPanelProps) {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const stages: FlowStage[] = run.workflow_stages?.length
@@ -185,14 +180,12 @@ export function FlowRunPanel({
       )}
       {run.replacement && <EditedInputNote replacement={run.replacement} />}
 
-      {(ended || run.failure_code || run.error_message || onRestart) && (
+      {(ended || run.failure_code || run.error_message || restartControl) && (
         <RunFailureNotice
           run={run}
           stepErrors={stepErrors}
           cancelled={outcome === 'cancelled'}
-          onRestart={onRestart}
-          restarting={restarting}
-          problem={restartProblem}
+          actions={restartControl}
         />
       )}
 

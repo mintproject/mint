@@ -8,9 +8,26 @@ import { Fragment, type ReactNode } from 'react';
  * implementation: anything it does not know shows as plain text.
  */
 
-const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*)|(\[[^\]]+\]\([^)\s]+\))/g;
+// Every quantifier is bounded, and no line longer than MAX_LINE reaches a pattern,
+// so no input can make a pattern take more than a few million steps.
+const INLINE =
+  /(`[^`]{1,500}`)|(\*\*[^*]{1,500}\*\*)|(\*[^*\s][^*]{0,500}\*)|(\[[^\]]{1,200}\]\([^)\s]{1,2000}\))/g;
+/** The longest line, and the most lines, that are read; the rest is left out with a notice. */
+export const MARKDOWN_MAX_LINE = 2000;
+export const MARKDOWN_MAX_LINES = 3000;
+
+function hostOf(href: string): string | null {
+  try {
+    return new URL(href).hostname || null;
+  } catch {
+    return null;
+  }
+}
 
 function inline(text: string, keyBase: string): ReactNode[] {
+  if (text.length > MARKDOWN_MAX_LINE) {
+    return [...inline(text.slice(0, MARKDOWN_MAX_LINE), keyBase), text.slice(MARKDOWN_MAX_LINE)];
+  }
   const out: ReactNode[] = [];
   let last = 0;
   let index = 0;
@@ -33,17 +50,23 @@ function inline(text: string, keyBase: string): ReactNode[] {
       const link = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(token);
       const label = link?.[1] ?? token;
       const href = link?.[2] ?? '';
+      const host = /^https?:\/\//i.test(href) ? hostOf(href) : null;
       out.push(
-        /^https?:\/\//i.test(href) ? (
-          <a
-            key={key}
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline"
-          >
-            {label}
-          </a>
+        host ? (
+          <Fragment key={key}>
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline"
+            >
+              {label}
+            </a>
+            {/* Where the link goes, so its words cannot hide it. */}
+            {label.replace(/\/$/, '') !== href.replace(/\/$/, '') && (
+              <span className="text-[11px] text-gray-500"> ({host})</span>
+            )}
+          </Fragment>
         ) : (
           label
         ),
@@ -81,7 +104,14 @@ const HEADING_CLASS = [
 ];
 
 export function MarkdownLite({ source, testId }: { source: string; testId?: string }) {
-  const lines = source.replace(/\r\n?/g, '\n').split('\n');
+  let cutLine = false;
+  const allLines = source.replace(/\r\n?/g, '\n').split('\n');
+  const cut = allLines.length > MARKDOWN_MAX_LINES;
+  const lines = allLines.slice(0, MARKDOWN_MAX_LINES).map((line) => {
+    if (line.length <= MARKDOWN_MAX_LINE) return line;
+    cutLine = true;
+    return line.slice(0, MARKDOWN_MAX_LINE);
+  });
   const blocks: ReactNode[] = [];
   let i = 0;
   const startsBlock = (line: string) =>
@@ -216,6 +246,12 @@ export function MarkdownLite({ source, testId }: { source: string; testId?: stri
   return (
     <div className="space-y-2 text-sm text-gray-800" data-testid={testId}>
       {blocks}
+      {(cut || cutLine) && (
+        <p className="text-[11px] text-gray-500" data-testid="markdown-truncated">
+          Part of this report is not shown (very long lines or too many lines). Download for the
+          whole file.
+        </p>
+      )}
     </div>
   );
 }

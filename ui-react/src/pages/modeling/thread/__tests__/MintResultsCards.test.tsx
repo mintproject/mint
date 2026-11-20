@@ -75,22 +75,42 @@ const run = (id: string, over: Partial<Execution> = {}): Execution => ({
 
 const oneRun: ModelExecutionsMap = { m1: { loading: false, executions: [run('exec-1')] } };
 
-const listing = {
+/** A listing of the run's files; the size of each is what a preview reads to decide to open. */
+const listingOf = (sizes: Record<string, number>) => ({
   ok: true,
   status: 200,
   json: () =>
     Promise.resolve({
-      files: [],
+      files: Object.entries(sizes).map(([url, size]) => ({ name: 'x', path: 'p', url, size })),
       results: [REPORT, TABLE, LEXICON].map((url) => ({ name: 'x', url, kind: 'file' })),
     }),
-};
-
-const content = (text: string) => ({
-  ok: true,
-  status: 200,
-  headers: new Headers(),
-  blob: () => Promise.resolve(new Blob([text])),
 });
+const listing = listingOf({ [REPORT]: 500, [TABLE]: 2000, [LEXICON]: 100 });
+
+/** A response whose body is read as a stream, `chunk` bytes at a time, as the route sends it. */
+let lastCancel: ReturnType<typeof vi.fn>;
+const content = (text: string, chunk = 64 * 1024) => {
+  const bytes = new TextEncoder().encode(text);
+  let at = 0;
+  lastCancel = vi.fn().mockResolvedValue(undefined);
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers(),
+    body: {
+      getReader: () => ({
+        read: async () => {
+          if (at >= bytes.length) return { done: true, value: undefined };
+          const value = bytes.slice(at, at + chunk);
+          at += chunk;
+          return { done: false, value };
+        },
+        cancel: lastCancel,
+      }),
+    },
+    blob: () => Promise.resolve(new Blob([bytes])),
+  };
+};
 
 const csv = ['id,score', ...Array.from({ length: 14 }, (_, i) => `row${i + 1},${i}`)].join('\n');
 
@@ -195,6 +215,87 @@ describe('a single run with results', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('does not open the report by itself when its size is not known or is large', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/files/content')
+        ? content('# Findings\n')
+        : listingOf({ [REPORT]: 5 * 1024 * 1024 }),
+    );
+    renderResults();
+    const toggles = await screen.findAllByTestId('preview-toggle');
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'false');
+    expect(contentCalls()).toHaveLength(0);
+    // Asking for it opens it.
+    fireEvent.click(toggles[0]!);
+    expect(await screen.findByRole('heading', { name: 'Findings' })).toBeInTheDocument();
+  });
+
+  it('reads as a stream and cancels at the 200 KB cap, saying only the start is shown', async () => {
+    const big = '# Big\n\n' + 'word '.repeat(150_000);
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/files/content')
+        ? content(big, 64 * 1024)
+        : listingOf({ [REPORT]: 90_000, [TABLE]: 2000, [LEXICON]: 100 }),
+    );
+    renderResults();
+    await screen.findByRole('heading', { name: 'Big' });
+    expect(lastCancel).toHaveBeenCalled();
+    expect(screen.getByTestId('preview-note')).toHaveTextContent('Only the start of the file');
+  });
+
+  it('never previews or fetches a web address, and still offers its Download link', async () => {
+    renderResults({
+      executions: {
+        m1: {
+          loading: false,
+          executions: [
+            run('exec-1', {
+              results: {
+                'o-report': { id: 'o-report', name: 'report.md', url: 'https://evil.example/r.md' },
+              },
+            }),
+          ],
+        },
+      },
+    });
+    const link = await screen.findByTestId('download-link');
+    expect(link).toHaveAttribute('href', 'https://evil.example/r.md');
+    expect(screen.queryByTestId('preview-toggle')).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.map(([u]) => String(u)).some((u) => u.includes('evil.example')),
+    ).toBe(false);
+  });
+
+  it('says a CSV was cut short only when it was', async () => {
+    renderResults();
+    await screen.findByRole('heading', { name: 'Findings' });
+    fireEvent.click(screen.getAllByTestId('preview-toggle')[1]!);
+    await screen.findByTestId('preview-csv');
+    expect(screen.getByTestId('preview-note')).toHaveTextContent('Only the first 9 rows');
+  });
+
+  it('shows a short CSV with no caption', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/files/content') ? content('id,score\nr1,1\nr2,2\n') : listing,
+    );
+    renderResults();
+    await screen.findAllByTestId('output-block');
+    fireEvent.click(screen.getAllByTestId('preview-toggle')[1]!);
+    await screen.findByTestId('preview-csv');
+    expect(screen.queryByTestId('preview-note')).not.toBeInTheDocument();
+  });
+
+  it('falls back quietly when Tapis refuses the file (403) too', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/files/content')
+        ? { ok: false, status: 403, json: () => Promise.resolve({ message: 'raw' }) }
+        : listing,
+    );
+    renderResults();
+    expect(await screen.findByTestId('preview-unavailable')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('keeps how it was made collapsed, with the inputs and the settings', async () => {
     renderResults();
     await screen.findAllByTestId('output-block');
@@ -237,6 +338,10 @@ describe('a run that has not finished', () => {
     loading: false,
     executions: [run('exec-1', { status: 'RUNNING', results: {} })],
   };
+  const failedExecutions = {
+    loading: false,
+    executions: [run('exec-1', { status: 'FAILURE', results: {} })],
+  };
 
   it('says a paused run waits for the user, with a way to the Runs step', () => {
     const onOpenRuns = vi.fn();
@@ -272,15 +377,29 @@ describe('a run that has not finished', () => {
     const onOpenRuns = vi.fn();
     renderResults({
       threadData: failedThread,
-      executions: { m1: unfinished },
+      executions: { m1: failedExecutions },
       unifiedRuns: { m1: failedRun },
       onRestartRuns,
       onOpenRuns,
     });
     expect(screen.getByText('job exited with code 2')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Restart' }));
-    await waitFor(() => expect(onRestartRuns).toHaveBeenCalledWith('m1'));
+    await waitFor(() => expect(onRestartRuns).toHaveBeenCalledWith('m1', { maxMinutes: 60 }));
     await waitFor(() => expect(onOpenRuns).toHaveBeenCalled());
+  });
+
+  it('carries the earlier run time into the restart', async () => {
+    const onRestartRuns = vi.fn().mockResolvedValue(undefined);
+    renderResults({
+      threadData: failedThread,
+      executions: { m1: failedExecutions },
+      unifiedRuns: { m1: { ...failedRun, model_result: { __max_minutes: 180, __queue: 'q' } } },
+      onRestartRuns,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Restart' }));
+    await waitFor(() =>
+      expect(onRestartRuns).toHaveBeenCalledWith('m1', { maxMinutes: 180, queue: 'q' }),
+    );
   });
 
   it('disables Restart while it sends and shows a refusal', async () => {
@@ -293,7 +412,7 @@ describe('a run that has not finished', () => {
     );
     renderResults({
       threadData: failedThread,
-      executions: { m1: unfinished },
+      executions: { m1: failedExecutions },
       unifiedRuns: { m1: failedRun },
       onRestartRuns,
     });
@@ -302,6 +421,42 @@ describe('a run that has not finished', () => {
     fail(new EnsembleManagerError(500, 'refused'));
     expect(await screen.findByTestId('restart-error-m1')).toHaveTextContent('refused');
     expect(screen.getByRole('button', { name: 'Restart' })).toBeEnabled();
+  });
+
+  it('shows Restart as in flight when the Runs step started it', () => {
+    renderResults({
+      threadData: failedThread,
+      executions: { m1: failedExecutions },
+      unifiedRuns: { m1: failedRun },
+      onRestartRuns: vi.fn(),
+      restartingModels: { m1: true },
+    });
+    expect(screen.getByRole('button', { name: /restarting/i })).toBeDisabled();
+  });
+
+  it('offers no Restart without permission, or while other runs are still going', () => {
+    const view = renderResults({
+      threadData: failedThread,
+      executions: { m1: failedExecutions },
+      unifiedRuns: { m1: failedRun },
+    });
+    expect(screen.queryByRole('button', { name: /restart/i })).not.toBeInTheDocument();
+    view.unmount();
+    renderResults({
+      threadData: thread({ total_runs: 2, submitted_runs: 2, successful_runs: 0, failed_runs: 1 }),
+      executions: {
+        m1: {
+          loading: false,
+          executions: [
+            run('exec-1', { status: 'FAILURE', results: {} }),
+            run('exec-2', { status: 'RUNNING', results: {} }),
+          ],
+        },
+      },
+      unifiedRuns: { m1: failedRun },
+      onRestartRuns: vi.fn(),
+    });
+    expect(screen.queryByRole('button', { name: /restart/i })).not.toBeInTheDocument();
   });
 });
 

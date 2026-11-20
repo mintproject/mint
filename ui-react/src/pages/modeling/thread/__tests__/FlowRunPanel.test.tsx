@@ -223,15 +223,13 @@ describe('FlowRunPanel', () => {
     expect(screen.getByTestId('flow-step-step-2')).toHaveTextContent('task-step-2');
   });
 
-  it('offers Restart on a failed run, disables it while sending, and not on a running one', () => {
-    const onRestart = vi.fn();
+  it('shows the restart control in the failure box of a failed run, and not for a running one', () => {
     const failed = flowRun({ status: 'failed', failure_code: 'FLOW_FAILED', error_message: 'x' });
-    const { rerender } = render(<FlowRunPanel run={failed} onRestart={onRestart} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Restart' }));
-    expect(onRestart).toHaveBeenCalledTimes(1);
-
-    rerender(<FlowRunPanel run={failed} onRestart={onRestart} restarting />);
-    expect(screen.getByRole('button', { name: /restarting/i })).toBeDisabled();
+    const { rerender } = render(
+      <FlowRunPanel run={failed} restartControl={<button type="button">Restart</button>} />,
+    );
+    const box = screen.getByTestId('run-failure');
+    expect(within(box).getByRole('button', { name: 'Restart' })).toBeInTheDocument();
 
     rerender(<FlowRunPanel run={flowRun()} />);
     expect(screen.queryByRole('button', { name: /restart/i })).not.toBeInTheDocument();

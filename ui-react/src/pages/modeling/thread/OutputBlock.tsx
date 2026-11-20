@@ -5,10 +5,10 @@
 import { ChevronRight, Copy, Download, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 
-import { previewKind } from '@/lib/result-preview';
+import { PREVIEW_AUTO_OPEN_MAX_BYTES, previewKind } from '@/lib/result-preview';
 import { FileDownloadButton } from './FileDownloadButton';
 import { ResultPreview } from './ResultPreview';
-import { useTapisResultKind } from './useTapisResultKind';
+import { useTapisResultInfo } from './useTapisResultKind';
 
 export interface OutputBlockProps {
   ensembleManagerApi: string;
@@ -42,13 +42,20 @@ export function OutputBlock({
   onOpenFolder,
 }: OutputBlockProps) {
   // Asked of Tapis only for a tapis:// location; the others never use it.
-  const tapisKind = useTapisResultKind(ensembleManagerApi, executionId, url, scheme === 'tapis');
+  const { kind: tapisKind, size } = useTapisResultInfo(
+    ensembleManagerApi,
+    executionId,
+    url,
+    scheme === 'tapis',
+  );
   const kind = previewKind(name);
-  const previewable =
-    Boolean(kind) && (scheme === 'web' || (scheme === 'tapis' && tapisKind === 'file'));
+  const previewable = Boolean(kind) && scheme === 'tapis' && tapisKind === 'file';
   const [open, setOpen] = useState<boolean | null>(null);
-  // A report is what the run was for, so it opens by itself; the rest wait to be asked for.
-  const expanded = open ?? kind === 'markdown';
+  // A report is what the run was for, so it opens by itself, but only when the
+  // listing says it is small; every other preview waits to be asked for. A web
+  // address is never read from here: it only has Download.
+  const expanded =
+    open ?? (kind === 'markdown' && size !== null && size <= PREVIEW_AUTO_OPEN_MAX_BYTES);
 
   const download =
     scheme === 'tapis' && tapisKind === 'file' ? (

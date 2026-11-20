@@ -103,3 +103,63 @@ export function publisherDefaults(publisher: PlanPublisher): Record<string, unkn
   }
   return values;
 }
+
+/** What a run's plan asked to publish: the catalog tokens and the chosen model output. */
+export interface PriorPublish {
+  tokens: string[];
+  outputKey?: string;
+}
+
+/**
+ * Read what the earlier run's plan id asked to publish. The id is the plan,
+ * encoded; this only reads it, to pre-fill the restart. The Ensemble Manager
+ * plans and checks the restart again, so nothing here is trusted. Null when the
+ * plan published nothing or cannot be read.
+ */
+export function priorPublish(planId: string | null | undefined): PriorPublish | null {
+  if (!planId?.startsWith('em_')) return null;
+  try {
+    const encoded = planId.slice(3).split('.')[0] ?? '';
+    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const plan = JSON.parse(new TextDecoder().decode(bytes)) as {
+      publish?: unknown;
+      post_model_adapter?: { model_output_key?: unknown };
+    };
+    const tokens = Array.isArray(plan.publish)
+      ? plan.publish.filter((token): token is string => typeof token === 'string')
+      : [];
+    if (tokens.length === 0) return null;
+    const outputKey = plan.post_model_adapter?.model_output_key;
+    return { tokens, ...(typeof outputKey === 'string' ? { outputKey } : {}) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The selection that repeats an earlier publish: the publisher offering exactly
+ * those catalogs, with its parameters at their defaults (the values the earlier
+ * run used are not kept, so the person checks them before restarting).
+ */
+export function selectionFromPrior(
+  publishers: PlanPublisher[],
+  prior: PriorPublish | null,
+): PublishSelection | null {
+  if (!prior) return null;
+  const wanted = [...prior.tokens].sort().join('+');
+  for (const publisher of publishers) {
+    const option = publisherCatalogOptions(publisher).find(
+      (tokens) => [...tokens].sort().join('+') === wanted,
+    );
+    if (option) {
+      return {
+        transformSpecId: publisher.transform_spec_id,
+        values: publisherDefaults(publisher),
+        tokens: option,
+        ...(prior.outputKey ? { outputId: prior.outputKey } : {}),
+      };
+    }
+  }
+  return null;
+}

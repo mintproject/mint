@@ -7,7 +7,7 @@
  *
  * Legacy: ui/src/screens/modeling/thread/mint-runs.ts
  */
-import { ExternalLink, FolderOpen, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { ExternalLink, FolderOpen, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -59,6 +59,7 @@ import { secretErrorMessage, userParameters } from '@/lib/secret-parameters';
 import { ExecutionFilesDialog } from './ExecutionFilesDialog';
 import { FlowRunPanel } from './FlowRunPanel';
 import { PublishOutputsControl } from './PublishOutputsControl';
+import { RestartRun, type RestartOptions } from './RestartRun';
 import {
   publishRequestFor,
   type PublishRequest,
@@ -680,11 +681,8 @@ interface UnifiedExecutionPanelProps {
   refreshError?: string;
   onCancel?: () => Promise<void>;
   cancelling?: boolean;
-  /** Sends the model again after it failed or was cancelled. */
-  onRestart?: () => void;
-  restarting?: boolean;
-  /** Why the last send was refused, shown beside Restart. */
-  restartProblem?: ReactNode;
+  /** The control that sends the model again, once it failed or was cancelled. */
+  restartControl?: ReactNode;
 }
 
 /**
@@ -727,9 +725,7 @@ function UnifiedExecutionPanel({
   refreshError,
   onCancel,
   cancelling = false,
-  onRestart,
-  restarting = false,
-  restartProblem,
+  restartControl,
 }: UnifiedExecutionPanelProps) {
   const adapterRuns = run.adapter_runs ?? [];
   const health = runHealth(run);
@@ -1013,13 +1009,11 @@ function UnifiedExecutionPanel({
           <WorkflowGraph run={run} modelName={modelName} adapterPlans={adapterPlans} />
         </div>
       </details>
-      {(run.failure_code || run.error_message || onRestart) && (
+      {(run.failure_code || run.error_message || restartControl) && (
         <RunFailureNotice
           run={run}
           cancelled={normalizeRunStatus(run.status) === 'cancelled'}
-          onRestart={onRestart}
-          restarting={restarting}
-          problem={restartProblem}
+          actions={restartControl}
         />
       )}
       {refreshError && (
@@ -1055,6 +1049,14 @@ interface MintRunsProps {
   onContinue: () => void;
   onFetchRuns: (modelId: string, page: number, pageSize: number) => void;
   onSubmitRuns: (modelId: string, maxMinutes: number, publish?: PublishRequest) => Promise<void>;
+  /**
+   * Send a model again after it failed. MintThread owns it so a send started
+   * from either step shows as in flight in both. Without it, Restart sends
+   * through `onSubmitRuns`.
+   */
+  onRestartRuns?: (modelId: string, options: RestartOptions) => Promise<void>;
+  /** Models whose restart is in flight, in either step. */
+  restartingModels?: Record<string, boolean>;
   /** Follow a flow run that is already in progress (`FLOW_ALREADY_RUNNING`). */
   onOpenFlowRun?: (modelId: string, runId: string) => Promise<void>;
   onExecutionSummaryChanged?: (summary: ExecutionSummaryMap) => void;
@@ -1120,7 +1122,7 @@ function SubmitProblems({
   );
 }
 
-/** The runs of a model that ran more than once: one row each, with a Restart on a failed row. */
+/** The runs of a model that ran more than once: one row each. */
 function RunsTable({
   modelId,
   isFlow,
@@ -1130,8 +1132,6 @@ function RunsTable({
   params,
   onViewLog,
   onViewFiles,
-  onRestart,
-  restarting,
 }: {
   modelId: string;
   isFlow: boolean;
@@ -1141,12 +1141,8 @@ function RunsTable({
   params: Array<{ id?: string | null; name?: string | null; default?: string | null }>;
   onViewLog: (executionId: string) => void;
   onViewFiles: (executionId: string) => void;
-  /** Present only when the model has ended and the viewer may run it. */
-  onRestart?: () => void;
-  restarting?: boolean;
 }) {
-  const showRestart = Boolean(onRestart) && executions.some((e) => e.status === 'FAILURE');
-  const fixedColumns = 5 + (showRestart ? 1 : 0);
+  const fixedColumns = 5;
   return (
     <div className="overflow-x-auto border border-gray-200">
       {loading ? (
@@ -1177,7 +1173,6 @@ function RunsTable({
               <th className="px-2 py-1 font-medium">End</th>
               <th className="px-2 py-1 font-medium">Log</th>
               <th className="px-2 py-1 font-medium">Files</th>
-              {showRestart && <th className="px-2 py-1" />}
               {inputs.length + params.length === 0 && <th className="px-2 py-1" />}
               {inputs.map((f) => (
                 <th key={f.id} className="px-2 py-1 font-medium">
@@ -1243,23 +1238,6 @@ function RunsTable({
                       Files
                     </button>
                   </td>
-                  {showRestart && (
-                    <td className="px-2 py-1">
-                      {execution.status === 'FAILURE' && (
-                        <button
-                          type="button"
-                          data-testid={`restart-run-${execution.id}`}
-                          title="Sends this model's runs again"
-                          onClick={onRestart}
-                          disabled={restarting}
-                          className="flex items-center gap-1 rounded border border-red-300 px-1.5 py-0.5 text-xs text-red-800 hover:bg-red-50 disabled:opacity-50"
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                          Restart
-                        </button>
-                      )}
-                    </td>
-                  )}
                   {inputs.length + params.length === 0 && (
                     <td className="px-2 py-1 text-gray-400">No inputs or parameters</td>
                   )}
@@ -1348,6 +1326,8 @@ export function MintRuns({
   onContinue,
   onFetchRuns,
   onSubmitRuns,
+  onRestartRuns,
+  restartingModels,
   onOpenFlowRun,
   onPublishExecution,
   onOutputsChanged,
@@ -1605,30 +1585,38 @@ export function MintRuns({
           const isFlowRun = Boolean(model.isFlow) || workflowRun?.adapter_stage === 'flow';
           const isSingleRun = summary.total_runs <= 1;
           const ended = displayStatus === 'failed' || displayStatus === 'cancelled';
+          // Restart only once every run of the model is over: a failed run next to
+          // runs still going would be sent again on top of them.
+          const anyActive = grouped.executions.some((e) =>
+            ['RUNNING', 'WAITING'].includes(e.status.toUpperCase()),
+          );
+          const allOver = !anyActive && (isSingleRun || finishedRuns >= summary.total_runs);
           const nextAction =
-            displayStatus === 'failed'
-              ? canSubmitRuns
-                ? 'The run failed. Read the reason below, then restart it.'
-                : 'The run failed. Read the reason below and open its log.'
-              : displayStatus === 'cancelled'
+            ended && !allOver
+              ? 'Some runs have failed. Restart is offered when the others have finished.'
+              : displayStatus === 'failed'
                 ? canSubmitRuns
-                  ? 'The run was cancelled. Restart it to run it again.'
-                  : 'The run was cancelled.'
-                : displayStatus === 'completed'
-                  ? isFlowRun
-                    ? 'The flow run is complete. Continue to review its results.'
-                    : 'The model run is complete. Continue to review or publish its results.'
-                  : displayStatus === 'paused'
-                    ? 'The flow is paused for your edit. Download the file, change it, upload your copy and resume.'
-                    : displayStatus === 'completing'
-                      ? isFlowRun
-                        ? 'The flow finished and its outputs are being prepared.'
-                        : 'The model finished and its output is being prepared for the next stage.'
-                      : displayStatus === 'running'
+                  ? 'The run failed. Read the reason below, then restart it.'
+                  : 'The run failed. Read the reason below and open its log.'
+                : displayStatus === 'cancelled'
+                  ? canSubmitRuns
+                    ? 'The run was cancelled. Restart it to run it again.'
+                    : 'The run was cancelled.'
+                  : displayStatus === 'completed'
+                    ? isFlowRun
+                      ? 'The flow run is complete. Continue to review its results.'
+                      : 'The model run is complete. Continue to review or publish its results.'
+                    : displayStatus === 'paused'
+                      ? 'The flow is paused for your edit. Download the file, change it, upload your copy and resume.'
+                      : displayStatus === 'completing'
                         ? isFlowRun
-                          ? 'The flow is running. Results will appear when it completes.'
-                          : 'The model is running. Results will appear when it completes.'
-                        : 'The run is waiting to start.';
+                          ? 'The flow finished and its outputs are being prepared.'
+                          : 'The model finished and its output is being prepared for the next stage.'
+                        : displayStatus === 'running'
+                          ? isFlowRun
+                            ? 'The flow is running. Results will appear when it completes.'
+                            : 'The model is running. Results will appear when it completes.'
+                          : 'The run is waiting to start.';
 
           // ── count inputs × params for display ──────────────────────────
           const nParameters = userParameters(model)
@@ -1661,9 +1649,27 @@ export function MintRuns({
           const headerStatus: RunDisplayStatus | null = submitted ? displayStatus : null;
           const open = cardOpen[mid] ?? defaultCardOpen(headerStatus, modelIds.length);
 
-          // ── Restart: send this model again, only after it ended ───────
-          const restart =
-            canSubmitRuns && submitted && ended ? () => void handleSubmit(mid) : undefined;
+          // ── Restart: send this model again, only once every run is over ──
+          const restartControl =
+            canSubmitRuns && submitted && ended && allOver ? (
+              <RestartRun
+                modelId={mid}
+                model={model}
+                run={workflowRun}
+                totalRuns={summary.total_runs}
+                successfulRuns={successfulRuns}
+                ensembleManagerApi={ensembleManagerApi}
+                inFlight={Boolean(waiting[mid] || restartingModels?.[mid])}
+                onRestart={
+                  onRestartRuns ??
+                  ((modelId, options) =>
+                    options.publish
+                      ? onSubmitRuns(modelId, options.maxMinutes, options.publish)
+                      : onSubmitRuns(modelId, options.maxMinutes))
+                }
+                onOpenFlowRun={onOpenFlowRun}
+              />
+            ) : undefined;
           const problems = (
             <SubmitProblems
               modelId={mid}
@@ -1833,9 +1839,7 @@ export function MintRuns({
                             ? (edit) => onResumeWorkflow(mid, edit)
                             : undefined
                         }
-                        onRestart={restart}
-                        restarting={waiting[mid]}
-                        restartProblem={problems}
+                        restartControl={restartControl}
                       />
                     ) : showPanel && workflowRun ? (
                       <UnifiedExecutionPanel
@@ -1847,9 +1851,7 @@ export function MintRuns({
                         refreshError={workflowRefreshErrors?.[mid]}
                         onCancel={cancelRun}
                         cancelling={workflowCancelling?.[mid]}
-                        onRestart={restart}
-                        restarting={waiting[mid]}
-                        restartProblem={problems}
+                        restartControl={restartControl}
                       />
                     ) : ended ? (
                       <RunFailureNotice
@@ -1857,9 +1859,7 @@ export function MintRuns({
                         stepErrors={[
                           `${failedRuns} of ${summary.total_runs} runs failed. Open a run's log below for why.`,
                         ]}
-                        onRestart={restart}
-                        restarting={waiting[mid]}
-                        problem={problems}
+                        actions={restartControl}
                       />
                     ) : null}
 
@@ -1957,8 +1957,6 @@ export function MintRuns({
                           params={adjustableParams}
                           onViewLog={(id) => void handleViewLog(id)}
                           onViewFiles={(id) => setFilesFor({ executionId: id, modelId: mid })}
-                          onRestart={restart}
-                          restarting={waiting[mid]}
                         />
                       </div>
                     )}

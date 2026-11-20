@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 
 import { CollapsibleCard } from '../CollapsibleCard';
@@ -51,5 +52,26 @@ describe('CollapsibleCard', () => {
     render(<Harness />);
     const body = screen.getByText('card body').closest('[data-state]');
     expect(body?.className).toContain('motion-reduce:animate-none');
+  });
+
+  it('is a real button the keyboard reaches, and Enter and Space toggle it', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const header = screen.getByRole('button', { name: /flood model/i });
+    expect(header.tagName).toBe('BUTTON');
+    await user.tab();
+    expect(header).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('card body')).not.toBeInTheDocument();
+    await user.keyboard(' ');
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('card body')).toBeInTheDocument();
+  });
+
+  it('names the region its button controls', () => {
+    render(<Harness />);
+    const header = screen.getByRole('button', { name: /flood model/i });
+    expect(header).toHaveAttribute('aria-controls');
   });
 });

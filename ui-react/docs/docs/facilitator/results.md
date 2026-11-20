@@ -10,13 +10,15 @@ A run that finishes is not the same as an answer you can rely on, so review the 
 
 ## Preview a result
 
-Under an output, **Preview** shows the start of the file in place:
+Under an output that DYNAMO stored in Tapis, **Preview** shows the start of the file in place:
 
-- **A Markdown report** (`.md`) is shown formatted, and is open when the card opens.
-- **A CSV file** shows its header and first rows as a small table.
-- **A JSON file** is shown indented.
+- **A Markdown report** (`.md`) is shown formatted. A link in it shows the address it goes to beside its words.
+- **A CSV file** shows its header and first rows as a small table. Very wide rows and very long cells are shortened.
+- **A JSON file** is shown indented. A file that is cut off, very large or deeply nested is shown as it is, with a note saying why.
 
-CSV and JSON previews are closed until you open them, and a file is read only when its preview is open. At most the first 200 KB is read; where that cuts the file short, the preview says so. If the file cannot be read, the preview says *Preview unavailable* and offers **Download**. Other kinds of file have **Download** only.
+A preview is closed until you open it, except that a Markdown report opens by itself when the file list says it is under 100 KB. A file is read only when its preview is open, and only its first 200 KB is read; where that cuts the file short, the preview says so. If the file cannot be read, the preview says *Preview unavailable* and offers **Download**. Other kinds of file have **Download** only.
+
+An output that is a web address is not read or previewed by DYNAMO, so that opening a result never sends your browser to another site. It has **Download**, which opens the address, and **Copy location**.
 
 ## A run that has not finished
 
@@ -24,7 +26,7 @@ The card says where the run is instead of showing results:
 
 - **Waiting for your edit.** The flow is paused. Select **Go to Runs to edit and resume**.
 - **Running.** The results will appear when it finishes. Use **Refresh** to check.
-- **Failed.** The card shows the reason and a **Restart** button, the same one as in the Runs step. After you restart, DYNAMO opens the Runs step so you can follow the new run.
+- **Failed.** The card shows the reason and the same **Restart** control as in the Runs step, with the same run time and publishing choices, and the same confirmation for a model run several times. After you restart, DYNAMO opens the Runs step so you can follow the new run.
 
 ## A model run many times
 

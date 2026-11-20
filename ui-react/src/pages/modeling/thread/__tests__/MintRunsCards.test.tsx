@@ -469,30 +469,144 @@ describe('restarting a failed run', () => {
     expect(screen.queryByRole('button', { name: /restart/i })).not.toBeInTheDocument();
   });
 
-  it('offers Restart on each failed row of an ensemble, all calling the same send', async () => {
+  const sweepThread = thread([
+    { id: 'm1', summary: { total_runs: 3, submitted_runs: 3, successful_runs: 1, failed_runs: 2 } },
+  ]);
+  const sweepRows = (...statuses: string[]): ModelExecutionsMap => ({
+    m1: {
+      loading: false,
+      executions: statuses.map((status, i) =>
+        execution(`exec-${i + 1}`, 'm1', { status, bindings: { 'p-depth': String(i + 1) } }),
+      ),
+    },
+  });
+
+  it('has no per-row Restart in a table of runs; one model-level button asks to confirm first', async () => {
     const onSubmitRuns = vi.fn().mockResolvedValue(undefined);
+    renderRuns({
+      threadData: sweepThread,
+      executions: sweepRows('FAILURE', 'SUCCESS', 'FAILURE'),
+      onSubmitRuns,
+    });
+    expect(screen.queryByTestId(/^restart-run-exec-/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Restart all 3 runs' }));
+    // Nothing is sent until the person confirms, and the card says what is sent.
+    expect(onSubmitRuns).not.toHaveBeenCalled();
+    expect(screen.getByTestId('restart-confirm-m1')).toHaveTextContent(
+      'sends all 3 runs again, including the 1 that succeeded',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onSubmitRuns).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restart all 3 runs' }));
+    fireEvent.click(screen.getByTestId('restart-confirm-yes-m1'));
+    await waitFor(() => expect(onSubmitRuns).toHaveBeenCalledWith('m1', 60));
+  });
+
+  it('offers no Restart while a sibling run is still running, even though one failed', () => {
     renderRuns({
       threadData: thread([
         {
           id: 'm1',
-          summary: { total_runs: 3, submitted_runs: 3, successful_runs: 1, failed_runs: 2 },
+          summary: { total_runs: 3, submitted_runs: 3, successful_runs: 0, failed_runs: 1 },
         },
       ]),
-      executions: {
-        m1: {
-          loading: false,
-          executions: [
-            execution('exec-1', 'm1', { status: 'FAILURE', bindings: { 'p-depth': '1' } }),
-            execution('exec-2', 'm1', { status: 'SUCCESS', bindings: { 'p-depth': '2' } }),
-            execution('exec-3', 'm1', { status: 'FAILURE', bindings: { 'p-depth': '3' } }),
-          ],
-        },
-      },
-      onSubmitRuns,
+      executions: sweepRows('FAILURE', 'RUNNING', 'SUCCESS'),
+      unifiedRuns: { m1: failure() },
     });
-    expect(screen.getByTestId('restart-run-exec-1')).toBeInTheDocument();
-    expect(screen.queryByTestId('restart-run-exec-2')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('restart-run-exec-3'));
-    await waitFor(() => expect(onSubmitRuns).toHaveBeenCalledWith('m1', 60));
+    expect(screen.queryByRole('button', { name: /restart/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/restart is offered when the others have finished/i),
+    ).toBeInTheDocument();
+  });
+
+  it('carries the earlier run time and queue, and lets the time be changed', async () => {
+    const onRestartRuns = vi.fn().mockResolvedValue(undefined);
+    renderRuns({
+      threadData: failedThread,
+      executions: failedRows,
+      unifiedRuns: { m1: failure({ model_result: { __max_minutes: 240, __queue: 'skx-dev' } }) },
+      onRestartRuns,
+    });
+    const minutes = screen.getByTestId('restart-minutes-m1');
+    expect(minutes).toHaveValue(240);
+    fireEvent.change(minutes, { target: { value: '300' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Restart' }));
+    await waitFor(() =>
+      expect(onRestartRuns).toHaveBeenCalledWith('m1', { maxMinutes: 300, queue: 'skx-dev' }),
+    );
+  });
+
+  it('shows the default time that will be used when the earlier one was not kept', () => {
+    renderRuns({
+      threadData: failedThread,
+      executions: failedRows,
+      unifiedRuns: { m1: failure() },
+    });
+    expect(screen.getByTestId('restart-minutes-m1')).toHaveValue(60);
+    expect(screen.getByText(/earlier run's time was not kept/i)).toBeInTheDocument();
+  });
+
+  describe('publishing', () => {
+    const publisher = {
+      transform_spec_id: 'spec-1',
+      name: 'Publish',
+      catalog_tokens: ['ckan', 'stac'],
+      parameters: [],
+      can_publish: { ok: true, reason: null },
+    };
+    const planWithPublish = `em_${btoa(JSON.stringify({ publish: ['ckan', 'stac'] }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')}.sig`;
+
+    beforeEach(() => {
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => ({
+        ok: true,
+        json: async () =>
+          String(url).includes('/plans/publishers') ? { publishers: [publisher] } : {},
+      }));
+    });
+
+    it('pre-selects what the earlier run published and sends it again', async () => {
+      const onRestartRuns = vi.fn().mockResolvedValue(undefined);
+      renderRuns({
+        threadData: failedThread,
+        executions: failedRows,
+        unifiedRuns: { m1: failure({ plan_id: planWithPublish }) },
+        onRestartRuns,
+      });
+      expect(await screen.findByTestId('publish-catalog-m1')).toBeInTheDocument();
+      expect(screen.getByTestId('publish-toggle-m1')).toBeChecked();
+      fireEvent.click(screen.getByRole('button', { name: 'Restart' }));
+      await waitFor(() => expect(onRestartRuns).toHaveBeenCalled());
+      expect(onRestartRuns.mock.calls[0]?.[1]).toMatchObject({
+        publish: { tokens: ['ckan', 'stac'] },
+      });
+    });
+
+    it('sends no publish when the earlier run published nothing and none is chosen', async () => {
+      const onRestartRuns = vi.fn().mockResolvedValue(undefined);
+      renderRuns({
+        threadData: failedThread,
+        executions: failedRows,
+        unifiedRuns: { m1: failure() },
+        onRestartRuns,
+      });
+      expect(await screen.findByTestId('publish-toggle-m1')).not.toBeChecked();
+      fireEvent.click(screen.getByRole('button', { name: 'Restart' }));
+      await waitFor(() => expect(onRestartRuns).toHaveBeenCalled());
+      expect(onRestartRuns.mock.calls[0]?.[1]).not.toHaveProperty('publish');
+    });
+  });
+
+  it('shows Restart as in flight when a send from the other step is running', () => {
+    renderRuns({
+      threadData: failedThread,
+      executions: failedRows,
+      unifiedRuns: { m1: failure() },
+      restartingModels: { m1: true },
+    });
+    expect(screen.getByRole('button', { name: /restarting/i })).toBeDisabled();
   });
 });

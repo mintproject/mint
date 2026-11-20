@@ -7,7 +7,7 @@
  *
  * Legacy: ui/src/screens/modeling/thread/mint-results.ts
  */
-import { secretErrorMessage, userParameters } from '@/lib/secret-parameters';
+import { userParameters } from '@/lib/secret-parameters';
 import { Download, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -23,7 +23,6 @@ import { RunAnswerCard } from '@/components/modeling/runs/RunAnswerCard';
 import { RunFailureNotice } from '@/components/modeling/runs/RunFailureNotice';
 import { SameForEveryRun } from '@/components/modeling/runs/SameForEveryRun';
 import { SettingsUsed } from '@/components/modeling/runs/SettingsUsed';
-import { flowErrorMessage } from '@/lib/flow-errors';
 import {
   aggregateRunStatus,
   displayStatusLabel,
@@ -33,6 +32,7 @@ import { humanizeName, runParamValue, splitRunParams } from '@/lib/modeling/run-
 import { EditedInputNote } from './EditedInputNote';
 import { ExecutionFilesDialog } from './ExecutionFilesDialog';
 import { OutputBlock } from './OutputBlock';
+import { RestartRun, type RestartOptions } from './RestartRun';
 import { TapisResult } from './TapisResult';
 import {
   EnsembleManagerError,
@@ -149,8 +149,13 @@ interface MintResultsProps {
   onPromoteOutputs?: () => void;
   /** Take the user to the Runs step: where a paused run is edited and a failed one restarted. */
   onOpenRuns?: () => void;
-  /** Send a model's runs again after they failed. Rejects with the Ensemble Manager's refusal. */
-  onRestartRuns?: (modelId: string) => Promise<void>;
+  /**
+   * Send a model again after it failed. Rejects with the Ensemble Manager's
+   * refusal. Absent means the viewer cannot run the model.
+   */
+  onRestartRuns?: (modelId: string, options: RestartOptions) => Promise<void>;
+  /** Models whose restart is in flight, in either step. */
+  restartingModels?: Record<string, boolean>;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -170,6 +175,7 @@ export function MintResults({
   onPromoteOutputs,
   onOpenRuns,
   onRestartRuns,
+  restartingModels,
   unifiedRuns,
 }: MintResultsProps) {
   const modelIds = Object.keys(threadData.execution_summary ?? {});
@@ -189,8 +195,6 @@ export function MintResults({
   const [showAllOutputs, setShowAllOutputs] = useState(true);
   // A card the user closed (or opened) keeps that choice; the rest start open.
   const [cardOpen, setCardOpen] = useState<Record<string, boolean>>({});
-  const [restarting, setRestarting] = useState<Record<string, boolean>>({});
-  const [restartError, setRestartError] = useState<Record<string, string>>({});
   const [publishWaiting, setPublishWaiting] = useState<Record<string, boolean>>({});
   const [publishError, setPublishError] = useState<Record<string, string>>({});
   // The server's own error code, kept beside the message. NO_OUTPUTS_DECLARED
@@ -248,30 +252,6 @@ export function MintResults({
       }
     },
     [onPublishResults, onFetchRuns, pages],
-  );
-
-  const handleRestart = useCallback(
-    async (mid: string) => {
-      if (!onRestartRuns) return;
-      setRestarting((r) => ({ ...r, [mid]: true }));
-      setRestartError((e) => ({ ...e, [mid]: '' }));
-      try {
-        await onRestartRuns(mid);
-        // The new run is followed in the Runs step.
-        onOpenRuns?.();
-      } catch (err) {
-        const refusal = flowErrorMessage(err);
-        setRestartError((e) => ({
-          ...e,
-          [mid]: refusal
-            ? [refusal.title, ...refusal.lines].join(' ')
-            : (secretErrorMessage(err) ?? (err instanceof Error ? err.message : String(err))),
-        }));
-      } finally {
-        setRestarting((r) => ({ ...r, [mid]: false }));
-      }
-    },
-    [onRestartRuns, onOpenRuns],
   );
 
   // ─ CSV download ─────────────────────────────────────────────────────────
@@ -372,6 +352,11 @@ export function MintResults({
             fallbackStatus: run?.status ?? grouped.executions[0]?.status?.toLowerCase(),
           });
           const isSingleRun = summary.total_runs <= 1;
+          const allOver =
+            !grouped.executions.some((e) =>
+              ['RUNNING', 'WAITING'].includes(e.status.toUpperCase()),
+            ) &&
+            (isSingleRun || finishedRuns >= summary.total_runs);
           const open = cardOpen[mid] ?? true;
 
           // Determine which outputs to show
@@ -555,16 +540,24 @@ export function MintResults({
                         ? [`${failedRuns} of ${summary.total_runs} runs failed.`]
                         : []
                     }
-                    onRestart={onRestartRuns ? () => void handleRestart(mid) : undefined}
-                    restarting={restarting[mid]}
-                    problem={
-                      restartError[mid] ? (
-                        <p className="text-red-700" data-testid={`restart-error-${mid}`}>
-                          {restartError[mid]}
-                        </p>
-                      ) : undefined
-                    }
                     testId={`result-failure-${mid}`}
+                    actions={
+                      !onRestartRuns ? undefined : allOver ? (
+                        <RestartRun
+                          modelId={mid}
+                          model={model}
+                          run={run}
+                          totalRuns={summary.total_runs}
+                          successfulRuns={successfulRuns}
+                          ensembleManagerApi={ensembleManagerApi}
+                          inFlight={Boolean(restartingModels?.[mid])}
+                          onRestart={onRestartRuns}
+                          onRestarted={onOpenRuns}
+                        />
+                      ) : (
+                        <p>Restart is offered when every run has finished.</p>
+                      )
+                    }
                   />
                 )}
 

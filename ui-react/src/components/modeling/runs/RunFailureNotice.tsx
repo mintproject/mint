@@ -1,4 +1,3 @@
-import { RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { EnsembleManagerError, type UnifiedRunSnapshot } from '@/lib/ensemble-manager';
@@ -10,27 +9,21 @@ export interface RunFailureNoticeProps {
   /** What failed inside the run, one line per step, shown under the reason. */
   stepErrors?: string[];
   cancelled?: boolean;
-  /** Sends the model again. Absent means the viewer cannot run it. */
-  onRestart?: () => void;
-  /** A send is in flight: Restart is disabled so nothing is started twice. */
-  restarting?: boolean;
-  /** Why the send was refused, shown under the button. */
-  problem?: ReactNode;
+  /** What the viewer can do about it: the restart control, when they may run the model. */
+  actions?: ReactNode;
   testId?: string;
 }
 
 /**
  * Why a run did not finish, and the way to run it again. The reason is the
  * Ensemble Manager's own failure code and message, in words when the code is a
- * known flow refusal.
+ * known flow refusal. The way to run it again is passed in as `actions`.
  */
 export function RunFailureNotice({
   run,
   stepErrors = [],
   cancelled = false,
-  onRestart,
-  restarting = false,
-  problem,
+  actions,
   testId = 'run-failure',
 }: RunFailureNoticeProps) {
   const known = run?.failure_code
@@ -67,19 +60,7 @@ export function RunFailureNotice({
           ))}
         </ul>
       )}
-      {onRestart && (
-        <button
-          type="button"
-          onClick={onRestart}
-          disabled={restarting}
-          className="inline-flex items-center gap-1 rounded border border-red-300 bg-white px-2.5 py-1 font-medium text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-          data-testid={`${testId}-restart`}
-        >
-          <RotateCcw className={`h-3 w-3 ${restarting ? 'animate-spin' : ''}`} />
-          {restarting ? 'Restarting…' : 'Restart'}
-        </button>
-      )}
-      {problem}
+      {actions}
     </div>
   );
 }
