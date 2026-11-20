@@ -6,6 +6,7 @@
  * the box.
  */
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -16,11 +17,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type { FlowSettings } from '@/lib/ensemble-manager';
+import type { FlowSettings, RequiredSecret, SendsDataTo } from '@/lib/ensemble-manager';
 import { describeFlowLink } from '@/lib/flow-errors';
 
+/** What the user must see or settle before a flow run is submitted. */
+export interface FlowRunGate {
+  /** The author's settings, when there are any to accept. */
+  settings?: FlowSettings;
+  /** Outside services the run sends data to; ticked on every run. */
+  sendsDataTo?: SendsDataTo[];
+  /** Saved credentials the flow needs; set only when the plan is not ready. */
+  requiredSecrets?: RequiredSecret[];
+}
+
 interface FlowSettingsDialogProps {
-  settings: FlowSettings | null;
+  gate: FlowRunGate | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -29,53 +40,116 @@ function valueText(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
-export function FlowSettingsDialog({ settings, onConfirm, onCancel }: FlowSettingsDialogProps) {
-  const [accepted, setAccepted] = useState(false);
-  useEffect(() => setAccepted(false), [settings]);
+export function FlowSettingsDialog({ gate, onConfirm, onCancel }: FlowSettingsDialogProps) {
+  const [acceptedSettings, setAcceptedSettings] = useState(false);
+  const [acceptedOutside, setAcceptedOutside] = useState(false);
+  useEffect(() => {
+    setAcceptedSettings(false);
+    setAcceptedOutside(false);
+  }, [gate]);
 
-  const defaults = Object.entries(settings?.defaults ?? {});
-  const links = settings?.links ?? [];
+  const defaults = Object.entries(gate?.settings?.defaults ?? {});
+  const links = gate?.settings?.links ?? [];
+  const hasSettings = defaults.length > 0 || links.length > 0;
+  const outside = gate?.sendsDataTo ?? [];
+  const secrets = gate?.requiredSecrets ?? [];
+  const blocked = gate?.requiredSecrets !== undefined;
+
+  const title = blocked
+    ? 'Saved credentials needed'
+    : hasSettings
+      ? "Settings chosen by the flow's author"
+      : 'Before this run';
+  const canRun = (!hasSettings || acceptedSettings) && (outside.length === 0 || acceptedOutside);
 
   return (
-    <Dialog open={settings !== null} onOpenChange={(open) => !open && onCancel()}>
+    <Dialog open={gate !== null} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Settings chosen by the flow&apos;s author</DialogTitle>
-          <DialogDescription>
-            These were chosen by the flow&apos;s author and will be used with your account.
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          {hasSettings && !blocked && (
+            <DialogDescription>
+              These were chosen by the flow&apos;s author and will be used with your account.
+            </DialogDescription>
+          )}
         </DialogHeader>
-        {defaults.length > 0 && (
-          <ul className="space-y-1 text-sm" data-testid="flow-settings-defaults">
-            {defaults.map(([name, value]) => (
-              <li key={name}>
-                <span className="font-medium">{name}</span>: {valueText(value)}
-              </li>
-            ))}
-          </ul>
+        {blocked && (
+          <div className="space-y-2 text-sm" data-testid="flow-required-secrets">
+            <p>This flow needs these saved credentials:</p>
+            <ul className="space-y-1">
+              {secrets.map((secret) => (
+                <li key={secret.name}>
+                  <span className="font-medium">{secret.label || secret.name}</span> ({secret.name}
+                  {secret.fields?.length ? `: ${secret.fields.join(', ')}` : ''}){' '}
+                  {secret.stored ? 'is stored' : 'is not stored yet'}
+                </li>
+              ))}
+            </ul>
+            <Link to="/account/credentials" className="text-blue-700 underline" onClick={onCancel}>
+              Open saved credentials
+            </Link>
+          </div>
         )}
-        {links.length > 0 && (
-          <ul className="space-y-1 text-sm" data-testid="flow-settings-links">
-            {links.map((link, index) => (
-              <li key={index}>{describeFlowLink(link)}</li>
-            ))}
-          </ul>
+        {!blocked && hasSettings && (
+          <>
+            {defaults.length > 0 && (
+              <ul className="space-y-1 text-sm" data-testid="flow-settings-defaults">
+                {defaults.map(([name, value]) => (
+                  <li key={name}>
+                    <span className="font-medium">{name}</span>: {valueText(value)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {links.length > 0 && (
+              <ul className="space-y-1 text-sm" data-testid="flow-settings-links">
+                {links.map((link, index) => (
+                  <li key={index}>{describeFlowLink(link)}</li>
+                ))}
+              </ul>
+            )}
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={acceptedSettings}
+                onChange={(e) => setAcceptedSettings(e.target.checked)}
+              />
+              I accept these settings
+            </label>
+          </>
         )}
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={accepted}
-            onChange={(e) => setAccepted(e.target.checked)}
-          />
-          I accept these settings
-        </label>
+        {!blocked && outside.length > 0 && (
+          <>
+            <div className="text-sm" data-testid="flow-sends-data-to">
+              <p>This run sends data outside DYNAMO:</p>
+              <ul className="mt-1 space-y-1">
+                {outside.map((item, index) => (
+                  <li key={index}>
+                    <span className="font-medium">{item.service}</span>
+                    {item.what ? `: ${item.what}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={acceptedOutside}
+                onChange={(e) => setAcceptedOutside(e.target.checked)}
+              />
+              I agree to send this data outside DYNAMO
+            </label>
+          </>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>
-            Cancel
+            {blocked ? 'Close' : 'Cancel'}
           </Button>
-          <Button disabled={!accepted} onClick={onConfirm}>
-            Accept and run
-          </Button>
+          {!blocked && (
+            <Button disabled={!canRun} onClick={onConfirm}>
+              Accept and run
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

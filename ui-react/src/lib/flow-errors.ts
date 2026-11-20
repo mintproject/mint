@@ -30,6 +30,10 @@ export const FLOW_ERROR_CODES = [
   'FLOW_COLLECTION_REFUSED',
   'FLOW_COLLECTION_RESOURCE_REFUSED',
   'FLOW_STAGING_UNRESOLVED',
+  'FLOW_SECRET_MISSING',
+  'FLOW_SECRET_CHANGED',
+  'SECRET_PIECE_UNSUPPORTED',
+  'SECRET_PIECE_NOT_TRUSTED',
   'GATHER_RESOURCE_NEEDS_LOGIN',
   'GATHER_ADDRESS_REFUSED',
   'GATHER_TOO_LARGE',
@@ -154,11 +158,16 @@ function gatherMessage(code: string, serverMessage: string, details: unknown): F
 
 const GATHER_CODE = /\bGATHER_[A-Z_]+\b/;
 
+const SECRET_FETCH_FAILED = 'STEP_SECRET_FETCH_FAILED';
+
 /**
  * A failed step's error text in plain words when it carries a gather code,
  * otherwise the text unchanged.
  */
 export function stepErrorText(raw: string): string {
+  if (raw.includes(SECRET_FETCH_FAILED)) {
+    return 'A step could not fetch your saved credential. Check it still exists, then run again.';
+  }
   const code = GATHER_CODE.exec(raw)?.[0];
   if (!code || !(code in GATHER_TITLES)) return raw;
   return flowErrorText(gatherMessage(code, raw, undefined));
@@ -306,6 +315,44 @@ export function flowErrorMessage(error: unknown): FlowErrorMessage | null {
           ...(serverMessage ? [serverMessage] : []),
         ],
       };
+    case 'FLOW_SECRET_MISSING': {
+      const secrets = list(field(details, 'secrets')).map((s) => {
+        const d = asDetails(s);
+        const fields = list(d.fields).map(text);
+        return fields.length > 0 ? `${text(d.name)} (${fields.join(', ')})` : text(d.name);
+      });
+      return {
+        title: 'This flow needs credentials you have not saved',
+        lines: ['Save these under Saved credentials, then run again.', ...secrets],
+      };
+    }
+    case 'FLOW_SECRET_CHANGED': {
+      const name = text(field(details, 'name'));
+      return {
+        title: 'A saved credential changed',
+        lines: [
+          `${name ? `The credential "${name}"` : 'A credential'} changed after this run was planned. Press Run again.`,
+        ],
+      };
+    }
+    case 'SECRET_PIECE_UNSUPPORTED': {
+      const step = text(field(details, 'step'));
+      return {
+        title: 'A step cannot use saved credentials',
+        lines: [
+          `${step ? `Step ${step}` : 'A step'} needs a credential but its piece cannot receive one. Ask the flow owner to fix it.`,
+        ],
+      };
+    }
+    case 'SECRET_PIECE_NOT_TRUSTED': {
+      const step = text(field(details, 'step'));
+      return {
+        title: 'A step is not approved to use saved credentials',
+        lines: [
+          `${step ? `Step ${step}` : 'A step'} needs a credential, and its piece has not been approved by an administrator to receive one.`,
+        ],
+      };
+    }
     case 'GATHER_RESOURCE_NEEDS_LOGIN':
     case 'GATHER_ADDRESS_REFUSED':
     case 'GATHER_TOO_LARGE':

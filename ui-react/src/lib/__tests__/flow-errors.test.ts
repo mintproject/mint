@@ -11,6 +11,29 @@ import {
 const refuse = (code: string, details?: unknown) =>
   flowErrorMessage(new EnsembleManagerError(422, 'refused', code, details));
 
+describe('credential refusals', () => {
+  it('lists the credentials not saved', () => {
+    const m = refuse('FLOW_SECRET_MISSING', {
+      secrets: [{ name: 'model_server', fields: ['api_key', 'chat_base_url'] }],
+    });
+    expect(m?.lines.join('\n')).toContain('model_server (api_key, chat_base_url)');
+  });
+  it('names the credential that changed', () => {
+    expect(refuse('FLOW_SECRET_CHANGED', { name: 'model_server' })?.lines.join(' ')).toContain(
+      '"model_server"',
+    );
+  });
+  it('names the step for the piece refusals', () => {
+    expect(refuse('SECRET_PIECE_UNSUPPORTED', { step: 's2' })?.lines.join(' ')).toContain('s2');
+    expect(refuse('SECRET_PIECE_NOT_TRUSTED', { step: 's3' })?.lines.join(' ')).toContain('s3');
+  });
+  it('words a failed credential fetch in a step', () => {
+    expect(stepErrorText('STEP_SECRET_FETCH_FAILED: 404')).toBe(
+      'A step could not fetch your saved credential. Check it still exists, then run again.',
+    );
+  });
+});
+
 describe('flowErrorMessage', () => {
   it('is null for an error that is not a flow refusal', () => {
     expect(flowErrorMessage(new Error('boom'))).toBeNull();
