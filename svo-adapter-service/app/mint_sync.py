@@ -440,8 +440,7 @@ async def sync_one_etl_process(hasura_client: Any, process: dict[str, Any]) -> d
     when the process cannot be a registry row. ``hasura_client`` is the adapter's
     own (admin) client: it writes the adapter schema. An approval already
     recorded for the piece is kept; it still has to match the piece to count."""
-    from .hasura import (
-        DELETE_SPEC_CONTRACTS_MUTATION, GET_APPROVAL_SPEC_QUERY, UPSERT_ETL_TRANSFORM_SPEC_MUTATION)
+    from .hasura import GET_APPROVAL_SPEC_QUERY, REPLACE_ETL_TRANSFORM_SPEC_MUTATION
 
     row = etl_process_to_spec_row(process, [])
     if row is None:
@@ -453,11 +452,12 @@ async def sync_one_etl_process(hasura_client: Any, process: dict[str, Any]) -> d
     if existing and existing.get("mint_etl_process_id") != row["id"]:
         raise SpecIdCollision(f"a registry spec with id {row['id']} already exists and is not this piece")
     contracts = row.pop("contracts", None)
-    await hasura_client.execute(DELETE_SPEC_CONTRACTS_MUTATION, {"ids": [row["id"]]})
     row["mint_synced_at"] = "now()"
     if contracts:
         row["contracts"] = contracts
-    await hasura_client.execute(UPSERT_ETL_TRANSFORM_SPEC_MUTATION, {"obj": row})
+    # The old contracts go in the same transaction as the upsert (see
+    # REPLACE_ETL_TRANSFORM_SPEC_MUTATION), so the piece is never seen without them.
+    await hasura_client.execute(REPLACE_ETL_TRANSFORM_SPEC_MUTATION, {"ids": [row["id"]], "obj": row})
     return row
 
 
@@ -477,12 +477,11 @@ async def sync_mint_to_adapter(
     5. Return a SyncResult with counts + warnings
     """
     from .hasura import (
-        UPSERT_TRANSFORM_SPEC_MUTATION,
-        UPSERT_ETL_TRANSFORM_SPEC_MUTATION,
+        REPLACE_TRANSFORM_SPEC_MUTATION,
+        REPLACE_ETL_TRANSFORM_SPEC_MUTATION,
         DELETE_OBSOLETE_MINT_SPECS_MUTATION,
         DELETE_OBSOLETE_ETL_SPECS_MUTATION,
         GET_MINT_SPEC_IDS_QUERY,
-        DELETE_SPEC_CONTRACTS_MUTATION,
     )
 
     if mint_client is None:
@@ -544,27 +543,22 @@ async def sync_mint_to_adapter(
     }
     existing_ids = set(spec_id_by_config)
 
-    # Replace, don't append: clear the contracts of every spec this sync is
-    # about to re-insert them for.
-    replace_ids = sorted({
-        str(row["id"]) if "mint_model_config_id" not in row
-        else str(spec_id_by_config.get(row["mint_model_config_id"]) or "")
-        for row in rows_to_upsert if row.get("contracts")
-    } - {""})
-    if replace_ids:
-        await hasura_client.execute(DELETE_SPEC_CONTRACTS_MUTATION, {"ids": replace_ids})
-
     for row in rows_to_upsert:
         contracts = row.pop("contracts", None)
         is_etl = "mint_model_config_id" not in row
         is_update = row.get("mint_model_config_id") in existing_ids if not is_etl else False
-        # Upsert on mint_model_config_id: if the row exists, update all fields;
-        # contracts are deleted and re-inserted via the nested mutation.
+        # Replace, don't append: a row whose contracts are re-inserted has its old
+        # ones deleted in the same transaction as the upsert, so no reader ever
+        # sees the row without contracts. A row synced without contracts keeps
+        # the ones it has.
+        spec_id = (str(row["id"]) if is_etl
+                   else str(spec_id_by_config.get(row["mint_model_config_id"]) or ""))
+        replace_ids = [spec_id] if contracts and spec_id else []
         row["mint_synced_at"] = "now()"
         if contracts:
             row["contracts"] = contracts
-        mutation = UPSERT_ETL_TRANSFORM_SPEC_MUTATION if is_etl else UPSERT_TRANSFORM_SPEC_MUTATION
-        await hasura_client.execute(mutation, {"obj": row})
+        mutation = REPLACE_ETL_TRANSFORM_SPEC_MUTATION if is_etl else REPLACE_TRANSFORM_SPEC_MUTATION
+        await hasura_client.execute(mutation, {"ids": replace_ids, "obj": row})
         if is_update:
             result.updated += 1
         else:
