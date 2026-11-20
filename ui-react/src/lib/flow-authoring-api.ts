@@ -11,6 +11,7 @@
  */
 import { getEnsembleManagerApiUrl, getModelCatalogApiUrl } from './config';
 import type { FlowProblem, ProposedChain, ProposedSource, WireJson } from './flow-authoring';
+import type { SettingDetails } from './flow-settings';
 
 export interface PieceSummary {
   inputs: number[];
@@ -25,7 +26,7 @@ export interface PieceSummary {
     string,
     { standard_variable_uri?: string; unit?: string; format?: string }
   >;
-  setting_details: Record<string, { type?: string; default?: unknown; description?: string }>;
+  setting_details: Record<string, SettingDetails>;
 }
 
 export interface FlowCheck {

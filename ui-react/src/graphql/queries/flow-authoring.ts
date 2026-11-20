@@ -94,6 +94,7 @@ export const GET_FLOW_FOR_COPY = gql`
       flow {
         thread_bindings_json
         outputs_json
+        settings_json
         steps(order_by: { position: asc }) {
           position
           etl_process_id

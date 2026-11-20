@@ -12,6 +12,8 @@ import {
   removeInput,
   removeStep,
   setInputWire,
+  setSettingRule,
+  settingRulesJson,
   sortProblems,
   type FlowDraft,
   type StoredFlowSource,
@@ -283,5 +285,60 @@ describe('editing as a copy', () => {
     });
     expect(draft.outputs).toEqual([]);
     expect(draft.bindings.collections).toEqual([]);
+  });
+});
+
+describe('what the author decides about a setting', () => {
+  it('records a decision, and removes a decision that decides nothing', () => {
+    let draft = setSettingRule(emptyDraft(), 'match_mode', { visibility: 'hidden', fixed: true });
+    expect(draft.settings).toEqual({ match_mode: { visibility: 'hidden', fixed: true } });
+    draft = setSettingRule(draft, 'match_mode', { fixed: false });
+    expect(draft.settings).toEqual({});
+  });
+
+  it('sends only decisions, and only for settings a step has once that is known', () => {
+    const draft: FlowDraft = {
+      ...emptyDraft(),
+      settings: {
+        a: { visibility: 'advanced' },
+        b: { fixed: true },
+        c: { fixed: false },
+        gone: { visibility: 'hidden' },
+      },
+    };
+    expect(settingRulesJson(draft)).toEqual({
+      a: { visibility: 'advanced' },
+      b: { fixed: true },
+      gone: { visibility: 'hidden' },
+    });
+    expect(settingRulesJson(draft, new Set(['a', 'b', 'c']))).toEqual({
+      a: { visibility: 'advanced' },
+      b: { fixed: true },
+    });
+    expect(buildCheckBody(draft).settings).toEqual(settingRulesJson(draft));
+    expect(buildSaveBody(draft, new Set(['a'])).settings).toEqual({
+      a: { visibility: 'advanced' },
+    });
+  });
+
+  it('is read back from a stored flow, ignoring what it cannot read', () => {
+    const base: StoredFlowSource = {
+      configuration: { label: 'F', inputs: [], outputs: [], parameters: [] },
+      flow: {
+        steps: [],
+        settings_json: {
+          a: { visibility: 'hidden', fixed: true },
+          b: { visibility: 'sideways' },
+          c: 'nope',
+        },
+      },
+    };
+    expect(draftFromStoredFlow(base).settings).toEqual({
+      a: { visibility: 'hidden', fixed: true },
+      b: {},
+    });
+    expect(
+      draftFromStoredFlow({ ...base, flow: { steps: [], settings_json: 7 } }).settings,
+    ).toEqual({});
   });
 });

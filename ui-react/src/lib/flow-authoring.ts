@@ -15,6 +15,7 @@
  */
 import type { FlowPieceRow } from '@/graphql/queries/flows';
 import { parseWires, parseSettings } from './flow-steps';
+import { VISIBILITIES, type SettingRule } from './flow-settings';
 
 export interface WireJson {
   to: Record<string, unknown>;
@@ -70,6 +71,12 @@ export interface FlowDraft {
   steps: DraftStep[];
   outputs: DraftOutput[];
   bindings: DraftBindings;
+  /**
+   * What the author decided about each setting, by name: whether it is fixed, and
+   * whether a runner sees it, finds it under "Advanced settings", or does not see it.
+   * One setting name used by several steps is one setting of the flow.
+   */
+  settings: Record<string, SettingRule>;
 }
 
 export const MAX_STEPS = 24;
@@ -85,6 +92,7 @@ export function emptyDraft(): FlowDraft {
     steps: [],
     outputs: [],
     bindings: { region: '', start_date: '', end_date: '', collections: [] },
+    settings: {},
   };
 }
 
@@ -114,6 +122,24 @@ function stepsJson(draft: FlowDraft) {
   }));
 }
 
+/**
+ * The author's decisions as the catalog and the adapter take them: only a setting that
+ * has one, and only a setting some step has when `known` is given (a setting whose step
+ * was removed must not linger and fail the check).
+ */
+export function settingRulesJson(draft: FlowDraft, known?: ReadonlySet<string>): Json {
+  const rules: Json = {};
+  for (const [name, rule] of Object.entries(draft.settings)) {
+    if (known && !known.has(name)) continue;
+    const kept: SettingRule = {
+      ...(rule.visibility ? { visibility: rule.visibility } : {}),
+      ...(rule.fixed ? { fixed: true } : {}),
+    };
+    if (Object.keys(kept).length > 0) rules[name] = kept;
+  }
+  return rules;
+}
+
 /** `editable` as the catalog takes it: a blank check or key is left out. */
 function editableJson(editable: Json): Json {
   const { check, key, ...rest } = editable;
@@ -136,8 +162,11 @@ function outputJson(output: DraftOutput, forSave: boolean): Json {
   return where;
 }
 
-/** The body of the adapter's `POST /flows/check` and `POST /flows/propose`. */
-export function buildCheckBody(draft: FlowDraft) {
+/**
+ * The body of the adapter's `POST /flows/check` and `POST /flows/propose`. `known` is
+ * the set of setting names the steps' pieces have, once the form has read them all.
+ */
+export function buildCheckBody(draft: FlowDraft, known?: ReadonlySet<string>) {
   const bindings: Json = {};
   for (const role of BINDING_ROLES) {
     const target = bindingJson(draft.bindings[role], false);
@@ -155,11 +184,16 @@ export function buildCheckBody(draft: FlowDraft) {
     steps: stepsJson(draft),
     outputs: draft.outputs.map((output) => outputJson(output, false)),
     thread_bindings: bindings,
+    settings: settingRulesJson(draft, known),
   };
 }
 
-/** The body of `POST /flows` on the model catalog API. */
-export function buildSaveBody(draft: FlowDraft) {
+/**
+ * The body of `POST /flows` on the model catalog API. The catalog writes each step's
+ * settings and the flow's `settings`, and copies the defaults, fixed values, choices and
+ * bounds onto the flow's parameter rows.
+ */
+export function buildSaveBody(draft: FlowDraft, known?: ReadonlySet<string>) {
   const bindings: Json = {};
   for (const role of BINDING_ROLES) {
     const target = bindingJson(draft.bindings[role], true);
@@ -187,6 +221,7 @@ export function buildSaveBody(draft: FlowDraft) {
     steps: stepsJson(draft),
     outputs: draft.outputs.map((output) => outputJson(output, true)),
     thread_bindings: bindings,
+    settings: settingRulesJson(draft, known),
   };
 }
 
@@ -244,6 +279,13 @@ export function removeStep(draft: FlowDraft, index: number): FlowDraft {
       .filter((output) => output.step !== position)
       .map((output) => (output.step > position ? { ...output, step: output.step - 1 } : output)),
   };
+}
+
+/** Record what the author decided about a setting. A rule with nothing in it is removed. */
+export function setSettingRule(draft: FlowDraft, name: string, rule: SettingRule): FlowDraft {
+  const { [name]: _dropped, ...others } = draft.settings;
+  const kept = Boolean(rule.visibility || rule.fixed);
+  return { ...draft, settings: kept ? { ...others, [name]: rule } : others };
 }
 
 export function updateStep(draft: FlowDraft, index: number, change: Partial<DraftStep>): FlowDraft {
@@ -606,6 +648,7 @@ export interface StoredFlowSource {
   flow: {
     thread_bindings_json?: unknown;
     outputs_json?: unknown;
+    settings_json?: unknown;
     steps: {
       position: number;
       etl_process_id?: string | null;
@@ -718,6 +761,20 @@ export function draftFromStoredFlow(stored: StoredFlowSource): FlowDraft {
     );
   }
 
+  const settings: Record<string, SettingRule> = {};
+  for (const [name, raw] of Object.entries(
+    isRecord(flow.settings_json) ? flow.settings_json : {},
+  )) {
+    if (!isRecord(raw)) continue;
+    const visibility = (VISIBILITIES as readonly unknown[]).includes(raw.visibility)
+      ? (raw.visibility as SettingRule['visibility'])
+      : undefined;
+    settings[name] = {
+      ...(visibility ? { visibility } : {}),
+      ...(raw.fixed === true ? { fixed: true } : {}),
+    };
+  }
+
   return {
     software: { id: version?.software?.id ?? '', label: version?.software?.label ?? '' },
     version: { id: version?.id ?? '', label: version?.version_id ?? '' },
@@ -729,5 +786,6 @@ export function draftFromStoredFlow(stored: StoredFlowSource): FlowDraft {
     steps,
     outputs,
     bindings,
+    settings,
   };
 }

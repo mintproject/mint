@@ -83,6 +83,14 @@ The form has these parts, in order.
 2. **Flow inputs**. Add each one with **Add a flow input**. Each input has a name, a label, a standard variable, a format, and two ticks: **Optional**, and **Takes a collection of files**. A collection input is read together as one input, so a run uses all the files chosen for it. See [Run a flow](../facilitator/run-a-flow.md).
 3. **Wanted result**. The standard variable and format the flow should produce. **Find pieces that make it** suggests pieces and chains of pieces that can produce it, with a note on each saying whether every input has a source.
 4. **Steps**. Add steps with **Add step**. A flow needs at least one step. Pick a piece for each step and connect its inputs to the flow's inputs or to earlier steps' outputs. Tick **Pause for review after this step** to make the run stop after that step so a person can edit its output. See [When a flow pauses for your edit](../facilitator/run-a-flow.md#when-a-flow-pauses-for-your-edit).
+
+   Under each step, its **Settings** list the piece's arguments. A piece can describe an argument with a title, an explanation, a type, a default, and a list of choices, each with its own explanation. The form shows what the piece says: a title instead of the raw name, a dropdown for an argument with choices (the explanation of the chosen choice appears under it), a number box with its limits for a number, and a tick box for a yes or no. For an older piece that says only a type and a description, the setting is a text box named after the argument. For each setting you choose:
+
+   - **The value.** It is the flow's default. Leave it blank to use the piece's own default.
+   - **Default or Fixed.** With *Default: a runner can change it*, the person who runs the flow sees your value and may change it. With *Fixed: a runner cannot change it*, they see the value but cannot change it, and a run that tries to change it is refused.
+   - **Who sees it.** *Shown* puts it in the main list. *Advanced settings* puts it in a collapsed section of the run form. The piece may suggest this for a rarely changed argument, and you can override it. *Hidden from runners* keeps it off the run form entirely: the run uses your fixed value, else your default, else the piece's default. If a piece requires a hidden setting and nothing gives it a value, the check says so and the flow cannot be saved.
+
+   A setting that is linked to an earlier step's output cannot also have a default, and its value cannot be edited here. A setting name used by more than one step is one setting of the flow, so the choices apply to all of them.
 5. **Outputs**. Add the outputs the flow reports, with **Add output**.
 6. **What the thread fills in**. The settings the flow takes from the thread. A value that is fixed here is shown to the person who runs the flow. Which inputs take a collection is set on each input above.
 7. **Graph**. The steps and their links, drawn as a picture.
