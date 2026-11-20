@@ -5,7 +5,7 @@
 import { ChevronRight, Copy, Download, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 
-import { PREVIEW_AUTO_OPEN_MAX_BYTES, previewKind } from '@/lib/result-preview';
+import { PREVIEW_AUTO_OPEN_MAX_BYTES, outputPreviewKind } from '@/lib/result-preview';
 import { FileDownloadButton } from './FileDownloadButton';
 import { ResultPreview } from './ResultPreview';
 import { useTapisResultInfo } from './useTapisResultKind';
@@ -26,9 +26,11 @@ export interface OutputBlockProps {
   onOpenFolder: (executionId: string) => void;
 }
 
-function typeLabel(format: string | null | undefined, name: string): string {
+function typeLabel(format: string | null | undefined, name: string, url: string): string {
   if (format) return format;
-  return /\.([a-z0-9]+)$/i.exec(name)?.[1]?.toUpperCase() ?? '';
+  // A result is usually named by its label, so the file's own name is the better guide.
+  const extension = (text: string) => /\.([a-z0-9]+)(?:[?#].*)?$/i.exec(text)?.[1]?.toUpperCase();
+  return extension(url) ?? extension(name) ?? '';
 }
 
 export function OutputBlock({
@@ -48,7 +50,7 @@ export function OutputBlock({
     url,
     scheme === 'tapis',
   );
-  const kind = previewKind(name);
+  const kind = outputPreviewKind(url, name, format);
   const previewable = Boolean(kind) && scheme === 'tapis' && tapisKind === 'file';
   const [open, setOpen] = useState<boolean | null>(null);
   // A report is what the run was for, so it opens by itself, but only when the
@@ -84,9 +86,9 @@ export function OutputBlock({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-gray-900">{label}</span>
-        {typeLabel(format, name) && (
+        {typeLabel(format, name, url) && (
           <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">
-            {typeLabel(format, name)}
+            {typeLabel(format, name, url)}
           </span>
         )}
         <span className="text-gray-500">{name}</span>
