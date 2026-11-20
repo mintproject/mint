@@ -47,6 +47,8 @@ A flow has no Maximum run time field. Select **Send Runs** to start the run.
 
 Before the run starts, a dialog may ask you to check something first. It can show up to three parts, in this order.
 
+![The run dialog: the settings chosen by the flow's author in plain words, the outside service the run sends data to, and the two boxes to tick before Accept and run](../assets/images/flow-run-dialog.png)
+
 1. **Settings chosen by the flow's author.** The dialog is titled *Settings chosen by the flow's author* and lists each setting in plain words, for example a value the flow fixes, or a value taken from an earlier step's output. The run uses these settings with your account. Tick **I accept these settings**.
 2. **This run sends data outside DYNAMO.** It names each outside service and what is sent to it. Tick **I agree to send this data outside DYNAMO**.
 3. **Accept and run.** This button is enabled only once every box shown is ticked. **Cancel** closes the dialog without starting the run.
@@ -78,6 +80,8 @@ When a run finishes, the thread says *The flow run is complete. Continue to revi
 Some flows stop partway through, after a step whose output needs a person to check or change it. The flow's author decides where a pause happens. A paused run shows the status **Waiting for your edit**, and its panel reads *Paused after “…”: review and edit* followed by the file name.
 
 Nothing is lost while it waits. The original file is kept.
+
+![A paused run: the step graph with the first three steps completed, and the panel with Download, Upload the edited file, and Resume with this edit](../assets/images/flow-paused-panel.png)
 
 1. **Download the file.** Use the download button beside the file name. DYNAMO has no editor, so change the file on your own computer.
 2. **Upload your edited copy.** Under **Upload the edited file**, choose the **Organisation**, choose the one file, and upload it. The upload is private. When it is ready, the panel says *Ready: …* with the catalog dataset it went to.
