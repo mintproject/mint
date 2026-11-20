@@ -7,7 +7,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ChevronRight, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +30,9 @@ import {
 } from '@/lib/standard-variable-taxonomy';
 import { searchVariableRows } from '@/lib/variable-catalog-search';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
+import { useAuth } from '@/lib/auth/useAuth';
+import { CreateStandardVariableDialog } from '@/components/autocomplete/CreateStandardVariableDialog';
+import type { StandardVariableOption } from '@/components/autocomplete/StandardVariableCombobox';
 
 type StandardVariable =
   GetStandardVariablesWithUnitsQuery['modelcatalog_standard_variable'][number];
@@ -228,7 +231,7 @@ function ExplanationSection({ expanded, onToggle }: { expanded: boolean; onToggl
               A standard variable is necessary to refer to all variables using the same nomenclature
               in a domain ontology. For example, a standard variable may be a{' '}
               <a
-                href="http://www.geoscienceontology.org/geo-upper#Variable"
+                href="https://scientificvariablesontology.org/svo/"
                 target="_blank"
                 rel="noreferrer"
                 className="underline"
@@ -270,7 +273,10 @@ function ExplanationSection({ expanded, onToggle }: { expanded: boolean; onToggl
 
 /** Explore Variables — searchable, sortable, paginated standard-variable catalog. */
 export function VariablesHome() {
-  const { data, loading, error } = useGetStandardVariablesWithUnitsQuery();
+  const { data, loading, error, refetch } = useGetStandardVariablesWithUnitsQuery();
+  const { isAuthenticated } = useAuth();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [justCreated, setJustCreated] = useState<StandardVariableOption | null>(null);
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [search, setSearch] = useState('');
@@ -327,13 +333,23 @@ export function VariablesHome() {
   // units and categories) and their service ranking. A failed/unavailable
   // service falls back to the existing local ranker; category remains local
   // and therefore a hard filter in both paths.
-  const displayRows = useMemo<StandardVariableRow[]>(
-    () =>
-      isSearching
-        ? (semanticRows ?? searchVariableRows(categoryFiltered, query))
-        : categoryFiltered,
-    [categoryFiltered, isSearching, query, semanticRows],
-  );
+  const displayRows = useMemo<StandardVariableRow[]>(() => {
+    if (isSearching) return semanticRows ?? searchVariableRows(categoryFiltered, query);
+    if (!justCreated) return categoryFiltered;
+    // Pin the variable the user just created at the top, whether or not the
+    // refetched catalog has reached us yet.
+    const known = rows.find((r) => r.id === justCreated.id);
+    const pinned: StandardVariableRow = known ?? {
+      __typename: 'modelcatalog_standard_variable',
+      id: justCreated.id,
+      label: justCreated.label,
+      description: justCreated.description,
+      variable_presentations: [],
+      units: [],
+      ...deriveDisplayFields(justCreated.label, justCreated.description),
+    };
+    return [pinned, ...categoryFiltered.filter((r) => r.id !== justCreated.id)];
+  }, [categoryFiltered, isSearching, query, semanticRows, justCreated, rows]);
 
   const columns = useMemo(() => buildColumns(query), [query]);
 
@@ -370,7 +386,31 @@ export function VariablesHome() {
             Standard variables and the units they are used in
           </p>
         </div>
+        {isAuthenticated ? (
+          <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> Create a standard variable
+          </Button>
+        ) : (
+          <p className="text-sm text-[#6c757d]">Sign in to add a standard variable</p>
+        )}
       </div>
+
+      {justCreated && (
+        <div role="status" className="mb-4 rounded-lg bg-green-50 px-4 py-2 text-sm text-green-800">
+          Created standard variable <span className="font-semibold">{justCreated.label}</span>. It
+          is pinned to the top of the list.
+        </div>
+      )}
+      <CreateStandardVariableDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(created) => {
+          setJustCreated(created);
+          setSearch('');
+          setSelectedCategory(ALL_CATEGORIES);
+          void refetch();
+        }}
+      />
 
       {/* Collapsible explanation */}
       <ExplanationSection

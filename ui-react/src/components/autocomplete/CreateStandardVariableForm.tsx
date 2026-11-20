@@ -61,9 +61,14 @@ export function CreateStandardVariableForm({
   const submit = React.useCallback(async () => {
     if (label.trim() === '') return;
     const desc = description.trim() === '' ? null : description.trim();
-    const res = await createSv({
-      variables: { id: generateMintUri(), label: label.trim(), description: desc },
-    });
+    let res;
+    try {
+      res = await createSv({
+        variables: { id: generateMintUri(), label: label.trim(), description: desc },
+      });
+    } catch {
+      return; // surfaced through `error` below
+    }
     const created = res.data?.insert_modelcatalog_standard_variable_one;
     if (created) {
       onCreated({
@@ -116,7 +121,7 @@ export function CreateStandardVariableForm({
 
       {error && (
         <p role="alert" className="mt-2 text-xs text-destructive">
-          Could not create the standard variable. Please try again.
+          Could not create the standard variable: {error.message}
         </p>
       )}
 

@@ -15,3 +15,6 @@ export type { StandardVariableUnitPickerProps } from './StandardVariableUnitPick
 
 export { CreateStandardVariableForm } from './CreateStandardVariableForm';
 export type { CreateStandardVariableFormProps } from './CreateStandardVariableForm';
+
+export { CreateStandardVariableDialog } from './CreateStandardVariableDialog';
+export type { CreateStandardVariableDialogProps } from './CreateStandardVariableDialog';

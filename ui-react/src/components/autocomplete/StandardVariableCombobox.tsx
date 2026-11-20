@@ -13,7 +13,7 @@
  */
 
 import * as React from 'react';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { humanizeStandardVariable } from '@/lib/standard-variable-grammar';
@@ -24,6 +24,7 @@ import {
 } from '@/lib/standard-variable-display';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 import { Button } from '@/components/ui/button';
+import { CreateStandardVariableDialog } from '@/components/autocomplete/CreateStandardVariableDialog';
 import {
   Command,
   CommandEmpty,
@@ -85,6 +86,11 @@ export interface StandardVariableComboboxProps {
    * as the variable's name, where an unlabeled row could not be matched later.
    */
   requireLabel?: boolean;
+  /**
+   * When a search finds nothing, offer to create a standard variable through the
+   * find-before-create dialog, then select the new one. For signed-in callers.
+   */
+  allowCreate?: boolean;
 }
 
 export function StandardVariableCombobox({
@@ -101,10 +107,12 @@ export function StandardVariableCombobox({
   driverConfigurationIds = [],
   preferredIds = [],
   requireLabel = false,
+  allowCreate = false,
 }: StandardVariableComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [showAll, setShowAll] = React.useState(false);
+  const [creating, setCreating] = React.useState(false);
 
   // Reads from Apollo cache — cache-first means no network call if already fetched.
   // The full catalog is fetched only once the user widens a narrowed picker.
@@ -199,95 +207,123 @@ export function StandardVariableCombobox({
           })()));
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          id={id}
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          aria-label="Select standard variable"
-          disabled={disabled || loading}
-          className={cn('w-full justify-between font-normal', className)}
-        >
-          <span className={cn('truncate', !value && 'text-muted-foreground')}>
-            {loading ? 'Loading...' : triggerLabel}
-          </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <Command shouldFilter={semanticOptions === null}>
-          <CommandInput placeholder={placeholder} onValueChange={setSearch} />
-          <CommandList>
-            <CommandEmpty>
-              {semanticSearch.loading ? 'Searching…' : 'No matching standard variables.'}
-            </CommandEmpty>
-            <CommandGroup>
-              {visibleOptions.map((sv) => (
-                <CommandItem
-                  key={sv.id}
-                  // cmdk identifies items by `value`, which must be UNIQUE. Standard
-                  // variables frequently share a label (and many have no description),
-                  // so a label-derived value collides across items and breaks click
-                  // selection in the browser. Key by the unique id; keep label and
-                  // description searchable via `keywords`.
-                  value={sv.id}
-                  keywords={[sv.label, sv.description ?? ''].filter(Boolean)}
-                  onSelect={() => handleSelect(sv.id)}
-                >
-                  <Check
-                    className={cn(
-                      'mr-2 h-4 w-4 shrink-0',
-                      value?.id === sv.id ? 'opacity-100' : 'opacity-0',
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            id={id}
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            aria-label="Select standard variable"
+            disabled={disabled || loading}
+            className={cn('w-full justify-between font-normal', className)}
+          >
+            <span className={cn('truncate', !value && 'text-muted-foreground')}>
+              {loading ? 'Loading...' : triggerLabel}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <Command shouldFilter={semanticOptions === null}>
+            <CommandInput placeholder={placeholder} onValueChange={setSearch} />
+            <CommandList>
+              <CommandEmpty>
+                {semanticSearch.loading ? (
+                  'Searching…'
+                ) : (
+                  <>
+                    <span className="block">No matching standard variables.</span>
+                    {allowCreate && (
+                      <button
+                        type="button"
+                        className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                        onClick={() => {
+                          setOpen(false);
+                          setCreating(true);
+                        }}
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Create a standard variable
+                      </button>
                     )}
-                  />
-                  <div className="flex min-w-0 flex-col">
-                    {standardVariableDescription(sv) && (
-                      <span className="line-clamp-1 font-medium">
-                        {standardVariableDescription(sv)}
-                      </span>
-                    )}
-                    <span
+                  </>
+                )}
+              </CommandEmpty>
+              <CommandGroup>
+                {visibleOptions.map((sv) => (
+                  <CommandItem
+                    key={sv.id}
+                    // cmdk identifies items by `value`, which must be UNIQUE. Standard
+                    // variables frequently share a label (and many have no description),
+                    // so a label-derived value collides across items and breaks click
+                    // selection in the browser. Key by the unique id; keep label and
+                    // description searchable via `keywords`.
+                    value={sv.id}
+                    keywords={[sv.label, sv.description ?? ''].filter(Boolean)}
+                    onSelect={() => handleSelect(sv.id)}
+                  >
+                    <Check
                       className={cn(
-                        'line-clamp-1',
-                        standardVariableDescription(sv) || !isUnlabeledStandardVariable(sv)
-                          ? 'text-xs text-muted-foreground'
-                          : 'font-medium',
+                        'mr-2 h-4 w-4 shrink-0',
+                        value?.id === sv.id ? 'opacity-100' : 'opacity-0',
                       )}
-                    >
-                      {standardVariableName(sv)}
-                    </span>
-                    {!!sv.models?.length && (
-                      <span className="line-clamp-1 text-[11px] text-muted-foreground/80">
-                        {sv.models
-                          .slice(0, 2)
-                          .map((model) => `${model.label} (${model.role})`)
-                          .join(' · ')}
-                        {sv.models.length > 2 ? ` · +${sv.models.length - 2} more` : ''}
+                    />
+                    <div className="flex min-w-0 flex-col">
+                      {standardVariableDescription(sv) && (
+                        <span className="line-clamp-1 font-medium">
+                          {standardVariableDescription(sv)}
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          'line-clamp-1',
+                          standardVariableDescription(sv) || !isUnlabeledStandardVariable(sv)
+                            ? 'text-xs text-muted-foreground'
+                            : 'font-medium',
+                        )}
+                      >
+                        {standardVariableName(sv)}
                       </span>
-                    )}
-                  </div>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-          {narrowed && (
-            // Outside CommandList so cmdk's filter never hides the escape.
-            <div className="border-t px-2 py-1.5">
-              <button
-                type="button"
-                className="w-full rounded px-1 py-0.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                onClick={() => setShowAll((v) => !v)}
-              >
-                {showAll
-                  ? `Showing ${allLoaded ? `all ${all.length}` : 'every'} standard variable — show only the ${scoped.length} ${scopeLabel}`
-                  : `Showing the ${scoped.length} ${scopeLabel} — show every standard variable`}
-              </button>
-            </div>
-          )}
-        </Command>
-      </PopoverContent>
-    </Popover>
+                      {!!sv.models?.length && (
+                        <span className="line-clamp-1 text-[11px] text-muted-foreground/80">
+                          {sv.models
+                            .slice(0, 2)
+                            .map((model) => `${model.label} (${model.role})`)
+                            .join(' · ')}
+                          {sv.models.length > 2 ? ` · +${sv.models.length - 2} more` : ''}
+                        </span>
+                      )}
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+            {narrowed && (
+              // Outside CommandList so cmdk's filter never hides the escape.
+              <div className="border-t px-2 py-1.5">
+                <button
+                  type="button"
+                  className="w-full rounded px-1 py-0.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => setShowAll((v) => !v)}
+                >
+                  {showAll
+                    ? `Showing ${allLoaded ? `all ${all.length}` : 'every'} standard variable — show only the ${scoped.length} ${scopeLabel}`
+                    : `Showing the ${scoped.length} ${scopeLabel} — show every standard variable`}
+                </button>
+              </div>
+            )}
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {allowCreate && (
+        <CreateStandardVariableDialog
+          open={creating}
+          onOpenChange={setCreating}
+          initialSearch={search}
+          onCreated={(created) => onChange(created)}
+        />
+      )}
+    </>
   );
 }
