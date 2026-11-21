@@ -24,7 +24,13 @@ The page lists the credentials you have saved. For each one it shows its name, i
 
 A credential can hold at most 4096 bytes in total, counting names and values together.
 
-The value box is a password field. After a successful save the form clears every value, and the list shows the credential's name and field names only.
+The value box is a password field. To check what you typed before saving, select the eye button beside it; it shows only what is in the box, never a value already saved. Select it again to hide the value.
+
+Under a value, a note appears if it starts or ends with a space, or with a quote mark. Spaces at either end are removed when you save, because they are never part of a key or an address. A quote mark is kept, so remove it yourself unless it belongs to the value. A key pasted with a stray space or quote is a common reason a model server refuses a key that looks right.
+
+![Adding a model server credential: the first value shown in clear with the eye button, and the note that it starts with a space](assets/images/credentials-show-value.png)
+
+After a successful save the form clears every value, and the list shows the credential's name and field names only.
 
 ### Add a model server
 

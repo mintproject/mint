@@ -46,6 +46,8 @@ Review each setting. Each shows a readable title and an explanation. The form fi
 - **A yes or no** is a tick box.
 - **Anything else** is a text box.
 
+![The settings of the Narrative flow: two dropdowns with the chosen option explained under each, a number box with its limit and default, and Advanced settings closed](../assets/images/flow-settings-form.png)
+
 Rarely changed settings are inside **Advanced settings**, which is closed until you open it. Settings the flow's author hid are not shown at all, and the run uses the author's value for them. A setting the author has fixed is listed under *Expert modeler has selected the following parameters* with its value, and you cannot change it. If something sends a value for a fixed or hidden setting anyway, the run is refused with *A setting is fixed or hidden by the flow*.
 
 If a required setting has no value, the run is not started. The message says *This flow needs a setting filled in*, and names the settings. Fill them in, save, and run again.
