@@ -78,6 +78,8 @@ If something blocks the run, DYNAMO shows a message with a title and the details
 
 The Runs step shows one **card** for each model or flow in the thread. The header has its name, a status (*Waiting to start*, *Running*, *Waiting for your edit*, *Completed*, *Failed* or *Cancelled*), and either when the run started or how long it took. Select the header to minimise the card or open it again; the choice stays while you are on the page.
 
+![The Runs step with two completed flows minimised to one line each, showing how long they took, and a third flow open with its Send Runs button](../assets/images/runs-cards.png)
+
 - **Which cards are open.** A card opens by itself when its run needs your attention: running, waiting for your edit, or failed. A completed card is closed when the thread has several models, so a long list stays short. If the thread has only one model, its card is open.
 - **One sentence.** Under the header, one line says what to do next, for example *The flow is running. Results will appear when it completes.*
 - **The steps.** Each step is one box in the graph, with its state: *Waiting*, *Running*, *Completed*, *Failed*, *Skipped* or *Cancelled*. The steps are drawn once. A step that failed is named, with its message, in the failure box above the graph.
