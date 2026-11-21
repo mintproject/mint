@@ -16,6 +16,8 @@ Under an output that DYNAMO stored in Tapis, **Preview** shows the start of the 
 - **A CSV file** shows its header and first rows as a small table. Very wide rows and very long cells are shortened.
 - **A JSON file** is shown indented. A file that is cut off, very large or deeply nested is shown as it is, with a note saying why.
 
+![A Sensemaking report previewed in place on the Results step: its summary, the science-backbone weights and the group counts, with Download and Copy location beside it](../assets/images/results-report-preview.png)
+
 A preview is closed until you open it, except that a Markdown report opens by itself when the file list says it is under 100 KB. A file is read only when its preview is open, and only its first 200 KB is read; where that cuts the file short, the preview says so. If the file cannot be read, the preview says *Preview unavailable* and offers **Download**. Other kinds of file have **Download** only.
 
 An output that is a web address is not read or previewed by DYNAMO, so that opening a result never sends your browser to another site. It has **Download**, which opens the address, and **Copy location**.
