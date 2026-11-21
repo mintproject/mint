@@ -2,7 +2,10 @@
 
 ## Status
 
-Approved (2026-11-20). Implementing.
+Implemented (2026-11-20). Deployed to dev in #482 (flow settings), #484 (optional credential
+fields), #485 (settings kept on a Datasets save) and #489/#490 (Runs and Results). The Sensemaking
+flows were registered on the described pieces the same day. Deviations are recorded under
+"Implementation deviations" and "After deploy" below.
 
 Checked against `origin/develop` at the time of writing, and against the dev catalog
 (`mintdevgraphql`) with read-only queries. Paths are relative to the monorepo root unless they
@@ -373,12 +376,42 @@ Recorded 2026-11-20, after review.
     `FLOW_SETTING_INVALID` (flow check)
   - `FLOW_SETTINGS_UNAVAILABLE` (502 from the relay)
 - **Migration:** `1771300000047_configuration_flow_settings`.
-- **Open:** draft-lexicon `grounding=semantic` and map-and-project `mapping_method=embedding`
-  cannot run, because the adapter makes every declared secret required (`step_secrets.py`, no
-  optional flag). Declaring `model_server` on map-and-project would force a credential on keyword
-  runs. Proposed: separate embedding variants of the two pieces (awaiting the user).
-- **Unverified:** Hasura applying the migration; the `text[]` literal written for
-  `has_accepted_values`; anything live.
+- **Resolved (was open):** draft-lexicon `grounding=semantic` and map-and-project
+  `mapping_method=embedding` could not run, because the adapter made every declared secret
+  required. The user chose separate variants. Embedding mapping is now its own piece,
+  `map-and-project-embedding` (r1), which declares `model_server`, while map-and-project stays
+  credential-free and no longer offers `embedding`. draft-lexicon already declared
+  `model_server`; it gained the embedding settings, and #484 lets a declaration mark
+  `embedding_base_url` optional, so keyword grounding needs no embedding address.
+- **Verified after deploy:** the migration and metadata applied on dev, the `text[]`
+  accepted-values write works, and the run form shows explained dropdowns for the Sensemaking
+  flows and multi-selects for the WERC model.
+
+### After deploy (2026-11-20)
+
+- **Piece revisions on dev** (library `wmobley/Semantic-Sensemaking` `feat/setting-schemas`; the
+  code that runs is still upstream `6f586c7`, fetched by each piece's wrapper):
+  - ingest-corpus r3
+  - score-lexicon, map-and-project, render-report and render-frames-report r2
+  - discover-frames r3
+  - draft-lexicon r4
+  - map-and-project-embedding r1
+- **draft-lexicon r4** requires `problem_statement` and `chat_kind`, so a Formulation run
+  without them is refused before it starts instead of failing in the step.
+- **ingest-corpus r3** fails the step when it keeps no documents, naming how many were skipped and
+  the minimum length. Before, a run whose documents were all too short was reported as completed
+  with an empty report.
+- **Author defaults.** Narrative and Formulation default to Tejas (`openai_compatible`), with
+  `Meta-Llama-3.3-70B-Instruct` for chat and `E5-Mistral-7B-Instruct` for embeddings. These are
+  the stack's `CKAN_LLM_MODEL` and the earlier runs' embedding model. They are author values on
+  the flows, not library defaults, because they belong to this deployment.
+- **Deviation: the ingest r3 swap was made in place.** The three flows' ingest step was pointed
+  at r3 directly in the catalog (one transaction), instead of registering three more flow
+  versions. A new version would have meant duplicate flows in the list, or deleting runs that
+  hold real results. Each past run's adapter plan records the pieces it actually ran, so history
+  stays accurate. Flows remain insert-only for users. This was an operator change.
+- **Old flow versions** (seven, all tests) were deleted with their 11 test runs, at the user's
+  request.
 
 ## User feedback / decisions
 
@@ -388,3 +421,9 @@ Recorded 2026-11-20, after review.
 - 2026-11-20: asked whether an author can hide a setting entirely: "yes". Asked whether models
   get dropdowns now or later: "yes now".
 - 2026-11-20: "ok lets do it": spec approved.
+- 2026-11-20: embedding choices that could not run: the user chose separate variants ("a is fine
+  for now"). Asked that `openai_compatible` be shown as "Tejas".
+- 2026-11-20: "we need to default to the CKAN_LLM_MODEL … and the embedding model": the Tejas
+  model defaults on Narrative and Formulation.
+- 2026-11-20: a run that kept no documents: "both solutions are fine" (fail the ingest step;
+  rebind the RGV thread to the RGV transcripts).
