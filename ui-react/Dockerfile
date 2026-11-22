@@ -30,7 +30,7 @@ RUN mkdocs build --strict
 FROM nginx:1.27-alpine AS runtime
 
 LABEL org.opencontainers.image.title="MINT UI (React)" \
-      org.opencontainers.image.source="https://github.com/mintproject/monorepo" \
+      org.opencontainers.image.source="https://github.com/mintproject/mint" \
       org.opencontainers.image.licenses="MIT"
 
 # Node runtime for the entrypoint, so the container and Vercel run the same

@@ -298,7 +298,7 @@ No comparison/chart/map.
 > **Deferred — indicator comparison / key-metrics post-processing.** Comparing the indicator
 > across the ensemble (sortable bindings→outcome table, indicator-vs-parameter chart, spatial
 > map preview) is valuable but needs metric-extraction over ingested outputs and more UI
-> work. Tracked as **mintproject/monorepo#35**, out of scope here.
+> work. Tracked as **mintproject/mint#35**, out of scope here.
 
 ## Data flow
 

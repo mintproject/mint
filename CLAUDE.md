@@ -30,16 +30,16 @@ there. A plain `git clone` is complete; there is nothing to `git submodule updat
 > ([ADR-0004](docs/adr/0004-no-submodule-stubs-for-external-repositories.md)). It is the
 > deprecated LitElement frontend,
 > [`mintproject/mint-ui-lit`](https://github.com/mintproject/mint-ui-lit), removed from TACC
-> by [#81](https://github.com/mintproject/monorepo/issues/81).
+> by [#81](https://github.com/mintproject/mint/issues/81).
 
 > **The MINT chart lives here, in `charts/mint/`**
 > ([ADR-0005](docs/adr/0005-chart-lives-here-and-this-repository-is-named-mint.md)). It
 > publishes to `https://mintproject.github.io/mint` (chart name `MINT`) from the `gh-pages`
 > branch. `dynamo` pins the deployed version; nothing in this repository does. The old chart
-> repository, `mintproject/mint`, is frozen. Do not open a pull request there.
+> repository is `mintproject/mint-chart-archive`, and it is archived.
 
 > **Four repositories left this checkout in the single-repo cutover**
-> ([#146](https://github.com/mintproject/monorepo/issues/146)):
+> ([#146](https://github.com/mintproject/mint/issues/146)):
 > `model-catalog-ontology/`, `MINT_USERGUIDE/`, `model-catalog-fetch-api-client/` and
 > `dynamo-experiment-may/`. Two stay maintained, and both keep outside forks. Read them
 > where they live. Do not copy their content here:
@@ -168,7 +168,7 @@ See `docs/MIGRATION-CONTEXT.md` for full migration status and decisions. Key poi
 
 ### Issue tracker
 
-Issues live in the `mintproject/monorepo` GitHub Issues, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in the `mintproject/mint` GitHub Issues, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

@@ -4,7 +4,7 @@ Context file for AI coding agents working inside `ui-react/`. Read this before g
 
 ## Project Overview
 
-MINT Model Catalog UI — a React 18 rewrite of the legacy LitElement app (`ui/`). Part of the MINT monorepo (`mintproject/monorepo`). The primary goal is to simplify model configuration for domain scientists on the SUBSIDE project: a user should be able to configure a model input (variable, standard variable, unit) in a single form submission rather than the current 5-level, 3-modal workflow.
+MINT Model Catalog UI — a React 18 rewrite of the legacy LitElement app (`ui/`). Part of the MINT monorepo (`mintproject/mint`). The primary goal is to simplify model configuration for domain scientists on the SUBSIDE project: a user should be able to configure a model input (variable, standard variable, unit) in a single form submission rather than the current 5-level, 3-modal workflow.
 
 This project lives at `ui-react/` alongside the legacy `ui/` (LitElement). The two coexist; do NOT port LitElement patterns (Redux, Webpack, LitElement decorators, `@lit/reactive-element`) into this app.
 

@@ -53,7 +53,7 @@
   /*
    * Chrome tokens — the dark frame around the app: the branding strip, the
    * header and the footer. Values measured from TACC's own live stylesheet
-   * (see mintproject/monorepo#205).
+   * (see mintproject/mint#205).
    *
    * Scoped to .mint-chrome on purpose. These are NOT the shadcn tokens above:
    * repointing --primary or --background to #222 would recolour every button,

@@ -6,8 +6,8 @@ then sync metadata, so `delete` works at `mint.tacc.utexas.edu`.
 **Scope**: TACC production. Six `ALTER TABLE` statements inside one transaction. No data is
 deleted, no PVC is touched, no seeds are run.
 
-**Ticket**: [monorepo#116](https://github.com/mintproject/monorepo/issues/116).
-Evidence and the dev-cluster rehearsal are on [#99](https://github.com/mintproject/monorepo/issues/99).
+**Ticket**: [monorepo#116](https://github.com/mintproject/mint/issues/116).
+Evidence and the dev-cluster rehearsal are on [#99](https://github.com/mintproject/mint/issues/99).
 
 **Why by hand**: `charts/mint/templates/post-install-hasura.yaml` carries
 `"helm.sh/hook": post-install` only. A `helm upgrade` never runs `hasura migrate apply`. The
@@ -304,7 +304,7 @@ trip through Hasura under a real Tapis token.
 Before, the delete returned success and changed nothing. A successful response is not proof —
 you must see the row disappear after a reload.
 
-Record the result on [#116](https://github.com/mintproject/monorepo/issues/116).
+Record the result on [#116](https://github.com/mintproject/mint/issues/116).
 
 ---
 

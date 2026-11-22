@@ -1,7 +1,7 @@
 FROM node:24-alpine
 
 LABEL org.opencontainers.image.title="MINT Ensemble Manager" \
-      org.opencontainers.image.source="https://github.com/mintproject/monorepo" \
+      org.opencontainers.image.source="https://github.com/mintproject/mint" \
       org.opencontainers.image.licenses="MIT"
 
 # # Install cwltool

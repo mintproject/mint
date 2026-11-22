@@ -2,7 +2,7 @@ name: Publish Chart
 
 # Add one packaged chart to the Helm repository on the gh-pages branch.
 #
-# The layout is the one the old `mintproject/mint` Makefile made, so every
+# The layout is the one the old `mintproject/mint-chart-archive` Makefile made, so every
 # historical URL keeps working:
 #
 #   gh-pages/index.yaml

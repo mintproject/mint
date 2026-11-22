@@ -1,6 +1,6 @@
 ---
 name: test-on-k8s-dev
-description: Deploy and test a `mintproject/monorepo` branch build on the shared MicroK8s development cluster (release `mint`, namespace `mint`) before pinning a tag. Use when asked to test a change on Kubernetes, verify a fix on the dev instance, check whether a deployed image actually contains a change, or reach Hasura / the model catalog API running in-cluster.
+description: Deploy and test a `mintproject/mint` branch build on the shared MicroK8s development cluster (release `mint`, namespace `mint`) before pinning a tag. Use when asked to test a change on Kubernetes, verify a fix on the dev instance, check whether a deployed image actually contains a change, or reach Hasura / the model catalog API running in-cluster.
 ---
 
 # test-on-k8s-dev
@@ -25,7 +25,7 @@ The cluster is remote, not on the laptop. `kubectl get nodes` is the fastest liv
 
 ## Component map
 
-The four services that ship from `mintproject/monorepo`:
+The four services that ship from `mintproject/mint`:
 
 | Directory | Deployment | Container | Ingress host | Image |
 |---|---|---|---|---|
@@ -51,7 +51,7 @@ Read-only, safe on a shared cluster, and enough to characterise current behaviou
 
 ## Deploying a branch build
 
-CI in `mintproject/monorepo` builds **all four services on every branch push**, with no path filter, so one commit gives you a whole consistent system. A branch image exists as soon as its `publish` job is green — you do not need to merge to test:
+CI in `mintproject/mint` builds **all four services on every branch push**, with no path filter, so one commit gives you a whole consistent system. A branch image exists as soon as its `publish` job is green — you do not need to merge to test:
 
 - `ghcr.io/mintproject/<image>:<full-commit-sha>`
 - `ghcr.io/mintproject/<image>:<branch-name-with-slashes-as-dashes>`
@@ -91,7 +91,7 @@ kubectl rollout undo -n mint deploy/mint-model-catalog
 
 Helm will also overwrite this on its next `helm upgrade`, so a forgotten `set image` is not permanent — but do not leave the shared instance on a branch build.
 
-**A helm upgrade does not run Hasura migrations.** The migration job is a post-install hook only, so a `graphql_engine` schema change needs a hand-run step ([#117](https://github.com/mintproject/monorepo/issues/117)).
+**A helm upgrade does not run Hasura migrations.** The migration job is a post-install hook only, so a `graphql_engine` schema change needs a hand-run step ([#117](https://github.com/mintproject/mint/issues/117)).
 
 ## Verifying the change is actually live
 

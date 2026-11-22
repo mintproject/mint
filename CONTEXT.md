@@ -25,7 +25,7 @@ The layout in use today. One repository holds each service as a plain directory,
 with one history. `.gitmodules` is gone and no gitlink remains.
 _Avoid_: monorepo, consolidated repo, merged repo
 
-> **Never write "monorepo" for either one.** `mintproject/monorepo` is the name of
+> **Never write "monorepo" for either one.** `mintproject/mint` is the name of
 > this repository. The word also names both layouts above. It cannot tell them
 > apart, so it is banned in prose about the migration.
 
@@ -64,9 +64,9 @@ _Avoid_: the frontend (unqualified), the old UI
 **the MINT chart**:
 The Helm chart that deploys the whole platform. It lives in `charts/mint/`, and
 it publishes to `https://mintproject.github.io/mint` under the chart name `MINT`.
-It was an external repository, `mintproject/mint`, until
+It was an external repository, `mintproject/mint-chart-archive`, until
 [ADR-0005](docs/adr/0005-chart-lives-here-and-this-repository-is-named-mint.md)
-moved it here. That old repository becomes `mintproject/mint-chart-archive`.
+moved it here. That old repository is now `mintproject/mint-chart-archive`, archived.
 _Avoid_: helm-charts (as a directory or a repository name), the mint repo
 
 **`dynamo`**:
@@ -98,7 +98,7 @@ _Avoid_: the cutover point, the deadline
 ### Planning
 
 These words come from the `/wayfinder` skill. They have concrete referents here,
-because every map and ticket is a GitHub issue in `mintproject/monorepo`.
+because every map and ticket is a GitHub issue in `mintproject/mint`.
 
 **map**:
 One issue that holds the whole route for a large effort. It carries the label
