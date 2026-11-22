@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mint-hasura-post-install
+  name: mint-hasura-migrate
 spec:
   selector:
     matchLabels:
-      app: mint-hasura-post-install
+      app: mint-hasura-migrate
   template:
     metadata:
       labels:
-        app: mint-hasura-post-install
+        app: mint-hasura-migrate
     spec:
       initContainers:
         - name: wait-for-db
@@ -41,7 +41,7 @@ spec:
                   key: username
 
       containers:
-        - name: post-install-hasura
+        - name: hasura-migrate
           command: ["/bin/bash"]
           args:
             [
